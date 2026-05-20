@@ -1,0 +1,84 @@
+=== switch.ko ===
+WARN  Decompiling 0002c310, pcode error at 0002c310: Unable to disassemble EXTERNAL block location: 0002c310 (DecompileCallback)  
+WARN  Decompiling 0002c318, pcode error at 0002c318: Unable to disassemble EXTERNAL block location: 0002c318 (DecompileCallback)  
+WARN  Decompiling 0002c31c, pcode error at 0002c31c: Unable to disassemble EXTERNAL block location: 0002c31c (DecompileCallback)  
+WARN  Decompiling 0002c320, pcode error at 0002c320: Unable to disassemble EXTERNAL block location: 0002c320 (DecompileCallback)  
+WARN  Decompiling 0002c324, pcode error at 0002c324: Unable to disassemble EXTERNAL block location: 0002c324 (DecompileCallback)  
+WARN  Decompiling 0002c328, pcode error at 0002c328: Unable to disassemble EXTERNAL block location: 0002c328 (DecompileCallback)  
+DONE: 422 dumped, 0 failed
+INFO  REPORT: Save succeeded for processed file: /switch.ko (HeadlessAnalyzer)  
+=== plat-zxylzb_9128S.ko ===
+WARN  Decompiling 0002f198, pcode error at 0002f198: Unable to disassemble EXTERNAL block location: 0002f198 (DecompileCallback)  
+WARN  Decompiling 0002f19c, pcode error at 0002f19c: Unable to disassemble EXTERNAL block location: 0002f19c (DecompileCallback)  
+WARN  Decompiling 0002f1a0, pcode error at 0002f1a0: Unable to disassemble EXTERNAL block location: 0002f1a0 (DecompileCallback)  
+WARN  Decompiling 0002f1a4, pcode error at 0002f1a4: Unable to disassemble EXTERNAL block location: 0002f1a4 (DecompileCallback)  
+WARN  Decompiling 0002f1a8, pcode error at 0002f1a8: Unable to disassemble EXTERNAL block location: 0002f1a8 (DecompileCallback)  
+WARN  Decompiling 0002f1ac, pcode error at 0002f1ac: Unable to disassemble EXTERNAL block location: 0002f1ac (DecompileCallback)  
+DONE: 332 dumped, 0 failed
+INFO  REPORT: Save succeeded for processed file: /plat-zxylzb_9128S.ko (HeadlessAnalyzer)  
+=== tm.ko ===
+WARN  Decompiling 000df0b0, pcode error at 000df0b0: Unable to disassemble EXTERNAL block location: 000df0b0 (DecompileCallback)  
+WARN  Decompiling 000df0b4, pcode error at 000df0b4: Unable to disassemble EXTERNAL block location: 000df0b4 (DecompileCallback)  
+WARN  Decompiling 000df0c4, pcode error at 000df0c4: Unable to disassemble EXTERNAL block location: 000df0c4 (DecompileCallback)  
+WARN  Decompiling 000df0c8, pcode error at 000df0c8: Unable to disassemble EXTERNAL block location: 000df0c8 (DecompileCallback)  
+WARN  Decompiling 000df0cc, pcode error at 000df0cc: Unable to disassemble EXTERNAL block location: 000df0cc (DecompileCallback)  
+WARN  Decompiling 000df0d8, pcode error at 000df0d8: Unable to disassemble EXTERNAL block location: 000df0d8 (DecompileCallback)  
+DONE: 1330 dumped, 0 failed
+INFO  REPORT: Save succeeded for processed file: /tm.ko (HeadlessAnalyzer)  
+=== idmfdb.ko ===
+WARN  Decompiling 0001807c, pcode error at 0001807c: Unable to disassemble EXTERNAL block location: 0001807c (DecompileCallback)  
+WARN  Decompiling 00018080, pcode error at 00018080: Unable to disassemble EXTERNAL block location: 00018080 (DecompileCallback)  
+WARN  Decompiling 00018084, pcode error at 00018084: Unable to disassemble EXTERNAL block location: 00018084 (DecompileCallback)  
+WARN  Decompiling 00018090, pcode error at 00018090: Unable to disassemble EXTERNAL block location: 00018090 (DecompileCallback)  
+WARN  Decompiling 00018094, pcode error at 00018094: Unable to disassemble EXTERNAL block location: 00018094 (DecompileCallback)  
+WARN  Decompiling 00018098, pcode error at 00018098: Unable to disassemble EXTERNAL block location: 00018098 (DecompileCallback)  
+DONE: 81 dumped, 0 failed
+INFO  REPORT: Save succeeded for processed file: /idmfdb.ko (HeadlessAnalyzer)  
+=== zx_ponreg.ko ===
+WARN  Decompiling 00011004, pcode error at 00011004: Unable to disassemble EXTERNAL block location: 00011004 (DecompileCallback)  
+WARN  Decompiling 00011008, pcode error at 00011008: Unable to disassemble EXTERNAL block location: 00011008 (DecompileCallback)  
+WARN  Decompiling 0001100c, pcode error at 0001100c: Unable to disassemble EXTERNAL block location: 0001100c (DecompileCallback)  
+WARN  Decompiling 00011010, pcode error at 00011010: Unable to disassemble EXTERNAL block location: 00011010 (DecompileCallback)  
+WARN  Decompiling 00011014, pcode error at 00011014: Unable to disassemble EXTERNAL block location: 00011014 (DecompileCallback)  
+WARN  Decompiling 00011018, pcode error at 00011018: Unable to disassemble EXTERNAL block location: 00011018 (DecompileCallback)  
+DONE: 15 dumped, 0 failed
+INFO  REPORT: Save succeeded for processed file: /zx_ponreg.ko (HeadlessAnalyzer)  
+=== rtkatm.ko ===
+WARN  Decompiling 00012070, pcode error at 00012070: Unable to disassemble EXTERNAL block location: 00012070 (DecompileCallback)  
+WARN  Decompiling 00012074, pcode error at 00012074: Unable to disassemble EXTERNAL block location: 00012074 (DecompileCallback)  
+WARN  Decompiling 00012078, pcode error at 00012078: Unable to disassemble EXTERNAL block location: 00012078 (DecompileCallback)  
+WARN  Decompiling 00012080, pcode error at 00012080: Unable to disassemble EXTERNAL block location: 00012080 (DecompileCallback)  
+WARN  Decompiling 00012084, pcode error at 00012084: Unable to disassemble EXTERNAL block location: 00012084 (DecompileCallback)  
+WARN  Decompiling 00012088, pcode error at 00012088: Unable to disassemble EXTERNAL block location: 00012088 (DecompileCallback)  
+DONE: 53 dumped, 0 failed
+INFO  REPORT: Save succeeded for processed file: /rtkatm.ko (HeadlessAnalyzer)  
+=== mt7915.ko ===
+WARN  Decompiling 005f72d8, pcode error at 005f72d8: Unable to disassemble EXTERNAL block location: 005f72d8 (DecompileCallback)  
+WARN  Decompiling 005f72dc, pcode error at 005f72dc: Unable to disassemble EXTERNAL block location: 005f72dc (DecompileCallback)  
+WARN  Decompiling 005f72e0, pcode error at 005f72e0: Unable to disassemble EXTERNAL block location: 005f72e0 (DecompileCallback)  
+WARN  Decompiling 005f72e8, pcode error at 005f72e8: Unable to disassemble EXTERNAL block location: 005f72e8 (DecompileCallback)  
+WARN  Decompiling 005f72f0, pcode error at 005f72f0: Unable to disassemble EXTERNAL block location: 005f72f0 (DecompileCallback)  
+WARN  Decompiling 005f72f4, pcode error at 005f72f4: Unable to disassemble EXTERNAL block location: 005f72f4 (DecompileCallback)  
+DONE: 7355 dumped, 2 failed
+INFO  REPORT: Save succeeded for processed file: /mt7915.ko (HeadlessAnalyzer)  
+=== wlan_debug_module.ko ===
+WARN  Decompiling 00068084, pcode error at 00068084: Unable to disassemble EXTERNAL block location: 00068084 (DecompileCallback)  
+WARN  Decompiling 00068088, pcode error at 00068088: Unable to disassemble EXTERNAL block location: 00068088 (DecompileCallback)  
+WARN  Decompiling 0006808c, pcode error at 0006808c: Unable to disassemble EXTERNAL block location: 0006808c (DecompileCallback)  
+WARN  Decompiling 00068094, pcode error at 00068094: Unable to disassemble EXTERNAL block location: 00068094 (DecompileCallback)  
+WARN  Decompiling 00068098, pcode error at 00068098: Unable to disassemble EXTERNAL block location: 00068098 (DecompileCallback)  
+WARN  Decompiling 0006809c, pcode error at 0006809c: Unable to disassemble EXTERNAL block location: 0006809c (DecompileCallback)  
+DONE: 95 dumped, 0 failed
+INFO  REPORT: Save succeeded for processed file: /wlan_debug_module.ko (HeadlessAnalyzer)  
+ALL DONE
+total 436
+drwxrwxr-x 10 ubuntu ubuntu   4096 May  2 15:32 .
+drwxrwxr-x  9 ubuntu ubuntu   4096 May  2 15:30 ..
+drwxr-x---  2 ubuntu ubuntu   4096 May  2 15:31 idmfdb.ko
+drwxr-x---  2 ubuntu ubuntu 299008 May  2 15:32 mt7915.ko
+drwxr-x---  2 ubuntu ubuntu  20480 May  2 15:30 plat-zxylzb_9128S.ko
+drwxr-x---  2 ubuntu ubuntu   4096 May  2 15:31 rtkatm.ko
+drwxr-x---  2 ubuntu ubuntu  24576 May  2 15:30 switch.ko
+drwxr-x---  2 ubuntu ubuntu  69632 May  2 15:31 tm.ko
+drwxr-x---  2 ubuntu ubuntu   4096 May  2 15:32 wlan_debug_module.ko
+drwxr-x---  2 ubuntu ubuntu   4096 May  2 15:31 zx_ponreg.ko

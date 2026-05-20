@@ -1,0 +1,2 @@
+product\H388X_TY\code\cspd\source\dsl_adapter_rtk.c
+    CSPSET_STR(ptDsl_status->tFWVer, "v135g907");

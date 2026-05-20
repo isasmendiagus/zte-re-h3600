@@ -1,0 +1,6 @@
+# D-Link Corp
+
+TargetVendor=  0x2001
+TargetProduct= 0x7e38
+
+MessageContent="55534243f04a7e10ff00000080010612018000ff0000000000000000000000"

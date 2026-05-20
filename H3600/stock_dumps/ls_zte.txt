@@ -1,0 +1,9 @@
+ls -la /proc/zte/
+dr-xr-xr-x    5 root     root             0 Jan  1  1970 .
+dr-xr-xr-x   80 root     root             0 Jan  1  1970 ..
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 ledkey_m
+dr-xr-xr-x    4 root     root             0 Feb 17 19:06 sys
+dr-xr-xr-x    2 root     root             0 Jan  1  1970 verinfo
+/tmp # echo ZZ_END
+ZZ_END
+/tmp # 

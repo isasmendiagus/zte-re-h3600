@@ -1,0 +1,26 @@
+// module: plat-zxylzb_9128S.ko
+// function: pon_tm_net_stop @ 0x196f8
+// size: 140 bytes
+//
+
+undefined4 pon_tm_net_stop(char *param_1)
+
+{
+  int iVar1;
+  
+  if (*(int *)(param_1 + 0x240) == 0) {
+    warn_slowpath_null("include/linux/netdevice.h",0xa06);
+    printk(&_LC2);
+  }
+  else {
+    _set_bit(0,*(int *)(param_1 + 0x240) + 0x50);
+  }
+  netif_carrier_off(param_1);
+  iVar1 = strcmp(param_1,"pon");
+  if (iVar1 == 0) {
+    napi_disable(param_1 + 0x530);
+    *(uint *)(tm_base + 0x104) = *(uint *)(tm_base + 0x104) | 7;
+  }
+  return 0;
+}
+

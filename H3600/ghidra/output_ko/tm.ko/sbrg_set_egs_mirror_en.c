@@ -1,0 +1,33 @@
+// module: tm.ko
+// function: sbrg_set_egs_mirror_en @ 0x1b6e8
+// size: 176 bytes
+//
+
+undefined4
+sbrg_set_egs_mirror_en(uint param_1,undefined4 param_2,undefined4 param_3,undefined4 param_4)
+
+{
+  int iVar1;
+  
+  if (0xff < param_1) {
+    if (g_tm_debug_level == 0) {
+      return 1;
+    }
+    printk("[TM][sbrg_set_egs_mirror_en]input invalid parameter!\n");
+    return 1;
+  }
+  if (6 < g_tm_debug_level) {
+    printk("[TM][sbrg_set_egs_mirror_en]input:portMsk = 0x%x\n",param_1,param_3,g_tm_debug_level,
+           param_4);
+  }
+  iVar1 = tmOnuRegWrite(0x41,param_1,0,&sbragRegTable);
+  if (iVar1 == 0) {
+    return 0;
+  }
+  if (g_tm_debug_level == 0) {
+    return 0xffffffff;
+  }
+  printk("[TM][sbrg_set_egs_mirror_en]write reg failed!\n");
+  return 0xffffffff;
+}
+

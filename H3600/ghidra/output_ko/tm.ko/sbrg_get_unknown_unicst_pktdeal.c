@@ -1,0 +1,43 @@
+// module: tm.ko
+// function: sbrg_get_unknown_unicst_pktdeal @ 0x1a9a8
+// size: 248 bytes
+//
+
+undefined4 sbrg_get_unknown_unicst_pktdeal(uint param_1,uint *param_2)
+
+{
+  undefined4 uVar1;
+  int iVar2;
+  uint local_1c [2];
+  
+  local_1c[0] = 0;
+  if (param_1 < 8) {
+    if (6 < g_tm_debug_level) {
+      printk("[TM][sbrg_get_unknown_unicst_pktdeal]input:port_id = %d\n",param_1);
+    }
+    iVar2 = tmOnuRegRead(0x35,local_1c,0,&sbragRegTable);
+    if (iVar2 == 0) {
+      *param_2 = local_1c[0] >> ((param_1 & 0x7f) << 1) & 3;
+      uVar1 = 0;
+      if (6 < g_tm_debug_level) {
+        printk("[TM][sbrg_get_unknown_unicst_pktdeal]output:en = %d\n");
+      }
+    }
+    else if (g_tm_debug_level == 0) {
+      uVar1 = 0xffffffff;
+    }
+    else {
+      printk("[TM][sbrg_get_unknown_unicst_pktdeal] reg read failed\n");
+      uVar1 = 0xffffffff;
+    }
+  }
+  else if (g_tm_debug_level == 0) {
+    uVar1 = 1;
+  }
+  else {
+    printk("[TM][sbrg_get_unknown_unicst_pktdeal]input invalid parameter!\n");
+    uVar1 = 1;
+  }
+  return uVar1;
+}
+

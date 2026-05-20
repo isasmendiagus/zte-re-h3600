@@ -1,0 +1,12 @@
+brctl show
+bridge name     bridge id               STP enabled     interfaces
+br0             8000.f4f6470f4264       no              eth1
+                                                        eth2
+                                                        eth3
+                                                        eth4
+                                                        nbif0
+                                                        wlan0
+                                                        wlan5g0
+/tmp # echo ZZ_END
+ZZ_END
+/tmp # 

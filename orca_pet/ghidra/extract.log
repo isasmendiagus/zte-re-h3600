@@ -1,0 +1,416 @@
+2026-05-01 21:35:29 INFO  (LoggingInitialization) Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml  
+2026-05-01 21:35:29 INFO  (LoggingInitialization) Using log file: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/extract.log  
+2026-05-01 21:35:29 INFO  (Preferences) Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences  
+2026-05-01 21:35:29 INFO  (Preferences) Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences  
+2026-05-01 21:35:29 INFO  (ClassSearcher) Searching for classes...  
+2026-05-01 21:35:30 INFO  (ClassSearcher) Class search complete (659 ms)  
+2026-05-01 21:35:30 INFO  (DefaultSSLContextInitializer) Initializing SSL Context  
+2026-05-01 21:35:30 INFO  (SecureRandomFactory) Initializing Random Number Generator...  
+2026-05-01 21:35:30 INFO  (SecureRandomFactory) Random Number Generator initialization complete: NativePRNGNonBlocking  
+2026-05-01 21:35:30 INFO  (DefaultTrustManagerFactory) Trust manager disabled, cacerts have not been set  
+2026-05-01 21:35:30 INFO  (AnalyzeHeadless) Headless startup complete (1295 ms)  
+2026-05-01 21:35:30 INFO  (ClassSearcher) Class searcher loaded 58 extension points (18 false positives)  
+2026-05-01 21:35:30 INFO  (HeadlessAnalyzer) HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts  
+2026-05-01 21:35:30 INFO  (HeadlessAnalyzer) HEADLESS: execution starts  
+2026-05-01 21:35:30 INFO  (HeadlessAnalyzer) Opening existing project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:35:30 INFO  (HeadlessProject) Opening project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:35:31 INFO  (HeadlessAnalyzer) REPORT: Processing project file: /vmlinux.bin  
+2026-05-01 21:35:32 INFO  (HeadlessAnalyzer) REPORT: Execute script: extract_compatibles.py '/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output'   
+2026-05-01 21:35:32 ERROR (HeadlessAnalyzer) REPORT SCRIPT ERROR: extract_compatibles.py : Ghidra was not started with PyGhidra. Python is not available ghidra.app.script.GhidraScriptLoadException: Ghidra was not started with PyGhidra. Python is not available
+	at ghidra.pyghidra.PyGhidraScriptProvider.getScriptInstance(PyGhidraScriptProvider.java:75)
+	at ghidra.app.util.headless.HeadlessAnalyzer.runScriptsList(HeadlessAnalyzer.java:924)
+	at ghidra.app.util.headless.HeadlessAnalyzer.analyzeProgram(HeadlessAnalyzer.java:1086)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processFileNoImport(HeadlessAnalyzer.java:1184)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processFolderNoImport(HeadlessAnalyzer.java:1356)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processNoImport(HeadlessAnalyzer.java:1385)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processLocal(HeadlessAnalyzer.java:459)
+	at ghidra.app.util.headless.AnalyzeHeadless.launch(AnalyzeHeadless.java:199)
+	at ghidra.GhidraLauncher.launch(GhidraLauncher.java:81)
+	at ghidra.Ghidra.main(Ghidra.java:54)
+ 
+2026-05-01 21:35:32 INFO  (HeadlessAnalyzer) REPORT: Save succeeded for processed file: /vmlinux.bin  
+2026-05-01 21:36:34 INFO  (LoggingInitialization) Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml  
+2026-05-01 21:36:34 INFO  (LoggingInitialization) Using log file: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/extract.log  
+2026-05-01 21:36:34 INFO  (Preferences) Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences  
+2026-05-01 21:36:34 INFO  (Preferences) Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences  
+2026-05-01 21:36:34 INFO  (ClassSearcher) Searching for classes...  
+2026-05-01 21:36:35 INFO  (ClassSearcher) Class search complete (1131 ms)  
+2026-05-01 21:36:36 INFO  (DefaultSSLContextInitializer) Initializing SSL Context  
+2026-05-01 21:36:36 INFO  (SecureRandomFactory) Initializing Random Number Generator...  
+2026-05-01 21:36:36 INFO  (SecureRandomFactory) Random Number Generator initialization complete: NativePRNGNonBlocking  
+2026-05-01 21:36:36 INFO  (DefaultTrustManagerFactory) Trust manager disabled, cacerts have not been set  
+2026-05-01 21:36:36 INFO  (AnalyzeHeadless) Headless startup complete (2550 ms)  
+2026-05-01 21:36:36 INFO  (ClassSearcher) Class searcher loaded 58 extension points (18 false positives)  
+2026-05-01 21:36:36 INFO  (HeadlessAnalyzer) HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts  
+2026-05-01 21:36:36 INFO  (HeadlessAnalyzer) HEADLESS: execution starts  
+2026-05-01 21:36:36 INFO  (HeadlessAnalyzer) Opening existing project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:36:37 INFO  (HeadlessProject) Opening project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:36:39 INFO  (HeadlessAnalyzer) REPORT: Processing project file: /vmlinux.bin  
+2026-05-01 21:36:39 INFO  (HeadlessAnalyzer) REPORT: Execute script: extract_compatibles.py '/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output'   
+2026-05-01 21:36:39 INFO  (HeadlessAnalyzer) SCRIPT: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts/extract_compatibles.py  
+2026-05-01 21:36:48 INFO  (HeadlessAnalyzer) REPORT: Save succeeded for processed file: /vmlinux.bin  
+2026-05-01 21:38:17 INFO  (LoggingInitialization) Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml  
+2026-05-01 21:38:17 INFO  (LoggingInitialization) Using log file: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/extract.log  
+2026-05-01 21:38:17 INFO  (Preferences) Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences  
+2026-05-01 21:38:17 INFO  (Preferences) Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences  
+2026-05-01 21:38:17 INFO  (ClassSearcher) Searching for classes...  
+2026-05-01 21:38:18 INFO  (ClassSearcher) Class search complete (1250 ms)  
+2026-05-01 21:38:18 INFO  (DefaultSSLContextInitializer) Initializing SSL Context  
+2026-05-01 21:38:18 INFO  (SecureRandomFactory) Initializing Random Number Generator...  
+2026-05-01 21:38:18 INFO  (SecureRandomFactory) Random Number Generator initialization complete: NativePRNGNonBlocking  
+2026-05-01 21:38:18 INFO  (DefaultTrustManagerFactory) Trust manager disabled, cacerts have not been set  
+2026-05-01 21:38:19 INFO  (AnalyzeHeadless) Headless startup complete (2683 ms)  
+2026-05-01 21:38:19 INFO  (ClassSearcher) Class searcher loaded 58 extension points (18 false positives)  
+2026-05-01 21:38:19 INFO  (HeadlessAnalyzer) HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts  
+2026-05-01 21:38:19 INFO  (HeadlessAnalyzer) HEADLESS: execution starts  
+2026-05-01 21:38:19 INFO  (HeadlessAnalyzer) Opening existing project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:38:19 INFO  (HeadlessProject) Opening project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:38:21 INFO  (HeadlessAnalyzer) REPORT: Processing project file: /vmlinux.bin  
+2026-05-01 21:38:22 INFO  (HeadlessAnalyzer) REPORT: Execute script: extract_compatibles.py '/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output'   
+2026-05-01 21:38:22 INFO  (HeadlessAnalyzer) SCRIPT: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts/extract_compatibles.py  
+2026-05-01 21:38:26 INFO  (HeadlessAnalyzer) REPORT: Save succeeded for processed file: /vmlinux.bin  
+2026-05-01 21:39:54 INFO  (LoggingInitialization) Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml  
+2026-05-01 21:39:54 INFO  (LoggingInitialization) Using log file: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/extract.log  
+2026-05-01 21:39:54 INFO  (Preferences) Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences  
+2026-05-01 21:39:54 INFO  (Preferences) Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences  
+2026-05-01 21:39:54 INFO  (ClassSearcher) Searching for classes...  
+2026-05-01 21:39:55 INFO  (ClassSearcher) Class search complete (1132 ms)  
+2026-05-01 21:39:56 INFO  (DefaultSSLContextInitializer) Initializing SSL Context  
+2026-05-01 21:39:56 INFO  (SecureRandomFactory) Initializing Random Number Generator...  
+2026-05-01 21:39:56 INFO  (SecureRandomFactory) Random Number Generator initialization complete: NativePRNGNonBlocking  
+2026-05-01 21:39:56 INFO  (DefaultTrustManagerFactory) Trust manager disabled, cacerts have not been set  
+2026-05-01 21:39:56 INFO  (AnalyzeHeadless) Headless startup complete (2530 ms)  
+2026-05-01 21:39:56 INFO  (ClassSearcher) Class searcher loaded 58 extension points (18 false positives)  
+2026-05-01 21:39:56 INFO  (HeadlessAnalyzer) HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts  
+2026-05-01 21:39:56 INFO  (HeadlessAnalyzer) HEADLESS: execution starts  
+2026-05-01 21:39:56 INFO  (HeadlessAnalyzer) Opening existing project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:39:56 INFO  (HeadlessProject) Opening project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:39:58 INFO  (HeadlessAnalyzer) REPORT: Processing project file: /vmlinux.bin  
+2026-05-01 21:39:59 INFO  (HeadlessAnalyzer) REPORT: Execute script: extract_compatibles.py '/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output'   
+2026-05-01 21:39:59 INFO  (HeadlessAnalyzer) SCRIPT: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts/extract_compatibles.py  
+2026-05-01 21:40:03 INFO  (HeadlessAnalyzer) REPORT: Save succeeded for processed file: /vmlinux.bin  
+2026-05-01 21:40:37 INFO  (LoggingInitialization) Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml  
+2026-05-01 21:40:37 INFO  (LoggingInitialization) Using log file: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/extract.log  
+2026-05-01 21:40:37 INFO  (Preferences) Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences  
+2026-05-01 21:40:37 INFO  (Preferences) Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences  
+2026-05-01 21:40:37 INFO  (ClassSearcher) Searching for classes...  
+2026-05-01 21:40:38 INFO  (ClassSearcher) Class search complete (1206 ms)  
+2026-05-01 21:40:39 INFO  (DefaultSSLContextInitializer) Initializing SSL Context  
+2026-05-01 21:40:39 INFO  (SecureRandomFactory) Initializing Random Number Generator...  
+2026-05-01 21:40:39 INFO  (SecureRandomFactory) Random Number Generator initialization complete: NativePRNGNonBlocking  
+2026-05-01 21:40:39 INFO  (DefaultTrustManagerFactory) Trust manager disabled, cacerts have not been set  
+2026-05-01 21:40:39 INFO  (AnalyzeHeadless) Headless startup complete (2593 ms)  
+2026-05-01 21:40:39 INFO  (ClassSearcher) Class searcher loaded 58 extension points (18 false positives)  
+2026-05-01 21:40:39 INFO  (HeadlessAnalyzer) HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts  
+2026-05-01 21:40:39 INFO  (HeadlessAnalyzer) HEADLESS: execution starts  
+2026-05-01 21:40:39 INFO  (HeadlessAnalyzer) Opening existing project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:40:40 INFO  (HeadlessProject) Opening project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:40:42 INFO  (HeadlessAnalyzer) REPORT: Processing project file: /vmlinux.bin  
+2026-05-01 21:40:42 INFO  (HeadlessAnalyzer) REPORT: Execute script: extract_compatibles.py '/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output'   
+2026-05-01 21:40:42 INFO  (HeadlessAnalyzer) SCRIPT: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts/extract_compatibles.py  
+2026-05-01 21:40:48 INFO  (HeadlessAnalyzer) REPORT: Save succeeded for processed file: /vmlinux.bin  
+2026-05-01 21:41:18 INFO  (LoggingInitialization) Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml  
+2026-05-01 21:41:18 INFO  (LoggingInitialization) Using log file: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/extract.log  
+2026-05-01 21:41:18 INFO  (Preferences) Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences  
+2026-05-01 21:41:18 INFO  (Preferences) Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences  
+2026-05-01 21:41:18 INFO  (ClassSearcher) Searching for classes...  
+2026-05-01 21:41:19 INFO  (ClassSearcher) Class search complete (1275 ms)  
+2026-05-01 21:41:20 INFO  (DefaultSSLContextInitializer) Initializing SSL Context  
+2026-05-01 21:41:20 INFO  (SecureRandomFactory) Initializing Random Number Generator...  
+2026-05-01 21:41:20 INFO  (SecureRandomFactory) Random Number Generator initialization complete: NativePRNGNonBlocking  
+2026-05-01 21:41:20 INFO  (DefaultTrustManagerFactory) Trust manager disabled, cacerts have not been set  
+2026-05-01 21:41:20 INFO  (AnalyzeHeadless) Headless startup complete (2606 ms)  
+2026-05-01 21:41:20 INFO  (ClassSearcher) Class searcher loaded 58 extension points (18 false positives)  
+2026-05-01 21:41:20 INFO  (HeadlessAnalyzer) HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts  
+2026-05-01 21:41:20 INFO  (HeadlessAnalyzer) HEADLESS: execution starts  
+2026-05-01 21:41:20 INFO  (HeadlessAnalyzer) Opening existing project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:41:20 INFO  (HeadlessProject) Opening project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:41:22 INFO  (HeadlessAnalyzer) REPORT: Processing project file: /vmlinux.bin  
+2026-05-01 21:41:23 INFO  (HeadlessAnalyzer) REPORT: Execute script: extract_compatibles.py '/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output'   
+2026-05-01 21:41:23 INFO  (HeadlessAnalyzer) SCRIPT: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts/extract_compatibles.py  
+2026-05-01 21:41:29 INFO  (HeadlessAnalyzer) REPORT: Save succeeded for processed file: /vmlinux.bin  
+2026-05-01 21:41:56 INFO  (LoggingInitialization) Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml  
+2026-05-01 21:41:56 INFO  (LoggingInitialization) Using log file: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/extract.log  
+2026-05-01 21:41:56 INFO  (Preferences) Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences  
+2026-05-01 21:41:56 INFO  (Preferences) Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences  
+2026-05-01 21:41:56 INFO  (ClassSearcher) Searching for classes...  
+2026-05-01 21:41:58 INFO  (ClassSearcher) Class search complete (1195 ms)  
+2026-05-01 21:41:58 INFO  (DefaultSSLContextInitializer) Initializing SSL Context  
+2026-05-01 21:41:58 INFO  (SecureRandomFactory) Initializing Random Number Generator...  
+2026-05-01 21:41:58 INFO  (SecureRandomFactory) Random Number Generator initialization complete: NativePRNGNonBlocking  
+2026-05-01 21:41:58 INFO  (DefaultTrustManagerFactory) Trust manager disabled, cacerts have not been set  
+2026-05-01 21:41:58 INFO  (AnalyzeHeadless) Headless startup complete (2559 ms)  
+2026-05-01 21:41:58 INFO  (ClassSearcher) Class searcher loaded 58 extension points (18 false positives)  
+2026-05-01 21:41:59 INFO  (HeadlessAnalyzer) HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts  
+2026-05-01 21:41:59 INFO  (HeadlessAnalyzer) HEADLESS: execution starts  
+2026-05-01 21:41:59 INFO  (HeadlessAnalyzer) Opening existing project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:41:59 INFO  (HeadlessProject) Opening project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:42:01 INFO  (HeadlessAnalyzer) REPORT: Processing project file: /vmlinux.bin  
+2026-05-01 21:42:01 INFO  (HeadlessAnalyzer) REPORT: Execute script: extract_compatibles.py '/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output'   
+2026-05-01 21:42:01 INFO  (HeadlessAnalyzer) SCRIPT: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts/extract_compatibles.py  
+2026-05-01 21:42:06 INFO  (HeadlessAnalyzer) REPORT: Save succeeded for processed file: /vmlinux.bin  
+2026-05-01 21:42:52 INFO  (LoggingInitialization) Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml  
+2026-05-01 21:42:52 INFO  (LoggingInitialization) Using log file: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/extract.log  
+2026-05-01 21:42:52 INFO  (Preferences) Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences  
+2026-05-01 21:42:52 INFO  (Preferences) Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences  
+2026-05-01 21:42:52 INFO  (ClassSearcher) Searching for classes...  
+2026-05-01 21:42:53 INFO  (ClassSearcher) Class search complete (1183 ms)  
+2026-05-01 21:42:53 INFO  (DefaultSSLContextInitializer) Initializing SSL Context  
+2026-05-01 21:42:53 INFO  (SecureRandomFactory) Initializing Random Number Generator...  
+2026-05-01 21:42:53 INFO  (SecureRandomFactory) Random Number Generator initialization complete: NativePRNGNonBlocking  
+2026-05-01 21:42:53 INFO  (DefaultTrustManagerFactory) Trust manager disabled, cacerts have not been set  
+2026-05-01 21:42:54 INFO  (AnalyzeHeadless) Headless startup complete (2626 ms)  
+2026-05-01 21:42:54 INFO  (ClassSearcher) Class searcher loaded 58 extension points (18 false positives)  
+2026-05-01 21:42:54 INFO  (HeadlessAnalyzer) HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts  
+2026-05-01 21:42:54 INFO  (HeadlessAnalyzer) HEADLESS: execution starts  
+2026-05-01 21:42:54 INFO  (HeadlessAnalyzer) Opening existing project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:42:54 INFO  (HeadlessProject) Opening project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:42:56 INFO  (HeadlessAnalyzer) REPORT: Processing project file: /vmlinux.bin  
+2026-05-01 21:42:57 INFO  (HeadlessAnalyzer) REPORT: Execute script: extract_compatibles.py '/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output'   
+2026-05-01 21:42:57 INFO  (HeadlessAnalyzer) SCRIPT: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts/extract_compatibles.py  
+2026-05-01 21:43:00 INFO  (HeadlessAnalyzer) REPORT: Save succeeded for processed file: /vmlinux.bin  
+2026-05-01 21:43:43 INFO  (LoggingInitialization) Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml  
+2026-05-01 21:43:43 INFO  (LoggingInitialization) Using log file: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/extract.log  
+2026-05-01 21:43:43 INFO  (Preferences) Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences  
+2026-05-01 21:43:43 INFO  (Preferences) Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences  
+2026-05-01 21:43:43 INFO  (ClassSearcher) Searching for classes...  
+2026-05-01 21:43:44 INFO  (ClassSearcher) Class search complete (1209 ms)  
+2026-05-01 21:43:44 INFO  (DefaultSSLContextInitializer) Initializing SSL Context  
+2026-05-01 21:43:44 INFO  (SecureRandomFactory) Initializing Random Number Generator...  
+2026-05-01 21:43:44 INFO  (SecureRandomFactory) Random Number Generator initialization complete: NativePRNGNonBlocking  
+2026-05-01 21:43:44 INFO  (DefaultTrustManagerFactory) Trust manager disabled, cacerts have not been set  
+2026-05-01 21:43:45 INFO  (AnalyzeHeadless) Headless startup complete (2646 ms)  
+2026-05-01 21:43:45 INFO  (ClassSearcher) Class searcher loaded 58 extension points (18 false positives)  
+2026-05-01 21:43:45 INFO  (HeadlessAnalyzer) HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts  
+2026-05-01 21:43:45 INFO  (HeadlessAnalyzer) HEADLESS: execution starts  
+2026-05-01 21:43:45 INFO  (HeadlessAnalyzer) Opening existing project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:43:45 INFO  (HeadlessProject) Opening project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic  
+2026-05-01 21:43:47 INFO  (HeadlessAnalyzer) REPORT: Processing project file: /vmlinux.bin  
+2026-05-01 21:43:48 INFO  (HeadlessAnalyzer) REPORT: Execute script: extract_compatibles.py '/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output'   
+2026-05-01 21:43:48 INFO  (HeadlessAnalyzer) SCRIPT: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts/extract_compatibles.py  
+2026-05-01 21:43:54 INFO  (HeadlessAnalyzer) REPORT: Save succeeded for processed file: /vmlinux.bin  

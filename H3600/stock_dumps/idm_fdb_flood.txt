@@ -1,0 +1,16 @@
+cat /proc/idm_fdb/flood_status
+idm_flood_status:
+idm0:
+  UNICAST            0
+  MULTICAST          0
+  BROADCAST          0
+  DROP               0
+idm1:
+  UNICAST            0
+  MULTICAST          0
+  BROADCAST          0
+  DROP               0
+
+/tmp # echo ZZ_END
+ZZ_END
+/tmp # 

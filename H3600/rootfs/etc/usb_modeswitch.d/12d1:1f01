@@ -1,0 +1,6 @@
+# Huawei E353 (3.se) and others
+TargetVendor=0x12d1
+TargetProductList="14db,14dc"
+MessageContent="55534243000000000000000000000011063000000100000000000000000000"
+#HuaweiNewMode=1
+#NoDriverLoading=1

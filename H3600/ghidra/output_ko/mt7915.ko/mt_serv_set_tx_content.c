@@ -1,0 +1,19 @@
+// module: mt7915.ko
+// function: mt_serv_set_tx_content @ 0x250bec
+// size: 84 bytes
+//
+
+int mt_serv_set_tx_content(undefined4 *param_1)
+
+{
+  int iVar1;
+  
+  iVar1 = (**(code **)(param_1[0x7c4] + 0x7c))
+                    (*param_1,(uint)*(byte *)(param_1 + 0x133),
+                     param_1 + (uint)*(byte *)(param_1 + 0x133) * 0x346 + 0x138);
+  if (iVar1 != 0) {
+    printk("%s: err=0x%08x\n","mt_serv_set_tx_content",iVar1);
+  }
+  return iVar1;
+}
+

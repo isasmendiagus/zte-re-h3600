@@ -1,0 +1,5 @@
+cat /proc/zte/verinfo 2>&1
+cat: read error: Is a directory
+/tmp # echo ZZ_END
+ZZ_END
+/tmp # 

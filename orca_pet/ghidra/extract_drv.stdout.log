@@ -1,0 +1,85 @@
+openjdk version "21.0.9" 2025-10-21
+OpenJDK Runtime Environment (build 21.0.9+10-Ubuntu-124.04)
+OpenJDK 64-Bit Server VM (build 21.0.9+10-Ubuntu-124.04, mixed mode)
+INFO  Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences (Preferences)  
+INFO  Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (1218 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (DefaultTrustManagerFactory)  
+INFO  Headless startup complete (2641 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 58 extension points (18 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Opening existing project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic (HeadlessAnalyzer)  
+INFO  Opening project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic (HeadlessProject)  
+INFO  REPORT: Processing project file: /vmlinux.bin (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: extract_drivers.py '/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output_drivers'  (HeadlessAnalyzer)  
+INFO  SCRIPT: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts/extract_drivers.py (HeadlessAnalyzer)  
+output -> /home/ubuntu/Projects/MYSELF/ZTE/ghidra/output_drivers
+indexed 15657 functions for nearest-before lookup
+loaded 1 memory blocks
+| gic | 0x00801000 | 0 | (no func found) |
+| timer_a9 | 0x00800200 | 0 | (no func found) |
+| twd_wdt | 0x00800620 | 0 | (no func found) |
+| mg_crm | 0x00804000 | 0 | (no func found) |
+| l2_pl310 | 0x00c00000 | 2 | (no func found) |
+| iram | 0x00200800 | 2 | (no func found) |
+| nand_data | 0x00d80000 | 2 | (no func found) |
+| nand_reg | 0x00d00000 | 2 | (no func found) |
+| mmc_sd | 0x08980000 | 0 | (no func found) |
+| usb2_dwc2 | 0x09000000 | 3 | (no func found) |
+| usb3_dwc3 | 0x09100000 | 0 | (no func found) |
+| pcie | 0x10000000 | 7 | (no func found) |
+| topcrm | 0x94000000 | 2 | (no func found) |
+| temp_sens | 0x94100034 | 0 | (no func found) |
+| lsp0crpm | 0x94400000 | 0 | (no func found) |
+| uart0 | 0x94404000 | 2 | FUN_c001092c |
+| uart1 | 0x94405000 | 0 | (no func found) |
+| spifc | 0x94406000 | 0 | (no func found) |
+| lsp1crpm | 0x9a100000 | 0 | (no func found) |
+| mdio | 0x9a101000 | 0 | (no func found) |
+| i2c0 | 0x9a102000 | 0 | (no func found) |
+| i2c1 | 0x9a103000 | 0 | (no func found) |
+| ssp | 0x9a105000 | 0 | (no func found) |
+| tdm | 0x9a106000 | 0 | (no func found) |
+| gephy0 | 0x9b000000 | 2 | (no func found) |
+| gephy1 | 0x9b100000 | 0 | (no func found) |
+| gephy2 | 0x9b200000 | 0 | (no func found) |
+| gephy3 | 0x9b300000 | 0 | (no func found) |
+| pon | 0x92000000 | 2 | (no func found) |
+| tm | 0x92340000 | 0 | (no func found) |
+| pp | 0x92380000 | 0 | (no func found) |
+| npp | 0x921c0000 | 0 | (no func found) |
+| idm | 0x921c8000 | 0 | (no func found) |
+DONE: 1 unique driver functions extracted
+INFO  REPORT: Save succeeded for processed file: /vmlinux.bin (HeadlessAnalyzer)  

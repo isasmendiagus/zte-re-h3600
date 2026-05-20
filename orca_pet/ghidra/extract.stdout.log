@@ -1,0 +1,59 @@
+openjdk version "21.0.9" 2025-10-21
+OpenJDK Runtime Environment (build 21.0.9+10-Ubuntu-124.04)
+OpenJDK 64-Bit Server VM (build 21.0.9+10-Ubuntu-124.04, mixed mode)
+INFO  Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/extract.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences (Preferences)  
+INFO  Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (1209 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (DefaultTrustManagerFactory)  
+INFO  Headless startup complete (2646 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 58 extension points (18 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Opening existing project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic (HeadlessAnalyzer)  
+INFO  Opening project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic (HeadlessProject)  
+INFO  REPORT: Processing project file: /vmlinux.bin (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: extract_compatibles.py '/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output'  (HeadlessAnalyzer)  
+INFO  SCRIPT: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts/extract_compatibles.py (HeadlessAnalyzer)  
+output -> /home/ubuntu/Projects/MYSELF/ZTE/ghidra/output
+scanning memory for compatible strings...
+  total initialized memory: 6.6 MiB
+  block ram @ 0xc0008000 sz=0x6a53c0
+DIAG @ 0xc0584940: hex=7a 74 65 2c 7a 78 32 37 39 31 32 38 2d 73 6d 70 00 00 00 00 65 72 72 6f
+DIAG @ 0xc0584940: str='zte,zx279128-smp\x00\x00\x00\x00erro'
+DIAG: total data len = 6968256
+DIAG: find('zte,') = 4638412
+scanning for prefix matches...
+found 35 unique compatible strings
+DONE: 35 strings, 3 xrefs, 0 unique funcs
+INFO  REPORT: Save succeeded for processed file: /vmlinux.bin (HeadlessAnalyzer)  

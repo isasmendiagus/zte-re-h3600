@@ -1,0 +1,35 @@
+cat /proc/idm/stat
+idm_pop_size_err[0]: 0
+idm_pop_size_err[1]: 0
+idm_pop_size_err[2]: 2
+idm_push_failed[0]: 0
+idm_push_failed[1]: 0
+idm_push_failed[2]: 0
+idm_push_failed_res[0]: 0
+idm_push_failed_res[1]: 0
+idm_push_failed_res[2]: 0
+idm_push_failed_res[3]: 0
+idm_push_failed_res[4]: 0
+idm_push_failed_res[5]: 0
+idm_push_failed_res[6]: 0
+idm_push_cnt[0]: 512
+idm_push_cnt[1]: 0
+idm_push_cnt[2]: 40629
+idm_pop_cnt[0]: 0
+idm_pop_cnt[1]: 0
+idm_pop_cnt[2]: 40531
+idm_skb_stack_full[0]: 0
+idm_skb_stack_full[1]: 0
+idm_skb_stack_full[2]: 0
+idm_skb_stack_empty[0]: 2048
+idm_skb_stack_empty[1]: 0
+idm_skb_stack_empty[2]: 119
+idm_rx_arp_count: 0
+idm_poll_cnt: 104966
+idm_txtq_err: 0
+idm_tx_done_total: 0
+idm_tx_full: 0
+idm_sw_tx_full: 0
+/tmp # echo ZZ_END
+ZZ_END
+/tmp # 

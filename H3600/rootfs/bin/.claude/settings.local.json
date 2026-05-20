@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(grep -E \"^\\\\s+[0-9a-f]+\\\\s+/bin/sh$\")",
+      "Bash(arm-linux-gnueabi-objdump -h httpd)",
+      "Bash(python3 -c ' *)",
+      "Bash(grep -E \"^[^;]+: mov r0, r4 ; \\(blx r3|pop \\\\{r3.*pc\\\\}\\)\")",
+      "Bash(grep -E \"^[^;]+: pop \\\\{r3, r4, fp, pc\\\\}$\")",
+      "Bash(python3 *)",
+      "Bash(grep -E \"^[^;]+: mov r1, r5 ; blx r3$\")",
+      "Read(//home/ubuntu/Projects/MYSELF/ZTE/H3600/rootfs/etc/**)",
+      "Bash(chmod +x /home/ubuntu/Projects/MYSELF/ZTE/H3600/ROP_load_firmware_no_uart/exploit_telnetd.sh)",
+      "Bash(bash -n /home/ubuntu/Projects/MYSELF/ZTE/H3600/ROP_load_firmware_no_uart/exploit_telnetd.sh)",
+      "Bash(ssh *)",
+      "Bash(sshpass *)",
+      "Bash(nc -z -w3 192.168.1.1 22)",
+      "Bash(echo \"22: $?\")",
+      "Bash(nc -z -w3 192.168.1.1 2323)",
+      "Bash(echo \"2323: $?\")",
+      "Bash(nc -z -w3 192.168.1.1 80)",
+      "Bash(ping -c1 -W2 192.168.1.1)",
+      "Bash(curl -sk --max-time 3 https://192.168.1.1/ -o /dev/null -w \"%{http_code}\")"
+    ]
+  }
+}

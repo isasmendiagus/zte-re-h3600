@@ -1,0 +1,28 @@
+Thread principal: XYUU en kanxue.com
+URL: https://bbs.kanxue.com/thread-276970.htm
+Este es el thread más importante. XYUU hizo el reverse engineering completo del firmware H3600P:
+
+Estructura del header de firmware
+Algoritmo de cifrado AES del rootfs
+Descubrimiento de que solo hay CRC32 (sin RSA real) en versiones antiguas
+Confirmación de que los .ko no están strippeados
+
+Tiene 4 páginas con discusión técnica detallada. Está en chino, así que necesitarás Google Translate o similar.
+Importante: kanxue.com requiere registro para ver algunas partes del thread y para enviar PMs a los usuarios.
+Thread del winnt5 en chinadsl.net
+URL: https://www.chinadsl.net/thread-169478-1-1.html
+Este es el thread que mencionaba qiner_1984 y donde winnt5 hizo el análisis comparativo entre el ZX296702 (mainline) y el ZX279128. También en chino, sin necesidad de registro para leer (creo).
+Otros enlaces útiles que hemos referenciado
+Forum OpenWrt - request de soporte (sin respuesta útil, pero por si lo quieres ver):
+
+https://forum.openwrt.org/t/support-for-zx279128s/196946
+
+XYUU también está en GitHub con scripts del proceso:
+
+https://github.com/enoymuss/h3600-root (este es derivado del trabajo de XYUU, funciona hasta P16_TR pero NO en P5_DIGI)
+
+orca.pet - el análisis de Marcos del Sol Vives:
+
+https://orca.pet/zteh3600p/
+
+

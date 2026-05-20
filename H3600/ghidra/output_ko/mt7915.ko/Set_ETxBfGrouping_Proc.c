@@ -1,0 +1,32 @@
+// module: mt7915.ko
+// function: Set_ETxBfGrouping_Proc @ 0xe540c
+// size: 160 bytes
+//
+
+undefined4
+Set_ETxBfGrouping_Proc(int param_1,undefined4 param_2,undefined4 param_3,undefined4 param_4)
+
+{
+  uint uVar1;
+  int iVar2;
+  
+  uVar1 = os_str_tol(param_2,0,10,param_4,param_4);
+  iVar2 = hc_get_hif_type(*(undefined4 *)(param_1 + 0xa797a0));
+  if (iVar2 == 2) {
+    if (0 < DebugLevel) {
+      printk("%s(): Not support for HIF_MT yet!\n","Set_ETxBfGrouping_Proc");
+      return 0;
+    }
+  }
+  else {
+    if (uVar1 < 3) {
+      return 1;
+    }
+    if (-1 < DebugLevel) {
+      printk("Set_ETxBfGrouping_Proc: value > 2!\n");
+      return 0;
+    }
+  }
+  return 0;
+}
+

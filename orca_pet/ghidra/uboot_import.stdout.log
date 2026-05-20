@@ -1,0 +1,185 @@
+openjdk version "21.0.9" 2025-10-21
+OpenJDK Runtime Environment (build 21.0.9+10-Ubuntu-124.04)
+OpenJDK 64-Bit Server VM (build 21.0.9+10-Ubuntu-124.04, mixed mode)
+INFO  Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/uboot_import.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences (Preferences)  
+INFO  Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (1134 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (DefaultTrustManagerFactory)  
+INFO  Headless startup complete (3819 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 207 extension points (111 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Creating project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project_uboot/uboot (HeadlessAnalyzer)  
+INFO  Creating project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project_uboot/uboot (DefaultProject)  
+INFO  REPORT: Processing input files:  (HeadlessAnalyzer)  
+INFO       project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project_uboot/uboot (HeadlessAnalyzer)  
+INFO  IMPORTING: file:///home/ubuntu/Projects/MYSELF/ZTE/firmware/bootloader.bin (HeadlessAnalyzer)  
+INFO  Successfully applied "-loader-baseAddr" to "Base Address" (old: "null", new: "0x40E00000") (ProgramLoader)  
+INFO  Using Loader: Raw Binary (ProgramLoader)  
+INFO  Using Language/Compiler: ARM:LE:32:v7:default (ProgramLoader)  
+INFO  Using Library Search Path: [., /bin, /lib, /lib64, /lib/x86_64-linux-gnu, /lib/aarch64-linux-gnu, /usr/bin, /usr/lib, /usr/X11R6/bin, /usr/X11R6/lib, /usr/java/packages/lib, /usr/lib/x86_64-linux-gnu/jni, /usr/lib/x86_64-linux-gnu, /usr/lib/jni] (ProgramLoader)  
+INFO  IMPORTING: Loaded 0 additional files (HeadlessAnalyzer)  
+INFO  ANALYZING all memory and code: file:///home/ubuntu/Projects/MYSELF/ZTE/firmware/bootloader.bin (HeadlessAnalyzer)  
+WARN  Decompiling 40e3de84, pcode error at 47f1d3c4: Could not follow disassembly flow into non-existing memory at 47f1d3c4 (DecompileCallback)  
+WARN  Decompiling 40e3de84, pcode error at 47f1d1cc: Could not follow disassembly flow into non-existing memory at 47f1d1cc (DecompileCallback)  
+WARN  Decompiling 40e3de84, pcode error at 47f1d278: Could not follow disassembly flow into non-existing memory at 47f1d278 (DecompileCallback)  
+WARN  Decompiling 40e3de84, pcode error at 47f1d218: Could not follow disassembly flow into non-existing memory at 47f1d218 (DecompileCallback)  
+WARN  Decompiling 40e3de84, pcode error at 47f1d364: Could not follow disassembly flow into non-existing memory at 47f1d364 (DecompileCallback)  
+WARN  Decompiling 40e3de84, pcode error at 47f1d3d4: Could not follow disassembly flow into non-existing memory at 47f1d3d4 (DecompileCallback)  
+WARN  Decompiling 40e41210, pcode error at 47f20ad8: Could not follow disassembly flow into non-existing memory at 47f20ad8 (DecompileCallback)  
+WARN  Decompiling 40e41210, pcode error at 47f20b04: Could not follow disassembly flow into non-existing memory at 47f20b04 (DecompileCallback)  
+WARN  Decompiling 40e41210, pcode error at 47f20ab0: Could not follow disassembly flow into non-existing memory at 47f20ab0 (DecompileCallback)  
+WARN  Decompiling 40e41210, pcode error at 47f20a80: Could not follow disassembly flow into non-existing memory at 47f20a80 (DecompileCallback)  
+WARN  Decompiling 40e385f0, pcode error at 47f18164: Could not follow disassembly flow into non-existing memory at 47f18164 (DecompileCallback)  
+WARN  Decompiling 40e385f0, pcode error at 47f18438: Could not follow disassembly flow into non-existing memory at 47f18438 (DecompileCallback)  
+WARN  Decompiling 40e385f0, pcode error at 47f1813c: Could not follow disassembly flow into non-existing memory at 47f1813c (DecompileCallback)  
+WARN  Decompiling 40e385f0, pcode error at 47f18114: Could not follow disassembly flow into non-existing memory at 47f18114 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f2a5f4: Could not follow disassembly flow into non-existing memory at 47f2a5f4 (DecompileCallback)  
+WARN  Decompiling 40e385f0, pcode error at 47f180f0: Could not follow disassembly flow into non-existing memory at 47f180f0 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f2a390: Could not follow disassembly flow into non-existing memory at 47f2a390 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f2a398: Could not follow disassembly flow into non-existing memory at 47f2a398 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f2a330: Could not follow disassembly flow into non-existing memory at 47f2a330 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f2a1f4: Could not follow disassembly flow into non-existing memory at 47f2a1f4 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f2a1bc: Could not follow disassembly flow into non-existing memory at 47f2a1bc (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f2a104: Could not follow disassembly flow into non-existing memory at 47f2a104 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f2a08c: Could not follow disassembly flow into non-existing memory at 47f2a08c (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29fb0: Could not follow disassembly flow into non-existing memory at 47f29fb0 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29f5c: Could not follow disassembly flow into non-existing memory at 47f29f5c (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29dfc: Could not follow disassembly flow into non-existing memory at 47f29dfc (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29b7c: Could not follow disassembly flow into non-existing memory at 47f29b7c (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29a90: Could not follow disassembly flow into non-existing memory at 47f29a90 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29a30: Could not follow disassembly flow into non-existing memory at 47f29a30 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f299ac: Could not follow disassembly flow into non-existing memory at 47f299ac (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f2994c: Could not follow disassembly flow into non-existing memory at 47f2994c (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f2989c: Could not follow disassembly flow into non-existing memory at 47f2989c (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29890: Could not follow disassembly flow into non-existing memory at 47f29890 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29848: Could not follow disassembly flow into non-existing memory at 47f29848 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f2980c: Could not follow disassembly flow into non-existing memory at 47f2980c (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29778: Could not follow disassembly flow into non-existing memory at 47f29778 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f296c8: Could not follow disassembly flow into non-existing memory at 47f296c8 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29610: Could not follow disassembly flow into non-existing memory at 47f29610 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f2955c: Could not follow disassembly flow into non-existing memory at 47f2955c (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f294cc: Could not follow disassembly flow into non-existing memory at 47f294cc (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29470: Could not follow disassembly flow into non-existing memory at 47f29470 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f293f4: Could not follow disassembly flow into non-existing memory at 47f293f4 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29364: Could not follow disassembly flow into non-existing memory at 47f29364 (DecompileCallback)  
+WARN  Decompiling 40e49914, pcode error at 47f29210: Could not follow disassembly flow into non-existing memory at 47f29210 (DecompileCallback)  
+WARN  Decompiling 40e4cecc, pcode error at 47f2c7d4: Could not follow disassembly flow into non-existing memory at 47f2c7d4 (DecompileCallback)  
+WARN  Decompiling 40e4cecc, pcode error at 47f2c7b4: Could not follow disassembly flow into non-existing memory at 47f2c7b4 (DecompileCallback)  
+WARN  Decompiling 40e4cecc, pcode error at 47f2c7c4: Could not follow disassembly flow into non-existing memory at 47f2c7c4 (DecompileCallback)  
+WARN  Decompiling 40e4cecc, pcode error at 47f2c900: Could not follow disassembly flow into non-existing memory at 47f2c900 (DecompileCallback)  
+WARN  Decompiling 40e4cecc, pcode error at 47f2c79c: Could not follow disassembly flow into non-existing memory at 47f2c79c (DecompileCallback)  
+WARN  Decompiling 40e4cecc, pcode error at 47f2c960: Could not follow disassembly flow into non-existing memory at 47f2c960 (DecompileCallback)  
+WARN  Decompiling 40e4cecc, pcode error at 47f2c938: Could not follow disassembly flow into non-existing memory at 47f2c938 (DecompileCallback)  
+WARN  Decompiling 40e4cecc, pcode error at 47f2c82c: Could not follow disassembly flow into non-existing memory at 47f2c82c (DecompileCallback)  
+WARN  Decompiling 40e4cecc, pcode error at 47f2c834: Could not follow disassembly flow into non-existing memory at 47f2c834 (DecompileCallback)  
+WARN  Decompiling 40e4cecc, pcode error at 47f2c94c: Could not follow disassembly flow into non-existing memory at 47f2c94c (DecompileCallback)  
+WARN  Decompiling 40e2f760, pcode error at 47f0e944: Could not follow disassembly flow into non-existing memory at 47f0e944 (DecompileCallback)  
+WARN  Decompiling 40e2f760, pcode error at 47f0e86c: Could not follow disassembly flow into non-existing memory at 47f0e86c (DecompileCallback)  
+WARN  Decompiling 40e2f760, pcode error at 47f0e970: Could not follow disassembly flow into non-existing memory at 47f0e970 (DecompileCallback)  
+WARN  Decompiling 40e2f760, pcode error at 47f0e710: Could not follow disassembly flow into non-existing memory at 47f0e710 (DecompileCallback)  
+WARN  Decompiling 40e2f760, pcode error at 47f0eb7c: Could not follow disassembly flow into non-existing memory at 47f0eb7c (DecompileCallback)  
+WARN  Decompiling 40e2f760, pcode error at 47f0eb34: Could not follow disassembly flow into non-existing memory at 47f0eb34 (DecompileCallback)  
+WARN  Decompiling 40e30774, pcode error at 47f1007c: Could not follow disassembly flow into non-existing memory at 47f1007c (DecompileCallback)  
+WARN  Decompiling 40e30774, pcode error at 47f1006c: Could not follow disassembly flow into non-existing memory at 47f1006c (DecompileCallback)  
+WARN  Decompiling 40e30774, pcode error at 47f1005c: Could not follow disassembly flow into non-existing memory at 47f1005c (DecompileCallback)  
+WARN  Decompiling 40e30774, pcode error at 47f101c0: Could not follow disassembly flow into non-existing memory at 47f101c0 (DecompileCallback)  
+WARN  Decompiling 40e30774, pcode error at 47f1004c: Could not follow disassembly flow into non-existing memory at 47f1004c (DecompileCallback)  
+WARN  Decompiling 40e30774, pcode error at 47f1003c: Could not follow disassembly flow into non-existing memory at 47f1003c (DecompileCallback)  
+WARN  Decompiling 40e30774, pcode error at 47f1002c: Could not follow disassembly flow into non-existing memory at 47f1002c (DecompileCallback)  
+WARN  Decompiling 40e30774, pcode error at 47f1001c: Could not follow disassembly flow into non-existing memory at 47f1001c (DecompileCallback)  
+WARN  Decompiling 40e30774, pcode error at 47f1000c: Could not follow disassembly flow into non-existing memory at 47f1000c (DecompileCallback)  
+WARN  Decompiling 40e2db84, pcode error at 47f0d420: Could not follow disassembly flow into non-existing memory at 47f0d420 (DecompileCallback)  
+WARN  Decompiling 40e2db84, pcode error at 47f0d3fc: Could not follow disassembly flow into non-existing memory at 47f0d3fc (DecompileCallback)  
+WARN  Decompiling 40e2db84, pcode error at 47f0d3d8: Could not follow disassembly flow into non-existing memory at 47f0d3d8 (DecompileCallback)  
+WARN  Decompiling 40e2db84, pcode error at 47f0d3b4: Could not follow disassembly flow into non-existing memory at 47f0d3b4 (DecompileCallback)  
+WARN  Decompiling 40e26af0, pcode error at 47f063fc: Could not follow disassembly flow into non-existing memory at 47f063fc (DecompileCallback)  
+WARN  Decompiling 40e26af0, pcode error at 47f063f4: Could not follow disassembly flow into non-existing memory at 47f063f4 (DecompileCallback)  
+WARN  Decompiling 40e26af0, pcode error at 47f063ec: Could not follow disassembly flow into non-existing memory at 47f063ec (DecompileCallback)  
+WARN  Decompiling 40e26af0, pcode error at 47f063e4: Could not follow disassembly flow into non-existing memory at 47f063e4 (DecompileCallback)  
+WARN  Decompiling 40e26af0, pcode error at 47f063d8: Could not follow disassembly flow into non-existing memory at 47f063d8 (DecompileCallback)  
+WARN  Decompiling 40e26af0, pcode error at 47f063cc: Could not follow disassembly flow into non-existing memory at 47f063cc (DecompileCallback)  
+WARN  Decompiling 40e26af0, pcode error at 47f06494: Could not follow disassembly flow into non-existing memory at 47f06494 (DecompileCallback)  
+WARN  Decompiling 40e26af0, pcode error at 47f06484: Could not follow disassembly flow into non-existing memory at 47f06484 (DecompileCallback)  
+WARN  Decompiling 40e26af0, pcode error at 47f06474: Could not follow disassembly flow into non-existing memory at 47f06474 (DecompileCallback)  
+WARN  Decompiling 40e26af0, pcode error at 47f06464: Could not follow disassembly flow into non-existing memory at 47f06464 (DecompileCallback)  
+WARN  Decompiling 40e26af0, pcode error at 47f06458: Could not follow disassembly flow into non-existing memory at 47f06458 (DecompileCallback)  
+WARN  Decompiling 40e26af0, pcode error at 47f06448: Could not follow disassembly flow into non-existing memory at 47f06448 (DecompileCallback)  
+INFO  Packed database cache: /var/tmp/ubuntu-ghidra/packed-db-cache (PackedDatabaseCache)  
+INFO  Applied data type archive: generic_clib (ApplyDataArchiveAnalyzer)  
+WARN  Decompiling 40e4c460, pcode error at 47f2cd24: Could not follow disassembly flow into non-existing memory at 47f2cd24 (DecompileCallback)  
+WARN  Decompiling 40e4c460, pcode error at 47f2cc24: Could not follow disassembly flow into non-existing memory at 47f2cc24 (DecompileCallback)  
+WARN  Decompiling 40e4c460, pcode error at 47f2ccbc: Could not follow disassembly flow into non-existing memory at 47f2ccbc (DecompileCallback)  
+WARN  Decompiling 40e4c460, pcode error at 47f2cd00: Could not follow disassembly flow into non-existing memory at 47f2cd00 (DecompileCallback)  
+WARN  Decompiling 40e4c460, pcode error at 47f2ccdc: Could not follow disassembly flow into non-existing memory at 47f2ccdc (DecompileCallback)  
+WARN  Decompiling 40e2c308, pcode error at 47f0bd1c: Could not follow disassembly flow into non-existing memory at 47f0bd1c (DecompileCallback)  
+WARN  Decompiling 40e2c308, pcode error at 47f0bc94: Could not follow disassembly flow into non-existing memory at 47f0bc94 (DecompileCallback)  
+WARN  Decompiling 40e2c308, pcode error at 47f0bc34: Could not follow disassembly flow into non-existing memory at 47f0bc34 (DecompileCallback)  
+WARN  Decompiling 40e2c308, pcode error at 47f0bbe0: Could not follow disassembly flow into non-existing memory at 47f0bbe0 (DecompileCallback)  
+WARN  Decompiling 40e2c308, pcode error at 47f0bb8c: Could not follow disassembly flow into non-existing memory at 47f0bb8c (DecompileCallback)  
+WARN  Decompiling 40e2c308, pcode error at 47f0bb6c: Could not follow disassembly flow into non-existing memory at 47f0bb6c (DecompileCallback)  
+INFO  -----------------------------------------------------
+    ARM Constant Reference Analyzer            2.305 secs
+    ARM Symbol                                 0.001 secs
+    ASCII Strings                              0.529 secs
+    Apply Data Archives                        0.569 secs
+    Call-Fixup Installer                       0.013 secs
+    Create Address Tables                      0.184 secs
+    Create Function                            0.303 secs
+    Data Reference                             0.004 secs
+    Decompiler Switch Analysis                 6.609 secs
+    Demangler GNU                              0.002 secs
+    Disassemble                                2.196 secs
+    Disassemble Entry Points                   0.003 secs
+    Embedded Media                             0.022 secs
+    External Entry References                  0.000 secs
+    Function ID                                0.023 secs
+    Function Start Pre Search                  0.027 secs
+    Function Start Search                      0.384 secs
+    Function Start Search After Code           0.461 secs
+    Function Start Search After Data           0.170 secs
+    Function Start Search delayed - One Time   0.034 secs
+    Non-Returning Functions - Discovered       0.185 secs
+    Reference                                  0.102 secs
+    Shared Return Calls                        0.059 secs
+    Stack                                      2.170 secs
+    Subroutine References                      0.073 secs
+    Subroutine References - One Time           0.000 secs
+-----------------------------------------------------
+     Total Time   16 secs
+-----------------------------------------------------
+ (AutoAnalysisManager)  
+INFO  REPORT: Analysis succeeded for file: file:///home/ubuntu/Projects/MYSELF/ZTE/firmware/bootloader.bin (HeadlessAnalyzer)  
+INFO  /bootloader.bin: file created (ubuntu) (LocalFileSystem)  
+INFO  REPORT: Save succeeded for: /bootloader.bin (uboot:/bootloader.bin) (HeadlessAnalyzer)  
+INFO  REPORT: Import succeeded (HeadlessAnalyzer)  

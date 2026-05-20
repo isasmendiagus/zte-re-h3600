@@ -1,0 +1,122 @@
+<?xml version="1.0"?>
+<scpd xmlns="urn:dslforum-org:service-1-0">
+<specVersion>
+<major>1</major>
+<minor>0</minor>
+</specVersion>
+<actionList>
+<action>
+<name>SetAllowedMACAddresses</name>
+<argumentList>
+<argument>
+<name>NewAllowedMACAddresses</name>
+<direction>in</direction>
+<relatedStateVariable>AllowedMACAddresses</relatedStateVariable>
+</argument>
+</argumentList>
+</action>
+<action>
+<name>DeleteAllowedMACAddress</name>
+<argumentList>
+<argument>
+<name>NewAllowedMACAddress</name>
+<direction>in</direction>
+<relatedStateVariable>AllowedMACAddresses</relatedStateVariable>
+</argument>
+</argumentList>
+</action>
+    <action>
+        <name>GetInfo</name>
+            <argumentlist>
+                <argument>
+                    <name>NewDHCPServerConfigurable</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>DHCPServerConfigurable</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewDHCPRelay</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>DHCPRelay</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewSubnetMask</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>SubnetMask</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewDNSServers</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>DNSServers</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewDomainName</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>DomainName</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewMinAddress</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>MinAddress</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewMaxAddress</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>MaxAddress</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewIPRouters</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>IPRouters</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewReservedAddresses</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>ReservedAddresses</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewDHCPLeaseTime</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>DHCPLeaseTime</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewDHCPServerEnable</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>DHCPServerEnable</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewDHCPServerEnable</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>DHCPServerEnable</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewAssociatedConnection</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>AssociatedConnection</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewPassthroughLease</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>PassthroughLease</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewPassthroughMACAddress</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>PassthroughMACAddress</relatedStateVariable>
+                </argument>
+                <argument>
+                    <name>NewAllowedMACAddresses</name>
+                    <direction>out</direction>
+                    <relatedStateVariable>AllowedMACAddresses</relatedStateVariable>
+                </argument>
+            </argumentlist>
+    </action>
+</actionList>
+
+<serviceStateTable>
+<stateVariable sendEvents="no">
+<name>AllowedMACAddresses</name>
+<dataType>string</dataType>
+</stateVariable>
+</serviceStateTable>
+</scpd>
+

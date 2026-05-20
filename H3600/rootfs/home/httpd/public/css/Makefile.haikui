@@ -1,0 +1,24 @@
+HAIKUI_DIR_SRC = $(PACKAGES_PATH)/multiap/map/web/
+CFLAGS += -I$(PACKAGES_PATH)/multiap/map/include
+
+#GLOBALENV-y += 
+
+#
+COMP_OBJS-y += webd_adaptor_multiap_roam.o
+pages-y += 
+pages-y += 
+pages-y += 
+
+
+#thinkluacss定制文件
+thinkluacss-pages-y += .
+
+#thinkluaimg定制文件
+thinkluaimg-pages-y += 
+######################  ######################
+
+include $(PACKAGES_PATH)/web/packageCom.mk 
+
+## 该目标作为对包里的特殊定制的时候使用:
+custom_thinklua:
+

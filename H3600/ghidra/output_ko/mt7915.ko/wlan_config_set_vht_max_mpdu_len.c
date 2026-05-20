@@ -1,0 +1,12 @@
+// module: mt7915.ko
+// function: wlan_config_set_vht_max_mpdu_len @ 0x106a20
+// size: 12 bytes
+//
+
+void wlan_config_set_vht_max_mpdu_len(int param_1,undefined1 param_2)
+
+{
+  *(undefined1 *)(*(int *)(param_1 + 0xb10) + 0x62) = param_2;
+  return;
+}
+

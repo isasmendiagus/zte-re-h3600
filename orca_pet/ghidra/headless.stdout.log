@@ -1,0 +1,126 @@
+openjdk version "21.0.9" 2025-10-21
+OpenJDK Runtime Environment (build 21.0.9+10-Ubuntu-124.04)
+OpenJDK 64-Bit Server VM (build 21.0.9+10-Ubuntu-124.04, mixed mode)
+INFO  Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/headless.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences (Preferences)  
+INFO  Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (1196 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (DefaultTrustManagerFactory)  
+INFO  Headless startup complete (3937 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 207 extension points (111 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Creating project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic (HeadlessAnalyzer)  
+INFO  Creating project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic (DefaultProject)  
+INFO  REPORT: Processing input files:  (HeadlessAnalyzer)  
+INFO       project: /home/ubuntu/Projects/MYSELF/ZTE/ghidra/project/zxic (HeadlessAnalyzer)  
+INFO  IMPORTING: file:///home/ubuntu/Projects/MYSELF/ZTE/firmware/vmlinux.bin (HeadlessAnalyzer)  
+INFO  Successfully applied "-loader-baseAddr" to "Base Address" (old: "null", new: "0xC0008000") (ProgramLoader)  
+INFO  Using Loader: Raw Binary (ProgramLoader)  
+INFO  Using Language/Compiler: ARM:LE:32:v7:default (ProgramLoader)  
+INFO  Using Library Search Path: [., /bin, /lib, /lib64, /lib/x86_64-linux-gnu, /lib/aarch64-linux-gnu, /usr/bin, /usr/lib, /usr/X11R6/bin, /usr/X11R6/lib, /usr/java/packages/lib, /usr/lib/x86_64-linux-gnu/jni, /usr/lib/x86_64-linux-gnu, /usr/lib/jni] (ProgramLoader)  
+INFO  IMPORTING: Loaded 0 additional files (HeadlessAnalyzer)  
+INFO  ANALYZING all memory and code: file:///home/ubuntu/Projects/MYSELF/ZTE/firmware/vmlinux.bin (HeadlessAnalyzer)  
+INFO  Packed database cache: /var/tmp/ubuntu-ghidra/packed-db-cache (PackedDatabaseCache)  
+INFO  Applied data type archive: generic_clib (ApplyDataArchiveAnalyzer)  
+INFO  -----------------------------------------------------
+    ARM Constant Reference Analyzer           20.257 secs
+    ARM Symbol                                 0.000 secs
+    ASCII Strings                              0.680 secs
+    Apply Data Archives                        0.354 secs
+    Call-Fixup Installer                       0.179 secs
+    Create Address Tables                      0.654 secs
+    Create Address Tables - One Time          39.254 secs
+    Create Function                            3.556 secs
+    Data Reference                            35.717 secs
+    Decompiler Switch Analysis               237.501 secs
+    Demangler GNU                              0.017 secs
+    Disassemble                               27.386 secs
+    Disassemble Entry Points                   0.002 secs
+    Embedded Media                             0.092 secs
+    External Entry References                  0.000 secs
+    Function ID                                0.013 secs
+    Function Start Pre Search                  0.094 secs
+    Function Start Search                      1.096 secs
+    Function Start Search After Code           2.918 secs
+    Function Start Search After Data           0.441 secs
+    Function Start Search delayed - One Time   0.660 secs
+    Non-Returning Functions - Discovered       3.172 secs
+    Reference                                 38.637 secs
+    Shared Return Calls                        1.508 secs
+    Stack                                     17.238 secs
+    Subroutine References                      3.644 secs
+    Subroutine References - One Time           0.004 secs
+-----------------------------------------------------
+     Total Time   435 secs
+-----------------------------------------------------
+ (AutoAnalysisManager)  
+INFO  REPORT: Analysis succeeded for file: file:///home/ubuntu/Projects/MYSELF/ZTE/firmware/vmlinux.bin (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: ExtractCompatibles.java '/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output'  (HeadlessAnalyzer)  
+ExtractCompatibles.java:91: error: cannot find symbol
+            ReferenceIterator refs = listing.getReferenceIterator(strAddr);
+                                            ^
+  symbol:   method getReferenceIterator(ghidra.program.model.address.Address)
+  location: variable listing of type ghidra.program.model.listing.Listing
+ExtractCompatibles.java:97: error: incompatible types: ghidra.program.model.symbol.ReferenceIterator cannot be converted to ghidra.program.model.symbol.Reference[]
+                .getReferencesTo(strAddr);
+                                ^
+skipping /home/ubuntu/Projects/MYSELF/ZTE/ghidra/scripts/ExtractCompatibles.java
+ERROR REPORT SCRIPT ERROR: ExtractCompatibles.java : The class could not be found. It must be the public class of the .java file: ExtractCompatibles not found by 3dac4a51 [1] (HeadlessAnalyzer) ghidra.app.script.GhidraScriptLoadException: The class could not be found. It must be the public class of the .java file: ExtractCompatibles not found by 3dac4a51 [1]
+	at ghidra.app.script.JavaScriptProvider.getScriptInstance(JavaScriptProvider.java:114)
+	at ghidra.app.util.headless.HeadlessAnalyzer.runScriptsList(HeadlessAnalyzer.java:924)
+	at ghidra.app.util.headless.HeadlessAnalyzer.analyzeProgram(HeadlessAnalyzer.java:1086)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processFileWithImport(HeadlessAnalyzer.java:1584)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processWithLoader(HeadlessAnalyzer.java:1744)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processWithImport(HeadlessAnalyzer.java:1685)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processWithImport(HeadlessAnalyzer.java:1769)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processLocal(HeadlessAnalyzer.java:462)
+	at ghidra.app.util.headless.AnalyzeHeadless.launch(AnalyzeHeadless.java:199)
+	at ghidra.GhidraLauncher.launch(GhidraLauncher.java:81)
+	at ghidra.Ghidra.main(Ghidra.java:54)
+Caused by: java.lang.ClassNotFoundException: ExtractCompatibles not found by 3dac4a51 [1]
+	at org.apache.felix.framework.BundleWiringImpl.findClassOrResourceByDelegation(BundleWiringImpl.java:1591)
+	at org.apache.felix.framework.BundleWiringImpl.access$300(BundleWiringImpl.java:79)
+	at org.apache.felix.framework.BundleWiringImpl$BundleClassLoader.loadClass(BundleWiringImpl.java:1976)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:526)
+	at org.apache.felix.framework.Felix.loadBundleClass(Felix.java:2116)
+	at org.apache.felix.framework.BundleImpl.loadClass(BundleImpl.java:986)
+	at ghidra.app.script.JavaScriptProvider.loadClass(JavaScriptProvider.java:166)
+	at ghidra.app.script.JavaScriptProvider.getScriptInstance(JavaScriptProvider.java:97)
+	... 10 more
+ 
+INFO  ANALYZING changes made by post scripts: file:///home/ubuntu/Projects/MYSELF/ZTE/firmware/vmlinux.bin (HeadlessAnalyzer)  
+INFO  REPORT: Post-analysis succeeded for file: file:///home/ubuntu/Projects/MYSELF/ZTE/firmware/vmlinux.bin (HeadlessAnalyzer)  
+INFO  /vmlinux.bin: file created (ubuntu) (LocalFileSystem)  
+INFO  REPORT: Save succeeded for: /vmlinux.bin (zxic:/vmlinux.bin) (HeadlessAnalyzer)  
+INFO  REPORT: Import succeeded (HeadlessAnalyzer)  

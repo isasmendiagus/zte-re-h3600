@@ -1,0 +1,75 @@
+// module: mt7915.ko
+// function: MtCmdTpcFeatureCtrl @ 0x1bcca4
+// size: 444 bytes
+//
+
+undefined4 MtCmdTpcFeatureCtrl(int param_1,undefined4 param_2,undefined4 param_3,int param_4)
+
+{
+  int iVar1;
+  undefined4 uVar2;
+  undefined1 local_50;
+  undefined1 local_4f;
+  undefined1 local_4e;
+  undefined1 local_4d;
+  undefined1 local_4c;
+  undefined4 local_48;
+  undefined4 local_44;
+  undefined4 local_40;
+  undefined4 local_3c;
+  undefined4 local_38;
+  undefined4 local_34;
+  undefined4 uStack_30;
+  undefined4 uStack_2c;
+  undefined4 uStack_28;
+  undefined4 local_24;
+  
+  local_48 = 0;
+  local_44 = 0;
+  local_40 = 0;
+  local_3c = 0;
+  local_38 = 0;
+  hc_get_chip_cap(*(undefined4 *)(param_1 + 0xa797a0));
+  if (param_4 == 0) {
+    if (DebugLevel < 0) {
+      return 2;
+    }
+    uVar2 = 2;
+    printk("(X) invalid Channel setting\n");
+  }
+  else {
+    iVar1 = AndesAllocCmdMsg(param_1,8);
+    if (iVar1 == 0) {
+      uVar2 = 3;
+    }
+    else {
+      os_zero_mem(&local_50,8);
+      local_50 = 8;
+      local_4f = (undefined1)param_2;
+      local_4e = (undefined1)param_3;
+      local_4c = (undefined1)param_4;
+      uVar2 = TxPowerGetChBand(param_3,param_4);
+      local_4d = (undefined1)uVar2;
+      if (2 < DebugLevel) {
+        printk("%s: pwr=%d=0x%02X, BandIdx=%d, CentralChannel=%d, ChBand=%d\n","MtCmdTpcFeatureCtrl"
+               ,param_2,param_2,local_4e,local_4c,uVar2);
+      }
+      local_48 = CONCAT13(0x58,CONCAT12(0xed,(undefined2)local_48));
+      local_44 = CONCAT31(local_44._1_3_,8);
+      local_44 = CONCAT22(0xffff,(undefined2)local_44);
+      local_34 = local_48;
+      uStack_30 = local_44;
+      uStack_2c = local_40;
+      uStack_28 = local_3c;
+      local_24 = local_38;
+      AndesInitCmdMsg(iVar1,local_48,local_44,local_40,local_3c,local_38);
+      AndesAppendCmdMsg(iVar1,&local_50,8);
+      uVar2 = chip_cmd_tx(param_1,iVar1);
+    }
+  }
+  if (2 < DebugLevel) {
+    printk("%s:(ret = %d)\n","MtCmdTpcFeatureCtrl",uVar2);
+  }
+  return uVar2;
+}
+

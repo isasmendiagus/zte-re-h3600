@@ -1,0 +1,59 @@
+  ├── 📁 H3600/                           [348 MiB] ⭐ TU dispositivo real                                                                                                     
+  │   ├── h3600_nand_full.bin             (128 MiB) Dump completo NAND vía SSH (cat /dev/mtd0)                                                                                 
+  │   ├── partitions/                     Splits del dump por offsets reales                                                                                                   
+  │   │   ├── 01_bootloader.bin           (1 MiB)  mtd1 = U-Boot                                                                                                               
+  │   │   ├── 02_tag.bin                  (1 MiB)  mtd2 = MAC, serial, admin pwd, WiFi PSK                                                                                     
+  │   │   ├── 03_wifi.bin                 (1 MiB)  mtd3 = WiFi calibration                                                                                                     
+  │   │   ├── 04_usercfg.bin              (2 MiB)  mtd4 = JFFS2 user config                                                                                                    
+  │   │   ├── 05_defcfg.bin               (2 MiB)  mtd5 = JFFS2 default config                                                                                                 
+  │   │   ├── 06_kernel1.bin              (3.4 MiB) mtd6 = uImage Linux 4.1.25                                                                                                 
+  │   │   ├── 07_rootfs.bin               (22 MiB) mtd8 = JFFS2 cifrado AES en raw NAND                                                                                        
+  │   │   └── 08_kernel2.bin              (3.4 MiB) mtd7 backup                                                                                                                
+  │   ├── extracted/                      Cosas descomprimidas                                                                                                                 
+  │   │   ├── uImage                      sin header ZTE                                                                                                                       
+  │   │   ├── zImage                      payload uImage                                                                                                                       
+  │   │   ├── vmlinux.bin                 (6.6 MiB) kernel descomprimido (gunzip)                                                                                              
+  │   │   ├── h3600_real.dtb              DTB extraído del zImage                                                                                                              
+  │   │   └── rootfs_decrypted.bin        rootfs JFFS2 plano (descifrado con la AES key)
+  │   ├── rootfs_live/                    Rootfs vía SSH+TFTP (cross-check)                                                                                                    
+  │   │   ├── src_tarballs/               h3600_live_*.tar.gz (chunks)                                                                                                         
+  │   │   └── extracted/                  1566 archivos extraídos                                                                                                              
+  │   └── ghidra/                         Análisis Ghidra del vmlinux DE TU device                                                                                             
+  │       ├── project/                    Proyecto persistente (analizado)                                                                                                     
+  │       └── output_*/                   Funciones decompiladas                                                                                                               
+  │                                                                                                                                                                            
+  ├── 📁 orca_pet/                        [396 MiB] Datos de orca's H3600P (REFERENCIA)                                                                                        
+  │   ├── firmware/                       firmware.bin + bootloader.bin de orca + extracted                                                                                    
+  │   │   └── rootfs/                     rootfs JFFS2 de orca's device (no es tuyo)                                                                                           
+  │   ├── kernel_elf/                     ★ kernel.elf de orca CON SÍMBOLOS (combine_token visible)                                                                            
+  │   ├── ghidra/                         Análisis del firmware de orca                                                                                                        
+  │   │   ├── output_chain/, output_ko/   Decompilaciones                                                                                                                      
+  │   │   ├── project*/                   Proyectos Ghidra                                                                                                                     
+  │   │   └── scripts/                    ★ Scripts Python/Jython compartidos                                                                                                  
+  │   └── extracted_files/                Drivers Linux mainline (pre-2021) revivibles                                                                                         
+  │                                                                                                                                                                            
+  ├── 📁 dumps/                           [129 MiB] Backup del dump NAND (redundancia)                                                                                         
+  │   └── h3600_nand_full_20260502.bin    Misma data que H3600/h3600_nand_full.bin                                                                                             
+  │                                                                                                                                                                            
+  ├── 📁 linux/                           [8.2 GiB] Mainline kernel.org tree (full history)                                                                                    
+  │   └── .git/                           1.4M commits, ~v7.1-rc2                                                                                                              
+  │                                                                                                                                                                            
+  ├── 📁 linux-zxic-fork/                 [8.0 GiB] ⚠️   Clon parcial fallido (eliminar)                                                                                        
+  │                                                                                                                                                                            
+  ├── 📁 kernel-patches/                  [48 KiB] ⭐ Nuestros patches v6.6 para ZX279128S
+  │   ├── dts/zx279128s.dtsi              Device tree del SoC (basado en extracted DTS)                                                                                        
+  │   ├── dts/zx279128s-h3600.dts         Device tree de la placa                                                                                                              
+  │   ├── clk/clk-zx279128s.c             Driver clock skeleton (PLLs + dividers)                                                                                              
+  │   ├── mach-zx/zx279128s.c             Machine descriptor ARM                                                                                                               
+  │   └── configs/zx279128s_defconfig     Defconfig mínimo                                                                                                                     
+  │                                                                                                                                                                            
+  ├── 📁 tools/                           [16 KiB] Herramientas externas                                                                                                       
+  │   └── ztetool.py                      Decoder/encoder config XML (de orca.pet)                                                                                             
+  │                                                                                                                                                                            
+  ├── 📄 build_kernel.sh                  Script automático: clone → patches → build → uImage                                                                                  
+  ├── 📄 setup_fork.sh                    Crea fork v6.6 con código ZX296702 revivido                                                                                          
+  ├── 📄 BITACORA.md                      ⭐ Bitácora cronológica con dificultades + soluciones                                                                                
+  ├── 📄 INFORME_ZXIC_KERNEL.md           Informe inicial: arqueología del soporte ZX en mainline                                                                              
+  ├── 📄 RE_BITACORA.md                   Bitácora original RE Ghidra (iteraciones 1-6)                                                                                        
+  └── 📄 Commands.txt                     Notas sueltas de comandos útiles                                                                                                     
+

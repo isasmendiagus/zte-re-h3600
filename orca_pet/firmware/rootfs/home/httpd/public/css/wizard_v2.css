@@ -1,0 +1,177 @@
+.wizardContainer {
+width: 100%;
+min-height: 275px;
+height: auto !important;
+text-align: left;
+padding: 15px;
+border: 1px solid #BFBDBE;
+background-color: #F7F7F7;
+}
+.wizardTitle {
+width: 100%;
+background: #DFDFDF;
+height: 40px;
+line-height: 40px;
+margin: 0;
+padding: 0 0 0 15px;
+border-left: 1px solid #BFBDBE;
+border-right: 1px solid #BFBDBE;
+border-radius: 5px 5px 0 0;
+overflow: visible;
+text-align: left;
+}
+div.wizardTitle span.stepDone,
+div.wizardTitle span.stepUndone {
+display: block;
+float: left;
+height: 12px;
+width: 12px;
+margin: 13px 5px;
+font-size: 0;
+}
+.stepDone {
+border: 1px solid #FFFFFF;
+background: #00D8F3;
+}
+.stepUndone {
+background: #717171;
+border: 1px solid #DFDFDF;
+}
+.wizardClose {
+width: 32px;
+height: 32px;
+margin: 4px 8px;
+float: right;
+}
+.welcomeHint {
+margin: 15px 0 6px 0;
+}
+.wizardIntroP {
+margin: 0 0 30px;
+line-height: 24px;
+}
+.wizardSubmitArea {
+width: 100%;
+justify-content: space-between;
+padding: 5px;
+height: auto;
+min-height: 30px;
+border: 1px solid #BFBDBE;
+border-top: none;
+background-color: #F7F7F7;
+}
+.wizardBtn {
+margin: 3px 3px 3px 3px;
+float: right;
+}
+.wizardCloseBtn {
+float: left;
+}
+.wizardOtherBtn {
+float: right;
+}
+h2 {
+border-bottom: 1px dotted #313131;
+font-size: 6px;
+font-weight: normal;
+padding-bottom: 1px;
+margin: 10px 0 10px
+}
+.logo {
+display: flex;
+vertical-align: middle;
+background: url(../img/Logo_ZTE.png) no-repeat 0.3rem 0.3rem !important;
+}
+#logoDiv {
+position: relative !important;
+}
+.timeArea {
+position: static;
+}
+.dynamicDepression {
+opacity: 0.2 !important;
+border-radius: 5px;
+pointer-events: none;
+border: 2px solid #0099cc !important;
+background-image: none !important;
+transition: opacity 1s;
+-o-transition: opacity 1s;
+-moz-transition: opacity 1s;
+-webkit-transition: opacity 1s;
+}
+*, :after, :before {
+box-sizing: border-box;
+}
+img {
+max-width: 100%;
+}
+body, html {
+height: 100%;
+}
+body {
+-webkit-text-size-adjust: 100%;
+-webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+-webkit-font-smoothing: antialiased;
+scroll-behavior: smooth;
+overflow-y: auto !important;
+}
+.encryptionSwitch {
+margin:7px 0 0 -27px;
+position:absolute;
+}
+#wizard_wrapper {
+position: static;
+display: flex;
+flex-wrap: wrap;
+margin: 0 auto;
+width: 100%;
+padding: 0 0;
+}
+#banner {
+width: 100%;
+position: static;
+display: flex;
+overflow: visible;
+}
+#page_header {
+width: 100%;
+position: static !important;
+display: flex;
+padding-bottom: 10px;
+}
+#page_container {
+padding: 0 0.5rem 1rem 0.5rem;
+position: static !important;
+min-height: 100%;
+max-width: 768px;
+display: flex;
+flex-wrap: wrap;
+width: 100%;
+overflow-y: visible !important;
+}
+#page_footer {
+position: static;
+width: 100%;
+height: auto !important;
+line-height: 28px;
+align-self: flex-end;
+}
+#page_footer div {
+text-align: center !important;
+}
+#banner_switchArea {
+margin-left: auto !important;
+width: 100% !important;
+position: static !important;
+}
+#page_content {
+width: 100%;
+position: static !important;
+min-height: 280px;
+}
+div.errorLabelWraper {
+background: url(../img/fail_s.png) no-repeat 0.2rem 0.4rem;
+display: inline-block;
+line-height: 2rem;
+width: 100% !important;
+}

@@ -1,0 +1,237 @@
+# -*- coding: utf-8 -*-
+# Extract ZX/ZTE driver functions from analyzed kernel.
+# Robust version: brute-force memory scan for compatible strings,
+# then search for 32-bit LE pointers to them (literal pool refs typical
+# of ARM `LDR rN, =addr`).
+#
+# @category ZXIC
+# @runtime Jython
+
+import os
+import re
+import struct
+
+from ghidra.app.decompiler import DecompInterface, DecompileOptions
+from ghidra.program.model.address import AddressSet
+from ghidra.program.model.mem import Memory
+from java.lang import String as JString
+
+PREFIXES = ("zte,", "snps,", "denali,", "zxic,", "arm,zx", "rohm,")
+MAX_FUNCS_PER_STRING = 4
+DECOMPILE_TIMEOUT = 90
+
+args = getScriptArgs()
+out_dir = args[0] if len(args) >= 1 else "/home/ubuntu/Projects/MYSELF/ZTE/ghidra/output"
+try:
+    os.makedirs(out_dir)
+except OSError:
+    pass
+print("output -> " + out_dir)
+
+decomp = DecompInterface()
+decomp.setOptions(DecompileOptions())
+decomp.openProgram(currentProgram)
+
+mem = currentProgram.getMemory()
+func_mgr = currentProgram.getFunctionManager()
+listing = currentProgram.getListing()
+addr_factory = currentProgram.getAddressFactory()
+
+# 1) Scan memory for each prefix as ASCII bytes, walk forward to find full string
+print("scanning memory for compatible strings...")
+blocks = [b for b in mem.getBlocks() if b.isInitialized() and b.isLoaded()]
+total_scan = sum(b.getSize() for b in blocks)
+print("  total initialized memory: {0:.1f} MiB".format(total_scan/1024.0/1024.0))
+
+# Read all initialized memory into a dict of block_start -> bytes
+mem_dump = []  # list of (start_addr_int, bytes)
+for b in blocks:
+    sz = int(b.getSize())
+    if sz > 64*1024*1024:
+        continue
+    # Use Java byte[] explicitly (Jython auto-coercion of bytearray fails)
+    from jarray import zeros
+    jbarr = zeros(sz, 'b')
+    try:
+        n = mem.getBytes(b.getStart(), jbarr)
+    except Exception as e:
+        print("  block {0} failed: {1}".format(b.getName(), e))
+        continue
+    # Convert Java byte[] (signed) to Python str (unsigned bytes)
+    data_str = "".join(chr(x & 0xff) for x in jbarr)
+    mem_dump.append((b.getStart().getOffset(), data_str))
+    print("  block {0} @ 0x{1:x} sz=0x{2:x}".format(
+        b.getName(), b.getStart().getOffset(), sz))
+
+# Build single contiguous map (we have one block typically)
+def find_string_at(off):
+    """Read NUL-terminated string starting at virtual address off, max 200 bytes"""
+    for base, data in mem_dump:
+        if base <= off < base + len(data):
+            local = off - base
+            end = data.find("\x00", local, local + 200)
+            if end < 0:
+                return None
+            try:
+                return data[local:end]  # already str in Jython
+            except Exception:
+                return None
+    return None
+
+def find_le32_refs(target_addr):
+    """Return list of virtual addresses where 32-bit LE value == target_addr"""
+    needle = struct.pack("<I", target_addr & 0xffffffff)
+    results = []
+    for base, data in mem_dump:
+        i = 0
+        while True:
+            j = data.find(needle, i)
+            if j < 0:
+                break
+            if j % 4 == 0:
+                results.append(base + j)
+            i = j + 1
+    return results
+
+# DIAG: dump bytes at known string position 0xc0584940 ("zte,zx279128-smp")
+known = 0xc0584940
+for base, data in mem_dump:
+    if base <= known < base + len(data):
+        local = known - base
+        sample = data[local:local+24]
+        hexbytes = " ".join("{0:02x}".format(ord(c)) for c in sample)
+        print("DIAG @ 0x{0:x}: hex={1}".format(known, hexbytes))
+        print("DIAG @ 0x{0:x}: str={1!r}".format(known, sample))
+        print("DIAG: total data len = {0}".format(len(data)))
+        # Try direct find
+        idx = data.find("zte,")
+        print("DIAG: find('zte,') = {0}".format(idx))
+
+# 2) For each prefix, scan memory for matching strings
+print("scanning for prefix matches...")
+candidate_strings = {}  # str -> list of addrs
+for base, data in mem_dump:
+    for prefix in PREFIXES:
+        i = 0
+        while True:
+            j = data.find(prefix, i)
+            if j < 0:
+                break
+            # Validate: previous byte (if in range) is NUL or non-ASCII
+            if j > 0 and 0x20 <= ord(data[j-1]) <= 0x7e:
+                i = j + 1
+                continue
+            s = find_string_at(base + j)
+            if s and s.startswith(prefix) and 5 < len(s) < 128:
+                if all(0x20 <= ord(c) <= 0x7e for c in s):
+                    candidate_strings.setdefault(s, []).append(base + j)
+            i = j + 1
+
+print("found {0} unique compatible strings".format(len(candidate_strings)))
+
+# 3) For each string, find LE32 refs to ANY of its occurrences,
+#    then find containing functions and decompile.
+dumped = set()
+hits = 0
+xref_total = 0
+
+index_lines = [
+    "# Compatible-string xref index (brute-force scan)",
+    "",
+    "Auto-generated by extract_compatibles.py",
+    "",
+    "| Compatible | # Occurrences | Total xrefs | Functions extracted |",
+    "|---|---|---|---|",
+]
+
+def safe(s):
+    return re.sub(r"[^a-zA-Z0-9._-]", "_", s)[:80]
+
+# Sort for deterministic output
+sorted_compats = sorted(candidate_strings.keys())
+
+for val in sorted_compats:
+    if monitor.isCancelled():
+        break
+    occurrences = candidate_strings[val]
+    hits += 1
+    all_refs = []
+    for occ in occurrences:
+        for ref in find_le32_refs(occ):
+            all_refs.append(ref)
+    xref_total += len(all_refs)
+
+    # Also look for refs to the START of of_device_id structs containing this string.
+    # of_device_id layout (Linux <= 4.x ARM):
+    #   char name[32]; char type[32]; char compatible[128]; const void *data;
+    # So compatible field is at offset 64 from the struct start.
+    # In some kernels: name[32]; compatible[128]; data; → offset 32
+    # Check both.
+    struct_offsets_to_try = (32, 64, 128)
+    for occ in occurrences:
+        for off in struct_offsets_to_try:
+            cand = occ - off
+            if cand < 0:
+                continue
+            for ref in find_le32_refs(cand):
+                all_refs.append(ref)
+    # dedupe
+    all_refs = sorted(set(all_refs))
+    xref_total = xref_total - len(occurrences)*0  # don't double-count display
+    # update displayed xref count below
+
+    extracted = []
+    for ref_addr in all_refs:
+        if len(extracted) >= MAX_FUNCS_PER_STRING:
+            break
+        ref_addr_obj = addr_factory.getDefaultAddressSpace().getAddress(ref_addr)
+        f = func_mgr.getFunctionContaining(ref_addr_obj)
+        if f is None:
+            # Try +1 (literal pool entry might not be inside function)
+            # Look for code reference: check if any instruction within +/- 32 bytes references this addr
+            for delta in range(-64, 65, 4):
+                a = addr_factory.getDefaultAddressSpace().getAddress(ref_addr + delta)
+                f2 = func_mgr.getFunctionContaining(a)
+                if f2 is not None:
+                    f = f2
+                    break
+            if f is None:
+                continue
+        key = f.getEntryPoint().getOffset()
+        if key in dumped:
+            extracted.append(str(f.getName()) + " (dup)")
+            continue
+        dumped.add(key)
+        dr = decomp.decompileFunction(f, DECOMPILE_TIMEOUT, monitor)
+        if dr is None or not dr.decompileCompleted():
+            extracted.append(str(f.getName()) + " (decompile failed)")
+            continue
+        c_code = dr.getDecompiledFunction().getC()
+        fname = "{0}__{1}.c".format(safe(val), safe(str(f.getName())))
+        path = os.path.join(out_dir, fname)
+        out = open(path, "w")
+        out.write("// compatible: {0}\n".format(val))
+        out.write("// {0} occurrences in memory\n".format(len(occurrences)))
+        out.write("// {0} 32-bit LE references found\n".format(len(all_refs)))
+        out.write("// xref from 0x{0:x}\n".format(ref_addr))
+        out.write("// function: {0} @ 0x{1:x}\n".format(f.getName(), key))
+        out.write("//\n")
+        out.write(c_code)
+        out.close()
+        extracted.append(str(f.getName()))
+
+    if extracted:
+        index_lines.append("| `{0}` | {1} | {2} | {3} |".format(
+            val, len(occurrences), len(all_refs), ", ".join(extracted)))
+    else:
+        index_lines.append("| `{0}` | {1} | {2} | (no function found) |".format(
+            val, len(occurrences), len(all_refs)))
+
+f = open(os.path.join(out_dir, "INDEX.md"), "w")
+f.write("\n".join(index_lines))
+f.write("\n")
+f.close()
+
+decomp.closeProgram()
+print("DONE: {0} strings, {1} xrefs, {2} unique funcs".format(
+    hits, xref_total, len(dumped)))

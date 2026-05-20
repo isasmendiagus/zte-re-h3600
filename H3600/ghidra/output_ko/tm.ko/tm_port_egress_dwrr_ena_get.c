@@ -1,0 +1,25 @@
+// module: tm.ko
+// function: tm_port_egress_dwrr_ena_get @ 0x46d00
+// size: 84 bytes
+//
+
+undefined4 tm_port_egress_dwrr_ena_get(undefined4 param_1)
+
+{
+  int iVar1;
+  undefined4 uVar2;
+  int local_c;
+  
+  local_c = 0;
+  iVar1 = sch_get_quesch_sharp_enable(&local_c);
+  if (iVar1 == 0) {
+    *(bool *)param_1 = local_c != 0;
+    uVar2 = 0;
+  }
+  else {
+    printk("tm_port_egress_dwrr_ena_get fail\n");
+    uVar2 = 0xffffffff;
+  }
+  return uVar2;
+}
+

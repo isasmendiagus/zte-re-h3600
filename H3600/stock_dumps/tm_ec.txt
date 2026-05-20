@@ -1,0 +1,6 @@
+devmem2 0x923400ec
+Memory mapped at address 0xb6f6c000.
+Value at address 0x923400EC (0xb6f6c0ec): 0x4E710000
+/tmp # echo ZZ_END
+ZZ_END
+/tmp # 

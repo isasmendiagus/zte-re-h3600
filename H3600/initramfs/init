@@ -1,0 +1,33 @@
+#!/bin/sh
+# Minimum initramfs init para verificación de boot del kernel mainline 6.6
+echo ""
+echo "=========================================="
+echo " Kernel mainline 6.6 BOOTED on H3600!"
+echo "=========================================="
+echo ""
+
+# Mount essentials
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mount -t tmpfs tmpfs /tmp
+
+# Print useful info
+echo "--- /proc/cpuinfo ---"
+cat /proc/cpuinfo | head -10
+echo ""
+echo "--- /proc/version ---"
+cat /proc/version
+echo ""
+echo "--- /proc/cmdline ---"
+cat /proc/cmdline
+echo ""
+echo "--- /proc/mtd (si lo veo, MTD funciona) ---"
+cat /proc/mtd 2>/dev/null || echo "(MTD no detectado)"
+echo ""
+echo "--- /proc/iomem ---"
+head -20 /proc/iomem 2>/dev/null
+echo ""
+echo "Iniciando shell. Ctrl+D para reset."
+echo ""
+exec /bin/sh

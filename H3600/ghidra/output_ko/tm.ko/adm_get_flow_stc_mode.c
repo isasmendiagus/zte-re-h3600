@@ -1,0 +1,27 @@
+// module: tm.ko
+// function: adm_get_flow_stc_mode @ 0x2a818
+// size: 168 bytes
+//
+
+int adm_get_flow_stc_mode(undefined4 *param_1)
+
+{
+  int iVar1;
+  int iVar2;
+  undefined4 local_14 [2];
+  
+  local_14[0] = 0;
+  iVar1 = tmOnuRegRead(3,local_14,0,AdmRegTable);
+  if (iVar1 == 0) {
+    *param_1 = local_14[0];
+    if (6 < g_tm_debug_level) {
+      printk("[TM][adm_get_flow_stc_mode]output: mode = %d\n");
+    }
+  }
+  else if ((g_tm_debug_level != 0) &&
+          (iVar2 = ___ratelimit(_rs_7094,"adm_get_flow_stc_mode"), iVar2 != 0)) {
+    printk("ERROR:(%s:%d) reg read fail\n","pp_adm.c",0x152);
+  }
+  return iVar1;
+}
+

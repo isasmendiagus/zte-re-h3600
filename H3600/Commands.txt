@@ -1,0 +1,18 @@
+picocom -b 115200 /dev/ttyUSB0
+Pass para uboot: Boot4128s!
+
+
+pass para web admin a3.141592A
+pass para ssh ssh admin@192.168.1.1 UkuGPeyRDU
+
+sudo in.tftpd -L --create --secure /home/ubuntu/Projects/MYSELF/ZTE/H3600/tftp
+
+
+Cargar gdbserver
+cd /tmp
+tftp -g -r gdbserver-static 192.168.1.50
+chmod +x gdbserver-static
+cd /tmp ; ./gdbserver-static :1234 --attach $(ps | grep httpd | awk '{print $1}')
+
+
+

@@ -1,0 +1,5 @@
+cat /proc/cmdline
+console="ttyAMA0,115200n8" root=/dev/mtdblock8 ro rootfstype=jffs2 mem=256M; U-Boot V1.0.0 20211028123000 0x700000 0x0 0xaf 0xa3
+/tmp # echo ZZ_END
+ZZ_END
+/tmp # 

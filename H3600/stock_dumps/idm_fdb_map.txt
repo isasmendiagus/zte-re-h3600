@@ -1,0 +1,19 @@
+cat /proc/idm_fdb/idm_map
+wlan_dev_map:
+fdb_list:
+0: idm:0 ssid:0 dev:apcli0
+1: idm:0 ssid:1 dev:apcli5g0
+2: idm:0 ssid:2 dev:wlan3
+3: idm:0 ssid:3 dev:wlan5g3
+8: idm:1 ssid:0 dev:wlan0
+9: idm:1 ssid:1 dev:wlan1
+10: idm:1 ssid:2 dev:wlan2
+11: idm:1 ssid:3 dev:wlan4
+12: idm:1 ssid:4 dev:wlan5g0
+13: idm:1 ssid:5 dev:wlan5g1
+14: idm:1 ssid:6 dev:wlan5g2
+15: idm:1 ssid:7 dev:wlan5g4
+
+/tmp # echo ZZ_END
+ZZ_END
+/tmp # 

@@ -1,0 +1,4 @@
+dmesg 2>&1 | grep -iE 'pon|tm|idm|switch|bmu|bppe|mac|eth|pdt'
+/tmp # echo ZZ_END
+ZZ_END
+/tmp # 

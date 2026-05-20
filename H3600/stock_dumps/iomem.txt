@@ -1,0 +1,38 @@
+cat /proc/iomem
+echo ZZ_END
+-rwxr-xr-x    1 root     root        571120 Feb 17 19:06 dumpmem
+/tmp # echo ZZ_END
+ZZ_END
+/tmp # cat /proc/iomem
+00800620-0080063f : /soc/watchdog@00800620
+09000000-0900ffff : /soc/usb@09000000
+09100000-09107fff : /soc/usb@09100000/dwc3@0x09100000
+  09100000-09107fff : /soc/usb@09100000/dwc3@0x09100000
+0910c100-091fffff : /soc/usb@09100000/dwc3@0x09100000
+10000000-17ffffff : pcie0 mem space
+  10000000-100fffff : 0000:00:00.0
+    10000000-100fffff : 0000:00:00.0
+  10100000-10103fff : 0000:00:00.0
+    10100000-10103fff : 0000:00:00.0
+  10104000-10104fff : 0000:00:00.0
+    10104000-10104fff : 0000:00:00.0
+20000000-27ffffff : pcie1 mem space
+  20000000-200fffff : 0000:01:00.0
+    20000000-200fffff : 0000:01:00.0
+  20100000-20103fff : 0000:01:00.0
+    20100000-20103fff : 0000:01:00.0
+  20104000-20104fff : 0000:01:00.0
+    20104000-20104fff : 0000:01:00.0
+40000000-4fffffff : System RAM
+  40008000-40632fef : Kernel code
+  4066a000-4081139f : Kernel data
+94100034-9410003f : /soc/temp@94100034
+94404000-94404fff : /soc/serial@0x94404000
+94405000-94405fff : /soc/serial@0x94405000
+94406000-94406fff : spifc_reg
+9a102000-9a10203f : /soc/i2c@9a102000
+9a105000-9a105fff : /soc/ssp@9a105000
+9a106000-9a106fff : /soc/tdm@9a106000
+/tmp # echo ZZ_END
+ZZ_END
+/tmp # 

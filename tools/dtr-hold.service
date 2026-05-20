@@ -1,0 +1,17 @@
+[Unit]
+Description=Hold DTR low on /dev/ttyUSB0 (FT232 modem reset/hold line)
+# Espera a que el dispositivo exista; si lo desenchufás, el servicio para
+# y vuelve a arrancar cuando reaparece.
+Requires=dev-ttyUSB0.device
+After=dev-ttyUSB0.device
+BindsTo=dev-ttyUSB0.device
+
+[Service]
+Type=simple
+ExecStart=/home/ubuntu/Projects/MYSELF/ZTE/tools/dtr.py -p /dev/ttyUSB0 hold dtr=low
+Restart=on-failure
+RestartSec=1
+# Si querés que también arranque solo al replug, ver la unidad udev abajo.
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,28 @@
+ls -la /proc/idm /proc/idm_fdb
+/proc/idm:
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 .
+dr-xr-xr-x   80 root     root             0 Jan  1  1970 ..
+-rw----rwx    1 root     root             0 Feb 17 19:06 stat
+
+/proc/idm_fdb:
+dr-xr-xr-x   14 root     root             0 Feb 17 19:06 .
+dr-xr-xr-x   80 root     root             0 Jan  1  1970 ..
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 apcli0
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 apcli5g0
+-rw-rw-rwx    1 root     root             0 Feb 17 19:06 debug
+-rw-rw-rwx    1 root     root             0 Feb 17 19:06 flood_status
+-rw-rw-rwx    1 root     root             0 Feb 17 19:06 idm_map
+-rw-rw-rwx    1 root     root             0 Feb 17 19:06 multicast
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 wlan0
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 wlan1
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 wlan2
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 wlan3
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 wlan4
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 wlan5g0
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 wlan5g1
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 wlan5g2
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 wlan5g3
+dr-xr-xr-x    2 root     root             0 Feb 17 19:06 wlan5g4
+/tmp # echo ZZ_END
+ZZ_END
+/tmp # 
