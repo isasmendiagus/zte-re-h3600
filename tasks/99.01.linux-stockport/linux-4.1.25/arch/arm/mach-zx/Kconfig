@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Renamed to match stock ZTE naming (per /etc/autokernelconf):
+#   CONFIG_ARCH_ZX279128S    (was CONFIG_ARCH_ZX in our prior build)
+#   CONFIG_MACH_ZX279128S    (was CONFIG_SOC_ZX279128S in our prior build)
+# Stock symbol names matter because the pl01x.S DEBUG_LL conditional and
+# any future stock-kernel patches we cherry-pick will reference these.
+#
+menuconfig ARCH_ZX279128S
+	bool "ZTE ZX279128S SoC"
+	depends on ARCH_MULTI_V7
+	select ARM_AMBA
+	select ARM_GIC
+	select ARM_GLOBAL_TIMER
+	select HAVE_ARM_TWD if SMP
+	select HAVE_ARM_SCU if SMP
+	select CLKSRC_OF
+	select COMMON_CLK
+	select USE_OF
+	select SERIAL_AMBA_PL011
+	select SERIAL_AMBA_PL011_CONSOLE
+	help
+	  Support for ZTE ZX279128S Cortex-A9 dual-core ONU SoC
+	  used in H3600 routers.
+
+if ARCH_ZX279128S
+
+config MACH_ZX279128S
+	bool "ZX279128S board"
+	default y
+	help
+	  Machine support for the ZX279128S board (DT-based).
+
+endif

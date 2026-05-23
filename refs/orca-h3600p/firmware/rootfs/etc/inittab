@@ -1,0 +1,4 @@
+::sysinit:/etc/rc
+::respawn:/sbin/getty ttyAMA0 115200
+::ctrlaltdel:/bin/umount -a -r
+

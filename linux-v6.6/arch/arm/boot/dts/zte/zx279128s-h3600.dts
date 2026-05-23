@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * ZTE H3600 (DIGI Spain) — ZX279128S SoC
+ * 256 MiB DDR @ 0x40000000, 128 MiB ESMT SPI NAND
+ */
+
+/dts-v1/;
+
+#include "zx279128s.dtsi"
+
+/ {
+	model = "ZTE H3600 (ZX279128S) — first boot";
+	compatible = "zte,h3600", "zte,zx279128s";
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs = "console=ttyAMA0,115200n8 earlycon=pl011,0x94404000 earlyprintk keep_bootcon ignore_loglevel cma=16M@0x4ec00000";
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x40000000 0x10000000>;	/* 256 MiB */
+	};
+
+	aliases {
+		serial0 = &uart0;
+	};
+};
+
+&pcie0 {
+	/* MT7915 WiFi 6 chip is wired to PCIe port 0 in this board */
+	status = "okay";
+};
+
+&eth {
+	status = "okay";
+};

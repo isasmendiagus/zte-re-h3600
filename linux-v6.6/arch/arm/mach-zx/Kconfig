@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+menuconfig ARCH_ZX
+	bool "ZTE ZXIC SoCs"
+	depends on ARCH_MULTI_V7
+	help
+	  Support for ZTE ZX279128S and related SoCs.
+
+if ARCH_ZX
+
+config SOC_ZX279128S
+	bool "ZTE ZX279128S"
+	default y
+	help
+	  Cortex-A9 dual-core SoC used in H3600 routers.
+
+endif

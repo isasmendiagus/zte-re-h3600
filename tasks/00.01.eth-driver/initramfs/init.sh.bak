@@ -1,0 +1,38 @@
+#!/bin/sh
+# /init must NEVER exit, or kernel panics with "Attempted to kill init".
+
+echo ""
+echo "==== INIT START ===="
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev 2>/dev/null   # may already be mounted from cpio nodes
+mount -t tmpfs tmpfs /tmp
+mount -t debugfs debugfs /sys/kernel/debug
+
+echo "=== insmod zx279128-eth.ko ==="
+insmod /lib/modules/zx279128-eth.ko && echo "insmod OK" || echo "insmod FAIL"
+
+echo "=== ip link before sw up ==="
+ip link 2>&1
+
+echo "=== bring up sw + assign IP + arping ==="
+ip link set sw up
+ip addr add 192.168.99.1/24 dev sw
+sleep 3
+arping -c 3 -w 5 -I sw 192.168.99.50 2>&1 || true
+
+echo "=== sleep 10s then dump stats ==="
+sleep 10
+echo "--- /sys/class/net/sw/statistics ---"
+for f in /sys/class/net/sw/statistics/*; do
+  echo "$(basename $f) = $(cat $f)"
+done
+echo "--- zx_eth debugfs stats ---"
+cat /sys/kernel/debug/zx_eth/stats 2>&1 | head -40
+
+echo "==== INIT DONE — staying alive ===="
+# CRITICAL: do not exit. Linux panics if PID 1 dies.
+while true; do
+  sleep 3600
+done

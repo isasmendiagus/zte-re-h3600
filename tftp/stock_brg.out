@@ -1,0 +1,143 @@
+=== ppBrg ls ===
+PortInfo
+brdTransTable
+desc
+gmacagingtime
+gmaclearnlimit
+gportisolate
+gportloopback
+gportmirror
+gvlancfg
+helpBrg
+macTable
+macTableClear
+macaddradd
+macaddrdelete
+macfilteradd
+macfilterdel
+multTransTable
+portStat
+portStatus
+smacagingtime
+smacfiltermode
+smaclearnlimit
+sportisolate
+sportlinkmode
+sportloopback
+sportmirror
+statics
+svlancfg
+v4Table
+v6Table
+vlanTable
+=== KMSG ===
+<4>pkt_len(13:00)                         0x42
+<4>1th_pmau(26:14)                        0x158
+<4>2th_pmau(39:27)                        0x159
+<4>3th_pmau(52:40)                        0x3ff
+<4>head_len(60:53)                        0x42
+<4>inport(64:61)                          0x1
+<4>ssid(67:65)                            0x0
+<4>gemport_id(79:68)                      0x0
+<4>rsv(80:80)                             0x0
+<4>multi release(81:81)                   0x0
+<4>tcont mirrow bit5(82:82)               0x0
+<4>tcont bit 5                            0x0
+<4>direction(84:84)                       0x0
+<4>action(86:85)                          0x0
+<4>action_rsn(93:87)                      0x2c(ZX_TM_TRAP_TCL_ACK                  )
+<4>pae2sadm_flag(94:94)                   0x0
+<4>multi_ipv6(95:95)                      0x0
+<4>sa_learn(96:96)                        0x1
+<4>bpdu_flag(97:97)                       0x0
+<4>pvid_flag(98:98)                       0x0
+<4>pkt_qnum(101:99)                       0x0
+<4>pkt_pri/cos(104:102)                   0x0
+<4>ip_dscp(110:105)                       0x4
+<4>oam(113:111)                           0x6
+<4>cast_type(115:114)                     0x0
+<4>tag_type(118:116)                      0x0
+<4>l3_en(119:119)                         0x1
+<4>port_map(121:120)                      0x0
+<4>spec_flow(123:122)                     0x0
+<4>pps_flag(124:124)                      0x1
+<4>move_flag(125:125)                     0x0
+<4>pppoe_drop_flag/drop_reason(128:126)   0x0
+<4>color(129:129)                         0x1
+<4>trunk_index(133:130)                   0x0
+<4>ip_flag(134:134)                       0x1
+<4>ipv4_flag(135:135)                     0x1
+<4>ipv6_flag(136:136)                     0x0
+<4>tcp_flag(137:137)                      0x1
+<4>udp_flag(138:138)                      0x0
+<4>pppoe_format(139:139)                  0x0
+<4>v4inv6_flag(140:140)                   0x0
+<4>v6inv4_flag(141:141)                   0x0
+<4>udp_lite_flag(142:142)                 0x0
+<4>l2_type(144:143)                       0x2
+<4>extend_flag(145:145)                   0x0
+<4>l2_offset(153:146)                     0xc
+<4>l3_offset_v4(161:154)                  0xe
+<4>l3_offset_v6(169:162)                  0x0
+<4>l3_offset_v6_last(177:170)             0x0
+<4>l4_offset(185:178)                     0x22
+<4>l5_offset(193:186)                     0x0
+<4>outer_pri(196:194)                     0x0
+<4>inner_pri(199:197)                     0x0
+<4>outer_vid(211:200)                     0x0
+<4>inner_vid(213:212)                     0x0
+<4>smac(271:224)                          00:00:00:00:a3:a3
+<4>from_cpu(528:528)                      0x0
+<4>outport_cpu(532:529)                   0x0
+<4>cpu_queue_id(535:533)                  0x0
+<4>da_known_cpu(536:536)                  0x0
+<4>vlan_change_cpu(537:537)               0x0
+<4>vlan_org(549:538)                      0x0
+<4>pri_org(552:550)                       0x0
+<4>ingress_mirror(553:553)                0x0
+<4>ram_id(560:554)                        0x45
+<4>fwd_rsn(567:561)                       0x0
+<4>len_change(581:568)                    0x42
+<4>g_api_mac_learnlimit input:port = 0,output:enable = 0,limit = 0
+<4>g_api_port_isolate input:p_isolateReg = 0 output:p_portMsk = 0xffffff01
+<4>------------[ cut here ]------------
+<4>WARNING: CPU: 0 PID: 1221 at kernel/softirq.c:150 __local_bh_enable_ip+0x8c/0xc8()
+<4>Modules linked in: usrline(O) rndis_host dsp_dev(O) cdc_ether voip_codec(O) cdc_ncm kudp(O) usbnet tdm(O) cdc_acm ohci_hcd ehci_hcd mt7915(O) idmfdb(O) switch(O) tm(O) plat_zxylzb_9128S(O) zx_ponreg(O) patch(O) shellproc(O)
+<4>CPU: 0 PID: 1221 Comm: sh Tainted: G           O    4.1.25 #2
+<4>Hardware name: ZTE ZX279128S (Device Tree)
+<4>[<c000fee8>] (unwind_backtrace) from [<c000cc90>] (show_stack+0x10/0x14)
+<4>[<c000cc90>] (show_stack) from [<c046c938>] (dump_stack+0x94/0xa8)
+<4>[<c046c938>] (dump_stack) from [<c0019e48>] (warn_slowpath_common+0x84/0xb4)
+<4>[<c0019e48>] (warn_slowpath_common) from [<c0019f14>] (warn_slowpath_null+0x1c/0x24)
+<4>[<c0019f14>] (warn_slowpath_null) from [<c001cbc0>] (__local_bh_enable_ip+0x8c/0xc8)
+<4>[<c001cbc0>] (__local_bh_enable_ip) from [<c00174a8>] (zx_mdio_read+0x138/0x154)
+<4>[<c00174a8>] (zx_mdio_read) from [<bf09bf40>] (zte_api_sw_port_get_port_loopback+0x24/0x4c [tm])
+<4>[<bf09bf40>] (zte_api_sw_port_get_port_loopback [tm]) from [<bf0ac374>] (brg_info_store+0x4dc/0x9d4 [tm])
+<4>[<bf0ac374>] (brg_info_store [tm]) from [<c00fdc38>] (kernfs_fop_write+0xb8/0x19c)
+<4>[<c00fdc38>] (kernfs_fop_write) from [<c00a86ec>] (__vfs_write+0x20/0xd8)
+<4>[<c00a86ec>] (__vfs_write) from [<c00a8ed0>] (vfs_write+0x90/0x164)
+<4>[<c00a8ed0>] (vfs_write) from [<c00a9714>] (SyS_write+0x60/0xc4)
+<4>[<c00a9714>] (SyS_write) from [<c000a380>] (ret_fast_syscall+0x0/0x3c)
+<4>---[ end trace cad65ab6dea103cc ]---
+<4>g_api_port_lookback input:port = 0,direct = 1,enable = 0
+<4>g_api_port_mirror input:sport = 0x0,output:enable = 0x0,direct = 0x2, dport = 0x0
+<4>not member
+<4>g_api_port_vlancfg input:vlan = 0x0, output:mbmask = 0xff untagmask = 0x0
+<4>macaddr_add input:   macaddr = b6f5e378:c9011f58:47:c904f100:0 :0 
+<4>macaddr_add input: port = 0,vlanid=0,mode = 0x0
+<4>macaddr_delete input:macaddr = b6f5e378:c9075f58:47:c904e100:0 :0 
+<4>macaddr_add input: port = 0,vlanid=0,mode = 0
+<4>macfilter_add input: macaddr = b6f5e378:c9011f58:47:c906f100:0 :0 
+<4>macfilter_add input: port = 0,vlanid=0,mode = 0
+<4>macfilter_del input: macaddr = b6f5e378:c907df58:47:c9068100:0 :0 
+<4>macfilter_del input: port = 0,vlanid=0,mode = 0
+<4>s_api_mac_agingtime input:agingtime = 0
+<4>macfilter_mode input: port = 0,mode = 0
+<4>s_api_mac_learnlimit input:port = 0,enable = 0,limit = 0
+<4>s_api_port_isolate input:port = 0x0,portMask = 0x0
+<4>s_api_port_vlancfg input:port = 0x0,minvlan = 0x0,maxvlan = 0x0,mode = 0x0
+<4>g_api_port_lookback input:port = 0x0,direct = 0x0,enable = 0x0
+<4>s_api_port_vlancfg input:port = 0x0,minvlan = 0x0,maxvlan = 0x0,mode = 0x0
+<6>br0: port 1(eth1) entered disabled state
+<4>[zte_api_sw_mac_del_port_macaddress] failed, return no this mac!
+<4>s_api_port_vlancfg input:port = 0x0,minvlan = 0x0,maxvlan = 0x0,mode = 0x0

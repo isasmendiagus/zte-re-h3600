@@ -1,0 +1,12 @@
+<4>macfilter_mode input: port = 0,mode = 0
+<4>macfilter_mode input: port = 0,mode = 0
+<4>macfilter_mode input: port = 5,mode = 0
+<4>macfilter_mode input: port = 5,mode = 0
+<4>macfilter_mode input: port = 5,mode = 1
+<4>[TM][sbrg_get_table_sel]output:ram_addr_sel = 1
+<4>field  instruction
+<4>valid  note 0:invalid, 1:valid
+<4>age    note 0:not age, 1:halfage
+<4>mode   note 0:include, 1:exclude
+<4>action note 0:unchange,1:remove a tag,2:replace,3:add a tag
+<4>num   vlan  dip              sip              portmask  mode  age  valid  

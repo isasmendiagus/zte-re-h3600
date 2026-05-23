@@ -1,0 +1,1 @@
+cmd_/home/ubuntu/Projects/MYSELF/ZTE/H3600/linux-stockport/testmod/memlog.ko := arm-linux-gnueabi-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/ubuntu/Projects/MYSELF/ZTE/H3600/linux-stockport/testmod/memlog.ko /home/ubuntu/Projects/MYSELF/ZTE/H3600/linux-stockport/testmod/memlog.o /home/ubuntu/Projects/MYSELF/ZTE/H3600/linux-stockport/testmod/memlog.mod.o

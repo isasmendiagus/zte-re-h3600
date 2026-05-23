@@ -1,0 +1,168 @@
+.loginInstCfgArea input::-webkit-input-placeholder {
+opacity: 0;
+}
+.loginInstCfgArea input::-moz-placeholder {
+opacity: 0;
+}
+.loginInstCfgArea input:-moz-placeholder {
+opacity: 0;
+}
+.loginInstCfgArea input:-ms-input-placeholder {
+opacity: 0;
+}
+@media screen and (max-width: 767px) {
+html body {
+background-color: fff;
+}
+#page_content {
+width: 100%;
+margin: 0 auto;
+min-height: 400px;
+}
+#banner {
+border-bottom-color: black;
+border-bottom: 1px solid #ccc !important;
+}
+#page_container {
+width: 100%;
+height: 100vh;
+padding: 0 0 0 0;
+margin: 0 auto;
+}
+.logo {
+background-size: 70%;
+}
+.timeArea {
+left: 100px;
+bottom: 10px;
+}
+#banner_switchArea {
+bottom: 10px;
+}
+#mainNavigator {
+display: none;
+}
+.loginTitle {
+font-size: 0;
+background: url(../img/login_title_mobile.png) no-repeat;
+width: 300px;
+margin: 0 auto;
+background-size: 100%;
+padding: 0 0 0 0 !important;
+height: auto;
+line-height: 46px;
+}
+#loginWrapper {
+width: 300px;
+margin: 0 auto;
+margin-top: 20%;
+}
+.loginContainer {
+width: 100%;
+background: url(../img/login_bg_mobile.png) repeat-y;
+background-size: 100%;
+padding: 0px 0px 40px 0px;
+}
+#loginBtn {
+width: 100%;
+background: url(../img/login_footer_mobile.png) no-repeat;
+background-size: 100%;
+}
+#FakePasPassword {
+display: none;
+}
+.loginInstCfgArea {
+padding: 15px 0 0 0;
+}
+.loginInstCfgArea .right {
+float: inherit;
+text-align: center;
+}
+.loginInstCfgArea label {
+display: none;
+}
+.loginInstCfgArea input {
+width: 200px;
+box-shadow: 0 0;
+height: 35px;
+margin: 8px;
+border-radius: 8px;
+}
+.loginInstCfgArea input::-webkit-input-placeholder {
+opacity: 1;
+}
+.loginInstCfgArea input::-moz-placeholder {
+opacity: 1;
+}
+.loginInstCfgArea input:-moz-placeholder {
+opacity: 1;
+}
+.loginInstCfgArea input:-ms-input-placeholder {
+opacity: 1;
+}
+.login {
+margin: 0 auto;
+float: inherit;
+width: 200px;
+margin-top: -20px;
+border-radius: 8px;
+height: 35px;
+}
+#login_error {
+margin: 1rem 0.5rem;
+}
+#page_footer {
+text-align: center;
+line-height: 20px;
+position: fixed;
+bottom: 0px;
+}
+#page_footer span {
+white-space: nowrap;
+}
+.warnHint {
+color: #443500;
+background: #FFF9E4 url(../img/warn_m.png) no-repeat 1rem;
+margin: 1rem 0.5rem !important;
+}
+.errorHint {
+text-align: left;
+padding: 10px 10px 10px 70px;
+}
+.preemptinput {
+width: 1rem !important;
+}
+.preemptlab {
+display: inline-block !important;
+width: 15rem;
+}
+.preemptrow {
+width: 25rem;
+}
+.doublebtn {
+margin: 0 auto;
+float: inherit;
+margin-top: -20px;
+border-radius: 8px;
+height: 35px;
+}
+#FakePasNewPassword {
+display: none;
+}
+.chpwdArea {
+padding-bottom: 15px !important;
+}
+.chpwdpass {
+line-height: 12px !important;
+}
+.chpwdmobile {
+width: 200px;
+box-shadow: 0 0;
+height: 30px !important;
+margin: 4px;
+border-radius: 8px;
+}
+.staticInfoHint {
+display: none;
+}
+}

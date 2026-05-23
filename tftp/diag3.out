@@ -1,0 +1,253 @@
+dmesg: applet not found
+no busybox dmesg
+-rw-r--r--    1 root     root             0 Feb 17 18:51 /tmp/d3
+=== /proc/sys/kernel/printk_ratelimit ===
+print-fatal-signals
+printk
+printk_delay
+printk_ratelimit
+printk_ratelimit_burst
+=== Look for syslog ===
+/tmp/diag3.sh: line 13: head: not found
+=== TM/IRQ symbols ===
+bf057748 t sbrg_add_vltbl	[tm]
+bf04b03c t cla_set_hash_poly_config	[tm]
+bf04fa14 t cla_set_hash_table	[tm]
+bf0581bc t sbrg_add_ipv4table	[tm]
+bf058ffc t sbrg_add_ipv6table	[tm]
+bf05a480 t sbrg_add_mactable	[tm]
+bf0213dc t zx_pon_tm_int	[plat_zxylzb_9128S]
+bf02152c t pon_tm_net_register	[plat_zxylzb_9128S]
+bf0215f8 t pon_tm_net_timeout	[plat_zxylzb_9128S]
+bf0216f8 t pon_tm_net_stop	[plat_zxylzb_9128S]
+bf021784 t pon_tm_net_open	[plat_zxylzb_9128S]
+bf0249f0 t pon_tm_net_poll	[plat_zxylzb_9128S]
+bf021c80 t pon_tm_net_tx	[plat_zxylzb_9128S]
+bf025c74 r pon_tm_net_netdev_ops	[plat_zxylzb_9128S]
+bf036328 B pon_tm_netdev	[plat_zxylzb_9128S]
+bf03635c b pon_tm_net_uni_flag	[plat_zxylzb_9128S]
+bf036320 b pon_tm_net_debug	[plat_zxylzb_9128S]
+bf0299e4 d pon_tm_net_swtx_flag	[plat_zxylzb_9128S]
+bf021440 t pon_tm_int_init	[plat_zxylzb_9128S]
+bf022258 t pon_tm_net_init	[plat_zxylzb_9128S]
+bf0220e8 t pon_tm_net_int	[plat_zxylzb_9128S]
+bf03622c b pon_tm_int_info	[plat_zxylzb_9128S]
+bf021430 t set_pon_tm_int_info	[plat_zxylzb_9128S]
+=== ppPm sysfs ===
+cmdInfo
+des
+flowInfo
+getDsliteDipv6
+getDsliteSipv6
+getPppoSessionId
+getV6rdDipv4
+helpOpc
+nextHopInfo
+onuMac
+setDsliteDipv6
+setDsliteSipv6
+setPppoSessionId
+setV6rdDipv4
+showPmOutputPktHead
+vlanInfo
+writeCmdInfo
+writeFlowInfo
+=== nppPm sysfs ===
+gg988stat
+gpmflowstat
+gpmg988stat
+gpmportstat
+gpmstat
+gpmztestat
+gportstat
+gztestat
+helppm
+spmflowrule
+spmflowstaen
+spmg988rule
+spmportrule
+spmzterule
+=== sysfs hooks summary ===
+--- nppGreg ---
+gport802xauth
+gportstatus
+helpGreg
+phyGuardEn
+phyLdoTest
+sport802xauth
+sportstatus
+--- nppPm ---
+gg988stat
+gpmflowstat
+gpmg988stat
+gpmportstat
+gpmstat
+gpmztestat
+gportstat
+gztestat
+helppm
+spmflowrule
+spmflowstaen
+spmg988rule
+spmportrule
+spmzterule
+--- nppSdet ---
+helpSdet
+sonumtu
+--- nppSpa ---
+desOut
+filter
+g802xtrap
+gbpdupass802x
+ghashram
+gmatchram
+gportpktfilter
+gportpvid
+gportvlanfilter
+gvlaninframemode
+helpSpa
+pvid
+s802xtrap
+sbpdupass802x
+setmatchrule
+sonehashramentry
+sonerule
+sportpktfilter
+sportpvid
+sportvlanfilter
+sproaction
+sstpaction
+statics
+svlaninframemode
+tpidSel
+--- power ---
+autosuspend_delay_ms
+control
+runtime_active_time
+runtime_status
+runtime_suspended_time
+--- ppAdm ---
+desOut
+flowLimitCfg
+flowStat
+gadmindramprint
+gpktlimitpps
+helpAdm
+protPpsCfg
+protPpsStat
+protToqCfg
+sadmppsmap
+showadmcfg
+showppsrate
+spqrtlmten
+sprotocolpktppsrate
+--- ppBrg ---
+PortInfo
+brdTransTable
+desc
+gmacagingtime
+gmaclearnlimit
+gportisolate
+gportloopback
+gportmirror
+gvlancfg
+helpBrg
+macTable
+macTableClear
+macaddradd
+macaddrdelete
+macfilteradd
+macfilterdel
+multTransTable
+portStat
+portStatus
+smacagingtime
+smacfiltermode
+smaclearnlimit
+sportisolate
+sportlinkmode
+sportloopback
+sportmirror
+statics
+svlancfg
+v4Table
+v6Table
+vlanTable
+--- ppCla ---
+addfastrule
+calculatehashaddr
+delfastrule
+desIn
+desOut
+flowInfoList
+gagingstatus
+gclacfg
+gextraindextable
+gextraruletable
+gfastentrynum
+ghashtable
+gparsehashkey
+helpCla
+modhashtable
+reason
+setmaxfastentry
+setmaxl3entry
+showaclinfoall
+showcommrule
+showfastinfoall
+showfastrule
+statics
+--- ppPm ---
+cmdInfo
+des
+flowInfo
+getDsliteDipv6
+getDsliteSipv6
+getPppoSessionId
+getV6rdDipv4
+helpOpc
+nextHopInfo
+onuMac
+setDsliteDipv6
+setDsliteSipv6
+setPppoSessionId
+setV6rdDipv4
+showPmOutputPktHead
+vlanInfo
+writeCmdInfo
+writeFlowInfo
+--- subsystem ---
+devices
+drivers
+drivers_autoprobe
+drivers_probe
+uevent
+--- tmRed ---
+bufCfg
+bufUsed
+dbgInfo
+desDrop
+desOut
+helpRed
+sredinquecfg
+sredoutquecfg
+--- tmTest ---
+gportcastratelimit
+gportegrssch
+gportegrstfsharp
+gportingratelimit
+gportstatistics1
+gportstatistics2
+gportstatistics3
+gportstatistics4
+sportcastratelimit
+sportegrssch
+sportegrstfsharp
+sportingratelimit
+spqdwrr
+spqshprate
+spqweight
+stcontshprate
+tmdn
+tmerrormonitor
+tmup

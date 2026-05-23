@@ -1,0 +1,93 @@
+--- statics all ports ---
+==statics p=0==
+==statics p=1==
+==statics p=2==
+==statics p=3==
+==statics p=4==
+==statics p=5==
+==statics p=6==
+==statics p=7==
+--- g802xtrap all ports ---
+==g802xtrap p=0==
+==g802xtrap p=1==
+==g802xtrap p=2==
+==g802xtrap p=3==
+==g802xtrap p=4==
+==g802xtrap p=5==
+==g802xtrap p=6==
+==g802xtrap p=7==
+--- helpSpa ---
+--- helpAdm ---
+--- helpOpc (ppPm) ---
+=== showfastinfoall ===
+===KMSG===
+<4>g_api_802x_trap input :port = 0 output :en = 1
+<4>g_api_802x_trap input :port = 1 output :en = 1
+<4>g_api_802x_trap input :port = 2 output :en = 1
+<4>g_api_802x_trap input :port = 3 output :en = 1
+<4>g_api_802x_trap input :port = 4 output :en = 1
+<4>tm_port_802x_trap_set fail, error p_port 5
+<4>g_api_802x_trap fail, error code -1!
+<4>g_api_802x_trap input :port = 6 output :en = 1
+<4>g_api_802x_trap input :port = 7 output :en = 1
+<4>============================================================================
+<4>Configuration Commands[HEX]
+<4>============================================================================
+<4> echo [port]             > gvlaninframemode          - get vlan inframe mode
+<4> echo [port][vid][pri]   > sportpvid                 - set port pvid
+<4> echo [port]             > gportpvid                 - get port pvid
+<4> echo [action]           > sstpaction                - get stp action
+<4> echo [type][action]     > sproaction                - set protocol action
+<4> echo [port][vlTagMsk]   > sportvlanfilter           - set port tag type filter
+<4> echo [port]             > gportvlanfilter           - get port tag type filter
+<4> echo [port]             > gportpktfilter            - get port pkt type filter
+<4> echo [port][enable]     > sbpdupass802x             - set bpdu  passthrough  802.1x enable
+<4> echo [port]             > gbpdupass802x             - get bpdu  passthrough  802.1x enable
+<4> echo [port][enable]     > s802xtrap                 - set 802.1trap enable
+<4> echo [port]             > g802xtrap                 - get 802.1trap enable
+<4> echo [addr][acyion][reason][match_arrar][valid] > sonehashramentry                 - get 802.1trap enable
+<4> echo [port][mode 0:DISNONE;1:DISALL;2:DISUNTAG;3:DISTAG] > svlaninframemode    - set vlan inframe mode
+<4> echo [port][pkttype 0:noflt;1:fil not pro;2:flt all]     > sportpktfilter      - set port pkt type filter
+<4>============================================================================
+<4>Display Commands: cat <file>
+<4>============================================================================
+<4> cat statics                                           - dump printing options
+<4> cat pvid                                              - dump printing options
+<4> cat filter                                            - dump printing options
+<4> cat tpidSel                                           - dump printing options
+<4> cat desOut                                            - dump printing options
+<4>============================================================================
+<4>Configuration Commands[HEX]
+<4>============================================================================
+<4> echo [flowid][flowcnt][statMod][RdClr]  > flowStat            - List flow rate limit pkt statistics
+<4> echo [port]                             > protPpsCfg          - List protocol pkt pps cfg by port
+<4> port:0-uni0, 1-uni1, 2-uni2, 3-uni3, 4-uni4, 5-pon, 6-wifi1, 7-wifi2
+<4> echo [dir][type][cpuq][rate]            > protToqCfg          - List protocol pkt pps cfg by port
+<4> echo [enable]                           > spqrtlmten          - set flow rate limit enable
+<4> echo [dir][pps_unit][ena][pps_num]      > sprotocolpktppsrate - set protocol pkt pps rate
+<4> echo [dir][pps_unit]                    > gpktlimitpps        - get protocol pkt pps rate
+<4> echo [index]                            > gadmindramprint     - get adm indirect access ram print
+<4> echo [index]                            > sadmppsmap          - set cpuid 2 pps============================================================================
+<4>Display Commands: cat <file>
+<4>============================================================================
+<4> cat helpAdm            - display adm command help
+<4> cat desOut             - dump printing adm output packet des
+<4> cat protPpsStat        - show protocol pps stats
+<4> cat flowLimitCfg       - show floe limit cfg
+<4> cat showadmcfg         - dump printing flow limit bucket cfg 
+<4> cat showppsrate        - show pps en and pps rate 
+<4>============================================================================
+<4>Configuration Commands[HEX]
+<4>============================================================================
+<4> echo [dir 0:up;1:dn][phyic addr]> flowInfo    - show flow info by direction and addr
+<4> echo [phyic addr]               > cmdInfo     - show cmd info by direction and addr
+<4> echo [phyic addr]               > nextHopInfo     - show mac info by direction and addr
+<4> echo [phyic addr]               > vlanInfo    - show vlan info by direction and addr
+<4> echo [subnet_id]                > onuMac  --show all onu mac(para is 0x10) or show one onu mac(para is subnet_id)
+<4>============================================================================
+<4>Display Commands: cat <file>
+<4>============================================================================
+<4> cat txStatics                                       - dump printing options
+<4> cat rxStatics                                       - dump printing options
+<4> cat des                                             - show descrip info 
+<4> cat showPmOutputPktHead                             - show pm modified packet head  

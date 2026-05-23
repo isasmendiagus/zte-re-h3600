@@ -1,0 +1,176 @@
+<4>11930:23:01 [KernOSS][Info] [oss_kernel_comm(209)KernOssInner_AS]  transfer appid=00010000, msgid=0x0000a442, ptr=ce0cb460, len=16, iRet=-111
+<4>11930:23:01 [KernOSS][Warn] [oss_kernel_comm(338)kern_oss_timer_]  bufCnt=6: Receiver=cspd.cspd.usb_mgr, wMsgId=0XA442
+<4>11930:23:01 [KernOSS][Info] [oss_kernel_comm(209)KernOssInner_AS]  transfer appid=00010000, msgid=0x0000a437, ptr=ce020b00, len=256, iRet=-111
+<4>11930:23:01 [KernOSS][Warn] [oss_kernel_comm(338)kern_oss_timer_]  bufCnt=6: Receiver=cspd.cspd.usb_mgr, wMsgId=0XA437
+<4>11930:23:01 [KernOSS][Info] [oss_kernel_comm(209)KernOssInner_AS]  transfer appid=00010000, msgid=0x0000a442, ptr=ce1aca60, len=16, iRet=-111
+<4>pon init
+<4>ZX_PA_BUF_BASE0=4e700000
+<4>ZX_VA_BUF_BASE0=ce700000
+<4>ZX_ACL_BASE=4e720000
+<4>ZX_VA_ACL_BASE=ce720000
+<4>ZX_FLOW_BASE=4eb20000
+<4>ZX_VA_FLOW_BASE=ceb20000
+<4>ZX_BP_BUFFER_BASE=4ec20000
+<4>ZX_DESC_BASE=4ff1f000
+<4>ZX_TX_UP_DESC_BASE=4ffdf000
+<4>ZX_TX_DN_DESC_BASE=4ffef000
+<4>ZX_VA_BPPE_BASE=ce700000
+<4>ZX_VA_BP_BUF_BASE=cec20000
+<4>ZX_VA_DESC_BASE=cff1f000
+<4>ZX_VA_TX_UP_DESC_BASE=cffdf000
+<4>ZX_VA_TX_DN_DESC_BASE=cffef000
+<4>BPPE_POOL_SIZE=2000
+<4>NORMAL_BP_BUFFER_SIZE=1200000
+<4>JUMBO_BP_SIZE=2800
+<4>JUMBO_BPPE_POOL_SIZE=66
+<4>BP_BUFFER_SIZE=12ff000
+<4>ponmode  = 0x10
+<4>lan_up=1, lan_up_port=4
+<4>g_pon_irq=26,f4000000,f0400000,f0500000,f0600000,d0c00000
+<4>get npp irq succeed,g_npp_irq:27
+<4>get tm irq succeed,g_tm_irq:29
+<4>get pp irq succeed,g_pp_irq:30
+<4>get idm irq succeed,g_idm_irq:28
+<4>enter ref_clk_set.. mode = 1 .
+<4>ref_clk_set success!
+<4>rxpll_ready
+<4>serdes band cpu_temper:43 coarse:0x2c
+<4>band calc fin
+<4>pon tm init
+<3>netif_napi_add() called with weight 512 on device pon
+<4>DMA_DN_DESC_CNT = 0x0
+<4>DMA_UP_DESC_CNT = 0x0
+<4>pon_tm net init ok,216/176
+<4>module-netdebug: register_chrdev failed
+<4>pon_pp init
+<4>pon_npp init
+<4>idm_status_proc success!
+<4>idm_desc_init d0ae2000/4dac8000
+<4>request idm irq succeed 
+<4>idm net init ok
+<4>mac 0 link down
+<4>mac 1 link down
+<4>mac 2 link down
+<4>mac 3 link down
+<4>Error! NFBI maybe not connect!
+<4>net_ratelimit: 254 callbacks suppressed
+<4>11930:23:07 [KernOSS][Info] [oss_kernel_comm(209)KernOssInner_AS]  transfer appid=00010000, msgid=0x0000a442, ptr=ce0cb460, len=16, iRet=-111
+<4>11930:23:07 [KernOSS][Warn] [oss_kernel_comm(338)kern_oss_timer_]  bufCnt=6: Receiver=cspd.cspd.usb_mgr, wMsgId=0XA442
+<4>11930:23:07 [KernOSS][Info] [oss_kernel_comm(209)KernOssInner_AS]  transfer appid=00010000, msgid=0x0000a437, ptr=ce020b00, len=256, iRet=-111
+<4>11930:23:07 [KernOSS][Warn] [oss_kernel_comm(338)kern_oss_timer_]  bufCnt=6: Receiver=cspd.cspd.usb_mgr, wMsgId=0XA437
+<4>11930:23:07 [KernOSS][Info] [oss_kernel_comm(209)KernOssInner_AS]  transfer appid=00010000, msgid=0x0000a442, ptr=ce1aca60, len=16, iRet=-111
+<4>Error! NFBI maybe not connect!
+<4>= TM Module SYS FS Init ended successfully =
+<4>tm_initModule begin...
+<4>enter tm_sdk_init  
+<4>api lock init!!
+<4>tm_initModule end...
+<4>Error! NFBI maybe not connect!
+<4>Init switch module
+<4>g_sw_cap.sw_uni_count=5
+<4>g_sw_cap.sw_uni_mask=0xf
+<4>g_sw_cap.sw_wan_port=4
+<4>g_sw_cap.sw_wan_mask=0x10
+<4>g_sw_cap.sw_all_port_count=8
+<4>g_sw_cap.sw_all_port_mask=0xff
+<4>g_sw_cap.gwtype1
+<4>g_sw_cap.wantype0
+<4>g_sw_cap.onutype3
+<4>ptSwInfo->wan_logicport=0
+<4>g_mii_dev_name[0]  sw 
+<4>g_mii_dev_name[1]  pon 
+<4>port id 4, name pon
+<4>Error! NFBI maybe not connect!
+<4>Error! NFBI maybe not connect!
+<4>Error! NFBI maybe not connect!
+<4>Error! NFBI maybe not connect!
+<4>sw_set_uni_as_wan uni=4
+<4>lan_up_port=0x4
+<4>PON_PP_TM_CFG=0x21200000
+<4>after PON_PP_TM_CFG=0x21200000
+<4>tm_pon_protocol_pktdeal_set fail, error protocal 33
+<4>tm_pon_protocol_pktdeal_set fail, error protocal 31
+<4>protocal fail, error deal 43
+<4>tm_pon_protocol_pktdeal_set fail, error protocal 35
+<4>tm_pon_protocol_pktdeal_set fail, error protocal 36
+<4>tm_pon_protocol_pktdeal_set fail, error protocal 37
+<4>tm_pon_protocol_pktdeal_set fail, error protocal 69
+<4>tm_pon_protocol_pktdeal_set fail, error protocal 34
+<4>protocol fail, error deal 66
+<4>[TM][dpa_set_protocol_type_i_act] failed
+<4>protocol fail, error deal 65
+<4>[TM][dpa_set_protocol_type_i_act] failed
+<4>-------chip_tm_init end-----
+<4>[SW][sw_init_switch] l2_fast init
+<4>[SW]set cpu queue rate limit to 8000pps
+<4>
+<4> Capacity=256000
+<4> Capacity=256000[SW][sw_init_switch] reg hff
+<4>register npu driver 12
+<4>Init personal switch module Success
+<4>fpga write: reg=0x00010006, data=0x00000002
+<4>fpga write: reg=0x00010009, data=0x000000c8
+<4>fpga write: reg=0x0001001a, data=0x61a88158
+<4>fpga write: reg=0x0001001b, data=0x00000bd8
+<4>fpga write: reg=0x00010008, data=0x00000300
+<4>fpga write: reg=0x00020013, data=0x00000001
+<4>fpga write: reg=0x00020007, data=0x000003e8
+<4>fpga write: reg=0x0002000a, data=0x26202020
+<4>fpga write: reg=0x00020040, data=0x01010101
+<4>fpga write: reg=0x00020000, data=0x010040cb
+<4>fpga write: reg=0x0002000c, data=0x00000006
+<4>fpga write: reg=0x00020001, data=0x003c0001
+<4>fpga write: reg=0x00020002, data=0x41900000
+<4>fpga write: reg=0x0002003c, data=0x80000003
+<4>fpga write: reg=0x00020041, data=0x00400656
+<4>fpga read: reg=0x00010006, value=0x00000002
+<4>IN task: sh(552)
+<4>systools cmd: ck 
+<6>console [0] enabled
+<4>create thread systools log success!ck run ok
+<4>Error! NFBI maybe not connect!
+<4>Error! NFBI maybe not connect!
+<4>Error! NFBI maybe not connect!
+<4>!!!!!!!!!! nfbi hardware reset !!!!!!!!!!
+<4>net_ratelimit: 254 callbacks suppressed
+<4>11930:23:12 [KernOSS][Info] [oss_kernel_comm(209)KernOssInner_AS]  transfer appid=00010000, msgid=0x0000a442, ptr=ce0cb460, len=16, iRet=-111
+<4>11930:23:12 [KernOSS][Warn] [oss_kernel_comm(338)kern_oss_timer_]  bufCnt=6: Receiver=cspd.cspd.usb_mgr, wMsgId=0XA442
+<4>11930:23:12 [KernOSS][Info] [oss_kernel_comm(209)KernOssInner_AS]  transfer appid=00010000, msgid=0x0000a437, ptr=ce020b00, len=256, iRet=-111
+<4>11930:23:12 [KernOSS][Warn] [oss_kernel_comm(338)kern_oss_timer_]  bufCnt=6: Receiver=cspd.cspd.usb_mgr, wMsgId=0XA437
+<4>11930:23:12 [KernOSS][Info] [oss_kernel_comm(209)KernOssInner_AS]  transfer appid=00010000, msgid=0x0000a442, ptr=ce1aca60, len=16, iRet=-111
+<4>IN task: sh(609)
+<4>systools cmd: ck 
+<4>ck run ok
+<4>sip alg change power[1] ok!
+<4>ftp alg change power[1] ok!
+<4>h323 alg change power[1] ok!
+<4>rtsp alg change power[1] ok!
+<4>pptp alg change power[1] ok!
+<4>tftp alg change power[1] ok!
+<4>cspplatspeed_to_sw_ztespeed undefined speed=0
+<4>cspplatduplex_to_sw_zteduplex undefined duplex=0
+<6>IPv6: ADDRCONF(NETDEV_UP): eth0: link is not ready
+<6>device eth0 entered promiscuous mode
+<6>IPv6: ADDRCONF(NETDEV_UP): eth1: link is not ready
+<4>cspplatspeed_to_sw_ztespeed undefined speed=0
+<4>cspplatduplex_to_sw_zteduplex undefined duplex=0
+<6>IPv6: ADDRCONF(NETDEV_UP): eth2: link is not ready
+<4>cspplatspeed_to_sw_ztespeed undefined speed=0
+<4>cspplatduplex_to_sw_zteduplex undefined duplex=0
+<6>IPv6: ADDRCONF(NETDEV_UP): eth3: link is not ready
+<4>cspplatspeed_to_sw_ztespeed undefined speed=0
+<4>cspplatduplex_to_sw_zteduplex undefined duplex=0
+<6>IPv6: ADDRCONF(NETDEV_UP): eth4: link is not ready
+<4>
+<4> Capacity=200000
+<4> Capacity=200000
+<4> Capacity=200000
+<4> Capacity=200000
+<4> Capacity=200000[SW][sw_mac_add_cpu_macaddress] input: mac=f4:f6:47:f:42:64
+<4>[SW][sw_mac_add_cpu_macaddress] input: mac=f4:f6:47:f:42:65
+<4>[SW][sw_mac_add_cpu_macaddress] input: mac=f4:f6:47:f:42:66
+<4>[SW][sw_mac_add_cpu_macaddress] input: mac=f4:f6:47:f:42:67
+<4><00000000070000001f07>[br_com_index.c(113)br_port_renew_i] netdevice[br0] is not a port
+<4><00000000070000001f07>[br_com_filter.c(452)br_rule_add] ADD ports[31]' filter, group_key[0]
+<4>2020 0214 register mt_drv
+<6>mt_pci_slave 0000:01:00.0: enabling device (0140 -> 0142)

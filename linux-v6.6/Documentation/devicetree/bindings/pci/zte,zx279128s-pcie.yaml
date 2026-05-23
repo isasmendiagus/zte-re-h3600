@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pci/zte,zx279128s-pcie.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ZTE ZXIC ZX279128S PCIe host controller
+
+description: |
+  The ZX279128S SoC integrates two Synopsys DesignWare PCIe Root Port
+  controllers. Each port has its own DBI region plus a SoC-specific
+  control block (used to read the LTSSM mirror state). Clocks and
+  resets are exposed through three syscon regions (TOPCRM, PCIe-CRM,
+  PCIe-CRM2).
+
+maintainers:
+  - Agustin Isasmendi <infra@quecomere.com>
+
+allOf:
+  - $ref: /schemas/pci/snps,dw-pcie.yaml#
+
+properties:
+  compatible:
+    const: zte,zx279128s-pcie
+
+  reg:
+    items:
+      - description: Synopsys DesignWare DBI registers
+      - description: SoC control registers (LTSSM mirror, link status)
+
+  reg-names:
+    items:
+      - const: dbi
+      - const: soc_ctrl
+
+  interrupts:
+    items:
+      - description: Main controller interrupt
+      - description: MSI interrupt
+
+  interrupt-names:
+    items:
+      - const: main
+      - const: msi
+
+  zte,port-id:
+    description: |
+      Index of the PCIe port (0 or 1). Selects which clock-gate / reset
+      bit pattern to apply during start_link, since the two ports use
+      different bit positions in TOPCRM.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1]
+
+  zte,topcrm:
+    description: phandle to the TOPCRM syscon (clocks + main resets)
+    $ref: /schemas/types.yaml#/definitions/phandle
+
+  zte,pcie-crm:
+    description: phandle to the PCIe-CRM syscon (sub-resets / PHY)
+    $ref: /schemas/types.yaml#/definitions/phandle
+
+  zte,pcie-crm2:
+    description: phandle to the secondary PCIe CRM syscon (lane control)
+    $ref: /schemas/types.yaml#/definitions/phandle
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - interrupts
+  - interrupt-names
+  - zte,port-id
+  - zte,topcrm
+  - zte,pcie-crm
+  - zte,pcie-crm2
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    soc {
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        topcrm: syscon@94000000 {
+            compatible = "zte,zx279128s-topcrm", "syscon";
+            reg = <0x94000000 0x1000>;
+        };
+
+        pcie_crm: syscon@94100000 {
+            compatible = "zte,zx279128s-pcie-crm", "syscon";
+            reg = <0x94100000 0x1000>;
+        };
+
+        pcie_crm2: syscon@94200000 {
+            compatible = "zte,zx279128s-pcie-crm2", "syscon";
+            reg = <0x94200000 0x1000>;
+        };
+
+        pcie@f000000 {
+            compatible = "zte,zx279128s-pcie";
+            reg = <0x0f000000 0x4000>,
+                  <0x09500000 0x4000>;
+            reg-names = "dbi", "soc_ctrl";
+
+            #address-cells = <3>;
+            #size-cells = <2>;
+            device_type = "pci";
+            bus-range = <0x00 0xff>;
+            ranges = <0x82000000 0 0x10000000 0x10000000 0 0x08000000>;
+
+            interrupts = <GIC_SPI 0x3f IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 0x3b IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-names = "main", "msi";
+
+            zte,port-id = <0>;
+            zte,topcrm = <&topcrm>;
+            zte,pcie-crm = <&pcie_crm>;
+            zte,pcie-crm2 = <&pcie_crm2>;
+        };
+    };

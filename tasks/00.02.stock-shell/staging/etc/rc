@@ -1,0 +1,35 @@
+#! /bin/sh
+
+PATH=/sbin:/bin:/usr/bin:/usr/sbin
+KERNELVER=4.1.25
+export PATH
+export KERNELVER
+
+mkdir /var/tmp -m 777
+
+mount -t proc proc /proc
+
+# Kernel printk → UART (DR=0x94404004 ZTE-shifted PL011)
+/sbin/kmsg2uart > /dev/null 2>&1 &
+#mount -t sysfs none /sys
+mount -t tmpfs -o size=30720k tmpfs /var
+mount -t tmpfs -o size=20480k tmpfs /tmp
+
+/bin/mount -a
+
+nfbi bootdownload 0 /etc/dsl/boot.bin &
+
+LOADTYPE=$(cat /proc/zte/verinfo/loadtype)
+if [ "$LOADTYPE" = "3" ];then
+echo "init normal mode!!!"
+echo 5000 > /proc/sys/vm/min_free_kbytes
+/etc/init.norm
+elif [ "$LOADTYPE" = "2" ];then
+echo "init debug mode!!!"
+/etc/init.debug
+else
+echo "loadtype para is error!!!"
+exit 0
+fi
+
+#/sbin/inetd

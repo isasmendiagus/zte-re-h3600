@@ -1,0 +1,54 @@
+HAIKUI_DIR_SRC = $(PACKAGES_PATH)/multiap/map/web/
+CFLAGS += -I$(PACKAGES_PATH)/multiap/map/include
+CFLAGS += -I$(ROOT_PATH)/packages/ieee1905/include/cmapi/
+
+#GLOBALENV-y += 
+
+#
+COMP_OBJS-y += webd_adaptor_multiap_roam.o
+pages-y += 
+pages-y += 
+pages-y += 
+
+
+#thinkluacss定制文件
+thinkluacss-pages-y += .
+
+#thinkluaimg定制文件
+thinkluaimg-pages-y += 
+######################  ######################
+
+
+CSP_DIR_COMP_OBJ = $(CSP_RELEASE_PATH)/applications/web/package_pages/
+
+OBJC := $(COMP_OBJS-y)
+DEPS := $(patsubst %.o,${CSP_DIR_OBJ}/%.d,$(notdir $(OBJC)))
+
+OBJ := $(DEPS)  ${OBJC}
+
+.PHONY:all
+
+all:append_work adaptor
+
+append_work: $(pages-y)
+.PHONY:$(pages-y)
+$(pages-y):
+	[ -d $(CSP_DIR_COMP_OBJ) ] || mkdir -p $(CSP_DIR_COMP_OBJ)
+	cp -af $@ $(CSP_DIR_COMP_OBJ)
+	
+adaptor: ${OBJ}
+
+$(CSP_DIR_OBJ)/%.d: $(HAIKUI_DIR_SRC)/%.c
+	$(Q)$(CC) -MM $(CFLAGS) $< | sed  -e s!$(patsubst %.c,%.o,$(notdir $<)):!$(patsubst %.c,$(CSP_DIR_OBJ)/%.o,$(notdir $<)):! > $@
+
+-include ${DEPS}
+
+$(CSP_DIR_OBJ)/%.o : $(HAIKUI_DIR_SRC)/%.c
+	$(Q)$(CC) $(CFLAGS) -c $(PICFLAG) $< -o $@
+	@$(E) "CC" $(notdir $<)
+	
+clean:_clean
+_clean:
+	-rm -rf  $(CSP_DIR_COMP_OBJ)
+
+

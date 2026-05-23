@@ -1,0 +1,22 @@
+<style type="text/css">
+.signalZero{
+background: url(../img/signalZero.png) no-repeat;
+display:inline-block;
+}
+.signalOne{
+background: url(../img/signalOne.png) no-repeat;
+display:inline-block;
+}
+.signalTwo{
+background: url(../img/signalTwo.png) no-repeat;
+display:inline-block;
+}
+.signalThree{
+background: url(../img/signalThree.png) no-repeat;
+display:inline-block;
+}
+.signalFour{
+background: url(../img/signalFour.png) no-repeat;
+display:inline-block;
+}
+</style>

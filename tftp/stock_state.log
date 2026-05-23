@@ -1,0 +1,133 @@
+###[GPORT_STATS1 port=0] echo 0 > /sys/devices/platform/tm/tmTest/gportstatistics1
+###[GPORT_STATS1 port=1] echo 1 > /sys/devices/platform/tm/tmTest/gportstatistics1
+###[GPORT_STATS1 port=2] echo 2 > /sys/devices/platform/tm/tmTest/gportstatistics1
+###[GPORT_STATS1 port=3] echo 3 > /sys/devices/platform/tm/tmTest/gportstatistics1
+###[GPORT_STATS1 port=4] echo 4 > /sys/devices/platform/tm/tmTest/gportstatistics1
+###[GPORT_STATS1 port=5] echo 5 > /sys/devices/platform/tm/tmTest/gportstatistics1
+###[GPORT_STATS1 port=6] echo 6 > /sys/devices/platform/tm/tmTest/gportstatistics1
+###[GPORT_STATS1 port=7] echo 7 > /sys/devices/platform/tm/tmTest/gportstatistics1
+###[SPORT_STATS1 port=0] echo 0 > /sys/devices/platform/tm/tmTest/sportingratelimit
+###[SPORT_STATS1 port=1] echo 1 > /sys/devices/platform/tm/tmTest/sportingratelimit
+###[SPORT_STATS1 port=2] echo 2 > /sys/devices/platform/tm/tmTest/sportingratelimit
+###[SPORT_STATS1 port=3] echo 3 > /sys/devices/platform/tm/tmTest/sportingratelimit
+###[SPORT_STATS1 port=4] echo 4 > /sys/devices/platform/tm/tmTest/sportingratelimit
+###[SPORT_STATS1 port=5] echo 5 > /sys/devices/platform/tm/tmTest/sportingratelimit
+###[SPORT_STATS1 port=6] echo 6 > /sys/devices/platform/tm/tmTest/sportingratelimit
+###[SPORT_STATS1 port=7] echo 7 > /sys/devices/platform/tm/tmTest/sportingratelimit
+###[CLA_FASTENTRYNUM] echo 0 > /sys/devices/platform/tm/ppCla/gfastentrynum
+###[CLA_GHASHTABLE bucket=0] echo 0 > /sys/devices/platform/tm/ppCla/ghashtable
+###[CLA_STATICS] echo 0 > /sys/devices/platform/tm/ppCla/statics
+###[CLA_HELP] echo 0 > /sys/devices/platform/tm/ppCla/helpCla
+###[GPORT_STATUS_0] echo 0 > /sys/devices/platform/tm/nppGreg/gportstatus
+###[GPORT_STATUS_1] echo 1 > /sys/devices/platform/tm/nppGreg/gportstatus
+###[SPORT_STATUS_0] echo 0 > /sys/devices/platform/tm/nppGreg/sportstatus
+###[SPORT_STATUS_1] echo 1 > /sys/devices/platform/tm/nppGreg/sportstatus
+
+==== KMSG CAPTURE ====
+<4>inbytes = 319299
+<4>inpkts = 1467
+<4>inunicast = 1288
+<4>inmulticast = 125
+<4>inbroadcast = 54
+<4>inerror = 0
+<4>indiscard = 0
+<4>outbytes = 379341
+<4>outpkts = 1306
+<4>outunicast = 1250
+<4>outmulticast = 52
+<4>outbroadcast = 4
+<4>outerror = 0
+<4>outdiscard = 0
+<4>inbytes = 0
+<4>inpkts = 0
+<4>inunicast = 0
+<4>inmulticast = 0
+<4>inbroadcast = 0
+<4>inerror = 0
+<4>indiscard = 0
+<4>outbytes = 0
+<4>outpkts = 0
+<4>outunicast = 0
+<4>outmulticast = 0
+<4>outbroadcast = 0
+<4>outerror = 0
+<4>outdiscard = 0
+<4>inbytes = 0
+<4>inpkts = 0
+<4>inunicast = 0
+<4>inmulticast = 0
+<4>inbroadcast = 0
+<4>inerror = 0
+<4>indiscard = 0
+<4>outbytes = 0
+<4>outpkts = 0
+<4>outunicast = 0
+<4>outmulticast = 0
+<4>outbroadcast = 0
+<4>outerror = 0
+<4>outdiscard = 0
+<4>inbytes = 0
+<4>inpkts = 0
+<4>inunicast = 0
+<4>inmulticast = 0
+<4>inbroadcast = 0
+<4>inerror = 0
+<4>indiscard = 0
+<4>outbytes = 0
+<4>outpkts = 0
+<4>outunicast = 0
+<4>outmulticast = 0
+<4>outbroadcast = 0
+<4>outerror = 0
+<4>outdiscard = 0
+<4>inbytes = 0
+<4>inpkts = 0
+<4>inunicast = 0
+<4>inmulticast = 0
+<4>inbroadcast = 0
+<4>inerror = 0
+<4>indiscard = 0
+<4>outbytes = 0
+<4>outpkts = 0
+<4>outunicast = 0
+<4>outmulticast = 0
+<4>outbroadcast = 0
+<4>outerror = 0
+<4>outdiscard = 0
+<4>tm_smac_statistics1 fail
+<4>[zte_api_sw_port_get_port_statistics1] L2761 tm sdk failed!
+<4>[tmtst]g_port_statistics1 fail, error code -1!
+<4>tm_smac_statistics1 fail
+<4>[zte_api_sw_port_get_port_statistics1] L2761 tm sdk failed!
+<4>[tmtst]g_port_statistics1 fail, error code -1!
+<4>tm_smac_statistics1 fail
+<4>[zte_api_sw_port_get_port_statistics1] L2761 tm sdk failed!
+<4>[tmtst]g_port_statistics1 fail, error code -1!
+<4>[tmtst]tm_port_rate_limit_set input: port = 0 ena = 0 BandWidth = 0 kbps
+<4>[tmtst]tm_port_rate_limit_set input: port = 1 ena = 0 BandWidth = 0 kbps
+<4>[tmtst]tm_port_rate_limit_set input: port = 2 ena = 0 BandWidth = 0 kbps
+<4>[tmtst]tm_port_rate_limit_set input: port = 3 ena = 0 BandWidth = 0 kbps
+<4>[tmtst]tm_port_rate_limit_set input: port = 4 ena = 0 BandWidth = 0 kbps
+<4>[tmtst]tm_port_rate_limit_set input: port = 5 ena = 0 BandWidth = 0 kbps
+<4>[tmtst]tm_port_rate_limit_set input: port = 6 ena = 0 BandWidth = 0 kbps
+<4>[TM][sadm_set_indtbl_flow_tfcfg_table]input invalid parameter!
+<4>tm_port_rate_limit_set fail
+<4>[tmtst]tm_port_rate_limit_set fail, error code -1!
+<4>CLA hash_table get: 
+<4>hashaddr = 0x0, windata19 = 0x0, windata18 = 0x0, windata17 = 0x0, windata16 = 0x0
+<4>windata15 = 0x0, windata14 = 0x0, windata13 = 0x0, windata12 = 0x0, windata11 = 0x0
+<4>windata10 = 0x0, windata9 = 0x0, windata8 = 0x0, windata7 = 0x0, windata6 = 0x0
+<4>windata5 = 0x0, windata4 = 0x0, windata3 = 0x0, windata2 = 0x0, windata1 = 0x0
+<4>windata0 = 0xe000, Reserve = 0x0, da_known = 0x0, t-condId high = 0x0, gemport_valid = 0x0
+<4>flow_sta_info = 0x0, valid = 0x1, direction = 0x0, rule_mode = 0x0, extract_index = 0x59
+<4>pppoe_flag = 0x0, l2_type = 0x0, tag_level = 0x0, inport= = 0x5, outport = 0x0
+<4>flow_pri = 0x2f, wan_id = 0x0, qid_dscp_en = 0x0 qid_dscp_ram_index = 0x0,qos_rp_flag = 0x0, qos_id = 0x0
+<4>adm_bucket_rp_en = 0x1, bucket_info = 0x0, mtu_rp_flag = 0x1, mtu = 0x0, cpu_qid_rg_flag = 0x1
+<4>cpu_qid = 0x1,  cmd_flow_info_rp_flag = 0x1, vlan_changed_flag = 0x0, mod_en = 0x1, pkt_len_changed = 0x0, e8_en = 0
+<4>cmd_flow_id = 0x0, tcnt_gpid_rp_en = 0x1, gemport_uni_id = 0x5, tcont_id = 0x0
+<4>queue_info_rp_flag = 0x1, queue_id = 0x2, act_rp_flag = 0x1, action = 0x1
+<4>len:2
+<4>tm_port_status_get input:p_port = 0 output:p_state = 1
+<4>tm_port_status_get input:p_port = 1 output:p_state = 1
+<4>tm_port_status_set input:p_port = 0,p_state = 0
+<4>tm_port_status_set input:p_port = 1,p_state = 0

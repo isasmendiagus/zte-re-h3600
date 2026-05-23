@@ -1,0 +1,7 @@
+READING MACTABLE...
+=== KMSG SIZE ===
+228 /tmp/mt.k
+<4>field instruction
+<4>status note 0:invalid entry,0001-1110:valid entry,1111:static entry
+<4>ctrl   note 0:whitelist ,1:blacklist
+<4>num   ramid addr  mac                vlan  portmask  status    smac_ctrl  dmac_ctrl     ssid

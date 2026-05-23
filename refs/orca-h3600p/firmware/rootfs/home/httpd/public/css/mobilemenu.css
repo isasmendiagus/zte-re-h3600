@@ -1,0 +1,330 @@
+@media screen and (max-width: 767px) {
+#class3Menu, #class2Menu, #mainNavigator {
+display: none;
+}
+.white_content_security {
+width: 350px;
+min-height: 195px;
+height: auto !important;
+height: 195px;
+z-index: 99;
+overflow: auto;
+position: absolute;
+margin-bottom: 100%;
+}
+#commRight {
+min-height:415px;
+height:auto !important;
+height: 415px;
+margin-left: 0;
+margin-right: 0;
+padding-left: 0px;
+text-align: left;
+}
+#page_header {
+background-color: #f4f4f4;
+margin-bottom: 50px;
+padding-bottom: 0px;
+}
+#page_container {
+position: fixed;
+max-width: 100%;
+padding: 0;
+height: 100vh;
+overflow-y: scroll;
+}
+#firewall {
+display: block;
+width: 100%;
+line-height: 1.2;
+padding-left: 0px;
+height: 19px;
+float: none;
+}
+.timeArea {
+display: none !important;
+}
+.logo {
+width: 7rem;
+height: 5rem;
+float: left;
+background: url(../img/Logo_ZTE.png) no-repeat 1rem 0.5rem;
+}
+#banner {
+position: relative;
+width: 100%;
+height: 52px;
+overflow: hidden;
+padding-bottom: 5px;
+}
+div.errorLabelWraper {
+background: url(../img/fail_s.png) no-repeat 5px 6px;
+display: inline-block;
+padding-left: 23px;
+line-height: 30px;
+width: 100% !important;
+}
+#dynamicTip div {
+display: none;
+}
+._LuQUID_AccessDeviceList {
+margin-left: 150px;
+height: auto !important;
+min-height: 30px;
+padding: 0 5px 0 0;
+clear: both;
+margin-left: 0rem !important;
+}
+#page_footer {
+text-align: center;
+line-height: 20px;
+height: 65px !important;
+}
+#page_footer span {
+white-space: nowrap;
+}
+.instName,
+.instNew {
+padding-left: 2rem;
+outline: none;
+color: #313131;
+height: 100%;
+cursor: pointer;
+display: block;
+width: 10rem;
+}
+.instSwitch {
+position: absolute;
+left: 15rem;
+top: 3px;
+}
+.instDelete,
+.closePopLayer {
+position: absolute;
+right: 1rem;
+top: 7px;
+cursor: pointer;
+}
+#homeWrapper {
+overflow-x: hidden;
+}
+.side-navigation {
+padding-bottom: 0;
+z-index: 10;
+max-width: 100%;
+position: fixed;
+display: flex;
+width: 100%;
+background: #2a2a2a;
+display: flex;
+-webkit-box-orient: vertical;
+-webkit-box-direction: normal;
+flex-direction: column;
+overflow-x: hidden;
+}
+.mobile-header {
+display: flex;
+position: fixed;
+bottom: 0;
+width: 100%;
+z-index: 10;
+background: #2a2a2a;
+-webkit-box-pack: justify;
+justify-content: space-between;
+height: 50px;
+border-top-style: double;
+}
+.current-page-indicator {
+padding: 16px 0 16px 16px;
+display: flex;
+}
+.current-page-indicator>.label {
+color: #fff;
+font-size: 1rem;
+font-weight: 600;
+line-height: 1.2;
+}
+.more-options-btn {
+background: #2a2a2a;
+padding: 12px;
+cursor: pointer;
+}
+.icon {
+width: 20px;
+height: 25px;
+background: url(../img/list.png) center/contain no-repeat;
+}
+.-display-navigation {
+bottom: 0;
+}
+.main-navigation-list {
+margin-bottom: 0;
+background: #2a2a2a;
+overflow-y: scroll;
+overflow-x: hidden;
+}
+.navigation-drawer {
+padding: 12px 0;
+margin-bottom: 0;
+border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+}
+.navigation-drawer>.label {
+position: relative;
+width: 100%;
+display: block;
+text-decoration: none;
+padding-left: 16px;
+font-size: 1rem;
+font-weight: 600;
+line-height: 1.2;
+margin-bottom: 2px;
+text-align: left;
+cursor: pointer;
+color: #fff;
+}
+.navigation-drawer>.label:after {
+content: "";
+position: absolute;
+width: 12px;
+height: 12px;
+top: -2px;
+bottom: 0;
+right: 34px;
+margin: auto 0;
+display: block;
+background: url(../img/right_arrow.png) center/contain no-repeat;
+}
+.navigation-drawer>.activemenu {
+position: relative;
+width: 100%;
+display: block;
+text-decoration: none;
+padding-left: 16px;
+font-size: 1rem;
+font-weight: 600;
+line-height: 1.2;
+margin-bottom: 2px;
+text-align: left;
+cursor: pointer;
+color: #fff;
+}
+.navigation-drawer>.activemenu:after {
+content: "";
+position: absolute;
+width: 12px;
+height: 12px;
+top: -2px;
+bottom: 0;
+right: 34px;
+margin: auto 0;
+display: block;
+background: url(../img/down_arrow.png) center/contain no-repeat;
+}
+.navigation-drawer>.onlyfrimenuclass {
+position: relative;
+width: 100%;
+display: block;
+text-decoration: none;
+padding-left: 16px;
+font-size: 1rem;
+font-weight: 600;
+line-height: 1.2;
+margin-bottom: 2px;
+text-align: left;
+cursor: pointer;
+color: #fff;
+}
+.navigation-drawer>.onlyfrimenuclass:after {
+content: "";
+position: absolute;
+width: 12px;
+height: 12px;
+top: -2px;
+bottom: 0;
+right: 34px;
+margin: auto 0;
+display: none;
+background: url(../img/right_arrow.png) center/contain no-repeat;
+}
+.sub-navigation {
+display: block;
+}
+.sub-navigation>.nav {
+width: 100%;
+padding: 10px 0px 10px 25px;
+text-align: left;
+border-top: 1px solid rgba(255, 255, 255, 0.3);
+}
+.sub-navigation>.nav > a {
+color: #fff;
+position: relative;
+width: 100%;
+display: block;
+font-size: 1rem;
+font-weight: 600;
+line-height: 1.2;
+cursor: pointer;
+}
+.nav>.MenuItem:after {
+content: "";
+position: absolute;
+width: 12px;
+height: 12px;
+top: -2px;
+bottom: 0;
+right: 54px;
+margin: auto 0;
+display: block;
+background: url(../img/right_arrow.png) center/contain no-repeat;
+}
+.nav>.SelectSecMenu:after {
+content: "";
+position: absolute;
+width: 12px;
+height: 12px;
+top: -2px;
+bottom: 0;
+right: 54px;
+margin: auto 0;
+display: block;
+background: url(../img/down_arrow.png) center/contain no-repeat;
+}
+.nav>.clear:after {
+content: "";
+position: absolute;
+width: 12px;
+height: 12px;
+top: -2px;
+bottom: 0;
+right: 54px;
+margin: auto 0;
+display: none;
+background: url(../img/right_arrow.png) center/contain no-repeat;
+}
+.tri-navigation {
+display: block;
+}
+.tri-navigation>.subnav {
+width: 100%;
+padding: 8px 0px 8px 24px;
+text-align: left;
+border-top: 1px solid rgba(255, 255, 255, 0.3);
+cursor: pointer;
+}
+.tri-navigation>.subnav>a {
+color: #fff;
+position: relative;
+width: 100%;
+display: block;
+font-size: 1rem;
+font-weight: 600;
+line-height: 1.2;
+}
+.active {
+display: none;
+}
+.SelectMenu {
+background:url(../img/height.png) no-repeat 5px 15px;
+background-color: rgb(119 119 119);
+}
+}

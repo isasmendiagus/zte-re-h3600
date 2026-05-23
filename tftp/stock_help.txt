@@ -1,0 +1,2 @@
+/tmp/stock_help.sh: line 6: can't create /sys/devices/platform/tm/ppBrg/helpBrg: Permission denied
+/tmp/stock_help.sh: line 8: can't create /sys/devices/platform/tm/ppCla/helpCla: Permission denied

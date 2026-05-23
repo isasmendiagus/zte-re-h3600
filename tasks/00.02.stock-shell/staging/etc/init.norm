@@ -1,0 +1,103 @@
+# /etc/init.norm: system-wide  file for the Bourne shells
+
+
+
+
+#judge the existence of udhcpd.lease
+echo
+firsttime=`echo /var/udhcpd/udhcpd.lease*`
+if [ "$firsttime" = "/var/udhcpd/udhcpd.lease*" ]; then
+ echo "Loading drivers and kernel modules... "
+ echo
+# no-op
+# create directory in /var mounted for TMPFS
+mkdir -p /var/log /var/run /var/state/dhcp /var/ppp /var/udhcpd /var/zebra /var/siproxd /var/cache /var/iproute2 /var/ct/tmp 
+mkdir /var/tmp -m 777
+mount -t jffs2 /dev/mtdblock4 /usercfg/
+mount -t jffs2 /dev/mtdblock5 /defcfg/
+mount -t jffs2 /dev/mtdblock3 /wlan/
+
+echo > /var/udhcpd/udhcpd.leases
+ifconfig lo 127.0.0.1 netmask 255.0.0.0 broadcast 127.255.255.255 up
+
+#驱动加载
+fi
+
+# BSP
+#/sbin/insmod /kmodule/bspdriver.ko
+
+# patch
+/sbin/insmod /kmodule/shellproc.ko
+
+# patch
+/sbin/insmod /kmodule/patch.ko
+
+
+# ponreg
+/sbin/insmod /kmodule/zx_ponreg.ko
+
+#需要等nbif传输结束后，再去将gpio61/62配置成mdio模式
+sleep 5
+
+# plat-zxylzb_9128S
+/sbin/insmod /kmodule/plat-zxylzb_9128S.ko
+
+# tm sdk
+/sbin/insmod /kmodule/tm.ko
+
+# ethdriver
+#/sbin/insmod /kmodule/netdriver.ko
+
+# switch 
+/sbin/insmod /kmodule/switch.ko
+
+#dsl transfer driver
+#/sbin/insmod /kmodule/rtkatm.ko
+
+ifconfig pon up
+ifconfig sw up
+
+ifconfig idm0 up
+ifconfig idm1 up
+
+#set serdes mode
+fpga -w 10006 2
+fpga -w 10009 c8
+fpga -w 1001a 61a88158
+fpga -w 1001b bd8
+fpga -w 10008 300
+fpga -w 20013 1
+fpga -w 20007 3e8
+fpga -w 2000a 26202020
+fpga -w 20040 01010101
+fpga -w 20000 10040cb
+fpga -w 2000c 6
+fpga -w 20001 3c0001
+fpga -w 20002 41900000
+fpga -w 2003c 80000003
+#设置报文最大长度为1622， 1600+22(atm封装) 
+fpga -w 20041 400656
+fpga -r 10006 1
+devmem2 0x9fe00068
+
+#controllerd -i pon&
+
+#临时修改
+#ifconfig eth0 0.0.0.0
+#ifconfig eth0 promisc
+#ethswctl  -c pause -p 0 -v 1
+#ethswctl  -c pause -p 1 -v 1
+#ethswctl  -c pause -p 2 -v 1
+#ethswctl  -c pause -p 3 -v 1
+#################################
+# 设置主机名称，不启动telnetd   #
+#################################
+hostname "H3600 V9"
+#telnetd&
+
+# auto start cpsd
+pc&
+
+
+# 默认br0同网段的arp双向隔离
+echo 3 > /proc/net/bridge/arp_stolen

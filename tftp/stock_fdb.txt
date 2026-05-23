@@ -1,0 +1,33 @@
+=== macTable arg=[0] ===
+=== macTable arg=[0 0] ===
+=== macTable arg=[1] ===
+=== macTable arg=[1 0] ===
+=== macTable arg=[0 1 0 0 0 0 0 0] ===
+=== vlanTable arg=[0] ===
+=== vlanTable arg=[0 0] ===
+=== vlanTable arg=[1] ===
+=== PortInfo port=0 ===
+=== PortInfo port=1 ===
+=== PortInfo port=2 ===
+=== PortInfo port=3 ===
+=== PortInfo port=4 ===
+=== PortInfo port=5 ===
+=== PortInfo port=6 ===
+=== PortInfo port=7 ===
+=== portStatus port=0 ===
+=== portStatus port=1 ===
+=== portStatus port=2 ===
+=== portStatus port=3 ===
+=== portStatus port=4 ===
+=== portStatus port=5 ===
+=== portStatus port=6 ===
+=== portStatus port=7 ===
+=== portStat port=0 ===
+=== portStat port=1 ===
+=== portStat port=2 ===
+=== portStat port=3 ===
+=== portStat port=4 ===
+=== portStat port=5 ===
+=== portStat port=6 ===
+=== portStat port=7 ===
+=== KMSG ===

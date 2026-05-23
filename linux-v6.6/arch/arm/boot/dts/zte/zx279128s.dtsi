@@ -1,0 +1,219 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * ZTE ZXIC ZX279128S SoC — minimal boot DTSI
+ *
+ * Reverse-engineered from stock H3600 V9.0.20P72 firmware.
+ * Strategy for first boot: only Cortex-A9 standard peripherals + UART.
+ * No clock controller (UART uses direct osc24m), no NAND/USB/etc yet.
+ */
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	#address-cells = <1>;
+	#size-cells = <1>;
+	compatible = "zte,zx279128s";
+	interrupt-parent = <&gic>;
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			compatible = "arm,cortex-a9";
+			device_type = "cpu";
+			reg = <0>;
+			next-level-cache = <&l2cc>;
+		};
+
+		/* CPU1 disabled for first boot — needs SMP enable-method */
+	};
+
+	clocks {
+		osc24m: osc24m {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <24000000>;
+			clock-output-names = "osc24m";
+		};
+
+		/* Real UART input clock from LSP0 (lb_lsp0_25m_wclk) — verified
+		 * from stock IBRD=13 FBRD=36: clk = 115200 * 16 * 13.5625 = 25 MHz */
+		uart_clk: uart_clk {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <25000000>;
+			clock-output-names = "uart_clk_25m";
+		};
+	};
+
+	soc {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "simple-bus";
+		ranges;
+
+		gic: interrupt-controller@801000 {
+			compatible = "arm,cortex-a9-gic";
+			#interrupt-cells = <3>;
+			interrupt-controller;
+			reg = <0x00801000 0x1000>,
+			      <0x00800100 0x100>;
+		};
+
+		global_timer: timer@800200 {
+			compatible = "arm,cortex-a9-global-timer";
+			reg = <0x00800200 0x20>;
+			interrupts = <GIC_PPI 11 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&osc24m>;
+		};
+
+		l2cc: cache-controller@c00000 {
+			compatible = "arm,pl310-cache";
+			reg = <0x00c00000 0x1000>;
+			cache-unified;
+			cache-level = <2>;
+			arm,data-latency = <2 2 2>;
+			arm,tag-latency = <2 2 2>;
+		};
+
+		uart0: serial@94404000 {
+			compatible = "arm,pl011", "arm,primecell";
+			arm,primecell-periphid = <0x0008c011>;	/* triggers vendor_zte */
+			reg = <0x94404000 0x1000>;
+			interrupts = <GIC_SPI 0x0b IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&uart_clk>, <&osc24m>;	/* uartclk=25MHz, apb_pclk=24MHz */
+			clock-names = "uartclk", "apb_pclk";
+			status = "okay";
+		};
+
+		usb_dwc2: usb@9000000 {
+			compatible = "snps,dwc2";
+			reg = <0x09000000 0x10000>;
+			interrupts = <GIC_SPI 0x2c IRQ_TYPE_LEVEL_HIGH>;
+			dr_mode = "host";
+			phy_type = "utmi";
+			g-rx-fifo-size = <512>;
+			g-np-tx-fifo-size = <128>;
+			g-tx-fifo-size = <128 128 64 64 64 32 32 16 16 16>;
+			status = "disabled";	/* needs SoC glue not yet RE'd */
+		};
+
+		usb3: usb@9100000 {
+			compatible = "zte,zx279128s-dwc3";
+			reg = <0x09100000 0x100000>,	/* DWC3 core */
+			      <0x09300000 0x100000>;	/* SoC USB ctrl extra */
+			reg-names = "dwc3", "ctrl";
+			zte,topcrm = <&topcrm>;
+
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+
+			status = "okay";
+
+			dwc3@9100000 {
+				compatible = "snps,dwc3";
+				reg = <0x09100000 0x100000>;
+				interrupts = <GIC_SPI 0x32 IRQ_TYPE_LEVEL_HIGH>;
+				dr_mode = "host";
+				snps,dis_u3_susphy_quirk;
+				snps,dis_u2_susphy_quirk;
+			};
+		};
+
+		topcrm: syscon@94000000 {
+			compatible = "zte,zx279128s-topcrm", "syscon";
+			reg = <0x94000000 0x1000>;
+		};
+
+		pcie_crm: syscon@94100000 {
+			compatible = "zte,zx279128s-pcie-crm", "syscon";
+			reg = <0x94100000 0x1000>;
+		};
+
+		pcie_crm2: syscon@94200000 {
+			compatible = "zte,zx279128s-pcie-crm2", "syscon";
+			reg = <0x94200000 0x1000>;
+		};
+
+		pcie0: pcie@f000000 {
+			compatible = "zte,zx279128s-pcie";
+			reg = <0x0f000000 0x4000>,	/* DBI */
+			      <0x09500000 0x4000>,	/* SoC ctrl (LTSSM mirror) */
+			      <0x17ff0000 0x10000>;	/* CFG window (carved from MEM) */
+			reg-names = "dbi", "soc_ctrl", "config";
+
+			#address-cells = <3>;
+			#size-cells = <2>;
+			device_type = "pci";
+			/* MEM window 0x10000000-0x17fefff (~127 MiB), CFG @ 0x17ff0000 */
+			ranges = <0x82000000 0 0x10000000  0x10000000  0 0x07ff0000>;
+			bus-range = <0x00 0xff>;
+
+			interrupts = <GIC_SPI 0x3f IRQ_TYPE_LEVEL_HIGH>,	/* main */
+				     <GIC_SPI 0x3b IRQ_TYPE_LEVEL_HIGH>;	/* msi */
+			interrupt-names = "main", "msi";
+
+			/* Required by of_irq_parse_pci so endpoint INTx are routed.
+			 * MT7915/16 use MSI so this is mostly to silence the warning,
+			 * but is required by the PCI core regardless. */
+			#interrupt-cells = <1>;
+			interrupt-map-mask = <0 0 0 7>;
+			interrupt-map = <0 0 0 1 &gic GIC_SPI 0x3f IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 2 &gic GIC_SPI 0x3f IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 3 &gic GIC_SPI 0x3f IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 4 &gic GIC_SPI 0x3f IRQ_TYPE_LEVEL_HIGH>;
+
+			zte,port-id = <0>;
+			zte,topcrm = <&topcrm>;
+			zte,pcie-crm = <&pcie_crm>;
+			zte,pcie-crm2 = <&pcie_crm2>;
+
+			status = "disabled";
+		};
+
+		/* Integrated ethernet block: NPP @ 0x921c0000, MAC[0..4] and PP
+		 * follow at +0x40000 strides. Single ioremap covers the whole
+		 * 2 MiB stretch — sub-bases are derived inside the driver. */
+		eth: ethernet@921c0000 {
+			compatible = "zte,zx279128s-eth";
+			reg = <0x921c0000 0x200000>;
+			/* IRQs verified against stock DTS:
+			 *   NPP main : GIC_SPI 0x23 (35) — pon_npp
+			 *   TM       : GIC_SPI 0x24 (36) — pon_tm = CPU↔switch traffic ⭐
+			 *   PP       : GIC_SPI 0x25 (37) — pon_pp (not used)
+			 *   IDM      : GIC_SPI 0x26 (38) — WiFi forwarding only */
+			interrupts = <GIC_SPI 0x26 IRQ_TYPE_LEVEL_HIGH>,	/* idm */
+				     <GIC_SPI 0x23 IRQ_TYPE_LEVEL_HIGH>,	/* npp */
+				     <GIC_SPI 0x24 IRQ_TYPE_LEVEL_HIGH>;	/* tm */
+			interrupt-names = "idm", "npp", "tm";
+			status = "disabled";
+		};
+
+		pcie1: pcie@f100000 {
+			compatible = "zte,zx279128s-pcie";
+			reg = <0x0f100000 0x4000>,
+			      <0x09600000 0x4000>,
+			      <0x27ff0000 0x10000>;	/* CFG window */
+			reg-names = "dbi", "soc_ctrl", "config";
+
+			#address-cells = <3>;
+			#size-cells = <2>;
+			device_type = "pci";
+			ranges = <0x82000000 0 0x20000000  0x20000000  0 0x07ff0000>;
+			bus-range = <0x00 0xff>;
+
+			interrupts = <GIC_SPI 0x4e IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 0x4a IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "main", "msi";
+
+			zte,port-id = <1>;
+			zte,topcrm = <&topcrm>;
+			zte,pcie-crm = <&pcie_crm>;
+			zte,pcie-crm2 = <&pcie_crm2>;
+
+			status = "disabled";	/* setup_port1 hangs kernel — debug later */
+		};
+	};
+};

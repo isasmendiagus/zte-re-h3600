@@ -1,0 +1,20 @@
+mount: mounting none on /sys/kernel/debug failed: Device or resource busy
+=== check debugfs ===
+9100000.dwc3
+bdi
+clk
+extfrag
+fault_around_bytes
+gpio
+hid
+memblock
+pinctrl
+pm_qos
+ras
+regmap
+sleep_time
+ubi
+usb
+=== klog (full) ===
+ls: /dev/kmsg: No such file or directory
+1 /tmp/dmesg.txt
