@@ -7,7 +7,7 @@ NAND LAYOUT (touched by this script):
 DO NOT TOUCH:
   0x00000000-0x000bffff — bootloader (BRICK risk)
   0x02700000+           — slot B (kernel/rootfs/header — our recovery fallback)
-Full NAND map + flash invariants: see tasks/00.03.nand-flash/README.md.
+Full NAND map + flash invariants: see tasks/00.04.flash-tool/README.md.
 
 Workflow:
 1. DTR reset → wait for U-Boot prompt
@@ -48,7 +48,7 @@ CMDS = [
     # Bumped to 180s to leave huge margin even if network is slow.
     ("tftp 0x42000000 slotA.bin",                             180),
     ("nand erase 0x700000 0x1980000",                         60),
-    ("nand write 0x42000000 0x700000 0xb00000",               120), # ~11 MiB write
+    ("nand write 0x42000000 0x700000 0xc00000",               120), # ~11 MiB write
     # 2. Modified header
     ("tftp 0x42000000 header_A_modified.bin",                 15),
     ("nand erase 0x2080000 0x20000",                          10),

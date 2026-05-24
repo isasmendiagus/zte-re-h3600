@@ -31,7 +31,7 @@ NAND  = ZXIC / "ext" / "h3600_nand_full.bin"
 # NAND layout (per docs/NAND_LAYOUT_AND_BOOT.md)
 SLOT_A_KERNEL_OFFSET = 0x700000
 NAND_ERASE_SIZE      = 0x1980000   # full kernel-side erase region for slot A
-NAND_WRITE_SIZE      = 0xb00000    # how much flash_mainline.py copies to NAND
+NAND_WRITE_SIZE      = 0xc00000    # how much flash_mainline.py copies to NAND (bumped 0xb→0xc on 2026-05-24 — kernel + initramfs grew past 11 MiB)
 # IMPORTANT: header[0x34] tells cspstart how many bytes to CRC. Setting it to
 # our exact padded slotA size means cspstart CRCs ONLY what we wrote, never the
 # erased-but-untouched region beyond. Removes ambiguity from bad-block skip /

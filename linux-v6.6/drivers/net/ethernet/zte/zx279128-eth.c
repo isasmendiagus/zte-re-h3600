@@ -1467,6 +1467,11 @@ static void zx_register_cpu_mac(struct zx_eth *e, u8 slot, const u8 *mac)
  *
  * See H3600/stock_state/FINDINGS_2026-05-21.md for the dump. */
 #define TM_INSTANCE_STRIDE 0x400
+/* Stock dump shows master config 0x140 in 16 instances but stock plat
+ * module's pon_tm_int_init writes ONLY to instance 0's tm_base+0x104.
+ * Reverted to 4 — bumping to 16 caused silent hang after FPGA IRQ enable
+ * during 2026-05-24 test. The per-instance state in dump may come from
+ * HW mirroring, not explicit writes. */
 #define TM_NUM_INSTANCES   4
 static void zx_tm_pre_init(struct zx_eth *e)
 {
@@ -2387,6 +2392,13 @@ static int zx_eth_probe(struct platform_device *pdev)
 	       eth->topcrm + TOPCRM_REG_PON_CLK);
 	dev_info(dev, "TOPCRM[0x0C] = %#x (PON clocks enabled)\n",
 		 readl(eth->topcrm + TOPCRM_REG_PON_CLK));
+	/* 2026-05-24: TOPCRM stock-match writes — Linux defaults leave many
+	 * bits cleared that stock sets. Writing the exact stock values for
+	 * the differing registers should enable FPGA → GIC IRQ routing. */
+	writel(0x0003cfff, eth->topcrm + 0x4c);   /* was 0x000381ff */
+	writel(0x1ff7ffff, eth->topcrm + 0x08);   /* was 0x10061fff — many clock-enable bits */
+	dev_info(dev, "TOPCRM[0x4c]=%#x [0x08]=%#x (stock-match)\n",
+		 readl(eth->topcrm + 0x4c), readl(eth->topcrm + 0x08));
 
 	zx_pp_init(eth);
 	zx_npp_init(eth);
@@ -2565,24 +2577,48 @@ static int zx_eth_probe(struct platform_device *pdev)
 		 * Format: [magic 'ZXFP'][u32 count][u32 offset, u32 value]... */
 		{
 			const struct firmware *fw = NULL;
-			if (request_firmware(&fw, "zx-replay/fpga.bin", dev) == 0 && fw && fw->size >= 8) {
+			int rfw_ret;
+			dev_info(dev, "CKPT1: before request_firmware(fpga.bin)\n");
+			rfw_ret = request_firmware(&fw, "zx-replay/fpga.bin", dev);
+			dev_info(dev, "CKPT2: request_firmware ret=%d fw=%p size=%zu\n",
+				 rfw_ret, fw, fw ? fw->size : 0);
+			if (rfw_ret == 0 && fw && fw->size >= 8) {
 				const u8 *p = fw->data;
 				const u32 *hdr = (const u32 *)p;
 				u32 cnt = hdr[1];
 				size_t i, applied = 0, skipped = 0;
-				if (hdr[0] != 0x5046585au /* 'ZXFP' little-endian: Z=0x5a X=0x58 F=0x46 P=0x50 */) {
+				if (hdr[0] != 0x5046585au /* 'ZXFP' little-endian */) {
 					dev_warn(dev, "zx-replay/fpga.bin: bad magic %#x\n", hdr[0]);
 				} else {
+					dev_info(dev, "CKPT3: starting replay loop cnt=%u\n", cnt);
 					for (i = 0; i < cnt; i++) {
 						u32 off = *(const u32 *)(p + 8 + i*8);
 						u32 val = *(const u32 *)(p + 12 + i*8);
-						/* skip DDR-pointer registers — they refer to stock's
-						 * reserved DRAM at 0x4Exxxxxx; mainline uses CMA.
-						 * Known: TM[0xE8..0xF8] = bp/desc/jumbo base. */
+						bool allow = false;
 						if ((val & 0xff000000u) == 0x4e000000u) {
 							skipped++;
 							continue;
 						}
+						/* WHITELIST of FPGA sub-blocks known to be safe to write.
+						 * Other ranges (PON, IDM, etc.) hang the AHB bus when
+						 * written without prior topcrm clock-enable.  We don't
+						 * need them — mainline H3600 is a router not an ONT. */
+						/* 0x000000-0x040000: pon_low control regs (4 entries) */
+						/* 0x040000-0x080000: secondary pon block (worked in prior tests) */
+						if (off < 0x80000) allow = true;
+						/* 0x1c0000-0x200000: NPP block */
+						else if (off >= 0x1c0000 && off < 0x200000) allow = true;
+						/* 0x340000-0x360000: TM block */
+						else if (off >= 0x340000 && off < 0x360000) allow = true;
+						/* 0x380000-0x3b0000: PP block */
+						else if (off >= 0x380000 && off < 0x3b0000) allow = true;
+
+						if (!allow) {
+							skipped++;
+							continue;
+						}
+						if ((i & 0xff) == 0)
+							dev_info(dev, "CKPT_PRE: i=%zu off=%#x val=%#x\n", i, off, val);
 						writel(val, eth->fpga_base + off);
 						applied++;
 					}
@@ -2591,8 +2627,9 @@ static int zx_eth_probe(struct platform_device *pdev)
 				}
 				release_firmware(fw);
 			} else {
-				dev_warn(dev, "zx-replay/fpga.bin missing; bulk replay skipped\n");
+				dev_warn(dev, "zx-replay/fpga.bin missing/bad; bulk replay skipped (ret=%d)\n", rfw_ret);
 			}
+			dev_info(dev, "CKPT4: after bulk replay block\n");
 		}
 
 		/* Replay pp_pm flow_info/sub_ram from stock snapshot */

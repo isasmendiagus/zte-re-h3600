@@ -7,3 +7,7 @@ tasks/00.01.eth-driver/initramfs/lib/firmware/zx-replay/fpga.bin
 **/__pycache__/
 tasks/00.01.eth-driver/captures/spliced_logs/
 tftp/
+tasks/00.01.eth-driver/captures/fpga/tm_block_stock.txt
+tasks/00.01.eth-driver/captures/fpga/npp_block_stock.txt
+tasks/00.01.eth-driver/captures/fpga/pp_block_stock.txt
+tasks/00.01.eth-driver/captures/fpga/pon_low_stock.txt
