@@ -2116,7 +2116,16 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	 * Our old code wrote desc[11]=0x20 (bit 29) instead of 0x01 (bit 24).
 	 * Bit 24 is what HW likely treats as "VALID — process this desc". */
 	desc[0]  = 0x80;
-	desc[1]  = 0x00;	/* was 0xc9 — stock leaves 0 */
+	desc[1]  = 0x00;
+	/* 2026-05-24 RE: stock pon_tm_net_tx sets desc[2..3] with egress port
+	 * encoded as ((port + 0x28) & 0x3f) << 4 at bits 4..9. Without this
+	 * the switch loops the packet back to CPU instead of forwarding to a
+	 * UNI port. Try port=0 (LAN 0) — if host is on a different port,
+	 * switch should still find it via FDB or flood. */
+	{
+		u32 port = 0;
+		*(__le16 *)(desc + 2) = cpu_to_le16(((port + 0x28) & 0x3f) << 4);
+	}
 	*(u32 *)(desc + 4) = cpu_to_le32(0x00010000);
 	*(u32 *)(desc + 8) = cpu_to_le32(((bp >> 7) & 0x7f) |
 					 ((len & 0x3fff) << 9) |
