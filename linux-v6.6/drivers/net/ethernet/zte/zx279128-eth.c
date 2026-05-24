@@ -2115,13 +2115,41 @@ static inline void zx_dbg_inc(u32 off) {}
  *    2. poll tm[0x8014] & 3 == 0 (busy/done bits)
  *    3. read tm[0x800c]; bit31 = error, bits[15:0] = bp idx
  */
-/* HACK: HW BMU pool depletes (auto-consumed for RX that never feeds back).
- * Bypass BMU, cycle through our 256-entry pool manually. HW will still
- * compute packet addr = bp_dma + bp_idx*BP_SIZE which lies in our DMA region. */
+/* REAL HW BMU allocator — replaces the cycle-counter HACK (2026-05-24).
+ * Stock protocol per pon_tm_bmu_alloc_bp (plat-zxylzb_9128S.ko @ 0x18668):
+ *   1. set tm[0x8014] |= 1  (alloc kick)
+ *   2. poll tm[0x8014] & 3 == 0  (busy/done bits clear when alloc done)
+ *   3. read tm[0x800c]: bit31 SET = valid, bits[15:0] = bp_idx
+ *      (bit31 CLEAR = pool empty / error → return invalid)
+ *
+ * Returns the allocated bp_idx (0..1023), or U32_MAX on failure (pool empty
+ * or HW hung). Caller must check and drop TX on failure.
+ *
+ * Spin-locked because alloc must be serialized — HW has 1 alloc engine.
+ * Stock used spin_lock_bh; we use the existing e->tx_lock since alloc only
+ * happens in the TX path here. */
 static u32 zx_bmu_alloc_bp(struct zx_eth *e)
 {
-	static u32 cycle;
-	return (cycle++) & (TM_BPPE_POOL_SIZE - 1);
+	u32 status, result;
+	int poll = 200;
+
+	/* Trigger alloc */
+	writel(readl(e->base + TM_OFF + 0x8014) | 1, e->base + TM_OFF + 0x8014);
+
+	/* Poll for completion: bits[1:0] = 0 means done */
+	while (poll-- > 0) {
+		status = readl(e->base + TM_OFF + 0x8014) & 3;
+		if (status == 0) {
+			result = readl(e->base + TM_OFF + 0x800c);
+			if ((int)result < 0)	/* bit 31 = valid */
+				return result & 0xffff;
+			/* bit 31 clear = no free buffers, fail */
+			break;
+		}
+	}
+
+	/* Timeout or pool empty */
+	return U32_MAX;
 }
 
 /* zx_sw_xmit — TM TX path.
@@ -2179,7 +2207,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	spin_lock_irqsave(&e->tm_tx_lock, flags);
 
 	bp = zx_bmu_alloc_bp(e);
-	if (bp == 0xFFFF) {
+	if (bp == U32_MAX || bp >= TM_BPPE_POOL_SIZE) {
 		spin_unlock_irqrestore(&e->tm_tx_lock, flags);
 		/* First failure: emit ONE clean diagnostic via kernel printk */
 		if (e->tm_tx_dropped == 0) {
@@ -2199,8 +2227,9 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 			 bp, len, tm_read(e, 0x8090));
 
 	bp_buf = (u8 *)e->bp_cpu + (u32)bp * TM_BP_SIZE;
-	/* TX: copy skb data to bp_buf + 0 (HW reads from start of BP).
-	 * RX uses bp_buf + 16 (HW prepends 16-byte metadata) — TX is different. */
+	/* Canary experiment reverted 2026-05-24 — now using real HW BMU allocator
+	 * (see zx_bmu_alloc_bp). HW gives us the correct bp_idx so simple memcpy
+	 * is correct. */
 	memcpy(bp_buf, skb->data, len);
 	TXCP(e, 3, "BMU alloc OK: bp=%u bp_buf=%p, copied %u bytes from skb", bp, bp_buf, len);
 
