@@ -111,3 +111,28 @@ during cleanup).
 Phase 5 is the highest immediate value — without it, the driver is a
 demo, not a tool. Phases 6+7 turn it into something the mainline ZTE
 H3600 OpenWRT port can actually use.
+
+---
+
+## Phase 5 in-session attempt results (2026-05-24)
+
+Tried, didn't reach 95% acceptance criteria but made measurable progress:
+
+| Experiment | Loss | DUPs/5pings | Notes |
+|---|---|---|---|
+| Phase 4 final baseline (port=0 hardcode) | 40% | 70 | Proven workable |
+| + dynamic FDB learn (added) | 40% | 252 | No measurable improvement |
+| desc[2..3]=0 (no port hint) | 100% | n/a | WORSE — HW needs port indicator |
+| Back to port=0 + FDB learn code | 20% | 277 | Slightly better reception, worse DUP count |
+
+**Conclusion**: stability requires what we don't have:
+1. Kotrace of stock's TX path during host ping → see actual desc[2..3]
+   bytes stock uses for unicast replies
+2. Implementation of switch's FDB hash function correctly (our brg_ram_set
+   protocol may not match HW exactly)
+3. Port mask logic for "send to actual ingress port of original frame"
+   rather than fixed port=0
+
+**Recommendation**: Phase 5 needs runtime trace work before more code
+changes. Phase 6 (iperf) and Phase 7 (mainline cleanup) are blocked
+until Phase 5 reaches 95%+ stability.
