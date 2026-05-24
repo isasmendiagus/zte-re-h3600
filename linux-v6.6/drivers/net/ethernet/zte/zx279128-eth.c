@@ -2745,6 +2745,22 @@ static int zx_eth_probe(struct platform_device *pdev)
 							skipped++;
 							continue;
 						}
+						/* Skip TM[0x10050]=TX_UP_BASE and TM[0x10060]=TX_DN_BASE
+						 * — stock values are 0x4ffdf000/0x4ffef000 (DDR), our
+						 * dma_init has set them to txdesc_dma which the bulk
+						 * replay would otherwise overwrite. Also skip 0x10064
+						 * (TX DN KICK = 1) — spurious kick on stale stock base. */
+						if (off == 0x350050 || off == 0x350060 || off == 0x350064) {
+							skipped++;
+							continue;
+						}
+						/* Skip TM[+0xF0] across 4 instances — RX desc base.
+						 * Stock val 0x4ff1f000 is DDR; we set to rxdesc_dma. */
+						if (off == 0x3400f0 || off == 0x3404f0 ||
+						    off == 0x3408f0 || off == 0x340cf0) {
+							skipped++;
+							continue;
+						}
 						/* WHITELIST of FPGA sub-blocks known to be safe to write.
 						 * Other ranges (PON, IDM, etc.) hang the AHB bus when
 						 * written without prior topcrm clock-enable.  We don't
