@@ -37,6 +37,8 @@
 #include <linux/spinlock.h>
 
 #include <linux/firmware.h>
+
+#include "zx_reg_tables.h"
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 
@@ -553,8 +555,13 @@ static void zx_pp_init(struct zx_eth *e)
 			writel(0xf000107c, pp + ibase + 0x18);
 		}
 	}
-	/* Stock CPU forwarding bit (lan_up_port=0 → bit 25). */
-	writel(readl(pp + 0x002c) | PP_CPU_FWD_BIT, pp + 0x002c);
+	/* REMOVED 2026-05-24: live-stock dump shows PP[+0x2c] = 0x00000106 across
+	 * ALL 8 per-port blocks. Our previous |= BIT(25) wrote 0x02000106, which
+	 * is wrong. The per-port block's +0x2c init value (0x106 from line 512)
+	 * is the correct stock value. Bit 25 was a misinterpretation of the
+	 * stock decomp (`pp[0x2c] |= 1 << (lan_up_port + 0x19)` was conditional
+	 * on `lan_up != 0` which is not set in our boot path).
+	 * See tasks/00.01.eth-driver/findings/stock_register_state_2026-05-24.md */
 
 	/* pon_pp_brg_init — ALL values verified via live stock dump (not Ghidra
 	 * decompile, which had printk strings cast as constants). */
@@ -572,6 +579,54 @@ static void zx_pp_init(struct zx_eth *e)
 	/* pon_pp_cla_init — verified */
 	writel(0x00000600, pp + PP_CLA_BASE + 0x0080);
 	/* stock leaves CLA[0x0084] as 0 — skip */
+
+	/* === HW classifier + SPA CPU pktdeal config from stock kotrace 2026-05-24 ===
+	 * RE: cspd calls during init (kotrace_phase5b_dump.txt):
+	 *   - cla_set_oth_l3_pkt_action_cfg(0) — 1 call (action 0 for unknown L3)
+	 *   - spa_set_enty_pktdeal_cfg(port 0..7, slot 0..58, val=1) — 465 calls
+	 *     This is the CPU port full pktdeal setup; without it, the switch
+	 *     doesn't know how to handle pkts from the CPU port.
+	 *
+	 * Register table addresses extracted from tm.ko .data (see zx_reg_tables.h):
+	 *   claRegTable[0x15] -> PP @ 0x9238c0cc (mask 0x3 shift 0)
+	 *   spaRegTable[0x43..0x7d] -> NPP @ 0x921d4300..0x921d430c (mask 0x3, various shifts, stride 5)
+	 *
+	 * Our ioremap base is 0x921c0000 so offsets are:
+	 *   PP[+0xc0cc]  = byte 0x1cc0cc from our base
+	 *   NPP[+0x4300] = byte 0x14300 from our base
+	 */
+	{
+#define ZX_FPGA_BASE_TO_NPP_OFF 0x1c0000	/* our base is +0x1c0000 from physical FPGA 0x92000000 */
+		u32 port, slot, byte_off, cur, new_v;
+		const struct zx_reg_entry *ent;
+
+		/* cla_set_oth_l3_pkt_action_cfg(0) */
+		ent = &zx_cla_table[0x15];
+		byte_off = ent->base_dword * 4 - ZX_FPGA_BASE_TO_NPP_OFF;
+		cur = readl(e->base + byte_off);
+		new_v = (cur & ~(ent->mask << ent->shift)) | ((0 & ent->mask) << ent->shift);
+		writel(new_v, e->base + byte_off);
+		dev_info(e->dev, "cla_oth_l3_act_cfg: PP+0x%x %#x -> %#x\n",
+			 byte_off + ZX_FPGA_BASE_TO_NPP_OFF, cur, new_v);
+
+		/* spa_set_enty_pktdeal_cfg(entity 0..7, slot 0x43..0x7d, val=1) — 8 × 59 = 472 writes.
+		 * Stock kotrace shows 465 — slight diff likely from validation bounds.
+		 * stride is in dwords; spaRegTable already encodes per-entity stride. */
+		for (slot = 0x43; slot <= 0x7d; slot++) {
+			ent = &zx_spa_table[slot];
+			if (ent->mask == 0)
+				continue;
+			for (port = 0; port < 8; port++) {
+				byte_off = (ent->base_dword + port * ent->stride) * 4
+					   - ZX_FPGA_BASE_TO_NPP_OFF;
+				cur = readl(e->base + byte_off);
+				new_v = (cur & ~(ent->mask << ent->shift)) |
+					((1 & ent->mask) << ent->shift);
+				writel(new_v, e->base + byte_off);
+			}
+		}
+		dev_info(e->dev, "spa_enty_pktdeal_cfg: applied for entities 0..7 × slots 0x43..0x7d\n");
+	}
 
 	/* PP_BRG port isolation table (pp+0x83C0..0x83DC) — exact stock values.
 	 * Each port's mask = which OTHER ports it can FORWARD to (~self mask).
@@ -2664,9 +2719,23 @@ static int zx_eth_probe(struct platform_device *pdev)
 					n_ok++;
 		dev_info(dev, "VLAN setup: %d/%d port-vlan entries OK\n", n_ok, 16);
 	}
-	zx_port_isolate(eth, 6, 0xDF);
-	zx_port_isolate(eth, 7, 0xDF);
-	dev_info(dev, "isolate ports 6,7 = %#x, %#x\n",
+	/* Stock live dump 2026-05-24 shows all 8 ports have isolation masks:
+	 *   port 0..5: mask = ~(1<<port) & 0xff  (no-self-loop, e.g. port0=0xfe)
+	 *   port 6,7 (CPU): mask = 0xff (block ALL egress via this register)
+	 * Stock pon_pp_brg_init only OR's 0xdf into ports 6,7 — the rest is HW
+	 * default. Our mainline likely has HW default = 0 (no isolation), so
+	 * we must explicitly set the no-self-loop masks for 0..5 too. */
+	for (i = 0; i < 6; i++)
+		zx_port_isolate(eth, i, (u8)(~(1u << i) & 0xff));
+	zx_port_isolate(eth, 6, 0xFF);  /* CPU port: was 0xDF, but stock state shows bit 5 also set → 0xff */
+	zx_port_isolate(eth, 7, 0xFF);
+	dev_info(dev, "isolate ports 0..7 = %#x %#x %#x %#x %#x %#x %#x %#x\n",
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(0)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(1)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(2)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(3)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(4)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(5)),
 		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(6)),
 		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(7)));
 
