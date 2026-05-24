@@ -84,3 +84,39 @@ Not relevant for ICMP/ARP traffic; ignore for now.
 2. **Pad short packets to 0x40** (was 0x21) — under-padded by 31 bytes
 3. **Kick only TM[+0x10054]** (was both UP+DN) — may eliminate DUPs
 4. Try desc[0] = 0xc9 (was 0x80) — CPU marker
+
+## Update 2026-05-24: pon_tm_net_tx LAN path detail
+
+Full decomp of `pon_tm_net_tx` (LAN-egress branch when `lan_up == 1`):
+```c
+*puVar3 = 0x80;
+*(u8*)puVar3 = 0xc9;            // desc[0] = 0xc9 (NOT 0x80)
+puVar3[3] = 0;                   // desc[12..15] = 0
+puVar3[1] = 0x10000;             // desc[4..7] = 0x00010000 (so desc[6]=1)
+puVar3[2] = 0x1000000;           // desc[8..11] = 0x01000000 (desc[11]=0x01 initially)
+// ... ethertype filter ...
+if (lan_up == 1) {
+    *(u16*)(desc+4) = 0;          // desc[4..5] = 0 (no-op, already 0)
+    desc[3] &= 0x1f;              // clear bits 5..7
+    *(u16*)(desc+2) =
+        (*(u16*)(desc+2) & 0xfc0f) | (((lan_up_port + 0x28U) & 0x3f) << 4);
+    // desc[2..3] port encoding = ((lan_up_port + 0x28) & 0x3f) << 4
+}
+pon_tm_data_raw_send(skb, desc, 0);  // dir=0 (upstream)
+```
+
+So:
+- `desc[0] = 0xc9` (we had 0x80 — likely wrong)
+- `lan_up_port` is a global the stock kmod updates from link-state callbacks;
+  we hardcode port=0. The right port for our connected LAN MAC may be 1 or
+  derived from ingress port of host's earlier ARP.
+- Note `desc[3] &= 0x1f`: clears upper 3 bits. Our cpu_to_le16 set for
+  port=0 gives desc[2..3] = 0x80 0x02 → desc[3]=0x02, masking to 0x02
+  no-op. Safe.
+
+## Next experiments to run
+
+- desc[0] = 0xc9 (instead of 0x80) — applied 2026-05-24, test pending
+- lan_up_port = ingress-port-learned (instead of hardcoded 0)
+- Investigate switch port-isolation register (pp[0x8050]=0xfffffffa in stock)
+  to prevent CPU TX from bouncing back as loopback

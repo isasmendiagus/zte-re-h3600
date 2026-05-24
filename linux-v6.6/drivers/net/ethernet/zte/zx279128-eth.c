@@ -2154,15 +2154,12 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	TXCP(e, 4, "desc[%u]=%p prepared (memset done, BP_SIZE=%u)", e->tx_head, desc, TM_BP_SIZE);
 	/* Stock TX desc format (Ghidra decomp of pon_tm_net_tx + pon_tm_data_raw_send,
 	 * 2026-05-24, see tasks/00.10.02.re-stock-kmods/findings/tx_path_stock_decomp.md):
-	 *   desc[0]   = 0xc9 in stock (we keep 0x80 for now; was the previous baseline)
-	 *   desc[1..3]= 0
+	 *   desc[0]   = 0xc9 (CPU/source marker; was 0x80 in our baseline)
+	 *   desc[1..3]= 0 except desc[2..3] port hint
 	 *   desc[4..7]= 0x00010000  (so desc[6]=1)
-	 *   desc[8..11]= initial 0x01000000 (desc[11]=0x01 VALID),
-	 *     then pon_tm_data_raw_send does desc[11] = (desc[11]&1) | 0x20
-	 *     giving desc[11] = 0x21 (bit 0 = VALID, bit 5 = some format/CPU marker),
-	 *     then bfi(len<<9, bits 9..22) preserving bit 0 and byte 3 (=0x21).
+	 *   desc[8..11]= 0x21 at byte 11 (VALID|0x20), bp_idx + len<<9 in low bits
 	 *   desc[12..13] = (desc[12..13] & 3) | (len << 2). */
-	desc[0]  = 0x80;
+	desc[0]  = 0xc9;
 	desc[1]  = 0x00;
 	/* desc[2..3] encodes egress port hint: ((port+0x28) & 0x3f) << 4.
 	 * Hardcoded port=0 (LAN port 0) works as proven baseline.
