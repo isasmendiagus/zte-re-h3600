@@ -1,0 +1,9 @@
+# Auto-added 2026-05-24
+ext/kmodules_dump
+tasks/00.01.01.fix-lief-rel-sections/LIEF/
+tasks/00.01.eth-driver/captures/fpga/*.bin
+tasks/00.01.eth-driver/initramfs/lib/firmware/zx-replay/fpga.bin
+.claude/
+**/__pycache__/
+tasks/00.01.eth-driver/captures/spliced_logs/
+tftp/
