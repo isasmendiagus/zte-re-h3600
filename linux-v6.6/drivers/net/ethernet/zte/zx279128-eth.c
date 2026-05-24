@@ -266,6 +266,10 @@ struct zx_eth {
 	u32 tm_rx_loopback_drops;
 	u32 tm_tx_count;
 	u32 tm_tx_dropped;
+	/* Phase 5: dedup set for FDB learning — 128 buckets, 1 bit each.
+	 * Indexed by (src_mac[11] & 0x7f). Crude but avoids re-adding the
+	 * same MAC repeatedly. Reset on reload. */
+	u8  fdb_learned[16];
 
 	struct napi_struct napi;
 	struct zx_eth_port ports[ZX_NPORTS];
@@ -1836,12 +1840,16 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 				 * are zeros, eth frame starts at +0x10). */
 				const u8 *bp_buf = (const u8 *)e->bp_cpu + (u32)bppe_idx * TM_BP_SIZE;
 				const u8 *src = bp_buf + 16;	/* skip HW metadata header */
+				/* Phase 5: ingress port from desc[6] bits 3..7, minus 1.
+				 * Per stock RE: `r2 = (desc[6] >> 3) & 0x1F; r2 -= 1; pkt[180] = r2`.
+				 * This is the UNI/PON port the packet arrived on. */
+				int ingress_port = ((desc[6] >> 3) & 0x1F) - 1;
 				if (e->sw_dev && !memcmp(src + 6, e->sw_dev->dev_addr, 6)) {
 					e->tm_rx_loopback_drops++;
 					if (e->tm_rx_loopback_drops <= 5)
-						dev_info(e->dev, "LOOPBACK drop #%u src=%pM dst=%pM ethertype=%04x len=%u\n",
+						dev_info(e->dev, "LOOPBACK drop #%u src=%pM dst=%pM ethertype=%04x len=%u ingress=%d\n",
 							 e->tm_rx_loopback_drops, src + 6, src,
-							 ntohs(*(__be16*)(src + 12)), len);
+							 ntohs(*(__be16*)(src + 12)), len, ingress_port);
 				} else {
 					struct sk_buff *skb = netdev_alloc_skb(e->sw_dev, len + 64);
 					if (skb) {
@@ -1854,9 +1862,29 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 						e->tm_rx_count++;
 						if (e->tm_rx_count <= 10) {
 							dev_info(e->dev, "TM RX q=%d idx=%u len=%u bppe=%u "
-								 "src=%pM dst=%pM ethertype=%04x delivered\n",
+								 "src=%pM dst=%pM ethertype=%04x ingress=%d delivered\n",
 								 q, idx, len, bppe_idx,
-								 src + 6, src, ntohs(*(__be16*)(src + 12)));
+								 src + 6, src, ntohs(*(__be16*)(src + 12)),
+								 ingress_port);
+						}
+						/* Phase 5: dynamic FDB learning. If src MAC is unicast
+						 * (not multicast bit) AND we extracted a valid ingress
+						 * port (0..7), register it in the switch FDB so
+						 * subsequent unicast TX to this MAC routes correctly.
+						 * Only do this once per MAC — track via simple table. */
+						if (ingress_port >= 0 && ingress_port < 8 &&
+						    (src[6] & 1) == 0 /* unicast src */) {
+							/* Hash this MAC into a small "already learned"
+							 * set to avoid re-adding. Use last byte as crude
+							 * dedup key. */
+							u8 key = src[11] & 0x7f;
+							if (!(e->fdb_learned[key >> 3] & (1u << (key & 7)))) {
+								e->fdb_learned[key >> 3] |= (1u << (key & 7));
+								int rc = zx_fdb_add(e, src + 6, 0, ingress_port);
+								if (e->tm_rx_count <= 30)
+									dev_info(e->dev, "FDB learn %pM → port=%d rc=%d\n",
+										 src + 6, ingress_port, rc);
+							}
 						}
 					}
 				}
@@ -2117,11 +2145,10 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	 * Bit 24 is what HW likely treats as "VALID — process this desc". */
 	desc[0]  = 0x80;
 	desc[1]  = 0x00;
-	/* 2026-05-24 RE: stock pon_tm_net_tx sets desc[2..3] with egress port
-	 * encoded as ((port + 0x28) & 0x3f) << 4 at bits 4..9. Without this
-	 * the switch loops the packet back to CPU instead of forwarding to a
-	 * UNI port. Try port=0 (LAN 0) — if host is on a different port,
-	 * switch should still find it via FDB or flood. */
+	/* desc[2..3] encodes egress port hint: ((port+0x28) & 0x3f) << 4.
+	 * Hardcoded port=0 (LAN port 0) works as proven baseline.
+	 * Experiment with desc[2..3]=0 dropped tm_rx_count from 700k to 6k —
+	 * port hint IS needed. Future: replace with FDB lookup of dst MAC. */
 	{
 		u32 port = 0;
 		*(__le16 *)(desc + 2) = cpu_to_le16(((port + 0x28) & 0x3f) << 4);
