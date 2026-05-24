@@ -2286,7 +2286,10 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	 * (likely because we don't have GPON DN traffic but switch routing expects
 	 * activity on DN side too). Keep dual-kick. */
 	tm_write(e, 0x10054, 1);	/* upstream kick */
-	tm_write(e, 0x10064, 1);	/* downstream kick */
+	/* 2026-05-24 ping-bidi-works: try single kick now that +16 + BMU fixed.
+	 * Stock soft_insert_tx_1desc kicks ONLY UP for direction=0 (LAN egress).
+	 * Previous attempt at single-kick made things worse PRE-fix; retry now. */
+	/* tm_write(e, 0x10064, 1); */	/* downstream kick — disabled */
 	TXCP(e, 7, "kick done; TM[0x10058]=%#x (UP cnt) TM[0x10068]=%#x (DN cnt)",
 	     tm_read(e, 0x10058), tm_read(e, 0x10068));
 
