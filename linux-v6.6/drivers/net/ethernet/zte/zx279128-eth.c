@@ -1561,7 +1561,47 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	writel(0x020000ff, pp + 0x8304);
 	writel(0xfffffffa, pp + 0x8050);
 	writel(0x0000ff00, pp + 0x8008);
-	dev_info(e->dev, "PP bridge init: 13 regs written to pp_base=fpga+0x380000\n");
+
+	/* pon_pp_add_port_to_vlan loop: vlan 0 + 1, port 0..7, action=3.
+	 * brg_ram_set with ram_id=4: poll pp[+0x8018] for idle, then write
+	 * (vlan | 4<<22) to pp[+0x8014], write 4 words at +0x801c/+0x8020/
+	 * +0x8024/+0x8028. We then modify word[0] (=offset +0x801c) to:
+	 *   val |= 1  (enable bit)
+	 *   val &= ~(3 << (port*2 + 1))
+	 *   val |= (3 << (port*2 + 1))    [since action_type=3]
+	 * For vlan=0,port=0: set bits 1-2 → val |= 0x6
+	 * For vlan=0,port=1: set bits 3-4 → val |= 0x18
+	 * ... pattern: bits (port*2+1) and (port*2+2) = action=3
+	 * For 8 ports total: val ends up = 1 | 0x6|0x18|0x60|0x180|0x600|0x1800|0x6000|0x18000 = 0x1FFFF
+	 * (= bit 0 + bits 1..16)
+	 * Same for vlan=1.
+	 *
+	 * Since we don't have brg_ram_get to read prior values, do an
+	 * approximate "set vlan 0 and 1 entries to 0x1FFFF" via brg_ram_set. */
+	{
+		int vlan;
+		for (vlan = 0; vlan <= 1; vlan++) {
+			int retries;
+			for (retries = 0; retries < 50; retries++)
+				if (readl(pp + 0x8018) & 1)
+					break;
+			if (retries == 50) {
+				dev_warn(e->dev, "PP brg_ram_set vlan=%d: not ready\n", vlan);
+				break;
+			}
+			writel(((u32)vlan) | (4u << 22), pp + 0x8014);
+			writel(0x1FFFF, pp + 0x801c);	/* word 0 = enable + all 8 ports action=3 */
+			writel(0x00000000, pp + 0x8020);	/* word 1 */
+			writel(0x00000000, pp + 0x8024);	/* word 2 */
+			writel(0x00000000, pp + 0x8028);	/* word 3 */
+		}
+	}
+
+	/* pon_pp_port_isolate(6, 0xdf) and (7, 0xdf): pp[0x83c0 + port*4] |= 0xdf */
+	writel(readl(pp + 0x83d8) | 0xdf, pp + 0x83d8);	/* port 6 */
+	writel(readl(pp + 0x83dc) | 0xdf, pp + 0x83dc);	/* port 7 */
+
+	dev_info(e->dev, "PP bridge init: 13 regs + VLAN0/1 + port6/7 isolate done\n");
 }
 
 /* Post-BMU setup (tm_pon_tm_init between bmu_init and pon_tm_net_init).
