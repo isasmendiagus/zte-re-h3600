@@ -2227,11 +2227,16 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 			 bp, len, tm_read(e, 0x8090));
 
 	bp_buf = (u8 *)e->bp_cpu + (u32)bp * TM_BP_SIZE;
-	/* Canary experiment reverted 2026-05-24 — now using real HW BMU allocator
-	 * (see zx_bmu_alloc_bp). HW gives us the correct bp_idx so simple memcpy
-	 * is correct. */
-	memcpy(bp_buf, skb->data, len);
-	TXCP(e, 3, "BMU alloc OK: bp=%u bp_buf=%p, copied %u bytes from skb", bp, bp_buf, len);
+	/* HW BP layout: [16-byte HW prefix][ethernet frame].
+	 * RX path confirmed this (BPDUMP shows zeros at +0..15, frame at +16).
+	 * TX must mirror it: place frame at bp_buf+16. Confirmed via Phase 5g
+	 * no-replay experiment which showed device TX reaches wire BUT shifted
+	 * by 16 bytes (frame appears starting at ARP-payload offset 2 instead
+	 * of L2 dst MAC) — exactly what putting frame at bp_buf+0 would cause. */
+	memset(bp_buf, 0, 16);                  /* zero the HW prefix area */
+	memcpy(bp_buf + 16, skb->data, len);    /* frame goes at +16 */
+	TXCP(e, 3, "BMU alloc OK: bp=%u bp_buf=%p, copied %u bytes from skb (frame at +16)",
+	     bp, bp_buf, len);
 
 	desc = (u8 *)e->txdesc_cpu + e->tx_head * TM_TX_DESC_SIZE;
 	memset(desc, 0, TM_TX_DESC_SIZE);
@@ -2362,6 +2367,18 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	}
 	e->sw_dev = ndev;
 	netdev_info(ndev, "sw registered (MAC %pM)\n", ndev->dev_addr);
+
+	/* Phase 5b 2026-05-24: populate HW FDB with our own MAC.
+	 * Stock kotrace captured sbrg_add_mactable(mac=our_mac, port=1) at boot.
+	 * Without this, when device unicast TXes (e.g. ARP reply to host),
+	 * switch can't find dst MAC in FDB → floods or drops → ping fails.
+	 * Try port=1 to match stock, plus port=6 (CPU) as backup. */
+	{
+		int rc1 = zx_fdb_add(e, ndev->dev_addr, 0, 1);
+		int rc6 = zx_fdb_add(e, ndev->dev_addr, 0, 6);
+		netdev_info(ndev, "HW FDB seed: self MAC at port=1 rc=%d, port=6 rc=%d\n",
+			    rc1, rc6);
+	}
 	return 0;
 }
 
@@ -2875,12 +2892,15 @@ static int zx_eth_probe(struct platform_device *pdev)
 		writel(0xa, eth->fpga_base + 0);
 		dev_info(dev, "FPGA IRQ enable: wrote 0xa to fpga+0 (sbrg_set_irq_en_mask equiv)\n");
 
-		/* Phase 4 BULK replay (state-replay strategy): dump of the full
-		 * FPGA register window (0x92000000 + 4 MiB) captured from a
-		 * STOCK boot where ping works. Replays only non-zero/non-0xff
-		 * entries (25515 records). Skips known DDR-pointing registers
-		 * (BMU/desc base) since stock's addresses don't match ours.
-		 * Format: [magic 'ZXFP'][u32 count][u32 offset, u32 value]... */
+		/* Phase 5g experiment 2026-05-24: bulk fpga.bin replay DISABLED
+		 * per round-2 reviewer (independent_review_round2_2026-05-24.md).
+		 * Replays 11456 entries from another unit's running state, may be
+		 * clobbering our seeded FDB + critical config. Test if RX still
+		 * works without it. If yes, we've removed 11456 unknowns.
+		 *
+		 * Set ZX_BULK_REPLAY=1 to re-enable for comparison. */
+#define ZX_BULK_REPLAY 0
+#if ZX_BULK_REPLAY
 		{
 			const struct firmware *fw = NULL;
 			int rfw_ret;
@@ -2953,6 +2973,9 @@ static int zx_eth_probe(struct platform_device *pdev)
 			}
 			dev_info(dev, "CKPT4: after bulk replay block\n");
 		}
+#else
+		dev_info(dev, "CKPT4: bulk replay DISABLED (ZX_BULK_REPLAY=0) — Phase 5g experiment\n");
+#endif /* ZX_BULK_REPLAY */
 
 		/* Replay pp_pm flow_info/sub_ram from stock snapshot */
 		zx_pp_pm_apply_replay(eth);
