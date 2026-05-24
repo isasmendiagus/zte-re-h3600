@@ -107,3 +107,42 @@ useful proxy: low drops = TX is mostly reaching wire, not bouncing.
 3. Investigate why kernel reports 40% loss — packets reaching mainline
    may be dropped before reaching ICMP responder, OR our TX reply is
    sometimes lost in switch. Need to instrument more carefully.
+
+---
+
+## End-of-session reality check (2026-05-24 ~15:25)
+
+After 17+ commits and ~12 hours of work:
+
+**What's PROVEN working**:
+- Driver probe + init: ✅ consistent
+- Boot via TFTP, init reaches `[INIT] === entering REPL on /dev/console ===`
+- TM IRQ firing (count = 10M+ regularly)
+- RX delivers real host packets to stack: `src=c8:a3:62:e9:59:00` (HOST MAC)
+  with valid ethertypes (IPv4 0x0800, IPv6 0x86dd)
+- TX path reaches HW (driver counter increments, loopback drops scale
+  appropriately)
+- **At least one ICMP echo reply confirmed bidi** (commit a3e6a8017):
+  `64 bytes from 192.168.1.99: icmp_seq=3 ttl=64 time=16.2 ms`
+
+**What's INTERMITTENT**:
+- Ping: works 0-60% of attempts, with many DUPs when it does work
+- ARP cycles between REACHABLE → STALE → INCOMPLETE → FAILED
+- TX→wire delivery is racy (switch forwarding inconsistency)
+
+**What's NOT IMPLEMENTED (= the root of remaining issues)**:
+1. Dynamic FDB learning (capture src MAC from RX + register via zx_fdb_add)
+2. Per-skb port lookup in TX desc[2..3] based on dst MAC FDB lookup
+3. Stock's `ffe_learn_skb` equivalent (built into stock vmlinux, would
+   handle MAC learning + bridge stats)
+4. Stock's `CSPKernel_skb_SelectQueue` (computes qid from skb)
+5. Full 16-instance TM init (we do 4 of 16)
+6. Stock's `pon_int_enable`/`pon_npp_int_enable`/`idm_int_enable` calls
+
+**The honest verdict**: We have a *demonstrable proof-of-concept*
+that mainline drives this HW end-to-end (RX delivers host's frames to
+Linux network stack; TX produces frames the host's NIC physically
+receives). But it's not a *production*-quality port — at least 5-10
+hours of additional RE + implementation work needed to make ping
+bidi consistent, and probably another week to handle real workloads
+(TCP, throughput, error recovery).
