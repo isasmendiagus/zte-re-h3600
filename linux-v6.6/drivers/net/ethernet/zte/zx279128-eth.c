@@ -1541,6 +1541,29 @@ static void zx_tm_red_init(struct zx_eth *e)
 	dev_info(e->dev, "TM RED init: %d failed of 1168 queue configs (busy timeout)\n", fail);
 }
 
+/* pon_pp_brg_init equivalent — initializes the PP bridge so CPU TX egresses
+ * to UNI ports. Without this, mainline TX never reaches the wire (driver
+ * counter increments but no packets seen on host tcpdump).
+ * 13 fixed register writes to pp_base = fpga_base + 0x380000. */
+static void zx_pp_brg_init(struct zx_eth *e)
+{
+	void __iomem *pp = e->fpga_base + 0x380000;
+	writel(0x020000ff, pp + 0x8004);
+	writel(0xff5555ff, pp + 0x8340);
+	writel(0x0000001e, pp + 0x8344);
+	writel(0x0000001f, pp + 0x8380);
+	writel(0xaaaaaaaa, pp + 0x863c);
+	writel(0x000000ff, pp + 0x81c0);
+	writel(0x00005555, pp + 0x81c4);
+	writel(0x0013f434, pp + 0x8188);
+	writel(0x000000ff, pp + 0x82c0);
+	writel(0x0000ffff, pp + 0x8300);
+	writel(0x020000ff, pp + 0x8304);
+	writel(0xfffffffa, pp + 0x8050);
+	writel(0x0000ff00, pp + 0x8008);
+	dev_info(e->dev, "PP bridge init: 13 regs written to pp_base=fpga+0x380000\n");
+}
+
 /* Post-BMU setup (tm_pon_tm_init between bmu_init and pon_tm_net_init).
  *
  * Stock dump 2026-05-21 showed per-instance desc base registers at
@@ -2569,6 +2592,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 		 * Matches stock tm_pon_tm_init sequence. */
 		zx_tm_pre_init(eth);
 		zx_tm_red_init(eth);   /* 2026-05-24: queue config — stock does this BEFORE dma/bmu */
+		zx_pp_brg_init(eth);   /* 2026-05-24: PP bridge init — enables CPU TX to UNI egress */
 		zx_tm_dma_init(eth);
 		zx_tm_bmu_init(eth);
 		zx_tm_post_bmu(eth);
