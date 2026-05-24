@@ -2145,9 +2145,10 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	e->tx_head = (e->tx_head + 1) & (TM_TX_RING_SIZE - 1);
 	TXCP(e, 6, "tx_head=%u (post-incr); about to kick TM[0x10054]=1, TM[0x10064]=1", e->tx_head);
 
-	/* Kick HW: both upstream (q0) AND downstream (q1) queues, since
-	 * CPU→LAN direction is ambiguous in ONU mode. HW reads desc from whichever
-	 * matches. */
+	/* Kick HW: both UP and DN queues. Empirically UP-only INCREASED
+	 * duplicates to 203/5pings vs 70 with both. Dual kick keeps the
+	 * 70-DUPs baseline. DUP origin is likely switch flooding the same
+	 * packet to multiple ports or bouncing through CPU port. */
 	tm_write(e, 0x10054, 1);	/* upstream kick */
 	tm_write(e, 0x10064, 1);	/* downstream kick */
 	TXCP(e, 7, "kick done; TM[0x10058]=%#x (UP cnt) TM[0x10068]=%#x (DN cnt)",
