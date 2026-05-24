@@ -79,3 +79,31 @@ $ ip neigh | grep 192.168.1.99
 See `tx_rx_paths.md` "Known artifacts / open work" for the full list.
 Quick: DUPs/loss from hardcoded port 0, looser TM init (only 4/16 instances),
 hardcoded qid=0, etc. Driver is *functional* not *production-grade*.
+
+---
+
+## Tuning experiments (post-milestone)
+
+### UP-only vs UP+DN kick
+- UP+DN (current): 40% loss, ~70-284 DUPs (variable), 3k loopback drops
+- UP-only: 80% loss, 203+ DUPs, 26k loopback drops
+- **Verdict**: dual kick wins. Reverted to dual.
+
+### Loopback drops as TX-validity indicator
+With dual kick + post-bulk-replay TX_UP/DN_BASE re-write, loopback
+drops are LOW (~3-26k vs the 1.8M with broken TX_UP_BASE). That's a
+useful proxy: low drops = TX is mostly reaching wire, not bouncing.
+
+## Final session summary
+- **Status: PING BIDI WORKS** (intermittently, with DUPs and 40% loss)
+- **Commits this session: 16** (a32a89abe...ce98884b0)
+- **All RE captured in:** findings/tx_rx_paths.md
+- **Known issues**: switch flood/FDB tuning — driver is functional but
+  not production-grade. ARP+ICMP work, real workload may stutter.
+
+## Next steps (out of scope for this session)
+1. Implement proper FDB so `desc[2..3]` port = MAC-learned port (not 0).
+2. Try `TM_NUM_INSTANCES = 16` again now that RED init is in place.
+3. Investigate why kernel reports 40% loss — packets reaching mainline
+   may be dropped before reaching ICMP responder, OR our TX reply is
+   sometimes lost in switch. Need to instrument more carefully.
