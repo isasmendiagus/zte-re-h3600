@@ -1541,6 +1541,18 @@ static void zx_tm_red_init(struct zx_eth *e)
 	dev_info(e->dev, "TM RED init: %d failed of 1168 queue configs (busy timeout)\n", fail);
 }
 
+/* pon_pp_ctrl_init equivalent — 2 writes + 52ms delay.
+ * Stock calls this BEFORE pon_pp_brg_init. The write to pp[0] = 2 may
+ * be a trigger that starts PP processing (not just state). */
+static void zx_pp_ctrl_init(struct zx_eth *e)
+{
+	void __iomem *pp = e->fpga_base + 0x380000;
+	writel(0x01070104, pp + 0x28);
+	writel(0x00000002, pp + 0x00);
+	msleep(52);
+	dev_info(e->dev, "PP ctrl init: pp[0x28]=0x01070104 pp[0]=2 + 52ms delay\n");
+}
+
 /* pon_pp_brg_init equivalent — initializes the PP bridge so CPU TX egresses
  * to UNI ports. Without this, mainline TX never reaches the wire (driver
  * counter increments but no packets seen on host tcpdump).
@@ -2632,6 +2644,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 		 * Matches stock tm_pon_tm_init sequence. */
 		zx_tm_pre_init(eth);
 		zx_tm_red_init(eth);   /* 2026-05-24: queue config — stock does this BEFORE dma/bmu */
+		zx_pp_ctrl_init(eth);  /* 2026-05-24: PP ctrl init — stock calls before brg_init */
 		zx_pp_brg_init(eth);   /* 2026-05-24: PP bridge init — enables CPU TX to UNI egress */
 		zx_tm_dma_init(eth);
 		zx_tm_bmu_init(eth);
