@@ -919,13 +919,15 @@ static netdev_tx_t zx_idm_xmit(struct sk_buff *skb, struct net_device *ndev)
 	unsigned long flags;
 	u32 idx, len;
 
-	/* Min frame length per stock (0x21) */
-	if (skb->len < 0x21) {
-		if (skb_padto(skb, 0x21)) {
+	/* Min frame length 0x40 per stock pon_tm_data_raw_send (decomp 2026-05-24):
+	 * if (len < 0x40 && param_3==0 && (desc[14]&1)==0) zeropad to 0x40 and
+	 * encode len=0x40 in desc[12..13]=0x100 and desc[8..11] |= 0x40<<9. */
+	if (skb->len < 0x40) {
+		if (skb_padto(skb, 0x40)) {
 			ndev->stats.tx_dropped++;
 			return NETDEV_TX_OK;
 		}
-		skb->len = 0x21;
+		skb->len = 0x40;
 	}
 	len = skb->len;
 
@@ -1834,12 +1836,30 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 			     desc[4], desc[5], desc[6], desc[7]);
 
 			if (len > 0 && len < 1600 && e->bp_cpu) {
-				/* Compute BP buffer addr from BPPE: BP_SIZE * bppe_idx.
-				 * Read from +16 (HW metadata header). The loopback case has
-				 * frame at +0 but our existing src-MAC filter catches it
-				 * via the ARP coincidence at byte 22 (= sender HW addr). */
 				const u8 *bp_buf = (const u8 *)e->bp_cpu + (u32)bppe_idx * TM_BP_SIZE;
-				const u8 *src = bp_buf + 16;
+				/* Detect frame offset by examining the ETHERTYPE field
+				 * (16-bit, bytes 12..13 of ethernet frame). Real ethertypes
+				 * are >= 0x0600 (per IEEE 802.3). If we see a valid value
+				 * at bp_buf+12, the frame is at +0 (looped-back TX).
+				 * Else at bp_buf+16 (fresh RX with HW prefix). */
+				u16 et_at_0 = ntohs(*(const __be16 *)(bp_buf + 12));
+				const u8 *src = (et_at_0 >= 0x0600 && et_at_0 != 0xffff) ?
+						bp_buf : (bp_buf + 16);
+				/* Phase 5 deep probe: dump bytes 0..47 of bp_buf for first
+				 * 12 packets to see exactly what HW writes. We want to
+				 * distinguish fresh-RX (HW prefix at 0..15, frame at 16+)
+				 * from looped-TX (frame at 0+, no prefix). */
+				if (e->tm_rx_count + e->tm_rx_loopback_drops < 20) {
+					dev_info(e->dev,
+						"BPDUMP q=%d len=%u bppe=%u +00..0f=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x +10..1f=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x +20..2f=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
+						q, len, bppe_idx,
+						bp_buf[0],  bp_buf[1],  bp_buf[2],  bp_buf[3],  bp_buf[4],  bp_buf[5],  bp_buf[6],  bp_buf[7],
+						bp_buf[8],  bp_buf[9],  bp_buf[10], bp_buf[11], bp_buf[12], bp_buf[13], bp_buf[14], bp_buf[15],
+						bp_buf[16], bp_buf[17], bp_buf[18], bp_buf[19], bp_buf[20], bp_buf[21], bp_buf[22], bp_buf[23],
+						bp_buf[24], bp_buf[25], bp_buf[26], bp_buf[27], bp_buf[28], bp_buf[29], bp_buf[30], bp_buf[31],
+						bp_buf[32], bp_buf[33], bp_buf[34], bp_buf[35], bp_buf[36], bp_buf[37], bp_buf[38], bp_buf[39],
+						bp_buf[40], bp_buf[41], bp_buf[42], bp_buf[43], bp_buf[44], bp_buf[45], bp_buf[46], bp_buf[47]);
+				}
 				/* Phase 5: ingress port from desc[6] bits 3..7, minus 1.
 				 * Per stock RE: `r2 = (desc[6] >> 3) & 0x1F; r2 -= 1; pkt[180] = r2`.
 				 * This is the UNI/PON port the packet arrived on. */
@@ -2132,17 +2152,16 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	desc = (u8 *)e->txdesc_cpu + e->tx_head * TM_TX_DESC_SIZE;
 	memset(desc, 0, TM_TX_DESC_SIZE);
 	TXCP(e, 4, "desc[%u]=%p prepared (memset done, BP_SIZE=%u)", e->tx_head, desc, TM_BP_SIZE);
-	/* 2026-05-24: corrected TX desc format from RE of stock pon_tm_net_tx +
-	 * pon_tm_data_raw_send. Stock writes:
-	 *   desc[0]  = 0x80 (byte 0 of u32 = 0x00000080)
-	 *   desc[1..3] = 0 (rest of first u32)
-	 *   desc[4..7] = 0x00010000  (so desc[6]=1)
-	 *   desc[8..11] = 0x01000000 INITIALLY (so desc[11]=1 = TX VALID bit),
-	 *     then pon_tm_data_raw_send does bfi(len, #9, #14) preserving bit 24
-	 *     and adds bp_hi at low byte.
-	 *   desc[12..13] = 2 or 3 (set by caller; pon_tm_data_raw_send adds len<<2)
-	 * Our old code wrote desc[11]=0x20 (bit 29) instead of 0x01 (bit 24).
-	 * Bit 24 is what HW likely treats as "VALID — process this desc". */
+	/* Stock TX desc format (Ghidra decomp of pon_tm_net_tx + pon_tm_data_raw_send,
+	 * 2026-05-24, see tasks/00.10.02.re-stock-kmods/findings/tx_path_stock_decomp.md):
+	 *   desc[0]   = 0xc9 in stock (we keep 0x80 for now; was the previous baseline)
+	 *   desc[1..3]= 0
+	 *   desc[4..7]= 0x00010000  (so desc[6]=1)
+	 *   desc[8..11]= initial 0x01000000 (desc[11]=0x01 VALID),
+	 *     then pon_tm_data_raw_send does desc[11] = (desc[11]&1) | 0x20
+	 *     giving desc[11] = 0x21 (bit 0 = VALID, bit 5 = some format/CPU marker),
+	 *     then bfi(len<<9, bits 9..22) preserving bit 0 and byte 3 (=0x21).
+	 *   desc[12..13] = (desc[12..13] & 3) | (len << 2). */
 	desc[0]  = 0x80;
 	desc[1]  = 0x00;
 	/* desc[2..3] encodes egress port hint: ((port+0x28) & 0x3f) << 4.
@@ -2154,9 +2173,11 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 		*(__le16 *)(desc + 2) = cpu_to_le16(((port + 0x28) & 0x3f) << 4);
 	}
 	*(u32 *)(desc + 4) = cpu_to_le32(0x00010000);
+	/* desc[11] = 0x21 (bit 0 VALID + bit 5 format), not 0x01 — stock decomp
+	 * pon_tm_data_raw_send does desc[11] = (desc[11]&1) | 0x20. */
 	*(u32 *)(desc + 8) = cpu_to_le32(((bp >> 7) & 0x7f) |
 					 ((len & 0x3fff) << 9) |
-					 (0x01U << 24));	/* was 0x20 — fixed to 0x01 */
+					 (0x21U << 24));
 	desc[7]  = (bp & 0x7f) << 1;
 	/* bytes 12-13 = len encoding (parallel to bits[22:9] above) */
 	if (len < 64)
@@ -2172,10 +2193,12 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	e->tx_head = (e->tx_head + 1) & (TM_TX_RING_SIZE - 1);
 	TXCP(e, 6, "tx_head=%u (post-incr); about to kick TM[0x10054]=1, TM[0x10064]=1", e->tx_head);
 
-	/* Kick HW: both UP and DN queues. Empirically UP-only INCREASED
-	 * duplicates to 203/5pings vs 70 with both. Dual kick keeps the
-	 * 70-DUPs baseline. DUP origin is likely switch flooding the same
-	 * packet to multiple ports or bouncing through CPU port. */
+	/* Stock soft_insert_tx_1desc (decomp 2026-05-24) kicks ONE reg (UP=0x10054 or
+	 * DN=0x10064) by direction. Tested single-kick (UP only) on top of fixed
+	 * desc[11]=0x21: 100% loss vs dual-kick's 60% loss + DUPs. So switch needs
+	 * BOTH rings populated to actually move packets to the wire in our setup
+	 * (likely because we don't have GPON DN traffic but switch routing expects
+	 * activity on DN side too). Keep dual-kick. */
 	tm_write(e, 0x10054, 1);	/* upstream kick */
 	tm_write(e, 0x10064, 1);	/* downstream kick */
 	TXCP(e, 7, "kick done; TM[0x10058]=%#x (UP cnt) TM[0x10068]=%#x (DN cnt)",

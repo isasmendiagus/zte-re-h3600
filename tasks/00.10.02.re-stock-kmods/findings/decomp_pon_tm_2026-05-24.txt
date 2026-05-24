@@ -1,0 +1,672 @@
+INFO  Using log config file: jar:file:/opt/ghidra_12.0.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.0.4_PUBLIC/preferences (Preferences)  
+INFO  Loading previous preferences: /home/ubuntu/.config/ghidra/ghidra_11.4.2_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (1164 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (DefaultTrustManagerFactory)  
+INFO  Headless startup complete (2402 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 58 extension points (18 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /tmp
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/ubuntu/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/ghidra_12.0.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Opening existing project: /home/ubuntu/Projects/MYSELF/ZTE/tasks/00.10.02.re-stock-kmods/ghidra/h3600_kmods (HeadlessAnalyzer)  
+INFO  Opening project: /home/ubuntu/Projects/MYSELF/ZTE/tasks/00.10.02.re-stock-kmods/ghidra/h3600_kmods (HeadlessProject)  
+INFO  REPORT: Processing project file: /plat-zxylzb_9128S.ko (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: decompile_targets.py  (HeadlessAnalyzer)  
+INFO  SCRIPT: /tmp/decompile_targets.py (HeadlessAnalyzer)  
+===FUNCTION: pon_pp_brg_init===
+
+undefined4 pon_pp_brg_init(void)
+
+{
+  uint uVar1;
+  uint uVar2;
+  
+  *(char **)(pp_base + 0x8004) = " %d/%d failed\n";
+  *(undefined4 *)(pp_base + 0x8340) = 0xff5555ff;
+  *(undefined4 *)(pp_base + 0x8344) = 0x1e;
+  *(undefined4 *)(pp_base + 0x8380) = 0x1f;
+  *(undefined4 *)(pp_base + 0x863c) = 0xaaaaaaaa;
+  *(undefined4 *)(pp_base + 0x81c0) = 0xff;
+  *(undefined4 *)(pp_base + 0x81c4) = 0x5555;
+  *(undefined4 *)(pp_base + 0x8188) = 0x13f434;
+  *(undefined4 *)(pp_base + 0x82c0) = 0xff;
+  *(undefined4 *)(pp_base + 0x8300) = 0xffff;
+  *(undefined4 *)(pp_base + 0x8304) = 0x1e;
+  *(undefined4 *)(pp_base + 0x8050) = 0xfffffffa;
+  *(undefined4 *)(pp_base + 0x8008) = 0xff00;
+  uVar1 = 0;
+  do {
+    uVar2 = uVar1 & 0xff;
+    uVar1 = uVar1 + 1;
+    pon_pp_add_port_to_vlan(0,uVar2,3);
+    pon_pp_add_port_to_vlan(1,uVar2,3);
+  } while (uVar1 != 8);
+  pon_pp_port_isolate_part_1(6,0xdf);
+  pon_pp_port_isolate_part_1(7,0xdf);
+  return 0;
+}
+
+
+===END_FUNCTION===
+===FUNCTION: pon_pp_ctrl_init===
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+undefined4 pon_pp_ctrl_init(void)
+
+{
+  pp_base[10] = 0x1070104;
+  *pp_base = 2;
+  (*_request_threaded_irq)(0x66665b0);
+  return 0;
+}
+
+
+===END_FUNCTION===
+===FUNCTION: pon_tm_data_raw_send===
+
+/* WARNING: Restarted to delay deadcode elimination for space: ram */
+
+undefined4 pon_tm_data_raw_send(int param_1,int param_2,int param_3)
+
+{
+  undefined1 uVar1;
+  int iVar2;
+  uint uVar3;
+  byte bVar4;
+  uint uVar5;
+  byte bVar6;
+  size_t __n;
+  void *__dest;
+  uint uVar7;
+  
+  __n = *(size_t *)(param_1 + 100);
+  uVar3 = pon_tm_bmu_alloc_bp();
+  if ((int)uVar3 < 0) {
+    printk("alloc bp failed\n");
+    return 0xffffffff;
+  }
+  if (*(uint *)((int)&bp_max_number + (*(byte *)(param_2 + 9) & 1) * 4) <= uVar3) {
+    printk("invalid bp %d\n",uVar3);
+    return 0xffffffff;
+  }
+  __dest = (void *)(u32_BP_SIZE * uVar3 +
+                   pdt_mem_size + -0x3fadfff0 + ZX_RESERVE_MEM_SIZE * -0x100000);
+  memcpy(__dest,*(void **)(param_1 + 0xcc),__n);
+  *(byte *)(param_2 + 0xb) = *(byte *)(param_2 + 0xb) & 1 | 0x20;
+  uVar1 = (undefined1)((int)uVar3 >> 7);
+  uVar7 = __n;
+  if (param_3 == 0) {
+    if ((*(byte *)(param_2 + 6) & 4) != 0) {
+      uVar5 = __n & 0x3fff;
+      bVar6 = *(byte *)(param_2 + 0xe) & 1;
+      goto LAB_00019a14;
+    }
+    bVar6 = *(byte *)(param_2 + 0xe) & 1;
+    bVar4 = bVar6 ^ 1;
+    if (0x3f < (int)__n) {
+      bVar4 = 0;
+    }
+    if (bVar4 == 0) {
+      uVar5 = __n & 0x3fff;
+      goto LAB_00019a14;
+    }
+    if (__n != 0x40) {
+      __memzero((int)__dest + __n);
+      uVar5 = 0x40;
+      bVar6 = *(byte *)(param_2 + 0xe) & 1;
+      uVar7 = 0x40;
+      goto LAB_00019a14;
+    }
+    uVar5 = 0x40;
+    *(byte *)(param_2 + 7) = *(byte *)(param_2 + 7) & 1 | (byte)((uVar3 & 0x7f) << 1);
+    *(undefined1 *)(param_2 + 8) = uVar1;
+    *(ushort *)(param_2 + 0xc) = *(ushort *)(param_2 + 0xc) & 3 | 0x100;
+    uVar7 = uVar5;
+  }
+  else {
+    uVar5 = __n & 0x3fff;
+    bVar6 = *(byte *)(param_2 + 0xe) & 1;
+LAB_00019a14:
+    *(undefined1 *)(param_2 + 8) = uVar1;
+    *(byte *)(param_2 + 7) = *(byte *)(param_2 + 7) & 1 | (byte)((uVar3 & 0x7f) << 1);
+    *(ushort *)(param_2 + 0xc) = *(ushort *)(param_2 + 0xc) & 3 | (ushort)(uVar5 << 2);
+    if (bVar6 != 0) goto LAB_00019a48;
+  }
+  *(uint *)(param_2 + 8) = *(uint *)(param_2 + 8) & 0xff8001ff | uVar5 << 9;
+LAB_00019a48:
+  if (0 < pon_tm_net_debug) {
+    printk("Send skb %x data %x,len %u buf size %u, BP %d \naddr %x,off %x,c %d,que %x,pri %x,f %x\n"
+           ,param_1,*(undefined4 *)(param_1 + 0xcc),uVar7,
+           *(int *)(param_1 + 0xc4) - *(int *)(param_1 + 200),uVar3,__dest,
+           *(byte *)(param_2 + 0xb) >> 1,*(byte *)(param_1 + 0x72) & 1,0,0);
+    dump_desc_tx(param_2);
+    dump_net_data(__dest,uVar7);
+    pon_tm_net_debug = pon_tm_net_debug + -1;
+  }
+  iVar2 = param_3 * 0x1c;
+  *(int *)(net_txq + iVar2 + 0x10) = *(int *)(net_txq + iVar2 + 0x10) + 1;
+  dma_cache_maint(__dest,__n);
+  soft_insert_tx_1desc(param_2,param_3);
+  *(int *)(net_txq + iVar2 + 0x18) = *(int *)(net_txq + iVar2 + 0x18) + 1;
+  bmu_status._24_4_ = bmu_status._24_4_ + 1;
+  return 0;
+}
+
+
+===END_FUNCTION===
+===FUNCTION: pon_tm_net_tx===
+
+undefined4 pon_tm_net_tx(int param_1,int param_2)
+
+{
+  code *pcVar1;
+  char cVar2;
+  undefined4 *puVar3;
+  int iVar4;
+  ushort uVar5;
+  int iVar6;
+  undefined4 uVar7;
+  undefined1 auStack_28 [4];
+  undefined4 local_24 [2];
+  
+  if (*(int *)(param_2 + 0x4c8) == 0) {
+    ffe_learn_skb(param_1,3);
+  }
+  if ((*(uint *)(((uint)auStack_28 & 0xffffe000) + 4) & 0x1fff00) == 0) {
+    uVar7 = _raw_spin_lock_irqsave(DAT_0001a0e4);
+    iVar6 = *(int *)(param_2 + 0x4c8);
+    if (iVar6 != 0) goto LAB_00019cd8;
+LAB_00019d3c:
+    local_24[0] = 0;
+    iVar6 = pon_is_registered();
+    if (iVar6 != 0) {
+      puVar3 = (undefined4 *)pon_tm_get_next_txdesc(0);
+      if (puVar3 == (undefined4 *)0x0) {
+        __dev_kfree_skb_any(param_1,1);
+        *(int *)(param_2 + 0x4ec) = *(int *)(param_2 + 0x4ec) + 1;
+        printk("get up tx desc failed\n");
+        goto LAB_00019cec;
+      }
+      *puVar3 = 0x80;
+      *(undefined1 *)puVar3 = 0xc9;
+      pcVar1 = dev_qos_get_queue;
+      puVar3[3] = 0;
+      puVar3[1] = 0x10000;
+      puVar3[2] = 0x1000000;
+      if (pcVar1 != (code *)0x0) {
+        (*pcVar1)(*(undefined4 *)(param_1 + 0x80),local_24);
+      }
+      uVar5 = *(ushort *)(*(int *)(param_1 + 0xcc) + 0xc);
+      uVar5 = uVar5 << 8 | uVar5 >> 8;
+      if (uVar5 == 0x884c || uVar5 == 0x8899) {
+        if (uVar5 != 0x8899 && uVar5 != 0x884c) goto LAB_00019e8c;
+      }
+      else {
+        iVar6 = dev_get_by_name(&init_net,&_LC17);
+        if (iVar6 != 0) {
+          if ((*(uint *)(iVar6 + 0x138) & 1) != 0) {
+            disableIRQinterrupts();
+            iVar4 = coproc_movefrom_Privileged_only_Thread_and_Process_ID();
+            *(int *)(iVar4 + *(int *)(iVar6 + 0x280)) =
+                 *(int *)(iVar4 + *(int *)(iVar6 + 0x280)) + -1;
+            if (dev_qos_select_queue == (code *)0x0) {
+              *(byte *)((int)puVar3 + 3) = *(byte *)((int)puVar3 + 3) & 0x1f;
+            }
+            else {
+              cVar2 = (*dev_qos_select_queue)(param_1,param_2);
+              *(byte *)((int)puVar3 + 3) = *(byte *)((int)puVar3 + 3) & 0x1f | cVar2 << 5;
+            }
+            goto LAB_00019ea0;
+          }
+          disableIRQinterrupts();
+          iVar4 = coproc_movefrom_Privileged_only_Thread_and_Process_ID();
+          *(int *)(iVar4 + *(int *)(iVar6 + 0x280)) = *(int *)(iVar4 + *(int *)(iVar6 + 0x280)) + -1
+          ;
+        }
+LAB_00019e8c:
+        pcVar1 = dev_qos_select_queue;
+        if (lan_up == 1) {
+          *(undefined2 *)(puVar3 + 1) = 0;
+          if (pcVar1 == (code *)0x0) {
+            *(byte *)((int)puVar3 + 3) = *(byte *)((int)puVar3 + 3) & 0x1f;
+          }
+          else {
+            cVar2 = (*pcVar1)(param_1,param_2);
+            *(byte *)((int)puVar3 + 3) = *(byte *)((int)puVar3 + 3) & 0x1f | cVar2 << 5;
+          }
+          *(ushort *)((int)puVar3 + 2) =
+               *(ushort *)((int)puVar3 + 2) & 0xfc0f | (ushort)((lan_up_port + 0x28U & 0x3f) << 4);
+        }
+      }
+LAB_00019ea0:
+      if (*(char *)(param_1 + 0xb5) != '\0') {
+        *(byte *)((int)puVar3 + 0xe) = *(byte *)((int)puVar3 + 0xe) | 1;
+        *(ushort *)((int)puVar3 + 0xe) =
+             *(ushort *)((int)puVar3 + 0xe) & 1 | *(short *)(param_1 + 0xba) << 1;
+        puVar3[2] = puVar3[2] & 0xff8001ff | (uint)*(byte *)(param_1 + 0xb6) << 9;
+      }
+      iVar6 = pon_tm_data_raw_send(param_1,puVar3,0);
+      if (iVar6 == 0) {
+LAB_00019ef0:
+        *(int *)(param_2 + 0x4d4) = *(int *)(param_2 + 0x4d4) + 1;
+        *(int *)(param_2 + 0x4dc) = *(int *)(param_2 + 0x4dc) + *(int *)(param_1 + 100);
+        goto LAB_00019ce0;
+      }
+      if (net_txq._12_4_ == 0) {
+        net_txq._12_4_ = 0x3ff;
+      }
+      else {
+        net_txq._12_4_ = net_txq._12_4_ + -1;
+      }
+    }
+LAB_00019d4c:
+    *(int *)(param_2 + 0x4ec) = *(int *)(param_2 + 0x4ec) + 1;
+  }
+  else {
+    _raw_spin_lock();
+    iVar6 = *(int *)(param_2 + 0x4c8);
+    uVar7 = 0;
+    if (iVar6 == 0) goto LAB_00019d3c;
+LAB_00019cd8:
+    if (iVar6 == 1) {
+      puVar3 = (undefined4 *)pon_tm_get_next_txdesc(1);
+      if (puVar3 == (undefined4 *)0x0) {
+        __dev_kfree_skb_any(param_1,1);
+        *(int *)(param_2 + 0x4ec) = *(int *)(param_2 + 0x4ec) + 1;
+        printk("get dn tx desc failed\n");
+        goto LAB_00019cec;
+      }
+      *puVar3 = 0x80;
+      iVar6 = test_da_unknown;
+      puVar3[2] = 0x1000000;
+      puVar3[1] = 0x10000;
+      if (iVar6 == 0) {
+        puVar3[3] = 3;
+        *(ushort *)((int)puVar3 + 2) =
+             *(ushort *)((int)puVar3 + 2) & 0xfc0f | (*(byte *)(param_1 + 0xb4) + 0x28 & 0x3f) << 4;
+      }
+      else {
+        puVar3[3] = 2;
+      }
+      if (dev_qos_select_queue == (code *)0x0) {
+        *(byte *)((int)puVar3 + 3) = *(byte *)((int)puVar3 + 3) & 0x1f;
+      }
+      else {
+        *(byte *)((int)puVar3 + 3) =
+             *(byte *)((int)puVar3 + 3) & 0x1f | (byte)((*(ushort *)(param_1 + 0x78) & 7) << 5);
+      }
+      if (*(char *)(param_1 + 0xb5) != '\0') {
+        *(byte *)((int)puVar3 + 0xe) = *(byte *)((int)puVar3 + 0xe) | 1;
+        *(ushort *)((int)puVar3 + 0xe) =
+             *(ushort *)((int)puVar3 + 0xe) & 1 | *(short *)(param_1 + 0xba) << 1;
+        puVar3[2] = puVar3[2] & 0xff8001ff | (uint)*(byte *)(param_1 + 0xb6) << 9;
+      }
+      iVar6 = pon_tm_data_raw_send(param_1,puVar3,1);
+      if (iVar6 != 0) {
+        if (net_txq._40_4_ == 0) {
+          net_txq._40_4_ = 0x3ff;
+        }
+        else {
+          net_txq._40_4_ = net_txq._40_4_ + -1;
+        }
+        goto LAB_00019d4c;
+      }
+      goto LAB_00019ef0;
+    }
+  }
+LAB_00019ce0:
+  __dev_kfree_skb_any(param_1,1);
+LAB_00019cec:
+  if ((*(uint *)(((uint)auStack_28 & 0xffffe000) + 4) & 0x1fff00) != 0) {
+    _raw_spin_unlock(DAT_0001a0e4);
+    return 0;
+  }
+  _raw_spin_unlock_irqrestore(DAT_0001a0e4,uVar7);
+  return 0;
+}
+
+
+===END_FUNCTION===
+===FUNCTION: pon_tm_net_poll===
+
+/* WARNING: Restarted to delay deadcode elimination for space: ram */
+
+int pon_tm_net_poll(int param_1,uint param_2)
+
+{
+  undefined2 uVar1;
+  int iVar2;
+  int iVar3;
+  int iVar4;
+  void *pvVar5;
+  uint uVar6;
+  uint uVar7;
+  uint uVar8;
+  int iVar9;
+  int iVar10;
+  uint uVar11;
+  void *pvVar12;
+  int iVar13;
+  bool bVar14;
+  uint local_58;
+  uint local_4c;
+  uint local_44;
+  uint local_40;
+  int local_3c;
+  int local_30;
+  
+  *(int *)(param_1 + 0x78) = *(int *)(param_1 + 0x78) + 1;
+  local_40 = param_2;
+  if ((*(uint *)(param_1 + -100) & 3) == 0) {
+    local_3c = 0;
+LAB_0001d0d4:
+    if (0 < (int)local_40) {
+      napi_complete_done(param_1,0);
+      disableIRQinterrupts();
+      *(uint *)(tm_base + 0x104) = *(uint *)(tm_base + 0x104) & 0xfffffffc;
+    }
+    return local_3c;
+  }
+  local_30 = 4;
+  *(int *)(param_1 + 0x7c) = *(int *)(param_1 + 0x7c) + 1;
+  local_3c = 0;
+  local_44 = 0xff;
+LAB_0001ca58:
+  bVar14 = false;
+  local_58 = 7;
+  iVar13 = DAT_0001d324;
+  do {
+    if (((int)local_44 >> (local_58 & 0xff) & 1U) == 0) {
+joined_r0x0001cd64:
+      if (local_58 == 0) break;
+    }
+    else {
+      uVar6 = *(uint *)(tm_base + (local_58 + 0x4040) * 4);
+      uVar7 = uVar6;
+      if (0 < (int)uVar6) {
+        uVar7 = local_40;
+      }
+      if (0 < (int)uVar7) {
+        iVar10 = 0x400 - *(int *)(iVar13 + 0x7c);
+        iVar9 = (int)local_40 >> 1;
+        if ((int)uVar6 >> 0x10 < (int)local_40 >> 1) {
+          iVar9 = (int)uVar6 >> 0x10;
+        }
+        iVar2 = *(int *)(iVar13 + 0x78) + *(int *)(iVar13 + 0x7c) * 0x10;
+        if (iVar10 < iVar9) {
+          net_invalid_cache(iVar2,iVar10 * 0x10);
+          net_invalid_cache(*(undefined4 *)(iVar13 + 0x78),(iVar9 - iVar10) * 0x10);
+        }
+        else {
+          net_invalid_cache(iVar2,iVar9 << 4);
+        }
+        iVar10 = (int)pon_tm_netdev;
+        if (iVar9 != 0) {
+          iVar2 = 0;
+          local_4c = 0;
+          do {
+            while( true ) {
+              iVar4 = *(uint *)(iVar13 + 0x78) + *(int *)(iVar13 + 0x7c) * 0x10;
+              HintPreloadData(iVar4);
+              uVar7 = *(int *)(iVar13 + 0x7c) + 1;
+              *(uint *)(iVar13 + 0x7c) = uVar7;
+              if (0x3ff < uVar7) {
+                *(undefined4 *)(iVar13 + 0x7c) = 0;
+              }
+              uVar8 = (uint)(*(byte *)(iVar4 + 7) >> 1) | (uint)*(byte *)(iVar4 + 8) << 7;
+              bVar14 = (*(byte *)(iVar4 + 6) & 1) != 0;
+              uVar7 = *(uint *)(iVar13 + 0x78);
+              if (bVar14) {
+                uVar7 = local_4c;
+              }
+              if (bVar14) {
+                uVar7 = uVar7 + 1;
+              }
+              if (bVar14) {
+                local_4c = uVar7;
+              }
+              if (*(uint *)((int)&bp_max_number + (*(byte *)(iVar4 + 9) & 1) * 4) <= uVar8) break;
+              bmu_status._20_4_ = bmu_status._20_4_ + 1;
+              if ((*(byte *)(iVar4 + 9) & 1) == 0) {
+                pvVar12 = (void *)(u32_BP_SIZE * uVar8 +
+                                  pdt_mem_size + -0x3fadfff0 + ZX_RESERVE_MEM_SIZE * -0x100000);
+              }
+              else {
+                pvVar12 = (void *)(u32_JUMBO_BP_SIZE * uVar8 +
+                                  u32_BP_SIZE * u32_BPPE_POOL_SIZE + pdt_mem_size + -0x3fadfff0 +
+                                  ZX_RESERVE_MEM_SIZE * -0x100000);
+              }
+              uVar7 = (uint)(*(ushort *)(iVar4 + 0xc) >> 2);
+              net_invalid_cache(pvVar12,uVar7);
+              if (0 < pon_tm_net_debug) {
+                dump_desc(iVar4);
+                printk("recv gem %d,addr %x\n",*(ushort *)(iVar4 + 4) & 0xfff,pvVar12);
+                dump_net_data(pvVar12,uVar7);
+                pon_tm_net_debug = pon_tm_net_debug + -1;
+              }
+              if ((*(byte *)(iVar4 + 6) & 4) == 0) {
+                iVar3 = __netdev_alloc_skb(iVar10,uVar7 + 0x12,0x20);
+                if (iVar3 != 0) {
+                  *(uint *)(iVar10 + 0x4d8) = *(int *)(iVar10 + 0x4d8) + uVar7;
+                  *(int *)(iVar10 + 0x4d0) = *(int *)(iVar10 + 0x4d0) + 1;
+                  pvVar5 = (void *)(*(int *)(iVar3 + 0xcc) + 2);
+                  *(void **)(iVar3 + 0xcc) = pvVar5;
+                  *(int *)(iVar3 + 0xc0) = *(int *)(iVar3 + 0xc0) + 2;
+                  memcpy(pvVar5,pvVar12,uVar7);
+                  skb_put(iVar3,uVar7);
+                  *(int *)(iVar3 + 0x18) = iVar10;
+                  if ((*(byte *)(iVar4 + 9) & 1) != 0) {
+                    *(ushort *)(iVar3 + 0xbc) = *(ushort *)(iVar3 + 0xbc) | 2;
+                  }
+                  if (switch_skb_recv == (code *)0x0) {
+                    uVar1 = eth_type_trans(iVar3,iVar10);
+                    *(undefined2 *)(iVar3 + 0xa4) = uVar1;
+                    netif_receive_skb_sk(*(undefined4 *)(iVar3 + 0x14),iVar3);
+                  }
+                  else {
+                    *(ushort *)(iVar3 + 0xbc) = *(ushort *)(iVar3 + 0xbc) | 8;
+                    if ((*(byte *)(iVar4 + 0xe) & 2) == 0) {
+                      *(byte *)(iVar3 + 0xb4) = (*(byte *)(iVar4 + 6) >> 3) - 1;
+                    }
+                    (*switch_skb_recv)(iVar3);
+                  }
+                  goto LAB_0001cc48;
+                }
+                iVar4 = pp_bmu_free_bp(uVar8,0,*(byte *)(iVar4 + 9) & 1);
+                if (iVar4 < 0) {
+                  printk("failed to rls bp\n");
+                }
+                *(int *)(iVar10 + 0x4e8) = *(int *)(iVar10 + 0x4e8) + 1;
+              }
+              else {
+LAB_0001cc48:
+                iVar4 = pp_bmu_free_bp(uVar8,0,*(byte *)(iVar4 + 9) & 1);
+                if (iVar4 < 0) {
+                  printk("failed to rls bp\n");
+                }
+              }
+              iVar2 = iVar2 + 1;
+              if (iVar2 == iVar9) goto LAB_0001cdb4;
+            }
+            *(int *)(iVar10 + 0x4e0) = *(int *)(iVar10 + 0x4e0) + 1;
+            iVar2 = iVar2 + 1;
+            printk("rxq %d,invalid bp %u\n",local_58,uVar8);
+            dump_desc(iVar4);
+          } while (iVar2 != iVar9);
+LAB_0001cdb4:
+          if (iVar9 - local_4c != 0) {
+            soft_release_rx_desc(1,local_58 & 0xff,0,iVar9 - local_4c & 0xffff);
+          }
+          if (local_4c != 0) {
+            soft_release_rx_desc(1,local_58 & 0xff,1,local_4c & 0xffff);
+          }
+        }
+        iVar2 = 0x400 - *(int *)(iVar13 + 0x3c);
+        iVar10 = *(int *)(iVar13 + 0x38) + *(int *)(iVar13 + 0x3c) * 0x10;
+        uVar7 = (int)(local_40 - iVar9) / 2;
+        if ((int)(uVar6 & 0xffff) <= (int)uVar7) {
+          uVar7 = uVar6 & 0xffff;
+        }
+        if (iVar2 < (int)uVar7) {
+          net_invalid_cache(iVar10,iVar2 * 0x10);
+          net_invalid_cache(*(undefined4 *)(iVar13 + 0x38),(uVar7 - iVar2) * 0x10);
+          if ((int)uVar7 < 1) goto LAB_0001d16c;
+LAB_0001ce24:
+          iVar10 = pon_tm_netdev._4_4_;
+          local_4c = 0;
+          uVar6 = 0;
+          do {
+            iVar2 = *(uint *)(iVar13 + 0x38) + *(int *)(iVar13 + 0x3c) * 0x10;
+            HintPreloadData(iVar2);
+            uVar8 = *(int *)(iVar13 + 0x3c) + 1;
+            *(uint *)(iVar13 + 0x3c) = uVar8;
+            if (0x3ff < uVar8) {
+              *(undefined4 *)(iVar13 + 0x3c) = 0;
+            }
+            uVar11 = (uint)(*(byte *)(iVar2 + 7) >> 1) | (uint)*(byte *)(iVar2 + 8) << 7;
+            bVar14 = (*(byte *)(iVar2 + 6) & 1) != 0;
+            uVar8 = *(uint *)(iVar13 + 0x38);
+            if (bVar14) {
+              uVar8 = local_4c;
+            }
+            if (bVar14) {
+              uVar8 = uVar8 + 1;
+            }
+            if (bVar14) {
+              local_4c = uVar8;
+            }
+            if (uVar11 < *(uint *)((int)&bp_max_number + (*(byte *)(iVar2 + 9) & 1) * 4)) {
+              bmu_status._20_4_ = bmu_status._20_4_ + 1;
+              if ((*(byte *)(iVar2 + 9) & 1) == 0) {
+                pvVar12 = (void *)(u32_BP_SIZE * uVar11 +
+                                  pdt_mem_size + -0x3fadfff0 + ZX_RESERVE_MEM_SIZE * -0x100000);
+              }
+              else {
+                pvVar12 = (void *)(u32_JUMBO_BP_SIZE * uVar11 +
+                                  u32_BP_SIZE * u32_BPPE_POOL_SIZE + pdt_mem_size + -0x3fadfff0 +
+                                  ZX_RESERVE_MEM_SIZE * -0x100000);
+              }
+              uVar8 = (uint)(*(ushort *)(iVar2 + 0xc) >> 2);
+              net_invalid_cache(pvVar12,uVar8);
+              if (0 < pon_tm_net_debug) {
+                dump_desc(iVar2);
+                printk("recv gem %d,addr %x\n",*(ushort *)(iVar2 + 4) & 0xfff,pvVar12);
+                dump_net_data(pvVar12,uVar8);
+                pon_tm_net_debug = pon_tm_net_debug + -1;
+              }
+              if ((*(byte *)(iVar2 + 6) & 4) == 0) {
+                iVar4 = __netdev_alloc_skb(iVar10,uVar8 + 0x12,0x20);
+                if (iVar4 == 0) {
+                  iVar2 = pp_bmu_free_bp(uVar11,0,*(byte *)(iVar2 + 9) & 1);
+                  if (iVar2 < 0) {
+                    printk("failed to rls bp\n");
+                  }
+                  *(int *)(iVar10 + 0x4e8) = *(int *)(iVar10 + 0x4e8) + 1;
+                  goto LAB_0001cf8c;
+                }
+                *(uint *)(iVar10 + 0x4d8) = *(int *)(iVar10 + 0x4d8) + uVar8;
+                *(int *)(iVar10 + 0x4d0) = *(int *)(iVar10 + 0x4d0) + 1;
+                pvVar5 = (void *)(*(int *)(iVar4 + 0xcc) + 2);
+                *(void **)(iVar4 + 0xcc) = pvVar5;
+                *(int *)(iVar4 + 0xc0) = *(int *)(iVar4 + 0xc0) + 2;
+                memcpy(pvVar5,pvVar12,uVar8);
+                skb_put(iVar4,uVar8);
+                *(int *)(iVar4 + 0x18) = iVar10;
+                if ((*(byte *)(iVar2 + 9) & 1) != 0) {
+                  *(ushort *)(iVar4 + 0xbc) = *(ushort *)(iVar4 + 0xbc) | 2;
+                }
+                if (switch_skb_recv == (code *)0x0) {
+                  uVar1 = eth_type_trans(iVar4,iVar10);
+                  *(undefined2 *)(iVar4 + 0xa4) = uVar1;
+                  netif_receive_skb_sk(*(undefined4 *)(iVar4 + 0x14),iVar4);
+                }
+                else {
+                  *(ushort *)(iVar4 + 0xbc) = *(ushort *)(iVar4 + 0xbc) | 8;
+                  if ((*(byte *)(iVar2 + 0xe) & 2) == 0) {
+                    *(byte *)(iVar4 + 0xb4) = (*(byte *)(iVar2 + 6) >> 3) - 1;
+                  }
+                  (*switch_skb_recv)(iVar4);
+                }
+              }
+              iVar2 = pp_bmu_free_bp(uVar11,0,*(byte *)(iVar2 + 9) & 1);
+              if (iVar2 < 0) {
+                printk("failed to rls bp\n");
+              }
+            }
+            else {
+              *(int *)(iVar10 + 0x4e0) = *(int *)(iVar10 + 0x4e0) + 1;
+              printk("rxq %d,invalid bp %u\n",local_58,uVar11);
+              dump_desc(iVar2);
+            }
+LAB_0001cf8c:
+            uVar6 = uVar6 + 1;
+          } while (uVar6 != uVar7);
+          uVar6 = uVar7 - local_4c;
+          if (uVar7 - local_4c != 0) {
+LAB_0001d178:
+            soft_release_rx_desc(0,local_58 & 0xff,0,uVar6 & 0xffff);
+          }
+          if (local_4c != 0) {
+            soft_release_rx_desc(0,local_58 & 0xff,1,local_4c & 0xffff);
+          }
+        }
+        else {
+          net_invalid_cache(iVar10,uVar7 << 4);
+          if (0 < (int)uVar7) goto LAB_0001ce24;
+LAB_0001d16c:
+          if (uVar7 != 0) {
+            local_4c = 0;
+            uVar6 = uVar7;
+            goto LAB_0001d178;
+          }
+        }
+        bVar14 = true;
+        local_40 = (local_40 - iVar9) - uVar7;
+        local_3c = local_3c + uVar7;
+        goto joined_r0x0001cd64;
+      }
+      if (local_58 != 7) {
+        local_44 = local_44 & ~(1 << (local_58 & 0xff));
+        goto joined_r0x0001cd64;
+      }
+    }
+    iVar13 = iVar13 + -8;
+    local_58 = local_58 - 1;
+  } while( true );
+  if ((!bVar14) || (local_30 = local_30 + -1, local_30 == 0)) goto LAB_0001d0d4;
+  goto LAB_0001ca58;
+}
+
+
+===END_FUNCTION===
+INFO  REPORT: Save succeeded for processed file: /plat-zxylzb_9128S.ko (HeadlessAnalyzer)  
