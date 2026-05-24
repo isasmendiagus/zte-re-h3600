@@ -40,10 +40,18 @@ KERNEL_SIZE_HDR      = NAND_WRITE_SIZE
 SLOT_A_ROOTFS_SIZE   = 0x1620000
 SLOT_A_HEADER_OFFSET = 0x2080000
 
-# 32-byte ZTE wrapper (magic that cspstart recognizes)
+# 32-byte ZTE wrapper (magic that cspstart recognizes).
+# 2026-05-24 CRITICAL BUG FIX: adjacent string literals concatenate at parse
+# time BEFORE the `*` operator, so the original
+#   b"...dd" b"\xff" * 16
+# was equivalent to (b"...dd\xff") * 16 = 17*16 = 272 bytes, NOT 32.
+# Result: uImage shifted to offset 272 → cspstart CRC check always failed
+# → every flash silently fell back to slot B (stock).
+# Add explicit `+` between the magic and the FF padding.
 ZTE_WRAPPER = (b"\x33\x33\x33\x33\xcc\xcc\xcc\xcc"
                b"\x88\x88\x88\x88\xdd\xdd\xdd\xdd"
-               b"\xff" * 16)
+               + b"\xff" * 16)
+assert len(ZTE_WRAPPER) == 32, f"ZTE_WRAPPER must be 32 bytes, got {len(ZTE_WRAPPER)}"
 
 LOAD_ADDR  = 0x42000000
 ENTRY_ADDR = 0x42000040
