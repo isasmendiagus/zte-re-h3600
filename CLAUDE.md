@@ -31,9 +31,9 @@ zxic/
 ├── tools/                             ← standalone CLI utilities
 │   ├── find_csp_crc.py                  compute zlib CRC (the cspstart variety)
 │   ├── gen_replay_bins.py               build replay tables for the driver
-│   ├── flash_header_only.py             rewrite BootPara header only
 │   ├── memdump (+.c)                    cross-compiled ARM mem dumper
 │   └── dtr-mod/                         FTDI cable hardware-mod tooling
+│   (NAND flashing now lives in tasks/00.04.flash-tool/)
 │
 ├── tasks/                             ← per-task work folders, dotted-decimal IDs
 │   ├── 00.openwrt-port/                 T0           root goal (PLANNED)
@@ -45,8 +45,10 @@ zxic/
 │   │   ├── captures/                      raw register dumps etc.
 │   │   └── initramfs/                     staging
 │   ├── 00.02.stock-shell/               T0.02        cspd patch + kmsg2uart (DONE)
-│   ├── 00.03.nand-flash/                T0.03        doc-only flash bundle
+│   ├── 00.04.flash-tool/                T0.04        unified NAND flasher (cspstart-aware + free-form raw)
+│   │   └── 00.04.01.tftp-port-probe/     T0.04.01    probe: does U-Boot honor tftpdstp? (DONE — no)
 │   ├── 00.05.firmware-load/             T0.05        umbrella w/ decision tree
+│   ├── 00.07.wifi/                      T0.07        MT7915 over internal PCIe (DONE — wlan0 + internet 2026-05-04)
 │   │   └── 00.05.01.rop-no-uart/         T0.05.01    httpd ROP exploit (incl. task-local ghidra/)
 │   ├── 00.10.explore/                   T0.10        🔬 umbrella for RE/discovery tasks
 │   │   ├── 00.10.01.re-vmlinux/          T0.10.01    knowledge base: stock kernel (Ghidra project here)
@@ -175,7 +177,7 @@ Move from `tools/` back to `tasks/X/scripts/` when:
 
 ### Current promotion candidates (in the codebase as of 2026-05-23)
 
-- `tasks/00.01.eth-driver/scripts/flash_mainline.py` + `tasks/00.02.stock-shell/flash_slot_a.py` both drive U-Boot via UART for TFTP-then-nand-write. **Two real users.** → ready for `lib/uboot_flash.py` extraction (this is the "unify the flash scripts" TODO already noted in `tasks/00.03.nand-flash/README.md`).
+- `tasks/00.04.flash-tool/{nand_layout,bootpara,uboot_flash}.py` — pure-function modules with multiple latent consumers (the per-task flash scripts they could replace). Promote to `lib/` when the second consumer migrates over. (The earlier "unify the flash scripts" TODO from the deleted `00.03.nand-flash` is satisfied by the `00.04.flash-tool` CLI itself.)
 
 ---
 
@@ -243,6 +245,40 @@ that operates on the per-task projects. See `zxic/ghidra/README.md`.
 
 ---
 
+## Documentation hygiene — task folders are forward-looking only
+
+**Task READMEs and findings docs MUST NOT mention obsolete, deleted, or
+superseded artifacts of this project.** No "replaces the old X", no
+"was previously Y", no `~~strikethrough~~` of removed files, no
+"deleted on 2026-XX-XX" entries, no migration tables of "old script →
+new command".
+
+A task's README answers "what is this and how do I use it **today**" —
+not "what came before". When you delete a script or task, also delete
+its name from every task-folder README that mentioned it.
+
+**Where historical record DOES belong:**
+- `CLAUDE.md` "Migration history" section — project-wide chronology
+- `LEARNED.md` — lessons learned from past bugs
+- Git history — the canonical record of what was there before
+- `docs/CHRONICLE.md` — the narrative project log
+
+**Where it does NOT belong:**
+- Any `tasks/NN.NN.*/README.md` or `tasks/NN.NN.*/findings/*.md`
+- Any `lib/` or `tools/` file docstring
+
+Reason: task folders are read by people doing the work *now*. Historical
+clutter forces them to figure out which references are still real. Git
+log is one command away for anyone who needs the "before" picture.
+
+**Exception**: legitimate upstream/external history (e.g. "the Linux
+kernel removed ZTE platform support in 2021" in
+`tasks/00.openwrt-port/README.md`) — that's project *rationale*, not
+internal obsolescence, and it stays. The rule is about **our project's
+own deletions**.
+
+---
+
 ## Common conventions
 
 ### Python style
@@ -307,8 +343,10 @@ that operates on the per-task projects. See `zxic/ghidra/README.md`.
   added (README, LEARNED, ROADMAP, STATE). Old paths like `mainline_eth/`,
   `stock_traced/`, `H3600/` may still appear in archived/parked docs — fix
   in-place if you touch them.
-- **2026-05-22**: NAND-flash bundle consolidated into `tasks/00.03.nand-flash/`
-  (now the single source of truth for NAND layout + CRC rules + flash scripts).
+- **2026-05-22**: NAND-flash bundle originally consolidated into `tasks/00.03.nand-flash/`
+  as an index of scripts + CRC rules. **Superseded 2026-05-23** by `tasks/00.04.flash-tool/`
+  which replaces the per-task flash scripts with one unified CLI; 00.03 folder removed.
+  Layout reference now lives in `nand_layout.py` (code) + `docs/NAND_LAYOUT_AND_BOOT.md` (narrative).
 - **2026-05-23**: Spanish kernel-archaeology + DTR-mod tooling + orca refs
   pulled in from ZTE/ sibling dirs before they were compressed.
 - **2026-05-23**: task folders renamed to dotted-decimal scheme (see "Task
@@ -317,7 +355,7 @@ that operates on the per-task projects. See `zxic/ghidra/README.md`.
 
 **Open chores** (do opportunistically when touching adjacent files):
 - TFTP daemon needs restart whenever the serve-dir path changes:
-  `sudo pkill -f 'in.tftpd' && sudo in.tftpd -L --secure --create -a 192.168.1.50:69 /home/ubuntu/Projects/MYSELF/ZTE/zxic/tftp`
+  `sudo pkill -f 'in.tftpd' && sudo in.tftpd -L --secure --create -a 192.168.1.50:69 /home/ubuntu/Projects/MYSELF/ZTE/tftp`
 - Translate `docs/CHRONICLE.md` from Spanish chunk by chunk
 - Several `docs/*.md` (SLOT_A_CSPD_PATCH_PLAYBOOK, NAND_PERSISTENCE_PLAN,
   STOCKPORT_PLAN, PCIE_DRIVER_DESIGN, WEB_RE) still have `mainline_eth/`

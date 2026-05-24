@@ -8,7 +8,7 @@ DO NOT TOUCH:
   0x00000000-0x000bffff — bootloader (BRICK risk)
   0x00700000-0x025fffff — slot A kernel region (we keep stock kernel here)
   0x02700000+           — slot B (factory recovery fallback)
-Full NAND map + flash invariants: see tasks/00.03.nand-flash/README.md.
+Full NAND map + flash invariants: see tasks/00.04.flash-tool/README.md.
 
 Prerequisite: run `./prepare_slot_a.sh` first to produce the files in zxic/tftp/.
 

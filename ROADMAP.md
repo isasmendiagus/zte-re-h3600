@@ -128,10 +128,10 @@ Host pings device, device replies. ARP works. Sustained traffic.
 
 ## Cleanup backlog (nice-to-have, no urgency)
 
-- **Unify the 5 flash scripts** into a single `tools/flash.py` with
-  parameters `--mode=ram|nand --what=kernel|rootfs|both --slot=A|B
-  --src=<file>`. Eliminate duplicated U-Boot-drive logic. See
-  `tasks/00.03.nand-flash/README.md` "TODO — unify into one parameterized script".
+- ~~**Unify the 5 flash scripts** into a single `tools/flash.py`~~ — **DONE 2026-05-23**:
+  `tasks/00.04.flash-tool/flash.py` (subcommands: kernel/rootfs/both/header/raw).
+  Migrating the per-task call sites (eth-driver `flash_mainline.py`, stock-shell
+  `flash_slot_a.py` etc.) to invoke the unified CLI is an open opportunistic chore.
 - **Soft-float busybox** for `tasks/00.01.eth-driver/initramfs/bin/busybox`
   (already #1 in "Now"; mentioned here for completeness).
 - **Translate `docs/CHRONICLE.md` to English** (currently Spanish; grep

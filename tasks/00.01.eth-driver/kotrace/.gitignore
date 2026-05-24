@@ -1,0 +1,10 @@
+# Kbuild out-of-tree artifacts — regeneratable from .c via `make`
+*.o
+*.ko
+*.mod.c
+*.mod.o
+*.mod
+.*.cmd
+.tmp_versions/
+modules.order
+Module.symvers

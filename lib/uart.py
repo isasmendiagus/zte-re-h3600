@@ -32,7 +32,38 @@ LOG  = "/tmp/uart.log"
 def open_port():
     """Open the serial port and immediately release DTR so we don't hold the
     MCU in reset. DTR=True asserts (pin LOW); DTR=False de-asserts (pin HIGH).
-    For active-low RESET, we want DTR=False (HIGH) during normal operation."""
+    For active-low RESET, we want DTR=False (HIGH) during normal operation.
+
+    Transport selection via env vars:
+      UART_TCP=1                  → go through the bridge daemon (see
+                                    tasks/00.04.02.uart-bridge/). Lets other
+                                    processes monitor UART concurrently via
+                                    `nc localhost 9999` or
+                                    `tail -f /tmp/uart_bridge.log`.
+      UART_TCP_HOST=hostname      → default localhost
+      UART_TCP_DATA_PORT=N        → default 9999
+      UART_TCP_CTL_PORT=N         → default 9998
+
+    Default (no UART_TCP) keeps the direct-pyserial path. The bridge daemon
+    must be running for the TCP path to work; see the README in 00.04.02.
+    """
+    if os.environ.get("UART_TCP"):
+        # Lazy import + sys.path push so we don't pollute the default path
+        import sys as _sys
+        _here = os.path.dirname(os.path.abspath(__file__))
+        _bridge_dir = os.path.normpath(
+            os.path.join(_here, "..", "tasks/00.04.02.uart-bridge"))
+        if _bridge_dir not in _sys.path:
+            _sys.path.insert(0, _bridge_dir)
+        from lib_uart_tcp import open_port as _tcp_open  # type: ignore
+        host = os.environ.get("UART_TCP_HOST", "localhost")
+        dport = int(os.environ.get("UART_TCP_DATA_PORT", "9999"))
+        cport = int(os.environ.get("UART_TCP_CTL_PORT",  "9998"))
+        ser = _tcp_open(host=host, data_port=dport, ctl_port=cport,
+                        timeout=0.1)
+        ser.setDTR(False)   # release reset on the bridge side
+        return ser
+
     ser = serial.Serial()
     ser.port = PORT
     ser.baudrate = BAUD

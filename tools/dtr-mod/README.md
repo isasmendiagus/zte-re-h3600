@@ -65,6 +65,6 @@ when setting up a new cable or diagnosing why the reset stopped working.
 
 ## See also
 
-- `tasks/00.03.nand-flash/README.md` "DTR-pin hardware mod" — the runtime
+- `tasks/00.04.flash-tool/README.md` "DTR-pin hardware mod" — the runtime
   consumer's view (how it gets used during flash sequences)
 - `lib/uart.py::reset()` — the function every `auto_*` script calls

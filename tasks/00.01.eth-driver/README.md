@@ -2,9 +2,9 @@
 
 **ID**: 00.01
 **Parent**: [00 openwrt-port](../00.openwrt-port/)
-**Children**: none yet (open work lives in `research/*.md`; promote to a subfolder if it grows scripts+artifacts)
+**Children**: [00.01.01.fix-lief-rel-sections](../00.01.01.fix-lief-rel-sections/) (LIEF upstream fix), [kotrace/](kotrace/) (loader-notifier RAM-patch tracer, working)
 **TaskList items**: #53, #87, #89, #90, #91, #92, #93, #103, #104
-**Status**: ACTIVE — RX path dead (`research/rx_path_dead.md`); TX intermittent.
+**Status**: ACTIVE — RX path dead (`research/rx_path_dead.md`); TX intermittent. Init-sequence trace tooling working (see [findings/idea_a_kotrace.md](findings/idea_a_kotrace.md)) — first switch.ko init trace captured 2026-05-23.
 
 **Goal**: port the ZTE-proprietary ethernet stack (Traffic Manager + Switch +
 PP packet processor + CLA + IDM CPU port + BMU buffer manager) to a clean
@@ -43,7 +43,17 @@ tasks/00.01.eth-driver/
 │   ├── README.md                     template + lifecycle
 │   ├── rx_path_dead.md               THE blocker (#87, #91, #92, #93)
 │   └── printk_injection_methodology.md  the RE methodology to unblock RX (#103, #104)
-└── findings/                       ← answered investigations (promoted from research/)
+├── findings/                       ← answered investigations
+│   ├── ko_splice_bugs.md             why on-disk LIEF splicing fails on this kernel (3 bugs)
+│   └── idea_a_kotrace.md             the working RAM-patch tracer + first init trace captured
+├── kotrace/                        ← the working tracer kmod (Idea A)
+│   ├── README.md                     operator's manual
+│   ├── kotrace.c                     module-notifier + RAM-patcher
+│   ├── hello.c                       Phase A1 build-env sanity .ko
+│   ├── Makefile                      out-of-tree build against 4.1.25 tree
+│   └── build_rootfs_with_kotrace.py  bake into a rootfs + insmod-at-boot via init.norm
+├── out/                            ← gitignored build artifacts (rootfs, spliced .kos)
+└── PLAN_init_debug.md              ← phased plan for the init RE work
 ```
 
 The kernel source + build output live at the zxic/ root (not inside this
@@ -81,7 +91,7 @@ Two modes — pick based on what you're doing:
 | **RAM-only** (ephemeral, fast iter) | Active driver dev | `python3 ../../lib/uart.py auto_bootm_dtb_appended` |
 | **NAND-persistent** (slot A) | Shipping a build | `python3 scripts/flash_mainline.py` |
 
-See `tasks/00.03.nand-flash/README.md` for NAND layout + CRC rules + the DTR
+See `tasks/00.04.flash-tool/README.md` for NAND layout + CRC rules + the DTR
 hardware mod that enables auto-reset. See `docs/ITERATE.md` Loop A for
 the full iter cycle.
 
@@ -104,7 +114,7 @@ The research thread tying #87/#91/#92/#93 together is
 
 - `tasks/00.02.stock-shell/` — custom slot-A rootfs + kmsg2uart daemon (gives
   persistent UART + SSH on **stock** kernel — the RE oracle for this task)
-- `tasks/00.03.nand-flash/README.md` — NAND layout + flash bundle (read before any flash)
+- `tasks/00.04.flash-tool/README.md` — unified flasher (read before any flash)
 - `tasks/99.01.linux-stockport/` — vanilla 4.1.25 + stock-shim attempt (parked)
 - `tasks/99/pcie_re/` — PCIe driver RE (the MT7915 WiFi sits on PCIe)
 - `../../docs/KERNELS.md` — where all 3 kernel trees live + which to use

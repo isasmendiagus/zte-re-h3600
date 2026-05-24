@@ -68,8 +68,9 @@ Read in this order. Each doc is the entry point for a different question.
 Specialized references:
 - **`docs/HOST_SETUP.md`** — host-side services (TFTP, tcpdump, USB-eth IP,
   DTR mod). What needs to be running on your PC for anything to work.
-- **`tasks/00.03.nand-flash/README.md`** — read THIS before any NAND write.
-  NAND layout + BootPara CRC rules + every flash script's role + DTR mod.
+- **`tasks/00.04.flash-tool/README.md`** — read THIS before any NAND write.
+  Two-tier flasher (cspstart-aware + free-form raw), safety guards, DTR mod,
+  pre-flight checklist, recovery scenarios.
 - **`docs/CROSS_COMPILE_GUIDE.md`** — toolchain (soft-float, no VFP).
 - **`docs/EXTERNAL_RESEARCH.md`** — orca, XYUU, winnt5, Stefan — who did what before us.
 - **`docs/CHRONICLE.md`** — historical narrative log (Spanish, archival).
@@ -90,7 +91,7 @@ zxic/
 │   ├── eth-driver/   ← mainline 6.6 + zx279128-eth.ko (THE main work)
 │   │   ├── research/ ← LIVE investigations — one file per open question
 │   │   └── findings/ ← answered investigations (promoted from research/)
-│   ├── nand-flash/   ← NAND layout + flash recipes bundle (doc-only)
+│   ├── flash-tool/   ← unified NAND flasher (cspstart-aware + free-form)
 │   └── parked/       ← linux-stockport, pcie_re — frozen attempts
 ├── ext/              ← READ-ONLY golden: h3600_nand_full.bin, partitions/, rootfs/
 ├── docs/             ← consolidated reference docs (was scattered top-level)

@@ -181,19 +181,99 @@ does not exist. dynamic tracing is DEAD on stock.
   on UART. So any kernel `printk` is visible to us.
 - Stock device can SSH (`admin / UkuGPeyRDU` @ `192.168.1.1`).
 - We can `rmmod` + `insmod` arbitrary .ko files.
-**Methodology**: **binary-patch stock `.ko` to add `printk` calls.**
-- Pick target function in Ghidra, find safe insertion offset.
-- Splice in `push {r0-r3, lr}; ldr r0,=fmt; mov r1, <arg>; bl printk; pop {r0-r3, lr}`.
-- Add a relocation entry for the `printk` symbol (kernel resolves at insmod).
-- Add the fmt string to `.rodata`.
-- Re-flash the patched .ko into slot-A rootfs (or push via SCP, rmmod, insmod).
-- Watch UART for the new printk lines.
-**Reference**: `tasks/99.01.linux-stockport/auto_patch_plat.py` has a working
-pattern (originally for symbol fixups; recycle the ELF splicing).
-**Why this is the path**: hook-module-via-kallsyms_lookup_name (Tier 3)
-needs ABI-matched build environment; binary patching (Tier 4) needs only
-`pyelftools` + Ghidra offsets. Tier 4 is what's actually viable today.
-**Reference doc**: `docs/STRATEGY_STOCK_AS_ORACLE.md` Tier 4.
+
+**Methodology (working, 2026-05-23)**: **loader-notifier kernel module
+that patches target .ko's `.text` in RAM** — `tasks/00.01.eth-driver/kotrace/`.
+- Build with the matching kernel tree at `tasks/99.01.linux-stockport/linux-4.1.25/`
+  → vermagic `4.1.25 SMP mod_unload ARMv7` matches stock.
+- Insmod kotrace.ko BEFORE the target — easiest via `/etc/init.norm` edit
+  (see `kotrace/build_rootfs_with_kotrace.py`).
+- Register `register_module_notifier()`; at MODULE_STATE_COMING (after
+  relocs/kallsyms set up, before init_module), walk `mod->kallsyms->symtab`
+  for target names, allocate exec memory with `module_alloc()`, build 32-byte
+  thunks with ALREADY-RESOLVED runtime addresses (no relocations needed),
+  `set_memory_rw` + overwrite first insn + `flush_icache_range` + `set_memory_ro`.
+- Each thunk writes a 1-byte marker directly to PL011 (bypasses kmsg2uart).
+- Full writeup: `tasks/00.01.eth-driver/findings/idea_a_kotrace.md`.
+
+**Methodology that DOESN'T work (don't redo)**: on-disk LIEF/ELF splicing
+of the .ko file. Three distinct bugs documented in
+`tasks/00.01.eth-driver/findings/ko_splice_bugs.md` — last one bricks
+the device without any panic message even on a no-op thunk. Cost to
+discover from scratch: ~1.5 days. The runtime-tracer approach above is
+strictly simpler.
+
+**Why kotrace works where binary-splicing didn't**: by patching after the
+kernel's own loader has run, we work with FULLY RESOLVED addresses — no
+relocations, no symbol-table surgery, no new ELF sections to confuse the
+loader. The patches are 4-byte direct branches to thunks that live in
+`module_alloc()`'d memory.
+
+---
+
+## Symptom: kernel module insmod fails `unknown symbol in module, or unknown parameter`
+**Cause**: this kernel doesn't `EXPORT_SYMBOL` several headers-only-declared
+helpers. Confirmed missing on stock 4.1.25 ZTE build: `module_alloc`,
+`set_memory_rw`, `set_memory_ro`, `find_module`. They exist in
+`/proc/kallsyms` (as `T` text symbols), so they CAN be called — just
+not at link time.
+**Fix**: lookup at module init via `kallsyms_lookup_name()` (which IS
+exported) and store function pointers:
+```c
+static void *(*p_module_alloc)(unsigned long);
+static int (*p_set_memory_rw)(unsigned long, int);
+...
+static int __init my_init(void) {
+    p_module_alloc = (void *)kallsyms_lookup_name("module_alloc");
+    if (!p_module_alloc) return -ENOENT;
+    ...
+}
+```
+**Reference**: `tasks/00.01.eth-driver/kotrace/kotrace.c`. Verify per-symbol
+with `cat /proc/kallsyms | busybox grep ' SYMBOL_NAME$'` on the device.
+**Cost when not known**: 1 cycle of "why did insmod fail?" = ~10 min.
+
+---
+
+## Symptom: kernel module's writel-to-PL011 output gets truncated after ~16 bytes
+**Cause**: PL011 has a 16-byte TX FIFO. Writing more bytes per burst without
+checking `FR.TXFF` (TX FIFO full) silently drops everything past 16. On
+this ZTE-shifted PL011, the **FR register is at offset `+0x14`** (stock
+PL011 is `+0x18`) — easy to get wrong and then the poll loop NOPs.
+**Fix**: poll FR.TXFF (bit 5) before every writel:
+```c
+#define PL011_FR_OFFSET  0x14    /* ZTE-shifted */
+#define PL011_FR_TXFF    (1u << 5)
+while ((readl(base + PL011_FR_OFFSET) & PL011_FR_TXFF) && --timeout)
+    cpu_relax();
+writel(c, base + PL011_DR_OFFSET);
+```
+**Reference**: `tasks/00.02.stock-shell/kmsg2uart.c` (also at `+0x14`),
+`tasks/00.01.eth-driver/kotrace/kotrace.c`.
+**Cost when not known**: 1 hour of "why is my trace not firing?" — easy
+to misdiagnose as patching not running when it's just output dropped.
+
+---
+
+## Symptom: spliced .ko bootloops the device with no panic message on UART
+**Cause**: on-disk LIEF/ELF patching of switch.ko (or any kernel module)
+hits at least three structural failure modes that look identical from
+the outside:
+1. Displaced first instruction carries a `.rel.text` relocation that
+   gets misapplied to the inserted branch.
+2. LIEF appends LOCAL-binding symbols past `.symtab.sh_info`, producing
+   malformed ELF that the kernel module loader silently mishandles.
+3. A third structural issue (kallsyms layout? exidx?) that bricks even
+   a naked-thunk variant (NOPs + displaced + back-jump only).
+None of these produce a panic message on UART or in dmesg — the system
+just boots, kernel starts, gets partway through module init, then
+silently reboots.
+**Fix**: don't patch the .ko on disk. Use a runtime tracer kernel module
+that patches the target in RAM at MODULE_STATE_COMING — see
+`tasks/00.01.eth-driver/kotrace/` for the working implementation and
+`tasks/00.01.eth-driver/findings/ko_splice_bugs.md` for the full bug
+catalog.
+**Cost when not known**: ~1.5 days of debugging blind bootloops.
 
 ---
 

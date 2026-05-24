@@ -40,6 +40,9 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 
+#include "zx-fpga-reg-tables.h"
+#include "zx-pp-pro-actions.h"
+
 /* Runtime-loaded replay snapshots (was: #include "zx279128-eth-{stock,cla,pm}-regs.h").
  * Bin files live in initramfs at /lib/firmware/zx-replay/{stock,cla,pm}.bin.
  * Each file: [u32 magic 'ZXGR'][u32 count][records...]
@@ -147,7 +150,10 @@ struct zx_replay_pm    { u32 ram_id; u32 ram_addr; u32 data[8];  } __packed;
 /* Stock prints `BPPE_POOL_SIZE=2000` in `pon init` = 0x2000 = 8192. Match
  * stock to avoid buffer exhaustion under sustained traffic (2026-05-22 boot
  * UART capture, tasks/mainline_eth/captures/boot_init_2026-05-22.log line 451). */
-#define TM_BPPE_POOL_SIZE	8192
+#define TM_BPPE_POOL_SIZE	1024	/* was 8192 — 18MB bp_pool failed dma_alloc_coherent
+					 * on default CMA. 1024 entries → ~2.3 MB,
+					 * fits comfortably. Reduce buffer head-room
+					 * but plenty for initial RX validation. */
 #define TM_BP_SIZE		2304	/* stock has 0x900=2304 (NOT 2048!) in TM[0xFC] low16 */
 #define TM_TX_RING_SIZE		1024
 #define TM_TX_DESC_SIZE		16
@@ -233,6 +239,13 @@ struct zx_eth {
 	void __iomem *base;	/* NPP + IDM + MACs + PP + TM (all in 2MB block) */
 	void __iomem *pon_early;	/* 0x92000000-0x921bffff (PON_TOP early regs — CLA tables, etc) */
 	void __iomem *topcrm;	/* clock control (small ioremap of 0x94000000) */
+	void __iomem *fpga_base;	/* unified FPGA window 0x92000000 + 4 MiB
+					 * — addresses every register described in
+					 * zx-fpga-reg-tables.h. Overlaps with `base`
+					 * and `pon_early`; we use it for the
+					 * descriptor-table-driven `zx_fpga_write()`
+					 * helper only (separate from existing direct
+					 * tm_write/pp_write paths). */
 	int irq_idm;
 	int irq_npp;
 	int irq_tm;
@@ -1290,6 +1303,121 @@ static int zx_cla_set_cpu_queue_id(struct zx_eth *e, u32 addr, u8 qid)
 	return zx_cla_write_entry(e, 7, addr, ram7_data);
 }
 
+/* ===================================================================
+ * Phase 4 (in progress, 2026-05-24): per-function ports of stock
+ * chip_tm_init's call chain.
+ *
+ * Each function here is the C equivalent of a stock tm.ko leaf
+ * helper. The data sources used to write them:
+ *   - kotrace runtime trace (call sequence + r0..r3 args), in
+ *     tasks/00.01.eth-driver/findings/captures/kotrace_p3c_full_args.txt
+ *   - register descriptor tables in zx-fpga-reg-tables.h
+ *   - stock disassembly via `arm-linux-gnueabi-objdump --disassemble=<fn>`
+ *
+ * fpga_base is the unified 4 MiB ioremap of 0x92000000..0x923fffff
+ * — the same physical window stock's zx_ponreg.ko maps at virt
+ * 0xf4000000 and accesses via writel(val, fpga_base + off * 4).
+ * =================================================================== */
+
+/* Write one FPGA register, descriptor-table style.
+ * Mirrors stock `tmOnuRegWrite(reg_id, val, sub_idx, table)`:
+ *   addr_off  = table[reg_id].base_off + table[reg_id].stride * sub_idx
+ *   writel(val, fpga_base + addr_off * 4)
+ * No mask/shift handling — stock tmOnuRegWrite does a read-mask-or-write
+ * cycle using table[].mask which we haven't extracted. For now we assume
+ * the descriptor entries we touch want whole-register writes.
+ */
+/* Wrapper around the inline helper in zx-fpga-reg-tables.h that adds
+ * the struct zx_eth's fpga_base lookup + ratelimited dev_warn diagnostics. */
+static int zx_table_write(struct zx_eth *e,
+			  const struct zx_fpga_reg *table, size_t n,
+			  u16 reg_id, u32 val, u32 sub_idx)
+{
+	int rc = zx_fpga_table_write(e->fpga_base, table, n, reg_id, val, sub_idx);
+	if (rc < 0)
+		dev_warn_ratelimited(e->dev, "fpga_table_write(%u, val=%#x, sub=%u): %d\n",
+				     reg_id, val, sub_idx, rc);
+	return rc;
+}
+
+/* Stock tm_port_isolate_set(port, mask).
+ *   8 calls during chip_tm_init, one per port.
+ *   `mask` = bitmap of ports this port may NOT forward to (8-port wide).
+ *   Stock writes sbragRegTable[57] (base 0xe20f0, stride 1, per port).
+ *
+ * Bit-fiddling reproduced from tm_port_isolate_set's disassembly:
+ *   inv = ~mask
+ *   out = ((inv >> 5) & 1)        bit 5 of inv → out bit 0
+ *       | ((inv << 1) & 0x3e)     inv bits 0..4 → out bits 1..5
+ *       |  (inv & 0xc0)           inv bits 6..7 → out bits 6..7
+ * The reshape is to map an 8-port bitmask onto the HW register's bit layout.
+ */
+static int zx_tm_port_isolate_set(struct zx_eth *e, u32 port, u32 mask)
+{
+	u32 inv = ~mask;
+	u32 hw  = ((inv >> 5) & 1u)
+		| ((inv << 1) & 0x3eu)
+		| ( inv       & 0xc0u);
+	return zx_table_write(e, zx_sbragregtable,
+			      ZX_SBRAGREGTABLE_COUNT, 57, hw, port);
+}
+
+/* Stock spa_set_enty_pktdeal_cfg(port, proto, action) →
+ *   tmOnuRegWrite(reg_id = 67 + proto, val = action, sub_idx = port, spaRegTable)
+ * Per disasm of spa_set_enty_pktdeal_cfg @ 0x2b1f4 in tm.ko.
+ * spaRegTable entries 67..137 are packed 2-bit fields (mask 0x3) at
+ * shift = (proto & 7) * 2 within the same register, stride 5 per port. */
+static int zx_spa_set_enty_pktdeal_cfg(struct zx_eth *e, u8 port, u8 proto, u8 action)
+{
+	if (proto > 0x46) return -EINVAL;  /* table has 71 protos */
+	return zx_table_write(e, zx_sparegtable, ZX_SPAREGTABLE_COUNT,
+			      67 + proto, action, port);
+}
+
+/* Replay the def_ptl_pkt_action table for every port × every protocol.
+ * This is stock chip_tm_init's pp_set_pro_action loop, decomposed:
+ * stock calls pp_set_pro_action(pp_inst, proto, action) which internally
+ * loops over ports → spa_set_enty_pktdeal_cfg(port, proto, action). We
+ * write the same configuration directly, port-major. The table
+ * zx_pp_pro_actions[] was extracted from kotrace trace; see
+ * tasks/00.01.eth-driver/findings/chip_tm_init_args.md. */
+static void zx_chip_tm_init_pro_action(struct zx_eth *e)
+{
+	int port, i, ok = 0, fail = 0;
+	for (port = 0; port < 8; port++) {
+		for (i = 0; i < ZX_PP_PRO_ACTION_COUNT; i++) {
+			/* Most entries are symmetric PP0 == PP1; we use PP0 action.
+			 * proto 0x14 differs (PP0=1, PP1=0) — pick the trap variant. */
+			u8 action = zx_pp_pro_actions[i].action_pp0;
+			if (zx_spa_set_enty_pktdeal_cfg(e, port, zx_pp_pro_actions[i].proto, action) == 0)
+				ok++;
+			else
+				fail++;
+		}
+	}
+	dev_info(e->dev, "pro_action replay: %d ok, %d fail (%d entries × 8 ports)\n",
+		 ok, fail, ZX_PP_PRO_ACTION_COUNT);
+}
+
+/* Replay chip_tm_init's per-port isolation loop.
+ * Masks observed in kotrace trace, one per port (sw_init_switch boot path):
+ *   port 0 → 0xff01    port 4 → 0xff10
+ *   port 1 → 0xff02    port 5 → 0xff20 (extrapolated)
+ *   port 2 → 0xff04    port 6 → 0xff40 (extrapolated)
+ *   port 3 → 0xff08    port 7 → 0xff80 (extrapolated)
+ * Each port masks ITSELF off the destination set — standard ONT.
+ */
+static void zx_chip_tm_init_isolate(struct zx_eth *e)
+{
+	int p;
+	for (p = 0; p < 8; p++) {
+		int rc = zx_tm_port_isolate_set(e, p, 0xffffff00u | (1u << p));
+		if (rc)
+			dev_warn(e->dev, "isolate port %d: %d\n", p, rc);
+	}
+	dev_info(e->dev, "port isolation programmed (sbragRegTable[57] x 8)\n");
+}
+
 static void zx_chip_tm_init_trap_queues(struct zx_eth *e)
 {
 	u32 ok = 0, fail = 0;
@@ -2265,6 +2393,15 @@ static int zx_eth_probe(struct platform_device *pdev)
 
 	/* Map PON early region (0x92000000-0x921bffff = 1.5MB) — contains CLA
 	 * tables, FWD configuration, etc. that switch.ko populates. */
+	/* fpga_base: unified 4 MiB window covering pon + npp + idm + tm + pp,
+	 * matching stock zx_ponreg.ko's `fpga_base` (virt 0xf4000000 →
+	 * phys 0x92000000). Used by descriptor-table writes
+	 * (zx-fpga-reg-tables.h). Overlaps with `pon_early` (first 1.75 MiB)
+	 * and `base` (next 2 MiB); fine, the regions read consistently. */
+	eth->fpga_base = devm_ioremap(dev, 0x92000000, 0x400000);
+	if (!eth->fpga_base)
+		return dev_err_probe(dev, -ENOMEM, "ioremap fpga_base failed\n");
+
 	eth->pon_early = devm_ioremap(dev, 0x92000000, 0x1C0000);
 	if (!eth->pon_early)
 		return dev_err_probe(dev, -ENOMEM, "ioremap PON early\n");
@@ -2400,6 +2537,63 @@ static int zx_eth_probe(struct platform_device *pdev)
 		 * Overrides the blanket "qid=7" from cla_apply_replay with the
 		 * stock def_ptl_pkt_map (82 entries × 7 ports). */
 		zx_chip_tm_init_trap_queues(eth);
+
+		/* Phase 4 port (2026-05-24): per-port isolate masks. Stock
+		 * chip_tm_init calls tm_port_isolate_set 8 times. */
+		zx_chip_tm_init_isolate(eth);
+
+		/* Phase 4 cont: pro_action replay — the def_ptl_pkt_action
+		 * table that decides which protocols get trapped to CPU.
+		 * Without this, broadcasts (ARP) don't reach the netdev. */
+		zx_chip_tm_init_pro_action(eth);
+
+		/* Phase 4 IRQ enable — stock chip_tm_init calls
+		 * sbrg_set_irq_en_mask(0xa) once. Per kotrace runtime capture:
+		 * marker '$' fires with r0=0x0000000a during boot init (after
+		 * tm_vlan_check_ena, before sbrg_set_table_sel et al).
+		 * sbrg_set_irq_en_mask writes via sbragRegTable[0] which is a
+		 * raw FPGA offset 0 register (the IRQ enable mask).
+		 * Mainline's tm IRQ stayed at count=0 until we add this. */
+		writel(0xa, eth->fpga_base + 0);
+		dev_info(dev, "FPGA IRQ enable: wrote 0xa to fpga+0 (sbrg_set_irq_en_mask equiv)\n");
+
+		/* Phase 4 BULK replay (state-replay strategy): dump of the full
+		 * FPGA register window (0x92000000 + 4 MiB) captured from a
+		 * STOCK boot where ping works. Replays only non-zero/non-0xff
+		 * entries (25515 records). Skips known DDR-pointing registers
+		 * (BMU/desc base) since stock's addresses don't match ours.
+		 * Format: [magic 'ZXFP'][u32 count][u32 offset, u32 value]... */
+		{
+			const struct firmware *fw = NULL;
+			if (request_firmware(&fw, "zx-replay/fpga.bin", dev) == 0 && fw && fw->size >= 8) {
+				const u8 *p = fw->data;
+				const u32 *hdr = (const u32 *)p;
+				u32 cnt = hdr[1];
+				size_t i, applied = 0, skipped = 0;
+				if (hdr[0] != 0x5046585au /* 'ZXFP' little-endian: Z=0x5a X=0x58 F=0x46 P=0x50 */) {
+					dev_warn(dev, "zx-replay/fpga.bin: bad magic %#x\n", hdr[0]);
+				} else {
+					for (i = 0; i < cnt; i++) {
+						u32 off = *(const u32 *)(p + 8 + i*8);
+						u32 val = *(const u32 *)(p + 12 + i*8);
+						/* skip DDR-pointer registers — they refer to stock's
+						 * reserved DRAM at 0x4Exxxxxx; mainline uses CMA.
+						 * Known: TM[0xE8..0xF8] = bp/desc/jumbo base. */
+						if ((val & 0xff000000u) == 0x4e000000u) {
+							skipped++;
+							continue;
+						}
+						writel(val, eth->fpga_base + off);
+						applied++;
+					}
+					dev_info(dev, "fpga.bin replay: %zu applied, %zu skipped (DDR ptrs), %u total\n",
+						 applied, skipped, cnt);
+				}
+				release_firmware(fw);
+			} else {
+				dev_warn(dev, "zx-replay/fpga.bin missing; bulk replay skipped\n");
+			}
+		}
 
 		/* Replay pp_pm flow_info/sub_ram from stock snapshot */
 		zx_pp_pm_apply_replay(eth);

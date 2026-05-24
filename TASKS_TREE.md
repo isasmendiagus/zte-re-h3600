@@ -13,10 +13,18 @@ For the naming convention itself, see `CLAUDE.md` "Task folder naming".
 ```
 00 openwrt-port              tasks/00.openwrt-port/              📋 PLANNED (root goal — stage 5/6)
 ├── 00.01 eth-driver         tasks/00.01.eth-driver/             🚧 ACTIVE — RX dead, TX intermittent
-│   ├─ (no sub-folders yet; open work in research/*.md)
-│   │  ─ research/rx_path_dead.md            🔥 WIP — the eth-driver blocker
-│   │  ─ research/printk_injection_methodology.md   open — RE methodology
-│   │  ─ findings/                            (empty; promote answered research here)
+│   ├── 00.01.01 fix-lief-rel-sections                            ✅ DONE — LIEF #661 patch
+│   │       Fix to LIEF's silent section-drop on ARM REL files.
+│   │       Forward decl + REL fast-path delegation.
+│   ├── kotrace/                                                  ✅ WORKING — RAM-patch tracer
+│   │       Idea A. Loader-notifier kmod that patches switch.ko's
+│   │       .text in RAM at MODULE_STATE_COMING. Sidesteps the bug
+│   │       classes documented in findings/ko_splice_bugs.md.
+│   │       First init trace captured 2026-05-23.
+│   ├─ research/rx_path_dead.md             🔥 WIP — the eth-driver blocker
+│   ├─ research/printk_injection_methodology.md   superseded by kotrace/
+│   ├─ findings/ko_splice_bugs.md           why on-disk LIEF splicing fails
+│   ├─ findings/idea_a_kotrace.md           the working tracer + init trace
 │   └─ Linked TaskList: #53, #87, #89, #90, #91, #92, #93, #103, #104
 │
 ├── 00.02 stock-shell        tasks/00.02.stock-shell/            ✅ DONE-ENOUGH
@@ -24,15 +32,29 @@ For the naming convention itself, see `CLAUDE.md` "Task folder naming".
 │      (cspd-patch + kmsg2uart bridge → persistent UART on stock kernel.
 │       Used as RE oracle for 00.01.)
 │
-├── 00.03 nand-flash         tasks/00.03.nand-flash/             📚 REFERENCE
-│   └─ Doc-only bundle: NAND layout, BootPara CRC rules, every flash
-│      script's role, DTR mod, RAM-vs-NAND mode, slot-A-vs-B policy.
-│      Read before any NAND write. No scripts of its own.
+├── 00.04 flash-tool         tasks/00.04.flash-tool/             ✅ DONE
+│   │  Unified NAND flasher (kernel/rootfs/both/header/raw subcommands).
+│   │  Lives entirely inside the task folder per CLAUDE.md "rule of two".
+│   │
+│   ├── 00.04.01 tftp-port-probe tasks/00.04.01.tftp-port-probe/  ✅ DONE
+│   │      Confirmed ZTE U-Boot 2013.04 fork does NOT support
+│   │      tftpdstp / tftpdstport / tftp_port → sudo in.tftpd
+│   │      stays. Captured cspstart's csp_crc log as a bonus.
+│   │
+│   └── 00.04.02 uart-bridge tasks/00.04.02.uart-bridge/          🚧 PoC
+│          UART-over-TCP daemon: own /dev/ttyUSB0 long-running,
+│          re-publish on tcp/9999 (data) + tcp/9998 (DTR ctl) +
+│          /tmp/uart_bridge.log. Unblocks concurrent UART access
+│          for flash + monitor + kotrace. Integration into flash.py
+│          via UART_TCP=1 env-var is TaskList #29.
 │
-├── 00.04 mainline-kernel    (not created yet — placeholder for the kernel
-│                             wrap/build/persist work distinct from the
-│                             driver itself; may stay merged with 00.01)
+├── 00.07 wifi               tasks/00.07.wifi/                   ✅ DONE
+│      MT7915 WiFi 6 on internal PCIe. Custom DesignWare PCIe glue
+│      driver `pcie-zx279128s.ko` enables the bus; mainline `mt76` /
+│      `mt7915e` drives the radio. wlan0 STA mode + internet verified
+│      2026-05-04. MSI broken for this geometry → `pci=nomsi` workaround.
 │
+
 ├── 00.06 platform-drivers   tasks/00.06.platform-drivers/       📋 PLANNED (cherry-pick catalog)
 │   │  Umbrella for resurrecting removed-from-mainline ZX SoC drivers.
 │   │  6 known cherry-picks; clk is the urgent one (blocks scaling

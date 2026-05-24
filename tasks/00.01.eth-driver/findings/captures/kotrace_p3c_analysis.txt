@@ -1,0 +1,406 @@
+=== Total entries: 4738 ===
+=== Distinct functions traced: 58 ===
+
+marker  count  function                                       distinct arg patterns
+----------------------------------------------------------------------------------------------------
+  'J'    2704  tm_protocol_pkt_limit_map_set                  2374
+  'K'     467  tm_port_protocol_pktdeal_set                    466
+  'l'     217  tm_protocol_pkt_limit_pps_set                    53
+  'e'     217  adm_set_policing_enable                          53
+  'f'     217  adm_set_pass_pktcnt_persec                       39
+  't'     164  zte_api_pp_set_trap_queue                       158
+  'I'     144  tm_in_port_tpid_select_set                      144
+  'r'     142  zte_api_pp_set_pro_action                       142
+  '8'      75  cla_set_extra_index_table                        75
+  '9'      66  cla_get_extra_index_table                        42
+  'T'      36  tm_tpid_vlu_select_get                            5
+  'Q'      32  tm_vlan_check_ena_set                            31
+  'V'      18  zte_api_sw_vlan_set_port_vlancfg                 16
+  'O'      10  zte_api_sw_other_set_onu_mtu                     10
+  'p'       8  zte_api_sw_port_init                              5
+  'D'       8  tm_mac_da_look_ena_set                            8
+  'L'       8  tm_mac_learn_mode_set                             8
+  'v'       8  zte_api_sw_vlan_set_port_pvid                     8
+  'd'       8  tm_port_pvid_set                                  8
+  'i'       8  zte_api_sw_port_set_port_isolatemask              8
+  'Y'       8  tm_port_isolate_set                               8
+  'b'       8  zte_api_sw_set_port_brdcast                       8
+  'F'       8  tm_port_brdcast_flood_ena_set                     8
+  'B'       8  tm_port_brdcast_fwd_ena_set                       8
+  '0'       8  tm_port_pon_broadcast_floodport_set               8
+  'w'       8  tm_port_dft_broadcst_vltrans_set                  8
+  'u'       8  zte_api_sw_set_port_unicast                       2
+  'U'       8  tm_port_unicast_act_set                           8
+  '2'       8  tm_port_unknwn_unicast_flood_set                  8
+  '3'       8  tm_port_unknwn_unicast_fwd_set                    8
+  '1'       8  tm_port_pon_unicast_floodport_set                 8
+  'z'       8  tm_port_dft_unkunicst_vltrans_set                 8
+  'm'       8  zte_api_sw_set_port_muticast                      2
+  'R'       8  tm_port_multicast_act_set                         8
+  '4'       8  tm_port_unknwn_multicast_flood_set                8
+  '5'       8  tm_port_unknwn_multicast_fwd_set                  8
+  'y'       8  tm_port_dft_multicst_vltrans_set                  8
+  '6'       8  tm_port_unknwn_multicast_floodport_set            8
+  'q'       8  zte_api_pp_set_cpu_queue_rate                     8
+  'E'       5  ethdrv_port_dev_init                              5
+  'c'       2  cla_get_outspace_cfg                              2
+  'a'       2  sbrg_set_table_sel                                2
+  'k'       2  sbrg_set_hash_collision_pktdeal                   2
+  'M'       2  sbrg_set_multicst_md                              2
+  'x'       2  sbrg_set_macaddr_exchange_md                      2
+  'o'       2  cla_set_outspace_cfg                              2
+  'S'       1  sw_init_switch                                    1
+  'W'       1  sw_init_wlan_ssid                                 1
+  'C'       1  chip_tm_init                                      1
+  'G'       1  zte_api_sw_global_init                            1
+  'h'       1  sbrg_set_hash_mode                                1
+  'n'       1  tm_multivlan_mode_set                             1
+  'P'       1  zte_api_pp_global_init                            1
+  '!'       1  cla_set_mac_req_ctrl_config                       1
+  '7'       1  cla_set_dn_unknown_da_action_cfg                  1
+  'g'       1  tm_cla_outspace_cfg_get                           1
+  's'       1  tm_cla_outspace_cfg_set                           1
+  'A'       1  sw_alarm_init                                     1
+
+====================================================================================================
+DISTINCT (r0,r1,r2,r3) PATTERNS PER FUNCTION (only functions with <= 30 distinct)
+====================================================================================================
+
+--- T (tm_tpid_vlu_select_get) — 5 distinct ---
+  r0=0x00008100  r1=0xcd19bcf4  r2=0x00000000  r3=0x00000000  (×1)
+  r0=0x00008100  r1=0xcd19bcf4  r2=0xbf100c34  r3=0x00000000  (×8)
+  r0=0x000088a8  r1=0xcd19bcf4  r2=0xbf100bfc  r3=0x00000000  (×9)
+  r0=0x00009100  r1=0xcd19bcf4  r2=0xbf100be0  r3=0x00000000  (×9)
+  r0=0x00009200  r1=0xcd19bcf4  r2=0xbf100c18  r3=0x00000000  (×9)
+
+--- V (zte_api_sw_vlan_set_port_vlancfg) — 16 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0x00000000  r3=0x00000003  (×1)
+  r0=0x00000000  r1=0x00000000  r2=0x00000fff  r3=0x00000003  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0x00000000  r3=0x00000003  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0x00000fff  r3=0x00000003  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0x00000000  r3=0x00000003  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0x00000fff  r3=0x00000003  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0x00000000  r3=0x00000003  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0x00000fff  r3=0x00000003  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0x00000000  r3=0x00000003  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0x00000fff  r3=0x00000003  (×2)
+  r0=0x00000005  r1=0x00000000  r2=0x00000000  r3=0x00000003  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0x00000fff  r3=0x00000003  (×2)
+  r0=0x00000006  r1=0x00000000  r2=0x00000000  r3=0x00000003  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0x00000fff  r3=0x00000003  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0x00000000  r3=0x00000003  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0x00000fff  r3=0x00000003  (×1)
+
+--- O (zte_api_sw_other_set_onu_mtu) — 10 distinct ---
+  r0=0x00000000  r1=0x000007d0  r2=0xbf0fc924  r3=0x00000000  (×1)
+  r0=0x00000000  r1=0x000007d0  r2=0xbf100400  r3=0x00000001  (×1)
+  r0=0x00000001  r1=0x000007d0  r2=0x00000000  r3=0x00000000  (×1)
+  r0=0x00000001  r1=0x000007d0  r2=0xbf100390  r3=0x00000001  (×1)
+  r0=0x00000002  r1=0x000007d0  r2=0x00000000  r3=0x00000000  (×1)
+  r0=0x00000002  r1=0x000007d0  r2=0xbf1003ac  r3=0x00000001  (×1)
+  r0=0x00000003  r1=0x000007d0  r2=0x00000000  r3=0x00000000  (×1)
+  r0=0x00000003  r1=0x000007d0  r2=0xbf1003c8  r3=0x00000001  (×1)
+  r0=0x00000004  r1=0x000007d0  r2=0x00000000  r3=0x00000000  (×1)
+  r0=0x00000004  r1=0x000007d0  r2=0x00000036  r3=0x00000001  (×1)
+
+--- p (zte_api_sw_port_init) — 5 distinct ---
+  r0=0xcd19bd34  r1=0x00000000  r2=0x00000006  r3=0x00000001  (×1)
+  r0=0xcd19bd34  r1=0x00000000  r2=0x00000010  r3=0x00000001  (×1)
+  r0=0xcd19bd34  r1=0x00000000  r2=0x00000040  r3=0x00000001  (×1)
+  r0=0xcd19bd34  r1=0x00000000  r2=0xbf0fcba8  r3=0x00000001  (×4)
+  r0=0xcd19bd34  r1=0x00650650  r2=0xbf1b68c0  r3=0x00000001  (×1)
+
+--- D (tm_mac_da_look_ena_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000001  r2=0xbf0fc79c  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000001  r2=0xbf0fc79c  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000001  r2=0xbf0fc79c  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000001  r2=0xbf0fc79c  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000001  r2=0xbf0fc79c  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000001  r2=0xbf0fc79c  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000001  r2=0xbf0fc79c  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000001  r2=0xbf0fc79c  r3=0xf4000000  (×1)
+
+--- L (tm_mac_learn_mode_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000001  r2=0xbf0fcb38  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000001  r2=0xbf0fcb38  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000001  r2=0xbf0fcb38  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000001  r2=0xbf0fcb38  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000001  r2=0xbf0fcb38  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000001  r2=0xbf0fcb38  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000001  r2=0xbf0fcb38  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000001  r2=0xbf0fcb38  r3=0xf4000000  (×1)
+
+--- v (zte_api_sw_vlan_set_port_pvid) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+
+--- d (tm_port_pvid_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
+
+--- i (zte_api_sw_port_set_port_isolatemask) — 8 distinct ---
+  r0=0x00000000  r1=0xffffff01  r2=0xbf0fceb8  r3=0x000000ff  (×1)
+  r0=0x00000001  r1=0xffffff02  r2=0xbf0fceb8  r3=0x000000ff  (×1)
+  r0=0x00000002  r1=0xffffff04  r2=0xbf0fceb8  r3=0x000000ff  (×1)
+  r0=0x00000003  r1=0xffffff08  r2=0xbf0fceb8  r3=0x000000ff  (×1)
+  r0=0x00000004  r1=0xffffff10  r2=0xbf0fceb8  r3=0x000000ff  (×1)
+  r0=0x00000005  r1=0xffffff20  r2=0xbf0fceb8  r3=0x000000ff  (×1)
+  r0=0x00000006  r1=0xffffff00  r2=0xbf0fceb8  r3=0x00000006  (×1)
+  r0=0x00000007  r1=0xffffff00  r2=0xbf0fceb8  r3=0x00000007  (×1)
+
+--- Y (tm_port_isolate_set) — 8 distinct ---
+  r0=0x00000000  r1=0xffffff01  r2=0xbf0fceb8  r3=0x000000ff  (×1)
+  r0=0x00000001  r1=0xffffff02  r2=0xbf0fceb8  r3=0x000000ff  (×1)
+  r0=0x00000002  r1=0xffffff04  r2=0xbf0fceb8  r3=0x000000ff  (×1)
+  r0=0x00000003  r1=0xffffff08  r2=0xbf0fceb8  r3=0x000000ff  (×1)
+  r0=0x00000004  r1=0xffffff10  r2=0xbf0fceb8  r3=0x000000ff  (×1)
+  r0=0x00000005  r1=0xffffff20  r2=0xbf0fceb8  r3=0x000000ff  (×1)
+  r0=0x00000006  r1=0xffffff00  r2=0xbf0fceb8  r3=0x00000006  (×1)
+  r0=0x00000007  r1=0xffffff00  r2=0xbf0fceb8  r3=0x00000007  (×1)
+
+--- b (zte_api_sw_set_port_brdcast) — 8 distinct ---
+  r0=0xcd19bd40  r1=0x000000df  r2=0xbf0fcca4  r3=0x000000ff  (×1)
+  r0=0xcd19bd40  r1=0x000000ef  r2=0xbf0fcca4  r3=0x000000ff  (×1)
+  r0=0xcd19bd40  r1=0x000000f7  r2=0xbf0fcca4  r3=0x000000ff  (×1)
+  r0=0xcd19bd40  r1=0x000000fb  r2=0xbf0fcca4  r3=0x000000ff  (×1)
+  r0=0xcd19bd40  r1=0x000000fd  r2=0xbf0fcca4  r3=0x000000ff  (×1)
+  r0=0xcd19bd40  r1=0x000000fe  r2=0xbf0fcca4  r3=0x000000ff  (×1)
+  r0=0xcd19bd40  r1=0x000000ff  r2=0xbf0fcca4  r3=0x00000006  (×1)
+  r0=0xcd19bd40  r1=0x000000ff  r2=0xbf0fcca4  r3=0x00000007  (×1)
+
+--- F (tm_port_brdcast_flood_ena_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0xbf0fcca4  r3=0x000000ff  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0xbf0fcca4  r3=0x000000ff  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0xbf0fcca4  r3=0x000000ff  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0xbf0fcca4  r3=0x000000ff  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0xbf0fcca4  r3=0x000000ff  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0xbf0fcca4  r3=0x000000ff  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0xbf0fcca4  r3=0x00000006  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0xbf0fcca4  r3=0x00000007  (×1)
+
+--- B (tm_port_brdcast_fwd_ena_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0xbf0fcbc4  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0xbf0fcbc4  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0xbf0fcbc4  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0xbf0fcbc4  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0xbf0fcbc4  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0xbf0fcbc4  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0xbf0fcbc4  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0xbf0fcbc4  r3=0xf4000000  (×1)
+
+--- 0 (tm_port_pon_broadcast_floodport_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0xbf0fcbe0  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0xbf0fcbe0  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0xbf0fcbe0  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0xbf0fcbe0  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0xbf0fcbe0  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0xbf0fcbe0  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0xbf0fcbe0  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0xbf0fcbe0  r3=0xf4000000  (×1)
+
+--- w (tm_port_dft_broadcst_vltrans_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0xbf0fcbfc  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0xbf0fcbfc  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0xbf0fcbfc  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0xbf0fcbfc  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0xbf0fcbfc  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0xbf0fcbfc  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0xbf0fcbfc  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0xbf0fcbfc  r3=0xf4000000  (×1)
+
+--- u (zte_api_sw_set_port_unicast) — 2 distinct ---
+  r0=0xcd19bd78  r1=0x00000001  r2=0xbf0fcdd8  r3=0x00000001  (×1)
+  r0=0xcd19bd78  r1=0x00000001  r2=0xbf0fcdd8  r3=0x00000005  (×7)
+
+--- U (tm_port_unicast_act_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000001  r2=0xbf0fcdd8  r3=0x00000005  (×1)
+  r0=0x00000001  r1=0x00000001  r2=0xbf0fcdd8  r3=0x00000005  (×1)
+  r0=0x00000002  r1=0x00000001  r2=0xbf0fcdd8  r3=0x00000005  (×1)
+  r0=0x00000003  r1=0x00000001  r2=0xbf0fcdd8  r3=0x00000005  (×1)
+  r0=0x00000004  r1=0x00000001  r2=0xbf0fcdd8  r3=0x00000005  (×1)
+  r0=0x00000005  r1=0x00000001  r2=0xbf0fcdd8  r3=0x00000001  (×1)
+  r0=0x00000006  r1=0x00000001  r2=0xbf0fcdd8  r3=0x00000005  (×1)
+  r0=0x00000007  r1=0x00000001  r2=0xbf0fcdd8  r3=0x00000005  (×1)
+
+--- 2 (tm_port_unknwn_unicast_flood_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000001  r2=0xbf0fcc18  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000001  r2=0xbf0fcc18  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000001  r2=0xbf0fcc18  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000001  r2=0xbf0fcc18  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000001  r2=0xbf0fcc18  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000001  r2=0xbf0fcc18  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000001  r2=0xbf0fcc18  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000001  r2=0xbf0fcc18  r3=0xf4000000  (×1)
+
+--- 3 (tm_port_unknwn_unicast_fwd_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0xbf0fcc34  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0xbf0fcc34  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0xbf0fcc34  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0xbf0fcc34  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0xbf0fcc34  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000001  r2=0xbf0fcc34  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0xbf0fcc34  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0xbf0fcc34  r3=0xf4000000  (×1)
+
+--- 1 (tm_port_pon_unicast_floodport_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0xbf0fcc50  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0xbf0fcc50  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0xbf0fcc50  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0xbf0fcc50  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0xbf0fcc50  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0xbf0fcc50  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0xbf0fcc50  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0xbf0fcc50  r3=0xf4000000  (×1)
+
+--- z (tm_port_dft_unkunicst_vltrans_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0xbf0fcc6c  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0xbf0fcc6c  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0xbf0fcc6c  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0xbf0fcc6c  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0xbf0fcc6c  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0xbf0fcc6c  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0xbf0fcc6c  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0xbf0fcc6c  r3=0xf4000000  (×1)
+
+--- m (zte_api_sw_set_port_muticast) — 2 distinct ---
+  r0=0xcd19bd50  r1=0x00000001  r2=0xbf0fcdf4  r3=0x00000000  (×6)
+  r0=0xcd19bd50  r1=0x00000001  r2=0xbf0fcdf4  r3=0x00000002  (×2)
+
+--- R (tm_port_multicast_act_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000001  r2=0xbf0fcdf4  r3=0x00000000  (×1)
+  r0=0x00000001  r1=0x00000001  r2=0xbf0fcdf4  r3=0x00000000  (×1)
+  r0=0x00000002  r1=0x00000001  r2=0xbf0fcdf4  r3=0x00000000  (×1)
+  r0=0x00000003  r1=0x00000001  r2=0xbf0fcdf4  r3=0x00000000  (×1)
+  r0=0x00000004  r1=0x00000001  r2=0xbf0fcdf4  r3=0x00000000  (×1)
+  r0=0x00000005  r1=0x00000001  r2=0xbf0fcdf4  r3=0x00000000  (×1)
+  r0=0x00000006  r1=0x00000001  r2=0xbf0fcdf4  r3=0x00000002  (×1)
+  r0=0x00000007  r1=0x00000001  r2=0xbf0fcdf4  r3=0x00000002  (×1)
+
+--- 4 (tm_port_unknwn_multicast_flood_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0xbf0fcb54  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0xbf0fcb54  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0xbf0fcb54  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0xbf0fcb54  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0xbf0fcb54  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0xbf0fcb54  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0xbf0fcb54  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0xbf0fcb54  r3=0xf4000000  (×1)
+
+--- 5 (tm_port_unknwn_multicast_fwd_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0xbf0fcb70  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0xbf0fcb70  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0xbf0fcb70  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0xbf0fcb70  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0xbf0fcb70  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0xbf0fcb70  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0xbf0fcb70  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0xbf0fcb70  r3=0xf4000000  (×1)
+
+--- y (tm_port_dft_multicst_vltrans_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0xbf0fcb8c  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0xbf0fcb8c  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0xbf0fcb8c  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0xbf0fcb8c  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0xbf0fcb8c  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0xbf0fcb8c  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000001  r2=0xbf0fcb8c  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000001  r2=0xbf0fcb8c  r3=0xf4000000  (×1)
+
+--- 6 (tm_port_unknwn_multicast_floodport_set) — 8 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0x00000005  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0x00000005  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0x00000005  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0x00000005  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0x00000005  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0x00000005  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0x00000005  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0x00000005  r3=0xf4000000  (×1)
+
+--- q (zte_api_pp_set_cpu_queue_rate) — 8 distinct ---
+  r0=0x00000000  r1=0x00001f40  r2=0xbf0fac24  r3=0xf4000000  (×1)
+  r0=0x00000001  r1=0x00000000  r2=0xbf0fe94c  r3=0xf4000000  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0xbf0fe94c  r3=0xf4000000  (×1)
+  r0=0x00000003  r1=0x00000000  r2=0xbf0fe94c  r3=0xf4000000  (×1)
+  r0=0x00000004  r1=0x00000000  r2=0xbf0fe94c  r3=0xf4000000  (×1)
+  r0=0x00000005  r1=0x00000000  r2=0xbf0fe94c  r3=0xf4000000  (×1)
+  r0=0x00000006  r1=0x00000000  r2=0xbf0fe94c  r3=0xf4000000  (×1)
+  r0=0x00000007  r1=0x00000000  r2=0xbf0fe94c  r3=0xf4000000  (×1)
+
+--- E (ethdrv_port_dev_init) — 5 distinct ---
+  r0=0xcd0da800  r1=0xcd19bd8c  r2=0x00000000  r3=0xbf19c008  (×1)
+  r0=0xcd0dd000  r1=0xcd19bd8c  r2=0x00000000  r3=0xbf19c008  (×1)
+  r0=0xcd0df000  r1=0xcd19bd8c  r2=0x00000000  r3=0xbf19c008  (×1)
+  r0=0xcd181000  r1=0xcd19bd8c  r2=0x00000000  r3=0xbf19c008  (×1)
+  r0=0xcd183000  r1=0xcd19bd8c  r2=0x00000000  r3=0xbf19c008  (×1)
+
+--- c (cla_get_outspace_cfg) — 2 distinct ---
+  r0=0xbf115308  r1=0xbf11530c  r2=0xbf0fac24  r3=0xf4000000  (×1)
+  r0=0xcd19bd2c  r1=0xcd19bd30  r2=0xbf101468  r3=0x00000000  (×1)
+
+--- a (sbrg_set_table_sel) — 2 distinct ---
+  r0=0x00000001  r1=0x00000001  r2=0xbf0fc994  r3=0x00000001  (×1)
+  r0=0x00000001  r1=0x00008100  r2=0x00009100  r3=0x00009200  (×1)
+
+--- k (sbrg_set_hash_collision_pktdeal) — 2 distinct ---
+  r0=0x00000001  r1=0x00000003  r2=0xbf0fc940  r3=0x00009200  (×1)
+  r0=0x00000001  r1=0x0013dd00  r2=0xbf0fc9b0  r3=0x00000001  (×1)
+
+--- M (sbrg_set_multicst_md) — 2 distinct ---
+  r0=0x00000000  r1=0x00000002  r2=0xbf0fc8ec  r3=0x00009200  (×1)
+  r0=0x00000001  r1=0x040200ff  r2=0xbf0fc710  r3=0x00000001  (×1)
+
+--- x (sbrg_set_macaddr_exchange_md) — 2 distinct ---
+  r0=0x00000000  r1=0x040200ff  r2=0xbf0fc710  r3=0x00009200  (×1)
+  r0=0x00000001  r1=0x00000002  r2=0xbf0fc908  r3=0x00000001  (×1)
+
+--- o (cla_set_outspace_cfg) — 2 distinct ---
+  r0=0x00000001  r1=0x00000000  r2=0x00000000  r3=0x00000000  (×1)
+  r0=0x00000002  r1=0x00000000  r2=0xbf0fac40  r3=0xf4000000  (×1)
+
+--- S (sw_init_switch) — 1 distinct ---
+  r0=0x00000012  r1=0xce4e3274  r2=0xce4e4560  r3=0x00000001  (×1)
+
+--- W (sw_init_wlan_ssid) — 1 distinct ---
+  r0=0x00000019  r1=0x00000000  r2=0x00000007  r3=0x00000001  (×1)
+
+--- C (chip_tm_init) — 1 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0x00000007  r3=0x00000001  (×1)
+
+--- G (zte_api_sw_global_init) — 1 distinct ---
+  r0=0xcd19bdb0  r1=0x00008100  r2=0x00009100  r3=0x00009200  (×1)
+
+--- h (sbrg_set_hash_mode) — 1 distinct ---
+  r0=0x00000000  r1=0x00000001  r2=0xbf0fc994  r3=0x00009200  (×1)
+
+--- n (tm_multivlan_mode_set) — 1 distinct ---
+  r0=0x00000001  r1=0x00000000  r2=0xbf0fc908  r3=0x00000000  (×1)
+
+--- P (zte_api_pp_global_init) — 1 distinct ---
+  r0=0xcd19bd60  r1=0x00001f40  r2=0x00000000  r3=0x00000001  (×1)
+
+--- ! (cla_set_mac_req_ctrl_config) — 1 distinct ---
+  r0=0x00000000  r1=0x00001f40  r2=0x00000001  r3=0xbf102a30  (×1)
+
+--- 7 (cla_set_dn_unknown_da_action_cfg) — 1 distinct ---
+  r0=0x00000001  r1=0x00000600  r2=0xbf0fac78  r3=0xbf102a30  (×1)
+
+--- g (tm_cla_outspace_cfg_get) — 1 distinct ---
+  r0=0xcd19bd2c  r1=0xcd19bd30  r2=0xbf101468  r3=0x00000000  (×1)
+
+--- s (tm_cla_outspace_cfg_set) — 1 distinct ---
+  r0=0x00000001  r1=0x00000000  r2=0x00000000  r3=0x00000000  (×1)
+
+--- A (sw_alarm_init) — 1 distinct ---
+  r0=0x00000000  r1=0x00000000  r2=0x00000000  r3=0x00000001  (×1)
