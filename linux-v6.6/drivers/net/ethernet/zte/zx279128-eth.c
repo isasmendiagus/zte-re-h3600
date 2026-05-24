@@ -263,6 +263,7 @@ struct zx_eth {
 	u32 tm_irq_count;
 	u32 tm_napi_count;
 	u32 tm_rx_count;
+	u32 tm_rx_loopback_drops;
 	u32 tm_tx_count;
 	u32 tm_tx_dropped;
 
@@ -1756,18 +1757,33 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 			if (len > 0 && len < 1600 && e->bp_cpu) {
 				/* Compute BP buffer addr from BPPE: BP_SIZE * bppe_idx */
 				const u8 *src = (const u8 *)e->bp_cpu + (u32)bppe_idx * TM_BP_SIZE;
-				struct sk_buff *skb = netdev_alloc_skb(e->sw_dev, len + 64);
-				if (skb) {
-					skb_reserve(skb, 32);
-					memcpy(skb_put(skb, len), src, len);
-					skb->protocol = eth_type_trans(skb, e->sw_dev);
-					e->sw_dev->stats.rx_packets++;
-					e->sw_dev->stats.rx_bytes += len;
-					netif_receive_skb(skb);
-					e->tm_rx_count++;
-					if (e->tm_rx_count <= 5)
-						dev_info(e->dev, "TM RX q=%d idx=%u len=%u bppe=%u delivered\n",
-							 q, idx, len, bppe_idx);
+				/* LOOPBACK FILTER: HW switch reflects our own outgoing
+				 * frames back to the CPU port. Drop any frame whose source
+				 * MAC matches sw_dev's MAC. (TODO: fix at switch level via
+				 * pon_pp_brg_init equivalent so the switch never reflects.) */
+				if (e->sw_dev && !memcmp(src + 6, e->sw_dev->dev_addr, 6)) {
+					e->tm_rx_loopback_drops++;
+					if (e->tm_rx_loopback_drops <= 5)
+						dev_info(e->dev, "LOOPBACK drop #%u src=%pM dst=%pM ethertype=%04x len=%u\n",
+							 e->tm_rx_loopback_drops, src + 6, src,
+							 ntohs(*(__be16*)(src + 12)), len);
+				} else {
+					struct sk_buff *skb = netdev_alloc_skb(e->sw_dev, len + 64);
+					if (skb) {
+						skb_reserve(skb, 32);
+						memcpy(skb_put(skb, len), src, len);
+						skb->protocol = eth_type_trans(skb, e->sw_dev);
+						e->sw_dev->stats.rx_packets++;
+						e->sw_dev->stats.rx_bytes += len;
+						netif_receive_skb(skb);
+						e->tm_rx_count++;
+						if (e->tm_rx_count <= 10) {
+							dev_info(e->dev, "TM RX q=%d idx=%u len=%u bppe=%u "
+								 "src=%pM dst=%pM ethertype=%04x delivered\n",
+								 q, idx, len, bppe_idx,
+								 src + 6, src, ntohs(*(__be16*)(src + 12)));
+						}
+					}
 				}
 			}
 			e->rx_head[q] = (idx + 1) & (TM_RX_DESC_PER_Q - 1);
@@ -2146,6 +2162,7 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	seq_printf(s, "tm_irq_count      = %u\n", e->tm_irq_count);
 	seq_printf(s, "tm_napi_count     = %u\n", e->tm_napi_count);
 	seq_printf(s, "tm_rx_count       = %u\n", e->tm_rx_count);
+	seq_printf(s, "tm_rx_loopback_drops = %u\n", e->tm_rx_loopback_drops);
 	seq_printf(s, "tm_tx_count       = %u\n", e->tm_tx_count);
 	seq_printf(s, "tm_tx_dropped     = %u\n", e->tm_tx_dropped);
 	seq_printf(s, "tx_head           = %u\n", e->tx_head);
