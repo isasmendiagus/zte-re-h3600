@@ -2838,6 +2838,18 @@ static int zx_eth_probe(struct platform_device *pdev)
 
 		dev_info(dev, "TM ready: IRQ=%d, sw netdev up, CPU MAC + CLA + pp_pm replay done\n",
 			 eth->irq_tm);
+
+		/* 2026-05-24: hardcode FDB entry for known host MAC → port 0.
+		 * Without this, switch floods CPU TX to all ports causing DUPs
+		 * and intermittent loss. Long-term fix is dynamic FDB learning
+		 * (call zx_fdb_add from napi_poll for each new src MAC).
+		 * Host MAC c8:a3:62:e9:59:00 is hardcoded for our test rig. */
+		{
+			const u8 host_mac[6] = {0xc8, 0xa3, 0x62, 0xe9, 0x59, 0x00};
+			int rc = zx_fdb_add(eth, host_mac, 0, 0);
+			dev_info(dev, "FDB add host=%pM port=0 vlan=0 → ret=%d\n",
+				 host_mac, rc);
+		}
 	}
 
 	/* Program FDB so switch knows which port the CPU netdevs live on.
