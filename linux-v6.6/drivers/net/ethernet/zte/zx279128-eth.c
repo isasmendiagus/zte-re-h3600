@@ -1491,6 +1491,55 @@ static void zx_tm_pre_init(struct zx_eth *e)
 	tm_write(e, 0x130, 0x1FFFFF);
 }
 
+/* RED queue config — equivalent of stock plat-zxylzb red_set_queue_cfg.
+ * Decoded from disassembly: poll TM[+0x4018] bit 0 for idle (up to 20 retries),
+ * then commit q_idx|(type<<22) at TM[+0x4014] and write 4 cfg words at +0x401c/
+ * +0x4020/+0x4024/+0x4028. */
+static int zx_red_set_queue_cfg(struct zx_eth *e, u16 q_idx, u32 type,
+				u32 w0, u32 w1, u32 w2, u32 w3)
+{
+	int retries;
+	for (retries = 0; retries < 20; retries++)
+		if (tm_read(e, 0x4018) & 1)
+			break;
+	if (retries == 20)
+		return -EBUSY;
+	tm_write(e, 0x4014, (u32)q_idx | (type << 22));
+	tm_write(e, 0x4028, w3);
+	tm_write(e, 0x4024, w2);
+	tm_write(e, 0x4020, w1);
+	tm_write(e, 0x401c, w0);
+	return 0;
+}
+
+/* pon_tm_red_init equivalent — 4 loops configuring 1168 RED-queue slots.
+ * Stock calls this from tm_pon_tm_init BEFORE pon_tm_dma_init/bmu_init.
+ * Hypothesis: without these queue configs HW receives packets via BMU but
+ * never fires the RX/TX-done bits on TM[+0x100] bits 0/1 → no GIC line 68
+ * IRQ → kernel never sees RX. */
+static void zx_tm_red_init(struct zx_eth *e)
+{
+	int q, fail = 0;
+
+	/* Loop 1: q=0..15, type=0, cfg={0x400, 0, 0, 0} */
+	for (q = 0; q < 16; q++)
+		if (zx_red_set_queue_cfg(e, q, 0, 0x400, 0, 0, 0))
+			fail++;
+	/* Loop 2: q=16..399, type=0, cfg={0x00800400, 0, 0, 0} */
+	for (q = 16; q < 400; q++)
+		if (zx_red_set_queue_cfg(e, q, 0, 0x00800400, 0, 0, 0))
+			fail++;
+	/* Loop 3: q=0..383, type=2, cfg={0x00200020, 0, 0, 0} */
+	for (q = 0; q < 384; q++)
+		if (zx_red_set_queue_cfg(e, q, 2, 0x00200020, 0, 0, 0))
+			fail++;
+	/* Loop 4: q=0..383, type=4, cfg={0xff803fff, 0x0100ff80, 0x00100200, 0x20} */
+	for (q = 0; q < 384; q++)
+		if (zx_red_set_queue_cfg(e, q, 4, 0xff803fff, 0x0100ff80, 0x00100200, 0x20))
+			fail++;
+	dev_info(e->dev, "TM RED init: %d failed of 1168 queue configs (busy timeout)\n", fail);
+}
+
 /* Post-BMU setup (tm_pon_tm_init between bmu_init and pon_tm_net_init).
  *
  * Stock dump 2026-05-21 showed per-instance desc base registers at
@@ -2500,6 +2549,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 		/* Order: pre-init regs → DMA → BMU init → BMU enable → post BMU.
 		 * Matches stock tm_pon_tm_init sequence. */
 		zx_tm_pre_init(eth);
+		zx_tm_red_init(eth);   /* 2026-05-24: queue config — stock does this BEFORE dma/bmu */
 		zx_tm_dma_init(eth);
 		zx_tm_bmu_init(eth);
 		zx_tm_post_bmu(eth);
