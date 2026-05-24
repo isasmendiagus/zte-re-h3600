@@ -1755,12 +1755,12 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 			     desc[4], desc[5], desc[6], desc[7]);
 
 			if (len > 0 && len < 1600 && e->bp_cpu) {
-				/* Compute BP buffer addr from BPPE: BP_SIZE * bppe_idx */
-				const u8 *src = (const u8 *)e->bp_cpu + (u32)bppe_idx * TM_BP_SIZE;
-				/* LOOPBACK FILTER: HW switch reflects our own outgoing
-				 * frames back to the CPU port. Drop any frame whose source
-				 * MAC matches sw_dev's MAC. (TODO: fix at switch level via
-				 * pon_pp_brg_init equivalent so the switch never reflects.) */
+				/* Compute BP buffer addr from BPPE: BP_SIZE * bppe_idx.
+				 * HW prepends a 16-byte metadata header before the actual
+				 * ethernet frame (diag dump 2026-05-24 showed bytes 0-15
+				 * are zeros, eth frame starts at +0x10). */
+				const u8 *bp_buf = (const u8 *)e->bp_cpu + (u32)bppe_idx * TM_BP_SIZE;
+				const u8 *src = bp_buf + 16;	/* skip HW metadata header */
 				if (e->sw_dev && !memcmp(src + 6, e->sw_dev->dev_addr, 6)) {
 					e->tm_rx_loopback_drops++;
 					if (e->tm_rx_loopback_drops <= 5)
