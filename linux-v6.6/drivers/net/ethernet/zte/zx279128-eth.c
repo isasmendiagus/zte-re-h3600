@@ -2104,18 +2104,23 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	desc = (u8 *)e->txdesc_cpu + e->tx_head * TM_TX_DESC_SIZE;
 	memset(desc, 0, TM_TX_DESC_SIZE);
 	TXCP(e, 4, "desc[%u]=%p prepared (memset done, BP_SIZE=%u)", e->tx_head, desc, TM_BP_SIZE);
+	/* 2026-05-24: corrected TX desc format from RE of stock pon_tm_net_tx +
+	 * pon_tm_data_raw_send. Stock writes:
+	 *   desc[0]  = 0x80 (byte 0 of u32 = 0x00000080)
+	 *   desc[1..3] = 0 (rest of first u32)
+	 *   desc[4..7] = 0x00010000  (so desc[6]=1)
+	 *   desc[8..11] = 0x01000000 INITIALLY (so desc[11]=1 = TX VALID bit),
+	 *     then pon_tm_data_raw_send does bfi(len, #9, #14) preserving bit 24
+	 *     and adds bp_hi at low byte.
+	 *   desc[12..13] = 2 or 3 (set by caller; pon_tm_data_raw_send adds len<<2)
+	 * Our old code wrote desc[11]=0x20 (bit 29) instead of 0x01 (bit 24).
+	 * Bit 24 is what HW likely treats as "VALID — process this desc". */
 	desc[0]  = 0x80;
-	desc[1]  = 0xc9;
-	*(u32 *)(desc + 4) = cpu_to_le32(0x10000);
-	/* Word at offset 8: stock encodes (bp_hi byte0) + (len << 9 in bits[22:9])
-	 * + byte 11 = 0x20 valid bit (= word bits [31:24] = 0x20).
-	 * Per pon_tm_data_raw_send decompile:
-	 *   *(u32 *)(desc+8) = (orig & 0xff8001ff) | (len << 9)
-	 *   desc[8] = bp >> 7  (byte write, into bits [7:0] of same word)
-	 *   desc[11] |= 0x20   (byte write into bits [31:24]) */
+	desc[1]  = 0x00;	/* was 0xc9 — stock leaves 0 */
+	*(u32 *)(desc + 4) = cpu_to_le32(0x00010000);
 	*(u32 *)(desc + 8) = cpu_to_le32(((bp >> 7) & 0x7f) |
 					 ((len & 0x3fff) << 9) |
-					 (0x20U << 24));
+					 (0x01U << 24));	/* was 0x20 — fixed to 0x01 */
 	desc[7]  = (bp & 0x7f) << 1;
 	/* bytes 12-13 = len encoding (parallel to bits[22:9] above) */
 	if (len < 64)
