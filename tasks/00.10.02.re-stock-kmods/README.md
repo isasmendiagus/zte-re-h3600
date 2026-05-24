@@ -61,9 +61,35 @@ Fork to your consumer task's local `ghidra/` for experiments.**
 
 ## Currently known findings
 
-(populated as discoveries from consumer tasks get promoted here. Today
-this is empty — existing kmod findings still live in consumer tasks'
-`research/` notes, e.g. `00.01.eth-driver/research/rx_path_dead.md`.)
+### Index
+- [`findings/HW_BLOCKS_INVENTORY.md`](findings/HW_BLOCKS_INVENTORY.md) —
+  **canonical HW inventory** of every block discovered in the stock kmods.
+  13 sub-blocks (sbrg, spa, cla, dpa, adm, sadm, sdet, greg, qmg, red,
+  pm, uopc/sopc, smct, usch, sch) + the 9 MMIO regions stock ioremaps
+  (vs our 1) + the 5 IRQs stock services (vs our 1).
+- [`findings/lan_up_port_lifecycle.md`](findings/lan_up_port_lifecycle.md) —
+  how stock derives the TX desc port encoding (`lan_up_port` global, set
+  by `tm_set_p2pmode` from `sw_other_set_wan_lan_switch`).
+- [`findings/tx_path_stock_decomp.md`](findings/tx_path_stock_decomp.md) —
+  TX desc bit-level format from `pon_tm_data_raw_send` decomp. Documents
+  the descriptor we now emit (desc[11]=0x21, desc[0]=0xc9, pad-to-0x40).
+
+### Massive pseudo-C corpus
+
+All function bodies from the stock .ko files, decompiled headless and
+saved as text — grep-able without needing to re-open Ghidra:
+
+- [`findings/decomp_all_plat_zxylzb_9128S.c`](findings/decomp_all_plat_zxylzb_9128S.c) — 334 fns, 273 KB
+- [`findings/decomp_all_switch.c`](findings/decomp_all_switch.c) — 423 fns, 412 KB
+- [`findings/decomp_all_tm.c`](findings/decomp_all_tm.c) — 1330 fns, 1.9 MB
+- [`findings/decomp_all_idmfdb.c`](findings/decomp_all_idmfdb.c) — 82 fns, 65 KB
+- [`findings/decomp_all_zx_ponreg.c`](findings/decomp_all_zx_ponreg.c) — 10 fns, 4 KB
+- Targeted decomps (older, narrower):
+  `decomp_pon_tm_2026-05-24.txt`, `decomp_pon_tm_net_tx_2026-05-24.txt`
+
+**Regenerate**: see the Jython script pattern in `findings/decomp_all_*.c`
+header comment, or rerun via `analyzeHeadless ghidra/ h3600_kmods
+-process <ko> -noanalysis -scriptPath /tmp -postScript decomp_all.py`.
 
 ## See also
 

@@ -93,6 +93,72 @@ is a **multi-layer HW config** problem:
 
 All of these need to be set up at probe-time. Currently we set up only #6 (implicitly) and partial #4 (SW FDB only, no HW FDB).
 
+## Physical memory map — what stock maps vs us
+
+Stock has **9 separate ioremap'd MMIO regions** split across multiple DT
+nodes. Our mainline collapses to **1 region** (`eth@921c0000` size 2 MiB).
+
+### Stock PON DT node (5 sub-regions)
+
+```c
+pon_base       = of_iomap(pon_node, 0);   // 14 refs  — main PON
+top_crm_base   = of_iomap(pon_node, 1);   // 18 refs  — Top Clock/Reset Mgr (= our topcrm syscon @ 0x94000000)
+sys_ctrl_base  = of_iomap(pon_node, 2);   //  4 refs  — System Control (NEW — we don't have)
+pin_mux_base   = of_iomap(pon_node, 3);   //  0 refs  — Pin Mux (NEW — declared but unused in .ko)
+pon_serdes_base= of_iomap(pon_node, 4);   // 133 refs — PON SerDes (PON-only, GPON optical PHY)
+```
+
+### Stock separate DT nodes (1 region each)
+
+```c
+npp_base = of_iomap(npp_node, 0);  // 92 refs — Network PP
+pp_base  = of_iomap(pp_node, 0);   // 91 refs — Packet Processor (switch)
+tm_base  = of_iomap(tm_node, 0);   // 124 refs — Traffic Manager
+idm_base = of_iomap(idm_node, 0);  // ? refs   — IDM (used by idmfdb.ko)
+```
+
+### Mainline coverage
+
+Our mainline maps **eth@921c0000** size 0x200000 (2 MiB) covering physical
+0x921c0000..0x923c0000. Stock's reg accesses (via `fpga_*_reg` indirect):
+
+| Range (stock dword index) | Translates to (byte offset from stock base 0xf4000000) | Status |
+|---|---|---|
+| `0x10006..0x36000` (6 calls) | `0x40018..0xd8000` | **BEFORE our window** — SerDes/PRBS test, PON physical (PON-only, irrelevant for LAN) |
+| `0x70000..0xe813b` (191 calls) | `0x1c0000..0x3a04ec` | **IN our window** — npp/tm/pp/idm registers ✓ |
+
+So our 2 MiB window IS sufficient size for ethernet — we just don't have
+direct access to `sys_ctrl_base` and `pin_mux_base` regions.
+
+### `data_base` (false positive)
+Initially looked like an MMIO base but is just a strtoul radix variable in a
+parsing helper. Not hardware.
+
+## IRQs — stock registers 5 distinct lines
+
+```c
+g_pon_irq → zx_pon_int        (PON top-level)
+g_npp_irq → pon_npp_int       (NPP)
+g_pp_irq  → zx_pon_pp_int     (PP switch)
+g_tm_irq  → zx_pon_tm_int     (TM — this is THE one we have, GIC 68)
+g_idm_irq → idm_net_int       (IDM — separate from TM!)
+zx_phy_int → request_threaded_irq(...)  per-PHY interrupts (4×)
+```
+
+**Our mainline registers only 1 IRQ: the TM at GIC 68.** We do NOT handle:
+- PON IRQ (PON state changes)
+- NPP IRQ (PHY/MAC events)
+- PP IRQ (switch events: FDB miss, port state change, etc — could matter for FDB learning!)
+- IDM IRQ (separate path for IDM packets)
+- PHY IRQs (link state change — we poll instead)
+
+The **PP IRQ** is the most suspicious miss for our ping bidi. The switch
+may signal "FDB miss / new MAC seen" via IRQ that we never service, so
+the switch never learns and keeps flooding.
+
+DTSI exposes GIC SPIs: 0x0b, 0x26, 0x2c, 0x32, 0x3f, 0x4e (= 11, 38, 44, 50, 63, 78).
+But only ONE is wired to eth (need to check which).
+
 ## What we still haven't decompiled
 
 Other stock .ko in `ext/kmodules_dump/` not yet decompiled:
