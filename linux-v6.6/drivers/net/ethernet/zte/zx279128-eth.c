@@ -2021,6 +2021,8 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 			 bp, len, tm_read(e, 0x8090));
 
 	bp_buf = (u8 *)e->bp_cpu + (u32)bp * TM_BP_SIZE;
+	/* TX: copy skb data to bp_buf + 0 (HW reads from start of BP).
+	 * RX uses bp_buf + 16 (HW prepends 16-byte metadata) — TX is different. */
 	memcpy(bp_buf, skb->data, len);
 	TXCP(e, 3, "BMU alloc OK: bp=%u bp_buf=%p, copied %u bytes from skb", bp, bp_buf, len);
 
