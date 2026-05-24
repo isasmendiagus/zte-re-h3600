@@ -2795,6 +2795,15 @@ static int zx_eth_probe(struct platform_device *pdev)
 			dev_info(dev, "Re-wrote TM[+0xF0] x%d instances to rxdesc_dma=%pad (was overwritten by bulk replay)\n",
 				 TM_NUM_INSTANCES, &eth->rxdesc_dma);
 		}
+		/* CRITICAL fix 2026-05-24: bulk replay also overwrites
+		 * TM[0x10050] (TX_UP_BASE) = 0x4ffdf000 and TM[0x10060] (TX_DN_BASE)
+		 * = 0x4ffef000 — both stock DDR addresses. HW was reading TX desc
+		 * from random kernel memory, seeing invalid descs, dropping all TX.
+		 * Re-write to our txdesc_dma so HW reads our actual ring. */
+		tm_write(eth, TM_REG_DMA_TX_UP_BASE, eth->txdesc_dma);
+		tm_write(eth, TM_REG_DMA_TX_DN_BASE, eth->txdesc_dma);
+		dev_info(dev, "Re-wrote TM[0x10050/0x10060] TX_UP/DN_BASE = txdesc_dma=%pad (was overwritten by bulk replay)\n",
+			 &eth->txdesc_dma);
 
 		dev_info(dev, "TM ready: IRQ=%d, sw netdev up, CPU MAC + CLA + pp_pm replay done\n",
 			 eth->irq_tm);
