@@ -2685,6 +2685,21 @@ static int zx_eth_probe(struct platform_device *pdev)
 		/* Replay pp_pm flow_info/sub_ram from stock snapshot */
 		zx_pp_pm_apply_replay(eth);
 
+		/* CRITICAL fix 2026-05-24: bulk replay above overwrote TM[+0xF0]
+		 * (the RX descriptor base address) with stock's value 0x4ff1f000
+		 * which points at stock's DDR. Mainline's rxdesc_dma is in CMA at
+		 * a totally different address. Re-write our value so HW writes RX
+		 * to our buffer (not random kernel memory). */
+		{
+			int inst;
+			for (inst = 0; inst < TM_NUM_INSTANCES; inst++) {
+				u32 base = inst * TM_INSTANCE_STRIDE;
+				tm_write(eth, base + 0xF0, eth->rxdesc_dma);
+			}
+			dev_info(dev, "Re-wrote TM[+0xF0] x%d instances to rxdesc_dma=%pad (was overwritten by bulk replay)\n",
+				 TM_NUM_INSTANCES, &eth->rxdesc_dma);
+		}
+
 		dev_info(dev, "TM ready: IRQ=%d, sw netdev up, CPU MAC + CLA + pp_pm replay done\n",
 			 eth->irq_tm);
 	}
