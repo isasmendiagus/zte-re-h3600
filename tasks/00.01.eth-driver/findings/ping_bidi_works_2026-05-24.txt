@@ -1,0 +1,38 @@
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on enxc8a362e95900, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+23:45:49.379220 ARP, Request who-has 192.168.1.99 tell 192.168.1.50, length 28
+23:45:50.404451 ARP, Request who-has 192.168.1.99 tell 192.168.1.50, length 28
+23:45:50.620100 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 487, seq 1, length 64
+23:45:50.620103 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 487, seq 2, length 64
+23:45:50.620105 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 487, seq 3, length 64
+23:45:50.620107 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 487, seq 4, length 64
+23:45:50.620160 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 487, seq 5, length 64
+23:45:50.620164 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 487, seq 6, length 64
+23:45:50.620166 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 487, seq 7, length 64
+23:45:50.620187 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 487, seq 8, length 64
+23:45:50.620187 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 487, seq 9, length 64
+23:45:50.620188 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 487, seq 10, length 64
+23:45:50.620188 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 488, seq 1, length 64
+23:45:50.620189 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 488, seq 2, length 64
+23:45:50.620190 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 488, seq 3, length 64
+23:45:50.620190 ARP, Reply 192.168.1.99 is-at f4:f6:47:0f:42:64, length 50
+23:45:50.620282 IP 192.168.1.50 > 192.168.1.99: ICMP echo request, id 489, seq 1, length 64
+23:45:50.620294 IP 192.168.1.50 > 192.168.1.99: ICMP echo request, id 489, seq 2, length 64
+23:45:50.620296 IP 192.168.1.50 > 192.168.1.99: ICMP echo request, id 489, seq 3, length 64
+23:45:50.620191 ARP, Reply 192.168.1.99 is-at f4:f6:47:0f:42:64, length 50
+23:45:50.620192 ARP, Reply 192.168.1.99 is-at f4:f6:47:0f:42:64, length 50
+23:45:50.631873 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 489, seq 1, length 64
+23:45:50.631952 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 489, seq 3, length 64
+23:45:50.631986 IP 192.168.1.99 > 192.168.1.50: ICMP echo reply, id 489, seq 3, length 64
+23:45:50.688803 ARP, Request who-has 192.168.1.50 tell 192.168.1.99, length 50
+23:45:50.688842 ARP, Reply 192.168.1.50 is-at c8:a3:62:e9:59:00, length 28
+23:45:50.738684 ARP, Request who-has 192.168.1.50 tell 192.168.1.99, length 50
+23:45:50.738716 ARP, Reply 192.168.1.50 is-at c8:a3:62:e9:59:00, length 28
+23:45:50.788542 ARP, Request who-has 192.168.1.50 tell 192.168.1.99, length 50
+23:45:50.788585 ARP, Reply 192.168.1.50 is-at c8:a3:62:e9:59:00, length 28
+23:45:50.889464 IP 192.168.1.50 > 192.168.1.99: ICMP echo request, id 489, seq 4, length 64
+23:45:51.395521 IP 192.168.1.50 > 192.168.1.99: ICMP echo request, id 489, seq 5, length 64
+
+32 packets captured
+32 packets received by filter
+0 packets dropped by kernel
