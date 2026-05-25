@@ -2371,16 +2371,12 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	e->sw_dev = ndev;
 	netdev_info(ndev, "sw registered (MAC %pM)\n", ndev->dev_addr);
 
-	/* Phase 5b 2026-05-24: populate HW FDB with our own MAC.
-	 * Stock kotrace captured sbrg_add_mactable(mac=our_mac, port=1) at boot.
-	 * Without this, when device unicast TXes (e.g. ARP reply to host),
-	 * switch can't find dst MAC in FDB → floods or drops → ping fails.
-	 * Try port=1 to match stock, plus port=6 (CPU) as backup. */
+	/* Phase 6 2026-05-24: single port=1 entry only (was port=1 + port=6).
+	 * Stock kotrace captured exactly one sbrg_add_mactable call with port=1.
+	 * Adding port=6 entry may have caused flood / DUPs. */
 	{
-		int rc1 = zx_fdb_add(e, ndev->dev_addr, 0, 1);
-		int rc6 = zx_fdb_add(e, ndev->dev_addr, 0, 6);
-		netdev_info(ndev, "HW FDB seed: self MAC at port=1 rc=%d, port=6 rc=%d\n",
-			    rc1, rc6);
+		int rc = zx_fdb_add(e, ndev->dev_addr, 0, 1);
+		netdev_info(ndev, "HW FDB seed: self MAC at port=1 rc=%d\n", rc);
 	}
 	return 0;
 }
