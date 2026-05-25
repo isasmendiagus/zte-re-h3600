@@ -1824,15 +1824,47 @@ static void zx_pp_ctrl_init(struct zx_eth *e)
  * to UNI ports. Without this, mainline TX never reaches the wire (driver
  * counter increments but no packets seen on host tcpdump).
  * 13 fixed register writes to pp_base = fpga_base + 0x380000. */
+/* CPU port = 5 per stock kotrace (sbrg_set_unknown_unicst_fwd called
+ * 8 times with port 5 = enable=1, others = enable=0). */
+#define ZX_CPU_PORT_BIT		BIT(5)
+#define ZX_ALL_PORTS_BITMAP	0xffu
+
 static void zx_pp_brg_init(struct zx_eth *e)
 {
 	void __iomem *pp = e->fpga_base + 0x380000;
+
+	/* 2026-05-25 — log INHERITED state from U-Boot before we overwrite.
+	 * Lets us see what U-Boot left behind so we can spot regs where we
+	 * may be clobbering a known-good config. Diff against the writes
+	 * below tells us which writes are no-ops vs. destructive. */
+	dev_info(e->dev, "PP_BRG inherited from U-Boot (pre-init):\n");
+	dev_info(e->dev, "  PP[0x8004]=%08x  [0x8008]=%08x  [0x8050]=%08x\n",
+		 readl(pp + 0x8004), readl(pp + 0x8008), readl(pp + 0x8050));
+	dev_info(e->dev, "  PP[0x8188]=%08x (aging_cycle)\n", readl(pp + 0x8188));
+	dev_info(e->dev, "  PP[0x81c0]=%08x (SMAC_LOOK_EN bitmap)\n", readl(pp + 0x81c0));
+	dev_info(e->dev, "  PP[0x81c4]=%08x (LEARN_MODE per port)\n", readl(pp + 0x81c4));
+	dev_info(e->dev, "  PP[0x82c0]=%08x (DA_LOOKUP_EN bitmap)\n", readl(pp + 0x82c0));
+	dev_info(e->dev, "  PP[0x8300]=%08x  [0x8304]=%08x\n",
+		 readl(pp + 0x8300), readl(pp + 0x8304));
+	dev_info(e->dev, "  PP[0x8340]=%08x (PKTDEAL+FWD)\n", readl(pp + 0x8340));
+	dev_info(e->dev, "  PP[0x8344]=%08x  [0x8380]=%08x  [0x863c]=%08x\n",
+		 readl(pp + 0x8344), readl(pp + 0x8380), readl(pp + 0x863c));
+
 	writel(0x020000ff, pp + 0x8004);
 	writel(0xff5555ff, pp + 0x8340);
 	writel(0x0000001e, pp + 0x8344);
 	writel(0x0000001f, pp + 0x8380);
 	writel(0xaaaaaaaa, pp + 0x863c);
-	writel(0x000000ff, pp + 0x81c0);
+
+	/* SMAC_LOOK_EN — 1 bit per port; was 0xff (all 8 enabled).
+	 * 2026-05-25 EXPERIMENT: disable SMAC learn on CPU port (bit 5).
+	 * Hypothesis: switch hairpins our own egress back to CPU port; with
+	 * SMAC learn enabled there, switch updates FDB from the looped-back
+	 * frame (sometimes with src_mac rewritten by switch egress stamping)
+	 * → FDB flap → flood. Disabling CPU-port learn keeps FDB stable.
+	 * LAN ports 0-4,6,7 still learn so external hosts get FDB entries. */
+	writel(ZX_ALL_PORTS_BITMAP & ~ZX_CPU_PORT_BIT, pp + 0x81c0);
+
 	writel(0x00005555, pp + 0x81c4);
 	writel(0x0013f434, pp + 0x8188);
 	writel(0x000000ff, pp + 0x82c0);
@@ -1840,6 +1872,8 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	writel(0x020000ff, pp + 0x8304);
 	writel(0xfffffffa, pp + 0x8050);
 	writel(0x0000ff00, pp + 0x8008);
+	dev_info(e->dev, "PP_BRG post-init: SMAC_LOOK_EN=%02x (CPU port 5 disabled)\n",
+		 readl(pp + 0x81c0));
 
 	/* pon_pp_add_port_to_vlan loop: vlan 0 + 1, port 0..7, action=3.
 	 * brg_ram_set with ram_id=4: poll pp[+0x8018] for idle, then write
@@ -2224,6 +2258,13 @@ static irqreturn_t zx_tm_irq(int irq, void *dev_id)
 static struct delayed_work zx_bmu_dump_work;
 static struct zx_eth *zx_bmu_dump_eth;
 
+/* Periodic STATS dump — DISABLED by default (was flooding the bridge log
+ * every 5s with no actionable change). Re-enable temporarily for debug by
+ * defining ZX_PERIODIC_STATS=1. The one-shot at sw_open+30s is enough for
+ * normal observation; if you need correlation across ping runs, bump the
+ * macro and rebuild. */
+#define ZX_PERIODIC_STATS	0
+
 static void zx_bmu_dump_fn(struct work_struct *w)
 {
 	struct zx_eth *e = zx_bmu_dump_eth;
@@ -2247,8 +2288,9 @@ static void zx_bmu_dump_fn(struct work_struct *w)
 		 alloc, rls, (int)rls - (int)alloc,
 		 bppe_avail, bppi, bp_stat,
 		 tx_kick, tx_done);
-	/* Re-arm: periodic 5s tick so we can correlate stats across ping runs. */
+#if ZX_PERIODIC_STATS
 	schedule_delayed_work(&zx_bmu_dump_work, msecs_to_jiffies(5000));
+#endif
 }
 
 static int zx_sw_open(struct net_device *ndev)
