@@ -50,7 +50,15 @@ cd linux-v6.6 && make ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- O=../build zImag
 # (re-wrap uImage — same mkimage line as step 2)
 
 # 4. Boot the new kernel via TFTP + bootm (no NAND write — temporary)
-nohup python3 -u lib/uart.py auto_bootm_dtb_appended > /tmp/boot.log 2>&1 &
+#    Use the dedicated mainline boot script — goes through uart-bridge so
+#    other processes (your `tail -f /tmp/uart_bridge.log`) keep working,
+#    uses the bridge's atomic DTR_PULSE (single round-trip, ctl port 9998)
+#    instead of client-side DTR hold (which is racy over TCP), and waits
+#    for the literal "Bytes transferred" marker before sending bootm (so
+#    a slow TFTP doesn't get a bootm injected mid-stream).
+python3 tasks/00.01.eth-driver/scripts/tftp_boot_mainline.py
+# Prerequisite: uart-bridge daemon running. If `ss -tln | grep 999[89]`
+# returns nothing, start it: tasks/00.04.02.uart-bridge/uart_bridge.py
 
 # 5. After ~3 min, kill logger, drop into REPL (the C init forks busybox per command)
 pkill -f 'uart\.py log'
