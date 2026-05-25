@@ -25,11 +25,23 @@ make -C tasks/00.01.eth-driver/kotrace
 python3 tasks/00.01.eth-driver/kotrace/build_rootfs_with_kotrace.py
 
 # 3. flash and watch UART
+#
+# flash.py uses the uart-bridge daemon (port 9999 data, 9998 ctl) BY
+# DEFAULT — multiple processes can tail UART concurrently. To opt out
+# pass --direct-uart.
+#
+# Prereq: the bridge must be reachable. Confirm with:
+#     ss -tln | grep -E ':9998|:9999'   # both ports should be LISTEN
+# If not running, flash.py will auto-spawn it; or start manually:
+#     tasks/00.04.02.uart-bridge/uart_bridge.py &
+#
 python3 tasks/00.04.flash-tool/flash.py rootfs \
     --src tasks/00.01.eth-driver/out/rootfs_kotrace_enc.jffs2 \
     | tee /tmp/a3_boot.log
 
 # 4. once boot completes, grep markers from the captured stream
+#    (the bridge also tees everything to /tmp/uart_bridge.log so a parallel
+#     `tail -f /tmp/uart_bridge.log` works during flash too)
 grep -aE "\[ko|patched OK" /tmp/a3_boot.log
 ```
 
