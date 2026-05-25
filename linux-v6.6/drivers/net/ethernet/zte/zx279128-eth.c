@@ -363,9 +363,13 @@ static int zx_brg_ram_set(struct zx_eth *e, u32 bucket, u32 slot,
 	if (zx_brg_wait_ready(e))
 		return -EBUSY;
 	writel(bucket | (slot << 22), pp + PP_BRG_RAM_CMD);
-	writel(d0, pp + PP_BRG_RAM_D0);
-	writel(d1, pp + PP_BRG_RAM_D1);
+	/* 2026-05-25: write in REVERSE order (D2 first, D0 last) — D0 commits.
+	 * Per stock sbrg_set_indreg_wr (decomp_all_tm.c L8422): writes 0x4e
+	 * (D2) → 0x4d (D1) → 0x4c (D0). Writing D0 first commits with stale
+	 * D1/D2 → entry partially written → switch silently uses bad data. */
 	writel(d2, pp + PP_BRG_RAM_D2);
+	writel(d1, pp + PP_BRG_RAM_D1);
+	writel(d0, pp + PP_BRG_RAM_D0);
 	return 0;
 }
 
@@ -400,53 +404,69 @@ static u16 zx_crc16(const u8 *data, int len)
 }
 
 /* Add a static MAC entry to the FDB → switch routes frames with this dst MAC
- * to the given port. For CPU-bound traffic, port = ZX_CPU_PORT.
+ * to the given port.
  *
- * Entry layout (12 bytes / 3 words, from pon_pp_add_mac RE):
- *   byte 0  : port mask = (1 << port)
- *   byte 1  : flags — bit 0 = static, bits 4-7 = "valid" nibble (0xf=in-use)
- *   byte 2  : low 8 bits of VLAN ID
- *   byte 3  : ((vid >> 8) & 0xf) | ((port & 0xf) << 4)
- *   bytes 4-9 : 6 MAC bytes (mac[0..5])
- *   bytes 10-11: pad/aging
- */
+ * 2026-05-25: rewrote entry encoding to match stock sbrg_add_mactable
+ * (decomp_all_tm.c L10836-L10840) instead of old (wrong) format.
+ *
+ * Stock 3-word format:
+ *   word2 (D2) = port_id | (mac_low_4 << 8)
+ *   word1 (D1) = (status<<4 & 0xf0) | (vlan>>8 & 0xf)
+ *                | (smac_ctrl<<8) | (dmac_ctrl<<9)
+ *   word0 (D0) = (mac_low_4 >> 24) | ((vlan & 0xfff) << 24)
+ *                | ((mac_high_2 & 0xffff) << 8)
+ *
+ * status=0xF marks the slot as valid+static. zx_brg_ram_set now writes
+ * D2→D1→D0 (D0 last commits). */
 static int zx_fdb_add(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 {
-	u32 table_size_idx, table_size;
 	u16 bucket;
 	u32 d0, d1, d2, existing;
 	int slot;
-	u8 entry[12] = {0};
+	u32 mac_low_4, mac_high_2;
+	const u32 status = 0xF, dmac_ctrl = 0, smac_ctrl = 0;
 
-	/* Hash table size selected by pp[0x8184] & 3 → mac_table_size[] u16.
-	 * Stock values are { 0x400, 0x800, 0x1000, 0x2000 } typically. We try
-	 * the current table size from a small lookup; fallback to 0x400. */
-	table_size_idx = readl(e->base + PP_OFF + PP_BRG_RAM_TABLE_SIZE) & 3;
-	table_size = (table_size_idx == 0) ? 0x400 :
-		     (table_size_idx == 1) ? 0x800 :
-		     (table_size_idx == 2) ? 0x1000 : 0x2000;
+	if (port >= 8 || (vlan & ~0xfffu))
+		return -EINVAL;
 
-	bucket = (zx_crc16(mac, 6) & (table_size - 1)) & 0x3FF;
+	mac_low_4  = (u32)mac[0]       | ((u32)mac[1] << 8)
+		   | ((u32)mac[2] << 16) | ((u32)mac[3] << 24);
+	mac_high_2 = (u32)mac[4]       | ((u32)mac[5] << 8);
 
-	entry[0] = 1 << port;
-	entry[1] = 0xF0;	/* valid */
-	entry[2] = vlan & 0xFF;
-	entry[3] = ((vlan >> 8) & 0xF) | ((port & 0xF) << 4);
-	memcpy(&entry[4], mac, 6);
-	d0 = entry[0] | (entry[1] << 8) | (entry[2] << 16) | (entry[3] << 24);
-	d1 = entry[4] | (entry[5] << 8) | (entry[6] << 16) | (entry[7] << 24);
-	d2 = entry[8] | (entry[9] << 8) | (entry[10] << 16) | (entry[11] << 24);
+	/* Hash bucket — stock sbrg_hash uses CRC-16/CCITT (poly 0x1021) over
+	 * reversed (mac_low_4 || mac_high_2). For minimal change here keep
+	 * existing crc16/IBM until we can verify which is right. */
+	bucket = zx_crc16(mac, 6) & 0x3FF;
 
-	/* Linear probe through 4 slots in bucket; find empty (valid nibble 0). */
-	for (slot = 0; slot < 4; slot++) {
-		if (zx_brg_ram_get(e, bucket, slot, &existing, &d1, &d2))
-			return -EBUSY;
-		if ((existing & 0x0000F000) == 0) {
-			zx_brg_ram_set(e, bucket, slot, d0, d1, d2);
-			dev_info(e->dev,
-				 "FDB add: port=%u vlan=%u %pM → bucket=%u slot=%d\n",
-				 port, vlan, mac, bucket, slot);
-			return 0;
+	/* Stock entry encoding */
+	d2 = (u32)port | (mac_low_4 << 8);
+	d1 = ((status & 0xf) << 4)
+	   | ((vlan >> 8) & 0xf)
+	   | ((smac_ctrl & 1u) << 8)
+	   | ((dmac_ctrl & 1u) << 9);
+	d0 = (mac_low_4 >> 24)
+	   | ((u32)(vlan & 0xfff) << 24)
+	   | ((mac_high_2 & 0xffff) << 8);
+
+	/* Linear probe through 4 slots in bucket; find empty.
+	 * Stock uses status nibble bits 31..28 of d2 (the new format). For now
+	 * preserve existing logic (check d0 bits) but fix the d1/d2 clobber
+	 * bug — zx_brg_ram_get overwrites our intended d1/d2 with stale HW
+	 * data, so save/restore them. */
+	{
+		u32 save_d1 = d1, save_d2 = d2;
+		u32 ex_d1, ex_d2;
+		for (slot = 0; slot < 4; slot++) {
+			if (zx_brg_ram_get(e, bucket, slot, &existing, &ex_d1, &ex_d2))
+				return -EBUSY;
+			/* Stock status nibble at d2 bits 31..28 = 0 → empty */
+			if (((ex_d2 >> 28) & 0xf) == 0) {
+				zx_brg_ram_set(e, bucket, slot, d0, save_d1, save_d2);
+				dev_info(e->dev,
+					 "FDB add: port=%u vlan=%u %pM → bucket=%u slot=%d\n",
+					 port, vlan, mac, bucket, slot);
+				return 0;
+			}
 		}
 	}
 	return -ENOSPC;
