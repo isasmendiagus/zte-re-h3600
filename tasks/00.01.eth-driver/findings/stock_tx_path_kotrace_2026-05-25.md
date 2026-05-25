@@ -60,6 +60,43 @@ Confirmed mechanics:
   (`pon_tm_timer_func`), NOT inline with TX — it drains the HW done
   counter on a separate schedule.
 
+## Stock vs mainline — register-level mismatch
+
+### `soft_insert_tx_1desc` decomp
+
+```c
+void soft_insert_tx_1desc(undefined4 param_1, int param_2) {
+  dma_cache_maint(param_1, 0x10, 1);   // flush 16-byte desc to RAM
+  if (param_2 == 0) tm[0x10054] = 1;   // upstream kick
+  else              tm[0x10064] = 1;   // downstream kick
+}
+```
+
+**Direction selection**: `pon_tm_data_raw_send` passes `direction` through.
+Our trace shows direction=1 (DN) for LAN-side ICMP replies. The
+mainline driver kicks ONLY `tm[0x10054]` (UP) and has the DN kick
+commented out — yet ping-bidi has been working. Hypothesis: in the
+current mainline init, switch routing forces packets onto the UP queue
+regardless, so the UP kick happens to drain LAN replies; under load
+this might fall apart. Add DN kick when `skb`-direction is to LAN port,
+or just dual-kick like the earlier baseline did.
+
+### `pon_tm_check_tx_done_nolock` decomp
+
+```c
+void pon_tm_check_tx_done_nolock(int param_1) {
+  if (param_1 != 1) net_txq[16] -= tm[0x10058] & 0xffff;  // UP done
+  else              net_txq[44] -= tm[0x10068] & 0xffff;  // DN done
+}
+```
+
+Subtracts HW done-counter from an SW outstanding counter. Stock runs
+this from `pon_tm_timer_func` (independent of the TX kick path).
+Mainline reads `tm[0x10058]` in STATS but never explicitly drains
+`tm[0x10068]` — could explain why STATS shows `tx_done=0` even when
+wire emissions ARE happening (we're reading the wrong counter for
+LAN traffic).
+
 ## Differences from mainline driver
 
 Mainline `zx279128-eth.c` already has the bp_buf+16 wire-format fix
