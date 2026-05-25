@@ -138,6 +138,14 @@ static unsigned int          n_patches;
  * To revert to legacy hardcoded mode, set #define KOTRACE_USE_V2 0.
  */
 #define KOTRACE_USE_V2 1
+/* Diagnostic mode: when set, kotrace_init does NOTHING beyond ioremap +
+ * kallsyms_lookup + register_notifier — no walks, no patches. The notifier
+ * callback also does nothing past the [ko:C/L name] print. Used to isolate
+ * whether the boot-time hang is in kotrace's heavy init work (alloc /
+ * walks / patches) or in module load itself.
+ *
+ * Set to 1 only when actively diagnosing the bake-in crash; default 0. */
+#define KOTRACE_MINIMAL_BOOT 0
 
 /* Legacy v1 struct kept for the hardcoded arrays below — only .name and
  * .marker are actually used by patch_module(). v2 struct (from header) is
@@ -663,6 +671,11 @@ static int kotrace_notify(struct notifier_block *nb,
 	uart_putc(']');
 	uart_putc('\n');
 
+#if KOTRACE_MINIMAL_BOOT
+	/* Skip patching entirely in MINIMAL_BOOT mode — just observe loads. */
+	return NOTIFY_DONE;
+#endif
+
 	if (mod && action == MODULE_STATE_COMING) {
 		/* Try v2 (auto-generated, 2157 fns) first; fallback to v1
 		 * (hardcoded ~60 fns) if v2 has no entry for this module. */
@@ -854,6 +867,11 @@ static int __init kotrace_init(void)
 	uart_puts("[ko: kotrace loaded]\n");
 	register_module_notifier(&kotrace_nb);
 	uart_puts("[koINIT:F notifier_registered]\n");
+
+#if KOTRACE_MINIMAL_BOOT
+	uart_puts("[koINIT:Z minimal-mode — skipping walks]\n");
+	return 0;
+#endif
 
 	/* For each module we want to trace: if it's already loaded
 	 * (e.g. cspd brought it up before us), patch it now — the
