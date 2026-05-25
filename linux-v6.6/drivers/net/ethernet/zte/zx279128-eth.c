@@ -2546,10 +2546,26 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	 * (likely because we don't have GPON DN traffic but switch routing expects
 	 * activity on DN side too). Keep dual-kick. */
 	tm_write(e, 0x10054, 1);	/* upstream kick */
-	/* 2026-05-24 ping-bidi-works: try single kick now that +16 + BMU fixed.
-	 * Stock soft_insert_tx_1desc kicks ONLY UP for direction=0 (LAN egress).
-	 * Previous attempt at single-kick made things worse PRE-fix; retry now. */
 	/* tm_write(e, 0x10064, 1); */	/* downstream kick — disabled */
+
+	/* Post-kick desc invalidation 2026-05-25:
+	 * pcap data showed HW emitting the SAME TX desc multiple times — host
+	 * received 300 replies for 30 sent (10x amplification), with replies
+	 * for old (cross-run) ICMP seqs continuing to fire. Hypothesis: HW
+	 * keeps polling the desc ring and re-emitting any slot whose valid
+	 * bit (desc[11] bit 5 = 0x20) is still set. Clear it now so HW only
+	 * emits once per kick. Use the prior slot we just wrote (tx_head
+	 * already advanced — subtract 1 with wrap). dma_wmb to push it out
+	 * before HW's next poll cycle. This is the post-kick clear; if HW
+	 * reads desc asynchronously (after kick returns), we'd break TX —
+	 * in which case revert and implement a NAPI-driven reclaim instead. */
+	{
+		u32 prev = (e->tx_head - 1) & (TM_TX_RING_SIZE - 1);
+		u8 *pdesc = (u8 *)e->txdesc_cpu + prev * TM_TX_DESC_SIZE;
+		pdesc[11] &= ~0x20;
+		dma_wmb();
+	}
+
 	TXCP(e, 7, "kick done; TM[0x10058]=%#x (UP cnt) TM[0x10068]=%#x (DN cnt)",
 	     tm_read(e, 0x10058), tm_read(e, 0x10068));
 
@@ -2637,11 +2653,15 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	{
 		int rc = zx_fdb_add(e, ndev->dev_addr, 0, 1);
 		netdev_info(ndev, "HW FDB seed (PP_BRG_RAM): self MAC port=1 rc=%d\n", rc);
-		/* Phase 5l 2026-05-25: disable unknown-unicast flood except CPU.
-		 * Per stock kotrace, ports 0-4,6,7 must have fwd=0, port 5 fwd=1.
-		 * Bitmap 0x20 = bit 5 set = only CPU port. This is the agent-
-		 * identified DUPs fix. */
-		zx_sbrg_set_unknown_unicast_flood_policy(e, 0x20);
+		/* DO NOT call zx_sbrg_set_unknown_unicast_flood_policy(e, 0x20).
+		 * Evidence (Agent 1 RE + git blame): an earlier init at L1831
+		 * already writes PP[0x8340] = 0xff5555ff which is the CORRECT
+		 * stock-matching state: PKTDEAL=1 (normal lookup) for ALL ports
+		 * + FWD enabled on ALL ports + reserved low byte. Disabling FWD
+		 * on LAN ports (the 0x20 = CPU-only bitmap) breaks lookup on
+		 * those ports → every unicast falls through to fallback action
+		 * (drop/flood depending on cla_set_dn_unknown_da_action_cfg).
+		 * Observed: tx_done counter stays at 0, ping 100% loss. */
 	}
 	return 0;
 }
