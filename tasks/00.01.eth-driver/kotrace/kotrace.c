@@ -102,6 +102,21 @@ static void uart_puthex(unsigned long v)
 static u8  *ring_buf;
 static u32  ring_idx;     /* monotonically incremented by thunks; we mask on read */
 
+/* ---------- rmmod-safety: track every patch so exit() can reverse ---------- */
+/* Without this, removing kotrace leaves dangling branches into freed thunk
+ * memory — the next call into a previously-patched function jumps to garbage
+ * and the device crashes. We record every successful patch and restore the
+ * original first instruction at module-exit.
+ *
+ * Sized for the v2 set (~2200 fns); kmalloc'd in init. Per entry: 8B. */
+#define MAX_PATCHES 2400
+struct patch_record {
+	unsigned long func_addr;   /* address whose first insn we replaced */
+	u32           original;    /* the displaced insn (to restore on exit) */
+};
+static struct patch_record *patches;
+static unsigned int          n_patches;
+
 /* ---------- Phase A3 / Phase B-runtime: target functions + thunk codegen
  *
  * Phase B (2026-05-25): the hardcoded switch_targets[] + tm_targets[]
@@ -354,39 +369,55 @@ static u32 arm_encode_strb_at(int rS, int rN)
 #define INSN_PUSH_R4_R7    0xe92d00f0u  /* push {r4, r5, r6, r7} */
 #define INSN_POP_R4_R7     0xe8bd00f0u  /* pop  {r4, r5, r6, r7} */
 
+#define THUNK_BYTES  96   /* 23 insns × 4 = 92, rounded up for alignment.
+                           * Bumped from 72: we added (a) idx-masking insns
+                           * to prevent OOB when ring wraps past 16k events,
+                           * and (b) 3 insns to record func_addr at +20. */
+
 /* ---------- Build thunk in newly-allocated executable memory ---------- */
 
-/* Thunk layout (18 insns × 4 bytes = 72 bytes) — Phase 3b:
+/* Thunk layout (23 insns × 4 bytes = 92 bytes, alloc rounds to 96):
  *  +0   push {r4, r5, r6, r7}      save scratch (keeps SP 8-aligned)
  *  +4   movw r4, #LO(&ring_idx)
  *  +8   movt r4, #HI(&ring_idx)
  * +12   ldr  r5, [r4]               r5 = current idx
  * +16   add  r6, r5, #1
  * +20   str  r6, [r4]               idx++ (non-atomic; init is single-thread)
- * +24   movw r4, #LO(ring_buf)
- * +28   movt r4, #HI(ring_buf)
- * +32   add  r4, r4, r5, lsl #5     r4 = ring_buf + (idx & ~?) * 32
- *                                   (we don't mask; trust RING_ENTRIES is huge)
- * +36   mov  r5, #<marker>
- * +40   strb r5, [r4]               entry[0] = marker
- * +44   str  r0, [r4, #4]           entry[4..7]   = r0
- * +48   str  r1, [r4, #8]           entry[8..11]  = r1
- * +52   str  r2, [r4, #12]          entry[12..15] = r2
- * +56   str  r3, [r4, #16]          entry[16..19] = r3
- * +60   pop  {r4, r5, r6, r7}       restore
- * +64   <displaced original insn>
- * +68   b    func+4
+ * +24   mov  r5, r5, lsl #18        @ low 14 bits → bits 31..18
+ * +28   mov  r5, r5, lsr #13        @ → bits 18..5 (= (idx & 0x3FFF) << 5)
+ *                                   This masks idx to RING_IDX_MASK and
+ *                                   pre-shifts by 5 (since RING_ENTRY_SIZE=32).
+ *                                   Two-insn alternative to `and r5,r5,#imm`
+ *                                   because the mask 0x3FFF doesn't encode
+ *                                   as an 8-bit-rotated ARM immediate.
+ * +32   movw r4, #LO(ring_buf)
+ * +36   movt r4, #HI(ring_buf)
+ * +40   add  r4, r4, r5              r4 = ring_buf + entry_offset (no shift)
+ * +44   mov  r5, #<marker>
+ * +48   strb r5, [r4]                entry[0]    = marker
+ * +52   str  r0, [r4, #4]            entry[4..7] = r0
+ * +56   str  r1, [r4, #8]            entry[8..11]= r1
+ * +60   str  r2, [r4, #12]           entry[12..15]= r2
+ * +64   str  r3, [r4, #16]           entry[16..19]= r3
+ * +68   movw r5, #LO(func_addr)
+ * +72   movt r5, #HI(func_addr)
+ * +76   str  r5, [r4, #20]           entry[20..23]= func_addr (NEW)
+ * +80   pop  {r4, r5, r6, r7}        restore
+ * +84   <displaced original insn>
+ * +88   b    func+4
  *
- * NOTE on the lsl #5: this assumes RING_ENTRY_SIZE == 32. Bumping it
- * needs a new shift constant.
+ * Why masking matters: with v2 patching ~2k functions, post-boot the ring
+ * cycles through 16k entries in seconds. The original thunk did
+ * `add r4, r4, r5, lsl #5` with raw idx — for idx > 16383 it writes past
+ * ring_buf, corrupting whatever sits after it (the 512KB allocation's
+ * next neighbour in the page-allocator's slab/buddy). That's the most
+ * plausible cause of the boot-hang we saw when v2 was baked into the
+ * rootfs.
  *
- * NOTE on overflow: ring_idx grows without bound. We don't mask in the
- * thunk (would cost an extra `and` insn with a 12-bit imm that doesn't
- * fit for arbitrary RING_ENTRIES). With RING_ENTRIES = 4096 and ~250
- * calls during chip_tm_init, we have huge slack. If a future caller
- * blows past 4096, the ring_buf write wraps (idx * 32 mod some power
- * of 2 because of integer overflow) — could corrupt memory past
- * ring_buf. To make safe long-term, mask in the procfs reader.
+ * Recording func_addr (NEW): solves the marker-ambiguity problem —
+ * markers are derived from the function name's first char and thus
+ * collide (e.g. 166 different 'p' functions in our v2 set). On dump,
+ * userspace can resolve func_addr → symbol via the patching log.
  */
 static int build_thunk(void *thunk_mem, u32 displaced, unsigned long func_addr,
 		       char marker)
@@ -403,25 +434,30 @@ static int build_thunk(void *thunk_mem, u32 displaced, unsigned long func_addr,
 	p[3]  = 0xe5945000;   /* ldr r5, [r4] */
 	p[4]  = 0xe2856001;   /* add r6, r5, #1 */
 	p[5]  = 0xe5846000;   /* str r6, [r4] */
-	p[6]  = arm_encode_movw(4, (u16)(buf_ptr & 0xffff));
-	p[7]  = arm_encode_movt(4, (u16)(buf_ptr >> 16));
-	p[8]  = 0xe0844285;   /* add r4, r4, r5, lsl #5 */
-	p[9]  = arm_encode_mov_imm8(5, (u8)marker);
-	p[10] = arm_encode_strb_at(5, 4);   /* strb r5, [r4] */
-	p[11] = 0xe5840004;   /* str r0, [r4, #4]  */
-	p[12] = 0xe5841008;   /* str r1, [r4, #8]  */
-	p[13] = 0xe584200c;   /* str r2, [r4, #12] */
-	p[14] = 0xe5843010;   /* str r3, [r4, #16] */
-	p[15] = INSN_POP_R4_R7;
-	p[16] = displaced;
-	back_b = arm_encode_b(thunk_addr + 68, func_addr + 4);
+	p[6]  = 0xe1a05905;   /* mov r5, r5, lsl #18 */
+	p[7]  = 0xe1a056a5;   /* mov r5, r5, lsr #13 */
+	p[8]  = arm_encode_movw(4, (u16)(buf_ptr & 0xffff));
+	p[9]  = arm_encode_movt(4, (u16)(buf_ptr >> 16));
+	p[10] = 0xe0844005;   /* add r4, r4, r5 */
+	p[11] = arm_encode_mov_imm8(5, (u8)marker);
+	p[12] = arm_encode_strb_at(5, 4);   /* strb r5, [r4] */
+	p[13] = 0xe5840004;   /* str r0, [r4, #4]  */
+	p[14] = 0xe5841008;   /* str r1, [r4, #8]  */
+	p[15] = 0xe584200c;   /* str r2, [r4, #12] */
+	p[16] = 0xe5843010;   /* str r3, [r4, #16] */
+	p[17] = arm_encode_movw(5, (u16)(func_addr & 0xffff));
+	p[18] = arm_encode_movt(5, (u16)(func_addr >> 16));
+	p[19] = 0xe5845014;   /* str r5, [r4, #20] */
+	p[20] = INSN_POP_R4_R7;
+	p[21] = displaced;
+	back_b = arm_encode_b(thunk_addr + 88, func_addr + 4);
 	if (back_b == 0xffffffff) {
 		uart_puts("[ko: back-jump out of range]\n");
 		return -ERANGE;
 	}
-	p[17] = back_b;
+	p[22] = back_b;
 
-	flush_icache_range(thunk_addr, thunk_addr + 72);
+	flush_icache_range(thunk_addr, thunk_addr + THUNK_BYTES);
 	return 0;
 }
 
@@ -457,7 +493,7 @@ static int make_text_readonly(unsigned long addr)
 	return p_set_memory_ro(addr & PAGE_MASK, 1);
 }
 
-#define THUNK_BYTES  72
+/* THUNK_BYTES is now declared above (before build_thunk) */
 
 /* Decide whether the function's first instruction can be safely
  * displaced (= moved into a thunk and replaced with a `b` to it).
@@ -555,6 +591,13 @@ static void patch_module(struct module *mod,
 		*func_p = branch;
 		flush_icache_range(func, func + 4);
 		make_text_readonly(func);
+
+		/* Record for rmmod-time restoration. Drop silently if full. */
+		if (patches && n_patches < MAX_PATCHES) {
+			patches[n_patches].func_addr = func;
+			patches[n_patches].original  = displaced;
+			n_patches++;
+		}
 		uart_puts("  patched OK\n");
 	}
 }
@@ -712,10 +755,11 @@ static ssize_t kotrace_dump_read(struct file *f, char __user *buf,
 		u32 r1 = *(const u32 *)(e + 8);
 		u32 r2 = *(const u32 *)(e + 12);
 		u32 r3 = *(const u32 *)(e + 16);
+		u32 fn = *(const u32 *)(e + 20);   /* func_addr recorded by thunk */
 		char marker = e[0] ? e[0] : '?';
 		line_len = snprintf(line, sizeof(line),
-				    "%5lld %c %08x %08x %08x %08x\n",
-				    entry, marker, r0, r1, r2, r3);
+				    "%5lld %c %08x  %08x %08x %08x %08x\n",
+				    entry, marker, fn, r0, r1, r2, r3);
 		if (line_len <= 0) break;
 		if (written + line_len > count) break;
 		if (copy_to_user(buf + written, line, line_len))
@@ -727,9 +771,28 @@ static ssize_t kotrace_dump_read(struct file *f, char __user *buf,
 	return written;
 }
 
+/* write() to /proc/kotrace_dump zeroes the ring and resets ring_idx.
+ * Lets us snapshot a clean window:
+ *     echo > /proc/kotrace_dump     # reset
+ *     <do something>
+ *     cat /proc/kotrace_dump        # delta
+ * The reset path doesn't lock — we just zero ring_idx then memset.
+ * On a busy device a thunk may fire mid-reset and write to slot N
+ * where N was already memset; that's harmless (we'd read a half-filled
+ * entry but the (entry, marker, regs) tuple still parses).
+ */
+static ssize_t kotrace_dump_write(struct file *f, const char __user *buf,
+				  size_t count, loff_t *ppos)
+{
+	ring_idx = 0;
+	memset(ring_buf, 0, RING_BYTES);
+	return count;
+}
+
 static const struct file_operations kotrace_dump_fops = {
 	.owner  = THIS_MODULE,
 	.read   = kotrace_dump_read,
+	.write  = kotrace_dump_write,
 	.llseek = default_llseek,
 };
 
@@ -750,7 +813,15 @@ static int __init kotrace_init(void)
 	}
 	ring_idx = 0;
 
-	proc_entry = proc_create("kotrace_dump", 0444, NULL, &kotrace_dump_fops);
+	patches = kzalloc(sizeof(*patches) * MAX_PATCHES, GFP_KERNEL);
+	if (!patches) {
+		kfree(ring_buf);
+		iounmap(pl011_base);
+		return -ENOMEM;
+	}
+	n_patches = 0;
+
+	proc_entry = proc_create("kotrace_dump", 0666, NULL, &kotrace_dump_fops);
 	if (!proc_entry) {
 		kfree(ring_buf);
 		iounmap(pl011_base);
@@ -835,7 +906,35 @@ static int __init kotrace_init(void)
 
 static void __exit kotrace_exit(void)
 {
+	unsigned int i;
+
+	/* Stop receiving new module-load events FIRST so no new patches can
+	 * sneak in mid-unpatch. */
 	unregister_module_notifier(&kotrace_nb);
+
+	/* Reverse every patch we made — restore the original first instruction.
+	 * Until this runs, ALL patched functions branch into our thunk memory;
+	 * after kotrace.ko is freed those thunks vanish and any call would
+	 * jump to garbage → kernel oops / silent hang. */
+	if (patches) {
+		uart_puts("[ko: restoring ");
+		uart_puthex(n_patches);
+		uart_puts(" patched fns]\n");
+		for (i = 0; i < n_patches; i++) {
+			unsigned long addr = patches[i].func_addr;
+			u32 *p = (u32 *)addr;
+			if (make_text_writable(addr) < 0)
+				continue;
+			*p = patches[i].original;
+			flush_icache_range(addr, addr + 4);
+			make_text_readonly(addr);
+		}
+		uart_puts("[ko: unpatch done]\n");
+		kfree(patches);
+		patches = NULL;
+		n_patches = 0;
+	}
+
 	if (proc_entry) {
 		proc_remove(proc_entry);
 		proc_entry = NULL;
