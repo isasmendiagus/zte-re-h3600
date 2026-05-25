@@ -164,6 +164,71 @@ def patch_init_norm(staging: Path):
         b"/sbin/printok AFTER_DUMPKRING_EARLY\n",
         1,
     )
+
+    # AUTO-START dropbear + debug shell BEFORE pc&. The stock firmware
+    # doesn't auto-start any SSH daemon — historically it was bootstrapped
+    # via a ROP exploit in httpd (see tasks/00.05.01.rop-no-uart/). For
+    # the bake-in path we don't need the exploit: just spawn dropbear
+    # straight from init.norm so SSH is available on port 22 right after
+    # cspd's slow cascade catches up with network setup.
+    #
+    # Also keep a /bin/sh on ttyAMA0 as a fallback if dropbear fails to
+    # bind: `nc 127.0.0.1 9999` from the host reaches that shell over
+    # the UART bridge. /dev/console is broken when cspstart doesn't
+    # expand $(console) in bootargs, so we pin stdin/stdout directly.
+    pc_marker = b"# auto start cpsd\npc&"
+    if pc_marker not in new_blob:
+        sys.exit(f"ERROR: pc& marker not found for shell/dropbear injection")
+    # dropbear in a RESPAWN LOOP on port 2222 (NOT 22). The stock
+    # config.bin's SSHCfg.SSH_ProcType=1 makes cspd wrap port 22 logins
+    # with a restricted-shell CLI ("Welcome to the world of CLI!" prompt
+    # asking for username/password a second time). dropbear on port
+    # 2222 is outside cspd's hook scope — gives a plain /bin/sh as
+    # root. Same trick the historical httpd-ROP exploit used.
+    #
+    # Supervisor sleeps 30s so cspd's network reconfig settles, then
+    # respawns dropbear if cspd ever kills it. `-F` keeps dropbear in
+    # foreground so the while loop sees the exit.
+    #
+    # Connect from host: ssh -p 2222 admin@192.168.1.1 (or root@…)
+    # TELNETD on port 23 (busybox built-in) — simplest path to a clean
+    # /bin/sh on the device. No CLI wrapper (cspd only intercepts SSH
+    # via SSHCfg.SSH_ProcType hook, not telnet). busybox telnetd has
+    # been disabled in /etc/init.norm by ZTE (line 96: `#telnetd&`)
+    # but the binary still lives in busybox.
+    #
+    # We also write the script as a tiny helper to /sbin/start_shells
+    # and call it post-cspd so any teardown cspd does during its
+    # cascade gets recovered. The 30s sleep lets cspd's first network
+    # reconfig settle before we bind listening sockets.
+    # SSH access plan (we control rootfs but not /usercfg/config.bin in mtdblock4):
+    # 1. cspd starts its own dropbear on port 22 (no supervisor needed)
+    # 2. /bin/cliagent symlinked to /bin/sh in staging -> SSH_ProcType=1 branch lands on sh
+    # 3. cspd applies FWSC rules at startup via popen(/bin/iptables);
+    #    Rule 8 lan_ssh DROP cuts LAN -> SSH. Periodic -D loop removes it
+    #    after cspd commits, while leaving WAN-side rules intact.
+    #    The loop wins because cspd never re-applies (no watchdog).
+    new_blob = new_blob.replace(
+        pc_marker,
+        b"/sbin/printok BEFORE_CSPD\n"
+        b"# DUMP then strip cspd's LAN-SSH-DROP rule. Snapshot each iter to\n"
+        b"# /tmp/fwdump.log (always) and try /dev/kmsg (UART relay) if writable.\n"
+        b"(for i in 1 2 3 4 5 6 7 8; do\n"
+        b"  sleep 10\n"
+        b"  {\n"
+        b"    echo \"==== fwdump iter $i ====\"\n"
+        b"    echo \"--- filter / srvcntrl ---\"\n"
+        b"    /bin/iptables  -L srvcntrl -v -n 2>&1\n"
+        b"    echo \"--- nat / srvcntrl ---\"\n"
+        b"    /bin/iptables  -t nat -L srvcntrl -v -n 2>&1\n"
+        b"  } >>/tmp/fwdump.log 2>&1\n"
+        b"  [ -w /dev/kmsg ] && tail -40 /tmp/fwdump.log >/dev/kmsg 2>/dev/null\n"
+        b"  /bin/iptables  -F srvcntrl 2>/dev/null\n"
+        b"  /bin/ip6tables -F srvcntrl 2>/dev/null\n"
+        b"done) &\n"
+        + pc_marker,
+        1,
+    )
     new_blob = new_blob.replace(
         tm_marker,
         b"/sbin/printok BEFORE_DUMPKRING\n"

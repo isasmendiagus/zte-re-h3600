@@ -137,6 +137,54 @@ Then watch `/tmp/uart_bridge.log`. Expected markers in order:
   within microseconds of the second uart_puts). Hardware watchdog
   may also contribute since cspd never runs to pet it.
 
+## SSH on the bake-in rootfs
+
+The bake-in needs SSH so we can `cat /proc/kotrace_dump` and iterate
+without reflashing. Two ZTE quirks block plain `ssh admin@dev`:
+
+1. **`/bin/dropbear` is patched by ZTE.** After auth it reads
+   `SSHCfg.SSH_ProcType` from `/usercfg/config.bin` via libcfapi:
+   - `=0` → `exec /bin/sh` (plain shell)
+   - `=1` → `exec /bin/cliagent` (the "Welcome to the world of CLI !"
+     restricted prompt that asks for username+password a second time)
+
+   It is hardcoded — NOT pluggable via `/etc/passwd` shell field, NOT
+   PAM, NOT a dropbear argv flag. `-p`/`-F`/`-E` are silently ignored.
+
+2. **FWSC firewall blocks SSH from LAN.** cspd applies its access
+   rules at startup via `popen('/bin/iptables ...')`, populating the
+   `srvcntrl` chain. Rule 8 (`lan_ssh`, FilterTarget=0) drops SSH from
+   the LAN interface within seconds of cspd settling.
+
+Both are configured through `/usercfg/config.bin` (AES-128-CBC,
+flag=4), uploadable through the web admin (Backup/Restore). On a
+stripped rootfs without httpd you can't take that path.
+
+### What the bake-in does instead
+
+- Replaces `/bin/cliagent` with a symlink to `/bin/sh` in staging.
+  When dropbear takes the SSH_ProcType=1 branch and execs
+  `/bin/cliagent`, it actually runs `/bin/sh`. The CLI is bypassed
+  with zero changes to cspd's config.
+- Adds a post-`pc&` loop in init.norm that flushes `srvcntrl` every
+  10 s for the first 80 s, after cspd commits the LAN-SSH-DROP rule
+  (cspd has no watchdog that re-applies — one flush is enough, but
+  the loop guards against slow cspd init).
+- The same loop snapshots `iptables -L srvcntrl -v -n` (filter +
+  nat) to `/tmp/fwdump.log` before each flush so we can audit what
+  cspd is actually installing.
+
+### Note about uploading config_modified.bin
+
+`ext/config_modified.bin` from orca's earlier RE has the right XML
+edits (`SSH_ProcType=0`, `lan_ssh FilterTarget=1`) but is encoded
+**flag=0 (plain zlib)** — orca's `ztetool.py` doesn't AES-wrap on
+encode. This unit's V9.0.20P72 firmware **rejects plain** through
+the web admin (silent failure, config keeps its prior values). The
+`ext/` reference file is therefore not directly upload-ready; build
+a flag=4 wrapper around it (AES-CBC with the H3600 hardcoded keys
+from `docs/CONFIG_EDIT.md`) if you want the web-admin path to work.
+
 ## Next: bisect MINIMAL=0 crash
 
 Approaches under consideration:
