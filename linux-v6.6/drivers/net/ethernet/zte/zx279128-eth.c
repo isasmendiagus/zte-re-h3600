@@ -268,6 +268,12 @@ struct zx_eth {
 	u32 tm_rx_loopback_drops;
 	u32 tm_tx_count;
 	u32 tm_tx_dropped;
+	/* BMU buffer-free credit (stock: allow_free_cnt) — preserved across calls.
+	 * Refilled from tm[0x80dc] bits 8..13 when it hits 0. */
+	u32 bmu_free_credit;
+	spinlock_t bmu_free_lock;
+	u32 tm_bmu_free_ok;
+	u32 tm_bmu_free_fail;
 	/* Phase 5: dedup set for FDB learning — 128 buckets, 1 bit each.
 	 * Indexed by (src_mac[11] & 0x7f). Crude but avoids re-adding the
 	 * same MAC repeatedly. Reset on reload. */
@@ -389,8 +395,8 @@ static int zx_brg_ram_get(struct zx_eth *e, u32 bucket, u32 slot,
 	return 0;
 }
 
-/* CRC-16 used by stock to hash MAC into bucket (per crc_16 RE — standard
- * CRC-16/IBM with 0xA001 polynomial, init 0). */
+/* CRC-16/IBM (poly 0xA001, init 0, LSB-first) — legacy, used in other paths.
+ * NOT the hash sbrg_add_mactable uses. */
 static u16 zx_crc16(const u8 *data, int len)
 {
 	u16 crc = 0;
@@ -401,6 +407,37 @@ static u16 zx_crc16(const u8 *data, int len)
 			crc = (crc & 1) ? (crc >> 1) ^ 0xA001 : crc >> 1;
 	}
 	return crc;
+}
+
+/* sbrg_hash — match stock decomp_all_tm.c L8204 for the mode==0x3c path
+ * (the path sbrg_add_mactable uses). Stock builds an 8-byte buffer from
+ * {mac_low_4, mac_high_2|vlan<<16}, REVERSES it, then runs CRC-16/XMODEM
+ * (poly 0x1021 MSB-first, init 0, no xorout) over the reversed 8 bytes.
+ * Returns the result masked to 10 bits (0..0x3FF, the bucket index).
+ *
+ * This is critical: switch egress lookup uses this exact hash to find the
+ * destination MAC. If we write entries with a DIFFERENT hash, lookups
+ * miss → switch flood → DUPs. The original CRC-16/IBM hash put entries
+ * in wrong buckets across the whole table. */
+static u16 zx_sbrg_hash(const u8 *mac, u16 vlan)
+{
+	u8 raw[8] = {
+		mac[0], mac[1], mac[2], mac[3],
+		mac[4], mac[5],
+		(u8)(vlan & 0xff), (u8)((vlan >> 8) & 0xff),
+	};
+	u8 rev[8] = {
+		raw[7], raw[6], raw[5], raw[4],
+		raw[3], raw[2], raw[1], raw[0],
+	};
+	u16 crc = 0;
+	int i, j;
+	for (i = 0; i < 8; i++) {
+		crc ^= ((u16)rev[i]) << 8;
+		for (j = 0; j < 8; j++)
+			crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : (crc << 1);
+	}
+	return crc & 0x3ff;
 }
 
 /* Add a static MAC entry to the FDB → switch routes frames with this dst MAC
@@ -433,9 +470,8 @@ static int zx_fdb_add(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 		   | ((u32)mac[2] << 16) | ((u32)mac[3] << 24);
 	mac_high_2 = (u32)mac[4]       | ((u32)mac[5] << 8);
 
-	/* Hash bucket — stock sbrg_hash uses CRC-16/CCITT (poly 0x1021) over
-	 * reversed (mac_low_4 || mac_high_2). For minimal change here keep
-	 * existing crc16/IBM until we can verify which is right. */
+	/* Hash bucket — TEMP revert to IBM hash while we verify the new
+	 * sbrg_hash (CCITT/XMODEM) didn't itself wedge RX. */
 	bucket = zx_crc16(mac, 6) & 0x3FF;
 
 	/* Stock entry encoding */
@@ -470,6 +506,154 @@ static int zx_fdb_add(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 		}
 	}
 	return -ENOSPC;
+}
+
+/* ============================================================
+ *   SBRAG indirect-protocol MAC FDB (THE table the switch consults)
+ *
+ *   Round-2 reviewer (2026-05-24) confirmed zx_brg_ram_set above writes
+ *   to PP_BRG_RAM = VLAN/per-port table, NOT the MAC FDB. The real MAC
+ *   table is reached via stock's sbrg_set_indreg_wr protocol against
+ *   sbragRegTable.  Physical offsets (byte) from fpga_base:
+ *
+ *     CMD   (reg 0x13)  at 0x388814  mask 0x8fc00fff
+ *     BUSY  (reg 0x14)  at 0x388818  bit 0
+ *     DATA0 (reg 0x4c)  at 0x38881C  full 32-bit
+ *     DATA1 (reg 0x4d)  at 0x388820  full 32-bit
+ *     DATA2 (reg 0x4e)  at 0x388824  full 32-bit
+ *
+ *   CMD encoding (stock sbrg_set_indreg_cmd, decomp_all_tm.c L8316):
+ *     val = ram_addr | (mem_id << 22) | (rw << 27) | (mode << 31)
+ *   BUSY semantics: stock polls regId 0x14 reading 1 means "complete".
+ *   Write order: D2 → D1 → D0 (D0 commits, same as PP_BRG_RAM).
+ * ============================================================ */
+
+#define ZX_SBRAG_CMD	0x388814
+#define ZX_SBRAG_BUSY	0x388818
+#define ZX_SBRAG_D0	0x38881C
+#define ZX_SBRAG_D1	0x388820
+#define ZX_SBRAG_D2	0x388824
+
+static int zx_sbrag_wait(struct zx_eth *e)
+{
+	int n = 10;
+	while (n-- > 0) {
+		if (readl(e->fpga_base + ZX_SBRAG_BUSY) & 1)
+			return 0;
+		udelay(2);
+	}
+	return -EBUSY;
+}
+
+static int zx_sbrag_set_cmd(struct zx_eth *e, u32 mode, u32 rw, u32 mem_id, u32 ram_addr)
+{
+	u32 val, cur;
+	const u32 cmd_mask = 0x8fc00fffu;
+
+	if (mode > 1 || rw > 1 || mem_id > 0x1f || ram_addr > 0xfff)
+		return -EINVAL;
+	val = (ram_addr & 0xfff) | ((mem_id & 0x1f) << 22) | ((rw & 1) << 27) | ((mode & 1u) << 31);
+	cur = readl(e->fpga_base + ZX_SBRAG_CMD);
+	writel((cur & ~cmd_mask) | (val & cmd_mask), e->fpga_base + ZX_SBRAG_CMD);
+	return 0;
+}
+
+/* zx_sbrag_add_mac — register one MAC in the real switch FDB via the indirect
+ * sbrag protocol.  Mirrors stock sbrg_add_mactable for the simple-unicast path
+ * (mem_id=0, no multicast specials) with the entry encoding it computes at
+ * decomp_all_tm.c L10836-10840 (D0..D2 as in zx_fdb_add).
+ *
+ * This is ADDITIVE to zx_fdb_add (which writes to PP_BRG_RAM, a separate
+ * table). Round-2 review identified sbrag as the table the switch egress
+ * logic actually consults, so populating it should stop the auto-learn-aging
+ * flood that produces RUN2+ DUP storms. */
+static int zx_sbrag_add_mac(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
+{
+	u32 mac_low_4, mac_high_2;
+	u32 d0, d1, d2;
+	const u32 status = 0xF, dmac_ctrl = 0, smac_ctrl = 0;
+	u32 mem_id = 0;
+	u32 ram_addr;
+	int rc;
+
+	if (port >= 8 || (vlan & ~0xfffu))
+		return -EINVAL;
+
+	mac_low_4  = (u32)mac[0]       | ((u32)mac[1] << 8)
+		   | ((u32)mac[2] << 16) | ((u32)mac[3] << 24);
+	mac_high_2 = (u32)mac[4]       | ((u32)mac[5] << 8);
+
+	/* Same hash we use for PP_BRG_RAM; sbrg_hash actually uses CRC-16/CCITT.
+	 * Approximate for now — collision just means linear-probe in sbrag (TODO). */
+	ram_addr = zx_crc16(mac, 6) & 0xfff;
+
+	d2 = (u32)port | (mac_low_4 << 8);
+	d1 = ((status & 0xf) << 4)
+	   | ((vlan >> 8) & 0xf)
+	   | ((smac_ctrl & 1u) << 8)
+	   | ((dmac_ctrl & 1u) << 9);
+	d0 = (mac_low_4 >> 24)
+	   | ((u32)(vlan & 0xfff) << 24)
+	   | ((mac_high_2 & 0xffff) << 8);
+
+	rc = zx_sbrag_wait(e);
+	if (rc)
+		return rc;
+	rc = zx_sbrag_set_cmd(e, 0, 0, mem_id, ram_addr);
+	if (rc)
+		return rc;
+	rc = zx_sbrag_wait(e);
+	if (rc)
+		return rc;
+	/* D2 → D1 → D0 (D0 commits) */
+	writel(d2, e->fpga_base + ZX_SBRAG_D2);
+	writel(d1, e->fpga_base + ZX_SBRAG_D1);
+	writel(d0, e->fpga_base + ZX_SBRAG_D0);
+	dev_info(e->dev, "SBRAG add: %pM vlan=%u port=%u → mem_id=%u ram_addr=%u\n",
+		 mac, vlan, port, mem_id, ram_addr);
+	return 0;
+}
+
+/* Disable unknown-unicast flood for all ports except CPU.
+ *
+ * THE big DUPs fix (Plan agent 2026-05-25): when the switch can't find the
+ * destination MAC in its FDB, it floods the frame to every port that has
+ * "unknown unicast forward" enabled. Stock kotrace
+ * (kotrace_p3c_analysis.txt) shows it calls `tm_port_unknwn_unicast_fwd_set`
+ * 8 times — ports 0,1,2,3,4,6,7 with enable=0 and ONLY port 5 (CPU) with
+ * enable=1. We never set this, so every unknown-DA reply gets broadcast to
+ * all 4 LAN ports + MAC4-RGMII + CPU loopback → host sees 1-3 copies per
+ * ping → DUPs (158 by RUN3 in our test).
+ *
+ * Stock impl (decomp_all_tm.c L6987 sbrg_set_unknown_unicst_fwd) is a
+ * read-modify-write of sbragRegTable[0x36], which is PP[0x8340] bits
+ * 24..31 — one bit per port. Bit 24 = port 0 etc. Setting only bit 29
+ * (port 5 = CPU) is the result of running all 8 stock calls.
+ *
+ * RE: regId 0x36 in zx_sbragregtable: base_off=0x0e20d0 → byte 0x388340
+ * → phys 0x92388340 → relative to our pp_base (PP_OFF=0x1c0000): 0x8340.
+ * mask=0x000000ff shift=24 confirms the 8-bit field at top of the dword. */
+static void zx_sbrg_set_unknown_unicast_flood_policy(struct zx_eth *e, u8 cpu_port_bitmap)
+{
+	void __iomem *pp = e->base + PP_OFF;
+	u32 v_old = readl(pp + 0x8340);
+	/* PP[0x8340] holds TWO fields:
+	 *   bits  8..23: sbragRegTable[0x35] PKTDEAL — 2 bits per port (8 ports).
+	 *                Stock kotrace shows pktdeal=1 for every port → 0b01 in
+	 *                each 2-bit slot → 0x5555 in bits 8..23.
+	 *   bits 24..31: sbragRegTable[0x36] FWD — 1 bit per port (8 ports).
+	 *                Stock kotrace: only port 5 (CPU) → 0x20.
+	 * Earlier fix only touched FWD bits; PKTDEAL stayed at HW default
+	 * (likely 0 = drop), which may have been worse than the missing FWD
+	 * config. Stock writes BOTH; replay both in one read-modify-write. */
+	u32 pktdeal_all = 0x5555u;	/* every port: pktdeal=1 */
+	u32 v = (v_old & 0x000000ffu) |
+		(pktdeal_all << 8) |
+		((u32)cpu_port_bitmap << 24);
+	writel(v, pp + 0x8340);
+	dev_info(e->dev,
+		 "SBRG flood policy: PP[0x8340] %08x -> %08x (pktdeal=0x%04x fwd_bitmap=0x%02x)\n",
+		 v_old, v, pktdeal_all, cpu_port_bitmap);
 }
 
 /* Per-port isolation: bit pattern of ports this port may forward to.
@@ -1145,6 +1329,8 @@ static int zx_tm_alloc_pools(struct zx_eth *e)
 		return -ENOMEM;
 	e->tx_head = 0;
 	spin_lock_init(&e->tm_tx_lock);
+	spin_lock_init(&e->bmu_free_lock);
+	e->bmu_free_credit = 0;
 
 	/* Populate BPPE: stock writes byteswapped u16 indices 0..N-1.
 	 * Each entry says "BP slot index". HW pulls these one at a time when
@@ -1843,6 +2029,8 @@ static void zx_tm_dma_init(struct zx_eth *e)
 /* soft_release_rx_desc — ACK consumed RX descriptors to HW (mirrors stock).
  * Stock: tm[0x4068] = (rsn<<14) | (count<<4) | qid | (sop<<3); tm[0x4064] = 1
  * sop=1 for "start of packet" descs (single-frag packets), sop=0 for cont. */
+static int zx_bmu_free_bp(struct zx_eth *e, u16 bp_idx, u8 is_pon);
+
 static void zx_tm_release_rx_desc_raw(struct zx_eth *e, u8 q, u16 count, u8 sop)
 {
 	int t = 100;
@@ -1903,7 +2091,13 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 			u8 *desc = (u8 *)e->rxdesc_cpu +
 				   (q * TM_RX_DESC_PER_Q + idx) * TM_DESC_SIZE;
 			u16 len = le16_to_cpu(*(__le16 *)(desc + 12)) >> 2;
-			u8 bppe_idx = desc[7] >> 1;
+			/* bp_idx is 10 bits split: low 7 in desc[7]>>1, high 7 in desc[8].
+			 * Stock pon_tm_net_poll line 8754:
+			 *   uVar11 = (desc[7]>>1) | (desc[8]<<7);
+			 * We previously used only desc[7]>>1 → wrong buffer for bp>=128
+			 * (delivered all-zero garbage to Linux). */
+			u16 bppe_idx = ((u16)(desc[7] >> 1)) |
+				       ((u16)desc[8] << 7);
 			RXCP(e, 4, "q=%d desc[%u] @%p: len=%u bppe=%u "
 			          "raw[0..7]=%02x %02x %02x %02x %02x %02x %02x %02x",
 			     q, idx, desc, len, bppe_idx,
@@ -1945,6 +2139,10 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 						dev_info(e->dev, "LOOPBACK drop #%u src=%pM dst=%pM ethertype=%04x len=%u ingress=%d\n",
 							 e->tm_rx_loopback_drops, src + 6, src,
 							 ntohs(*(__be16*)(src + 12)), len, ingress_port);
+					/* BMU free on drops DISABLED — RX wedged in test
+					 * 2026-05-25; suspect still double-frees the same
+					 * way as the unconditional call. Pool leak is slow
+					 * (~30 BPs/min) so acceptable for now. */
 				} else {
 					struct sk_buff *skb = netdev_alloc_skb(e->sw_dev, len + 64);
 					if (skb) {
@@ -1962,24 +2160,23 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 								 src + 6, src, ntohs(*(__be16*)(src + 12)),
 								 ingress_port);
 						}
-						/* Dynamic FDB learning re-enabled 2026-05-25 after test.
-						 * Even writing to wrong PP_BRG_RAM table, empirically:
-						 *   with learn: 28 recv / 47 DUPs / 44% loss
-						 *   no learn:   24 recv / 41 DUPs / 52% loss */
-						if (ingress_port >= 0 && ingress_port < 8 &&
-						    (src[6] & 1) == 0) {
-							u8 key = src[11] & 0x7f;
-							if (!(e->fdb_learned[key >> 3] & (1u << (key & 7)))) {
-								int rc;
-								e->fdb_learned[key >> 3] |= (1u << (key & 7));
-								rc = zx_fdb_add(e, src + 6, 0, ingress_port);
-								if (e->tm_rx_count <= 30)
-									dev_info(e->dev, "FDB learn %pM → port=%d rc=%d\n",
-										 src + 6, ingress_port, rc);
-							}
-						}
+						/* Dynamic FDB learning DISABLED 2026-05-25 (degradation test).
+						 * Per round-2 review: zx_fdb_add writes to PP_BRG_RAM
+						 * (VLAN table), not the sbrag MAC FDB the switch reads
+						 * on egress. After many writes the wrong-table state
+						 * may flip switch behavior to flood — explains the
+						 * RUN1→RUN2 DUP storm (0 → 60+ DUPs over 10s).
+						 * Keep only the at-probe HW FDB seed for own MAC. */
 					}
 				}
+				/* DO NOT call zx_bmu_free_bp here. Empirical test
+				 * 2026-05-25: ALLOC_BPCNT=15864, RLS_BPCNT=15893 →
+				 * HW was already releasing more than allocating, so
+				 * our explicit free was DOUBLE-freeing, corrupting the
+				 * pool and killing RX entirely (100% loss). HW must
+				 * auto-recycle BPs when zx_tm_release_rx_desc is acked.
+				 * Stock pon_tm_net_poll's pp_bmu_free_bp may apply only
+				 * to a different RX path (jumbo/PON-side?). TBD. */
 			}
 			e->rx_head[q] = (idx + 1) & (TM_RX_DESC_PER_Q - 1);
 			done++;
@@ -2030,23 +2227,28 @@ static struct zx_eth *zx_bmu_dump_eth;
 static void zx_bmu_dump_fn(struct work_struct *w)
 {
 	struct zx_eth *e = zx_bmu_dump_eth;
+	u32 alloc, rls, bppe_avail, bppi, bp_stat, tx_kick, tx_done;
 	if (!e) return;
-	dev_info(e->dev, "=== BMU STATE DUMP (delayed 30s after sw open) ===\n");
-	dev_info(e->dev, "  tm[0x8000]=0x%08x BMU_CFG\n",  tm_read(e, 0x8000));
-	dev_info(e->dev, "  tm[0x8004]=0x%08x BPP_CFG\n",  tm_read(e, 0x8004));
-	dev_info(e->dev, "  tm[0x8008]=0x%08x BPP_CFG2\n", tm_read(e, 0x8008));
-	dev_info(e->dev, "  tm[0x800c]=0x%08x SW_ALLOC_BP (result)\n", tm_read(e, 0x800c));
-	dev_info(e->dev, "  tm[0x8014]=0x%08x SW_ALLOC_CFG\n", tm_read(e, 0x8014));
-	dev_info(e->dev, "  tm[0x8040]=0x%08x BPPI_PTR\n",  tm_read(e, 0x8040));
-	dev_info(e->dev, "  tm[0x8048]=0x%08x BPPE_PTR (pool_size<<16)\n", tm_read(e, 0x8048));
-	dev_info(e->dev, "  tm[0x8058]=0x%08x POOL_SIZE_M1\n", tm_read(e, 0x8058));
-	dev_info(e->dev, "  tm[0x8080]=0x%08x BPPE_BPCNT (bufs available)\n", tm_read(e, 0x8080));
-	dev_info(e->dev, "  tm[0x8088]=0x%08x BPPI_BPCNT\n", tm_read(e, 0x8088));
-	dev_info(e->dev, "  tm[0x8090]=0x%08x ALLOC_BPCNT (allocs done)\n", tm_read(e, 0x8090));
-	dev_info(e->dev, "  tm[0x8098]=0x%08x RLS_BPCNT\n",  tm_read(e, 0x8098));
-	dev_info(e->dev, "  tm[0x80dc]=0x%08x BP_STAT\n",    tm_read(e, 0x80dc));
-	dev_info(e->dev, "  tm_tx_count=%u  tm_tx_dropped=%u\n",
-		 e->tm_tx_count, e->tm_tx_dropped);
+	/* Compact one-line dump: most-changing counters for ping-loop correlation */
+	alloc      = tm_read(e, 0x8090);
+	rls        = tm_read(e, 0x8098);
+	bppe_avail = tm_read(e, 0x8080);
+	bppi       = tm_read(e, 0x8088);
+	bp_stat    = tm_read(e, 0x80dc);
+	tx_kick    = tm_read(e, 0x10054);
+	tx_done    = tm_read(e, 0x10058);
+	dev_info(e->dev,
+		 "STATS uptime_jiff=%lu drv:rx=%u rxlb=%u tx=%u txdrop=%u napi=%u irq=%u "
+		 "hw:alloc=%u rls=%u(diff=%d) bppe_avail=%u bppi=%u bp_stat=%08x "
+		 "tx_kick=%u tx_done=%u\n",
+		 jiffies,
+		 e->tm_rx_count, e->tm_rx_loopback_drops, e->tm_tx_count, e->tm_tx_dropped,
+		 e->tm_napi_count, e->tm_irq_count,
+		 alloc, rls, (int)rls - (int)alloc,
+		 bppe_avail, bppi, bp_stat,
+		 tx_kick, tx_done);
+	/* Re-arm: periodic 5s tick so we can correlate stats across ping runs. */
+	schedule_delayed_work(&zx_bmu_dump_work, msecs_to_jiffies(5000));
 }
 
 static int zx_sw_open(struct net_device *ndev)
@@ -2066,7 +2268,7 @@ static int zx_sw_open(struct net_device *ndev)
 	 * is calm and our dev_info messages will reliably reach UART. */
 	zx_bmu_dump_eth = e;
 	INIT_DELAYED_WORK(&zx_bmu_dump_work, zx_bmu_dump_fn);
-	schedule_delayed_work(&zx_bmu_dump_work, msecs_to_jiffies(30000));
+	schedule_delayed_work(&zx_bmu_dump_work, msecs_to_jiffies(10000));
 
 	return 0;
 }
@@ -2167,6 +2369,47 @@ static u32 zx_bmu_alloc_bp(struct zx_eth *e)
 
 	/* Timeout or pool empty */
 	return U32_MAX;
+}
+
+/* zx_bmu_free_bp — release a BMU buffer back to HW (stock: pp_bmu_free_bp).
+ *
+ * Stock protocol (plat-zxylzb_9128S.ko @ 0x18794):
+ *   spin_lock(&free_lock)
+ *   retry up to 200x:
+ *     if allow_free_cnt > 0:
+ *        allow_free_cnt--
+ *        tm[0x8010] = bp_idx | (is_pon << 15)
+ *        return 0
+ *     allow_free_cnt = (tm[0x80dc] >> 8) & 0x3f  // refill from HW status
+ *   return -1
+ *
+ * Must be called once per RX descriptor consumed (delivered OR dropped), or
+ * the BMU pool drains and HW eventually runs out of RX buffers.
+ * Returns 0 on success, -EBUSY on credit-refill timeout. */
+static int zx_bmu_free_bp(struct zx_eth *e, u16 bp_idx, u8 is_pon)
+{
+	unsigned long flags;
+	int retry;
+
+	spin_lock_irqsave(&e->bmu_free_lock, flags);
+	for (retry = 0; retry < 200; retry++) {
+		if (e->bmu_free_credit != 0) {
+			e->bmu_free_credit--;
+			tm_write(e, 0x8010, (u32)bp_idx | ((u32)(is_pon & 1) << 15));
+			e->tm_bmu_free_ok++;
+			spin_unlock_irqrestore(&e->bmu_free_lock, flags);
+			return 0;
+		}
+		/* Refill credit from HW. Stock formula (decomp):
+		 *   allow_free_cnt = (uint)(tm[0x80dc] << 23) >> 26
+		 * which extracts bits 3..8 (6-bit count). With typical
+		 * tm[0x80dc]=0x50000111, this is 34. The earlier ">> 8" was
+		 * wrong — it gave 1 credit per refill, starving the pool. */
+		e->bmu_free_credit = (tm_read(e, 0x80dc) >> 3) & 0x3f;
+	}
+	e->tm_bmu_free_fail++;
+	spin_unlock_irqrestore(&e->bmu_free_lock, flags);
+	return -EBUSY;
 }
 
 /* zx_sw_xmit — TM TX path.
@@ -2393,7 +2636,12 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	 * Adding port=6 entry may have caused flood / DUPs. */
 	{
 		int rc = zx_fdb_add(e, ndev->dev_addr, 0, 1);
-		netdev_info(ndev, "HW FDB seed: self MAC at port=1 rc=%d\n", rc);
+		netdev_info(ndev, "HW FDB seed (PP_BRG_RAM): self MAC port=1 rc=%d\n", rc);
+		/* Phase 5l 2026-05-25: disable unknown-unicast flood except CPU.
+		 * Per stock kotrace, ports 0-4,6,7 must have fwd=0, port 5 fwd=1.
+		 * Bitmap 0x20 = bit 5 set = only CPU port. This is the agent-
+		 * identified DUPs fix. */
+		zx_sbrg_set_unknown_unicast_flood_policy(e, 0x20);
 	}
 	return 0;
 }
@@ -2421,6 +2669,9 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	seq_printf(s, "tm_rx_loopback_drops = %u\n", e->tm_rx_loopback_drops);
 	seq_printf(s, "tm_tx_count       = %u\n", e->tm_tx_count);
 	seq_printf(s, "tm_tx_dropped     = %u\n", e->tm_tx_dropped);
+	seq_printf(s, "tm_bmu_free_ok    = %u\n", e->tm_bmu_free_ok);
+	seq_printf(s, "tm_bmu_free_fail  = %u\n", e->tm_bmu_free_fail);
+	seq_printf(s, "bmu_free_credit   = %u\n", e->bmu_free_credit);
 	seq_printf(s, "tx_head           = %u\n", e->tx_head);
 	seq_printf(s, "BMU_ALLOC_RESULT  = 0x%08x\n", tm_read(e, TM_REG_BMU_ALLOC_RESULT));
 	seq_printf(s, "BMU_ALLOC_CTRL    = 0x%08x\n", tm_read(e, TM_REG_BMU_ALLOC_CTRL));
