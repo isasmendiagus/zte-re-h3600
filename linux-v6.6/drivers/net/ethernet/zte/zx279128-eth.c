@@ -1939,17 +1939,13 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 				 * Per stock RE: `r2 = (desc[6] >> 3) & 0x1F; r2 -= 1; pkt[180] = r2`.
 				 * This is the UNI/PON port the packet arrived on. */
 				int ingress_port = ((desc[6] >> 3) & 0x1F) - 1;
-				/* HEURISTIC #2 DISABLED 2026-05-25 (iter 2 test):
-				 * With FDB fix giving 0 DUPs, switch shouldn't be flooding
-				 * back to CPU port. If LOOPBACK drop fires here, it means
-				 * either (a) we're still bouncing somehow, or (b) some
-				 * non-loopback frames have src=our_mac for other reason.
-				 * Track count via tm_rx_loopback_drops but DELIVER the frame. */
 				if (e->sw_dev && !memcmp(src + 6, e->sw_dev->dev_addr, 6)) {
 					e->tm_rx_loopback_drops++;
-					/* fall through to delivery */
-				}
-				{
+					if (e->tm_rx_loopback_drops <= 5)
+						dev_info(e->dev, "LOOPBACK drop #%u src=%pM dst=%pM ethertype=%04x len=%u ingress=%d\n",
+							 e->tm_rx_loopback_drops, src + 6, src,
+							 ntohs(*(__be16*)(src + 12)), len, ingress_port);
+				} else {
 					struct sk_buff *skb = netdev_alloc_skb(e->sw_dev, len + 64);
 					if (skb) {
 						skb_reserve(skb, 32);
