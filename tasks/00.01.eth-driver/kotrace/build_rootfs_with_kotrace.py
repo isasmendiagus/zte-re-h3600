@@ -56,12 +56,20 @@ AES_KEY_ASCII   = b"H36000e71071c440"   # per device
 INIT_NORM_REL   = "etc/init.norm"
 # Marker line we look for to find the right insertion point.
 INSERT_AFTER_MARKER = "/sbin/insmod /kmodule/zx_ponreg.ko"
-# What we inject (note trailing newline so original line stays as-is)
+# What we inject. 2026-05-25 footgun fix: redirect insmod stderr to /dev/kmsg
+# so any kernel-side rejection of the .ko (vermagic, unknown symbol, invalid
+# module format, etc.) actually shows up in UART via klogctl-kmsg2uart. Without
+# this, init.norm's stderr at boot has no controlling tty — busybox-insmod's
+# error message goes to the void, making bake-in failures look like silent
+# hangs when they're really just unreported errors.
 INJECT_BLOCK = (
     "\n"
-    "# kotrace — loader-notifier for module-state trace (Phase A2.5).\n"
-    "# Injected AFTER zx_ponreg so PL011 mappings exist.\n"
-    "/sbin/insmod /kmodule/kotrace.ko\n"
+    "# kotrace bake-in — uses /sbin/kinsmod (NOT /sbin/insmod) to load.\n"
+    "# kinsmod writes status to PL011 UART DIRECTLY (mmap /dev/mem), bypassing\n"
+    "# /dev/console (which is broken when cspstart fails to expand $(console)\n"
+    "# in bootargs). This way, even if insmod fails silently, we see the\n"
+    "# exact errno on UART.\n"
+    "/sbin/kinsmod /kmodule/kotrace.ko\n"
 )
 
 
@@ -76,30 +84,68 @@ def run(cmd, **kw):
 
 
 def patch_init_norm(staging: Path):
-    """Insert `insmod /kmodule/kotrace.ko` AFTER the zx_ponreg insmod (so
-    the PL011 ioremap kotrace does at init succeeds — the earlier
-    shellproc/patch/zx_ponreg.ko set up the ZTE-private platform IO state
-    that PL011_BASE_PHYS=0x94404000 sits inside).
-    init.norm has non-UTF-8 bytes (Chinese comments in GB-something) so
-    read+patch as bytes to preserve them byte-for-byte.
+    """Inject the kotrace insmod + BISECT PROBES at multiple points in
+    init.norm. Each /sbin/printok PROBE_NAME writes "[printok] PROBE_NAME"
+    DIRECTLY to PL011 (mmap /dev/mem), bypassing /dev/console (broken on
+    boots where cspstart fails to expand $(console) bootarg).
+    The probes tell us EXACTLY where init.norm hangs/aborts.
     """
     target = staging / INIT_NORM_REL
     blob = target.read_bytes()
     if b"/kmodule/kotrace.ko" in blob:
         print(f"  init.norm already references kotrace — leaving as-is")
         return
+
+    # Probes to insert (marker_in_existing_init_norm  →  inject_AFTER)
+    probes = [
+        # Top of init.norm — confirms /etc/rc reached init.norm at all
+        (b"# /etc/init.norm: system-wide  file for the Bourne shells\n",
+         b"/sbin/printok BEGIN\n"),
+        # Right before the first stock insmod
+        (b"/sbin/insmod /kmodule/shellproc.ko",
+         b"/sbin/printok BEFORE_SHELLPROC\n"),
+        # Before patch.ko
+        (b"/sbin/insmod /kmodule/patch.ko",
+         b"/sbin/printok BEFORE_PATCH\n"),
+        # Before zx_ponreg
+        (b"/sbin/insmod /kmodule/zx_ponreg.ko",
+         b"/sbin/printok BEFORE_ZXPONREG\n"),
+    ]
+    # Insert probes BEFORE their markers (so probe runs first)
+    new_blob = blob
+    for marker, probe in probes:
+        if marker in new_blob:
+            new_blob = new_blob.replace(marker, probe + marker, 1)
+        else:
+            print(f"  WARN: probe marker {marker[:40]!r}... not found")
+
+    # Now inject the kotrace block AFTER zx_ponreg.ko (existing logic)
     marker = INSERT_AFTER_MARKER.encode()
-    if marker not in blob:
-        sys.exit(f"ERROR: marker {INSERT_AFTER_MARKER!r} not found in "
-                 f"{target} — stock init.norm has changed, update the script")
-    new_blob = blob.replace(
+    if marker not in new_blob:
+        sys.exit(f"ERROR: marker {INSERT_AFTER_MARKER!r} not found")
+    new_blob = new_blob.replace(
         marker,
-        marker + INJECT_BLOCK.encode(),
+        marker + INJECT_BLOCK.encode() +
+        b"/sbin/printok AFTER_KOTRACE\n",  # probe AFTER kinsmod
         1,
     )
+    # And before plat-zxylzb (to confirm we got past kotrace)
+    plat_marker = b"/sbin/insmod /kmodule/plat-zxylzb_9128S.ko"
+    new_blob = new_blob.replace(
+        plat_marker,
+        b"/sbin/printok BEFORE_PLAT\n" + plat_marker,
+        1,
+    )
+    # Before switch
+    sw_marker = b"/sbin/insmod /kmodule/switch.ko"
+    new_blob = new_blob.replace(
+        sw_marker,
+        b"/sbin/printok BEFORE_SWITCH\n" + sw_marker,
+        1,
+    )
+
     target.write_bytes(new_blob)
-    print(f"  patched {INIT_NORM_REL}: inserted kotrace insmod "
-          f"AFTER {INSERT_AFTER_MARKER}")
+    print(f"  patched {INIT_NORM_REL}: 7 bisect probes + kotrace inject")
 
 
 def main():

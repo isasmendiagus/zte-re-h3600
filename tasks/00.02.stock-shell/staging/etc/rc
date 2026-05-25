@@ -1,35 +1,43 @@
 #! /bin/sh
+/sbin/printok RC_TOP
 
 PATH=/sbin:/bin:/usr/bin:/usr/sbin
 KERNELVER=4.1.25
 export PATH
 export KERNELVER
 
+/sbin/printok RC_AFTER_PATH
 mkdir /var/tmp -m 777
 
+/sbin/printok RC_BEFORE_MOUNT_PROC
 mount -t proc proc /proc
+/sbin/printok RC_AFTER_MOUNT_PROC
 
 # Kernel printk → UART (DR=0x94404004 ZTE-shifted PL011)
+/sbin/printok RC_BEFORE_KMSG2UART
 /sbin/kmsg2uart > /dev/null 2>&1 &
+/sbin/printok RC_AFTER_KMSG2UART
 #mount -t sysfs none /sys
 mount -t tmpfs -o size=30720k tmpfs /var
 mount -t tmpfs -o size=20480k tmpfs /tmp
 
+/sbin/printok RC_BEFORE_MOUNT_A
 /bin/mount -a
+/sbin/printok RC_AFTER_MOUNT_A
 
 nfbi bootdownload 0 /etc/dsl/boot.bin &
 
-LOADTYPE=$(cat /proc/zte/verinfo/loadtype)
-if [ "$LOADTYPE" = "3" ];then
-echo "init normal mode!!!"
+# BYPASS /proc/zte/verinfo/loadtype check 2026-05-25: that proc file isn't
+# populated at this point in boot for our rootfs (returns empty → exits 0,
+# init.norm never runs → bake-in fundamentally broken). Force normal mode.
+/sbin/printok RC_BEFORE_LOADTYPE
+LOADTYPE=$(cat /proc/zte/verinfo/loadtype 2>/dev/null)
+/sbin/printok RC_AFTER_LOADTYPE_$LOADTYPE
+# FORCE normal mode regardless of LOADTYPE
+echo "init normal mode (FORCED via /etc/rc bypass)"
 echo 5000 > /proc/sys/vm/min_free_kbytes
+/sbin/printok RC_BEFORE_INIT_NORM
 /etc/init.norm
-elif [ "$LOADTYPE" = "2" ];then
-echo "init debug mode!!!"
-/etc/init.debug
-else
-echo "loadtype para is error!!!"
-exit 0
-fi
+/sbin/printok RC_AFTER_INIT_NORM
 
 #/sbin/inetd
