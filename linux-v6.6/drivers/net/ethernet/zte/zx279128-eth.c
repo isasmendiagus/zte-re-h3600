@@ -1942,20 +1942,17 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 								 src + 6, src, ntohs(*(__be16*)(src + 12)),
 								 ingress_port);
 						}
-						/* Phase 5: dynamic FDB learning. If src MAC is unicast
-						 * (not multicast bit) AND we extracted a valid ingress
-						 * port (0..7), register it in the switch FDB so
-						 * subsequent unicast TX to this MAC routes correctly.
-						 * Only do this once per MAC — track via simple table. */
+						/* Dynamic FDB learning re-enabled 2026-05-25 after test.
+						 * Even writing to wrong PP_BRG_RAM table, empirically:
+						 *   with learn: 28 recv / 47 DUPs / 44% loss
+						 *   no learn:   24 recv / 41 DUPs / 52% loss */
 						if (ingress_port >= 0 && ingress_port < 8 &&
-						    (src[6] & 1) == 0 /* unicast src */) {
-							/* Hash this MAC into a small "already learned"
-							 * set to avoid re-adding. Use last byte as crude
-							 * dedup key. */
+						    (src[6] & 1) == 0) {
 							u8 key = src[11] & 0x7f;
 							if (!(e->fdb_learned[key >> 3] & (1u << (key & 7)))) {
+								int rc;
 								e->fdb_learned[key >> 3] |= (1u << (key & 7));
-								int rc = zx_fdb_add(e, src + 6, 0, ingress_port);
+								rc = zx_fdb_add(e, src + 6, 0, ingress_port);
 								if (e->tm_rx_count <= 30)
 									dev_info(e->dev, "FDB learn %pM → port=%d rc=%d\n",
 										 src + 6, ingress_port, rc);
