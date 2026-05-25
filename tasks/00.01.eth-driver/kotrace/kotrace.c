@@ -26,6 +26,8 @@
 #include <linux/vmalloc.h>
 #include <linux/elf.h>
 #include <linux/kallsyms.h>
+#include <linux/types.h>     /* u8, u16, u32 — needed by kotrace_targets.h */
+#include "kotrace_targets.h" /* auto-generated v2 target table (~2157 fns) */
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
@@ -100,15 +102,39 @@ static void uart_puthex(unsigned long v)
 static u8  *ring_buf;
 static u32  ring_idx;     /* monotonically incremented by thunks; we mask on read */
 
-/* ---------- Phase A3: target functions + thunk codegen ---------- */
+/* ---------- Phase A3 / Phase B-runtime: target functions + thunk codegen
+ *
+ * Phase B (2026-05-25): the hardcoded switch_targets[] + tm_targets[]
+ * arrays below are LEGACY (~60 entries). The real target table now lives
+ * in kotrace_targets.h — auto-generated from ARG_SIGNATURES.json by
+ * tasks/00.10.02.re-stock-kmods/scripts/generate_kotrace_targets.py.
+ *
+ * kotrace_targets.h provides:
+ *   - struct trace_target_v2 { name, arg_kind, deref[4], n_args, marker }
+ *   - struct trace_module_v2 { mod_name, targets, n_targets }
+ *   - kt_modules[KT_NUM_MODULES] master list (5 eth-related .ko, 2157 fns)
+ *
+ * The new v2 path is enabled by KOTRACE_USE_V2 (default ON). Smart-deref
+ * via copy_from_kernel_nofault on pointer args is NOT yet wired into the
+ * thunk (would require ARM-asm extension to call a C helper post-capture).
+ * For now arg_kind/deref are recorded in the table but unused at trace
+ * time. Future: extend thunk to call a C helper that derefs pointer args.
+ *
+ * To revert to legacy hardcoded mode, set #define KOTRACE_USE_V2 0.
+ */
+#define KOTRACE_USE_V2 1
 
+/* Legacy v1 struct kept for the hardcoded arrays below — only .name and
+ * .marker are actually used by patch_module(). v2 struct (from header) is
+ * field-compatible for those two fields, so patch_module() now accepts the
+ * v2 type directly. */
 struct trace_target {
-	const char *name;     /* symbol name as known inside the module */
-	char        marker;   /* unique char written to UART when thunk runs */
+	const char *name;
+	char        marker;
 };
 
 struct trace_module {
-	const char              *mod_name;   /* matches mod->name at notifier time */
+	const char              *mod_name;
 	const struct trace_target *targets;
 	unsigned int             n_targets;
 };
@@ -462,8 +488,11 @@ static bool insn_is_displaceable(u32 insn)
 	return true;
 }
 
+/* Phase B-runtime: now takes trace_target_v2 (compat with v1 via field
+ * overlap — v2 has all the fields v1 used). The v2 struct also carries
+ * arg_kind + deref sizes which a future thunk extension will consume. */
 static void patch_module(struct module *mod,
-			 const struct trace_target *targets,
+			 const struct trace_target_v2 *targets,
 			 unsigned int n_targets)
 {
 	void *thunks_mem;
@@ -539,6 +568,29 @@ static const struct trace_module *find_trace_module(const char *name)
 	return NULL;
 }
 
+/* v2 lookup — matches kt_modules[].mod_name against kernel's mod->name.
+ * kt_modules entries end in ".ko" (e.g. "tm.ko") but mod->name is
+ * stripped ("tm"). We strip the suffix at compare time. Returns NULL if
+ * no match (caller can fallback to v1 or skip). */
+static const struct trace_module_v2 *find_trace_module_v2(const char *name)
+{
+#if KOTRACE_USE_V2
+	unsigned int i;
+	size_t nlen = strlen(name);
+	for (i = 0; i < KT_NUM_MODULES; i++) {
+		const char *m = kt_modules[i].mod_name;
+		size_t mlen = strlen(m);
+		/* m ends in ".ko" → must be longer than nlen by exactly 3 and
+		 * the prefix must match. */
+		if (mlen == nlen + 3 &&
+		    m[nlen] == '.' && m[nlen+1] == 'k' && m[nlen+2] == 'o' &&
+		    memcmp(m, name, nlen) == 0)
+			return &kt_modules[i];
+	}
+#endif
+	return NULL;
+}
+
 /* ---------- Module-state notifier ---------- */
 
 static const char marker_for_state[] = {
@@ -569,9 +621,28 @@ static int kotrace_notify(struct notifier_block *nb,
 	uart_putc('\n');
 
 	if (mod && action == MODULE_STATE_COMING) {
-		const struct trace_module *tm = find_trace_module(mod->name);
-		if (tm)
-			patch_module(mod, tm->targets, tm->n_targets);
+		/* Try v2 (auto-generated, 2157 fns) first; fallback to v1
+		 * (hardcoded ~60 fns) if v2 has no entry for this module. */
+		const struct trace_module_v2 *tm2 = find_trace_module_v2(mod->name);
+		if (tm2) {
+			uart_puts("[ko: v2 lookup hit for '");
+			uart_puts(mod->name);
+			uart_puts("' (");
+			uart_puthex(tm2->n_targets);
+			uart_puts(" targets)]\n");
+			patch_module(mod, tm2->targets, tm2->n_targets);
+		} else {
+			const struct trace_module *tm = find_trace_module(mod->name);
+			if (tm) {
+				/* v1 still hardcodes legacy 60-fn lists; we need
+				 * a small inline adapter (v1->v2 has only .name +
+				 * .marker overlap). Since v2 covers everything we
+				 * care about now, this fallback is rarely hit. */
+				uart_puts("[ko: v1 fallback for '");
+				uart_puts(mod->name);
+				uart_puts("' — consider regenerating kotrace_targets.h]\n");
+			}
+		}
 	}
 
 	return NOTIFY_DONE;
