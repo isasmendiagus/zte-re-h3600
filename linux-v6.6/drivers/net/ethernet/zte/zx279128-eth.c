@@ -268,6 +268,13 @@ struct zx_eth {
 	u32 tm_rx_loopback_drops;
 	u32 tm_tx_count;
 	u32 tm_tx_dropped;
+	/* Per-ingress-port RX counter (decoded from desc[6]: (desc[6]>>3 & 0x1F)-1).
+	 * Used to identify the CPU-hairpin loopback ingress port empirically.
+	 * The port that spikes 1:1 with tm_tx_count IS the hairpin source — we
+	 * can then drop those frames to break the DUPs amplification loop.
+	 * 32 slots: ingress is a 5-bit field minus 1, so values run -1..30; we
+	 * shift by +1 to index. */
+	u32 tm_rx_per_ingress[32];
 	/* BMU buffer-free credit (stock: allow_free_cnt) — preserved across calls.
 	 * Refilled from tm[0x80dc] bits 8..13 when it hits 0. */
 	u32 bmu_free_credit;
@@ -2167,6 +2174,11 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 				 * Per stock RE: `r2 = (desc[6] >> 3) & 0x1F; r2 -= 1; pkt[180] = r2`.
 				 * This is the UNI/PON port the packet arrived on. */
 				int ingress_port = ((desc[6] >> 3) & 0x1F) - 1;
+				/* Per-ingress counter for empirical CPU-loopback port id */
+				{
+					int slot = (ingress_port + 1) & 0x1F;
+					e->tm_rx_per_ingress[slot]++;
+				}
 				if (e->sw_dev && !memcmp(src + 6, e->sw_dev->dev_addr, 6)) {
 					e->tm_rx_loopback_drops++;
 					if (e->tm_rx_loopback_drops <= 5)
@@ -2288,6 +2300,24 @@ static void zx_bmu_dump_fn(struct work_struct *w)
 		 alloc, rls, (int)rls - (int)alloc,
 		 bppe_avail, bppi, bp_stat,
 		 tx_kick, tx_done);
+
+	/* Per-ingress-port RX histogram — for DUPs hairpin diagnosis.
+	 * The port whose count grows ~1:1 with tm_tx_count is the CPU hairpin
+	 * loopback source. Drop frames from it to break the amplification
+	 * loop. Slots [0..31] = ingress_port+1 (so slot 0 = ingress -1 "invalid",
+	 * slot 1 = port 0, slot 8 = port 7, etc.). */
+	dev_info(e->dev, "STATS rx_per_ingress[]: "
+		 "[ing-1]=%u [0]=%u [1]=%u [2]=%u [3]=%u [4]=%u [5]=%u [6]=%u "
+		 "[7]=%u [8]=%u [9]=%u [10]=%u [11]=%u [12]=%u [13]=%u\n",
+		 e->tm_rx_per_ingress[0],
+		 e->tm_rx_per_ingress[1],  e->tm_rx_per_ingress[2],
+		 e->tm_rx_per_ingress[3],  e->tm_rx_per_ingress[4],
+		 e->tm_rx_per_ingress[5],  e->tm_rx_per_ingress[6],
+		 e->tm_rx_per_ingress[7],
+		 e->tm_rx_per_ingress[8],  e->tm_rx_per_ingress[9],
+		 e->tm_rx_per_ingress[10], e->tm_rx_per_ingress[11],
+		 e->tm_rx_per_ingress[12], e->tm_rx_per_ingress[13],
+		 e->tm_rx_per_ingress[14]);
 #if ZX_PERIODIC_STATS
 	schedule_delayed_work(&zx_bmu_dump_work, msecs_to_jiffies(5000));
 #endif
