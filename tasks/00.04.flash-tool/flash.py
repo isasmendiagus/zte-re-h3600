@@ -151,6 +151,22 @@ def cmd_kernel(args) -> int:
             f"ZTE wrapper at offset 0 followed by a uImage"
         )
 
+    # Auto-prepend the ZTE wrapper if the input is a raw uImage (starts with
+    # the standard u-boot magic `27 05 19 56`) instead of the ZTE-wrapped
+    # form (starts with `33 33 33 33`). Without the wrapper cspstart's NAND
+    # scan can't locate the kernel and silently falls back to slot B — a
+    # 2026-05-25 footgun that cost the project an evening. The wrapper is
+    # exactly 32 bytes of fixed magic + 0xff padding; see nl.ZTE_KERNEL_WRAPPER.
+    UBOOT_UIMG_MAGIC = bytes.fromhex("27051956")
+    if src[:4] == UBOOT_UIMG_MAGIC:
+        print(f"  src starts with u-boot uImage magic 27051956 — prepending "
+              f"32-byte ZTE wrapper automatically.")
+        src = nl.ZTE_KERNEL_WRAPPER + src
+    elif src[:4] != nl.ZTE_KERNEL_WRAPPER[:4]:
+        print(f"  WARNING: src does not start with ZTE wrapper magic "
+              f"(33 33 33 33) NOR uImage magic (27 05 19 56). Got: {src[:4].hex()}. "
+              f"cspstart may reject this slot. Pass a raw uImage to get auto-wrapping.")
+
     padded_total = bp.round_up_to_erase_block(len(src))
     if padded_total > slot.kernel_max_size:
         raise SystemExit(
@@ -236,6 +252,17 @@ def cmd_both(args) -> int:
             f"kernel src too small ({len(k_src)} B) — must include the "
             f"{wrapper_len}-byte ZTE wrapper at offset 0"
         )
+    # Auto-prepend the ZTE wrapper if input is a raw uImage. See cmd_kernel
+    # for the rationale (2026-05-25 footgun: silent slot-B fallback).
+    UBOOT_UIMG_MAGIC = bytes.fromhex("27051956")
+    if k_src[:4] == UBOOT_UIMG_MAGIC:
+        print(f"  kernel: src is raw uImage (27051956) — auto-prepending "
+              f"32-byte ZTE wrapper.")
+        k_src = nl.ZTE_KERNEL_WRAPPER + k_src
+    elif k_src[:4] != nl.ZTE_KERNEL_WRAPPER[:4]:
+        print(f"  WARNING: kernel src does not start with ZTE wrapper (33 33 33 33) "
+              f"NOR uImage magic (27 05 19 56). Got: {k_src[:4].hex()}. "
+              f"cspstart may reject this slot.")
     k_padded_total = bp.round_up_to_erase_block(len(k_src))
     if k_padded_total > slot.kernel_max_size:
         raise SystemExit(
