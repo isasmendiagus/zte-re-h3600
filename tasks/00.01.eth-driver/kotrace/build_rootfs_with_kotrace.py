@@ -144,8 +144,37 @@ def patch_init_norm(staging: Path):
         1,
     )
 
+    # Dump kotrace ring → UART AFTER plat_zxylzb load, BEFORE tm.ko.
+    # Rationale: tm.ko init reliably crashes the box (its init calls a
+    # patched function whose thunk corrupts state). By dumping right
+    # after plat-LIVE we capture all the plat init activity (the most
+    # interesting register-write sequence) BEFORE the crash. cspd never
+    # starts but we already have the data on UART.
+    tm_marker = b"# tm sdk\n/sbin/insmod /kmodule/tm.ko"
+    if tm_marker not in new_blob:
+        sys.exit(f"ERROR: tm.ko marker not found in init.norm")
+    # DIAGNOSTIC: also dump RIGHT AFTER kotrace load (ring nearly empty —
+    # validates the binary works in isolation, before any patched-fn-call
+    # corruption could destabilize the kernel).
+    new_blob = new_blob.replace(
+        b"/sbin/printok AFTER_KOTRACE\n",
+        b"/sbin/printok AFTER_KOTRACE\n"
+        b"/sbin/printok BEFORE_DUMPKRING_EARLY\n"
+        b"/sbin/dumpkring /proc/kotrace_dump\n"
+        b"/sbin/printok AFTER_DUMPKRING_EARLY\n",
+        1,
+    )
+    new_blob = new_blob.replace(
+        tm_marker,
+        b"/sbin/printok BEFORE_DUMPKRING\n"
+        b"/sbin/dumpkring /proc/kotrace_dump\n"
+        b"/sbin/printok AFTER_DUMPKRING\n"
+        + tm_marker,
+        1,
+    )
+
     target.write_bytes(new_blob)
-    print(f"  patched {INIT_NORM_REL}: 7 bisect probes + kotrace inject")
+    print(f"  patched {INIT_NORM_REL}: 7 bisect probes + kotrace inject + dumpkring")
 
 
 def main():

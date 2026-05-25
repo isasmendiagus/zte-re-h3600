@@ -145,7 +145,7 @@ static unsigned int          n_patches;
  * walks / patches) or in module load itself.
  *
  * Set to 1 only when actively diagnosing the bake-in crash; default 0. */
-#define KOTRACE_MINIMAL_BOOT 0
+#define KOTRACE_MINIMAL_BOOT 1
 
 /* Legacy v1 struct kept for the hardcoded arrays below — only .name and
  * .marker are actually used by patch_module(). v2 struct (from header) is

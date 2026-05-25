@@ -27,17 +27,29 @@ mount -t tmpfs -o size=20480k tmpfs /tmp
 
 nfbi bootdownload 0 /etc/dsl/boot.bin &
 
-# BYPASS /proc/zte/verinfo/loadtype check 2026-05-25: that proc file isn't
-# populated at this point in boot for our rootfs (returns empty → exits 0,
-# init.norm never runs → bake-in fundamentally broken). Force normal mode.
+# HARDCODE LOADTYPE=3 2026-05-25: /proc/zte/verinfo/loadtype returns empty
+# at this point in boot for our rootfs (apparently populated late by some
+# kernel mechanism we're missing). Forcing LOADTYPE=3 takes the normal-mode
+# branch — same code path as canonical-good boots — so cspd-userspace
+# start eventually fires. Restores end-to-end userspace boot AND keeps
+# the kotrace bake-in working.
 /sbin/printok RC_BEFORE_LOADTYPE
 LOADTYPE=$(cat /proc/zte/verinfo/loadtype 2>/dev/null)
+[ -z "$LOADTYPE" ] && LOADTYPE=3 && echo "LOADTYPE forced to 3"
 /sbin/printok RC_AFTER_LOADTYPE_$LOADTYPE
-# FORCE normal mode regardless of LOADTYPE
-echo "init normal mode (FORCED via /etc/rc bypass)"
+if [ "$LOADTYPE" = "3" ];then
+echo "init normal mode!!!"
 echo 5000 > /proc/sys/vm/min_free_kbytes
 /sbin/printok RC_BEFORE_INIT_NORM
 /etc/init.norm
 /sbin/printok RC_AFTER_INIT_NORM
+elif [ "$LOADTYPE" = "2" ];then
+echo "init debug mode!!!"
+/etc/init.debug
+else
+echo "loadtype para is error!!!"
+/sbin/printok RC_LOADTYPE_ERROR
+exit 0
+fi
 
 #/sbin/inetd
