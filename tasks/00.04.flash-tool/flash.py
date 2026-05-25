@@ -90,6 +90,34 @@ from uboot_flash import WriteStep, flash_steps
 
 DEFAULT_TFTP_DIR  = REPO / "tftp"
 DEFAULT_NAND_DUMP = REPO / "ext" / "h3600_nand_full.bin"
+UART_LOG          = "/tmp/uart_bridge.log"
+
+
+def _rotate_uart_log():
+    """Move the current UART log out of the way and truncate the live one
+    so the upcoming flash + boot is the ONLY thing in /tmp/uart_bridge.log.
+    The uart_bridge daemon holds an fd into the file; truncating in-place
+    (via O_TRUNC open) preserves the daemon's fd — it just continues
+    appending at the now-zero file size. We also backup the old contents
+    to /tmp/uart_bridge.<ts>.log for forensics.
+    """
+    import time
+    if not os.path.exists(UART_LOG):
+        return
+    sz = os.path.getsize(UART_LOG)
+    if sz == 0:
+        return
+    ts = int(time.time())
+    backup = f"/tmp/uart_bridge.{ts}.log"
+    try:
+        with open(UART_LOG, "rb") as src, open(backup, "wb") as dst:
+            dst.write(src.read())
+        # Truncate the live log (the bridge daemon's append fd survives this)
+        with open(UART_LOG, "wb"):
+            pass
+        print(f"[flash] rotated UART log: {sz:,} B → {backup} (live log now empty)")
+    except Exception as e:
+        print(f"[flash] WARN: failed to rotate UART log: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +144,12 @@ def _add_common_args(ap: argparse.ArgumentParser) -> None:
                          "monitor in parallel via `nc localhost 9999` or "
                          "`tail -f /tmp/uart_bridge.log`. Use this flag for "
                          "low-level debugging when the bridge itself is broken.")
+    ap.add_argument("--keep-uart-log", action="store_true",
+                    help="don't rotate /tmp/uart_bridge.log before flashing. "
+                         "By default flash.py moves the current log to "
+                         "/tmp/uart_bridge.<ts>.log and truncates the live one "
+                         "so the upcoming boot is the ONLY thing in it — "
+                         "much easier to grep panic stacks etc.")
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +235,8 @@ def cmd_kernel(args) -> int:
                   nand_offset=slot.header_offset,
                   write_size=slot.header_size),
     ]
+    if not args.dry_run and not getattr(args, "keep_uart_log", False):
+        _rotate_uart_log()
     return flash_steps(steps, allow_slot_b=args.allow_slot_b, dry_run=args.dry_run)
 
 
@@ -238,6 +274,8 @@ def cmd_rootfs(args) -> int:
                   nand_offset=slot.header_offset,
                   write_size=slot.header_size),
     ]
+    if not args.dry_run and not getattr(args, "keep_uart_log", False):
+        _rotate_uart_log()
     return flash_steps(steps, allow_slot_b=args.allow_slot_b, dry_run=args.dry_run)
 
 
@@ -312,6 +350,8 @@ def cmd_both(args) -> int:
                   nand_offset=slot.header_offset,
                   write_size=slot.header_size),
     ]
+    if not args.dry_run and not getattr(args, "keep_uart_log", False):
+        _rotate_uart_log()
     return flash_steps(steps, allow_slot_b=args.allow_slot_b, dry_run=args.dry_run)
 
 
@@ -381,6 +421,8 @@ def cmd_header(args) -> int:
                   nand_offset=slot.header_offset,
                   write_size=slot.header_size),
     ]
+    if not args.dry_run and not getattr(args, "keep_uart_log", False):
+        _rotate_uart_log()
     return flash_steps(steps, allow_slot_b=args.allow_slot_b, dry_run=args.dry_run)
 
 
