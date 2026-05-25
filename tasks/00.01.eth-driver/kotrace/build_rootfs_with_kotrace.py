@@ -47,15 +47,21 @@ PAGESIZE        = 2048
 ERASEBLOCK      = 131072                # 128 KiB
 AES_KEY_ASCII   = b"H36000e71071c440"   # per device
 
-# Init script we patch — we inject our insmod before the first stock insmod
+# Init script we patch — we inject our insmod AFTER zx_ponreg.ko so the
+# platform IO/MMU state needed for kotrace's ioremap(PL011) is already set up
+# (shellproc + patch + zx_ponreg between them establish the ZTE-private
+# remappings; injecting before them caused silent kernel hangs at boot
+# because ioremap returned an address that wasn't writable yet).
+# We're still ahead of plat-zxylzb_9128S / tm / switch — the interesting ones.
 INIT_NORM_REL   = "etc/init.norm"
-# Marker line we look for to find the right insertion point
-FIRST_INSMOD_MARKER = "/sbin/insmod /kmodule/shellproc.ko"
-# What we inject (note trailing newline so the original line stays as-is)
+# Marker line we look for to find the right insertion point.
+INSERT_AFTER_MARKER = "/sbin/insmod /kmodule/zx_ponreg.ko"
+# What we inject (note trailing newline so original line stays as-is)
 INJECT_BLOCK = (
-    "# kotrace — loader-notifier for module-state trace (Phase A2.5)\n"
-    "/sbin/insmod /kmodule/kotrace.ko\n"
     "\n"
+    "# kotrace — loader-notifier for module-state trace (Phase A2.5).\n"
+    "# Injected AFTER zx_ponreg so PL011 mappings exist.\n"
+    "/sbin/insmod /kmodule/kotrace.ko\n"
 )
 
 
@@ -70,7 +76,10 @@ def run(cmd, **kw):
 
 
 def patch_init_norm(staging: Path):
-    """Insert `insmod /kmodule/kotrace.ko` before the first stock insmod.
+    """Insert `insmod /kmodule/kotrace.ko` AFTER the zx_ponreg insmod (so
+    the PL011 ioremap kotrace does at init succeeds — the earlier
+    shellproc/patch/zx_ponreg.ko set up the ZTE-private platform IO state
+    that PL011_BASE_PHYS=0x94404000 sits inside).
     init.norm has non-UTF-8 bytes (Chinese comments in GB-something) so
     read+patch as bytes to preserve them byte-for-byte.
     """
@@ -79,18 +88,18 @@ def patch_init_norm(staging: Path):
     if b"/kmodule/kotrace.ko" in blob:
         print(f"  init.norm already references kotrace — leaving as-is")
         return
-    marker = FIRST_INSMOD_MARKER.encode()
+    marker = INSERT_AFTER_MARKER.encode()
     if marker not in blob:
-        sys.exit(f"ERROR: marker {FIRST_INSMOD_MARKER!r} not found in "
+        sys.exit(f"ERROR: marker {INSERT_AFTER_MARKER!r} not found in "
                  f"{target} — stock init.norm has changed, update the script")
     new_blob = blob.replace(
         marker,
-        INJECT_BLOCK.encode() + marker,
+        marker + INJECT_BLOCK.encode(),
         1,
     )
     target.write_bytes(new_blob)
     print(f"  patched {INIT_NORM_REL}: inserted kotrace insmod "
-          f"before first stock insmod")
+          f"AFTER {INSERT_AFTER_MARKER}")
 
 
 def main():
