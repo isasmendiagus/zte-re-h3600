@@ -2211,7 +2211,7 @@ static const struct trace_target_v2 kt_zx_ponreg_targets[] = {
 static const struct trace_module_v2 kt_modules[] = {
 	{ "tm.ko", kt_tm_targets, KT_TM_COUNT },
 	{ "switch.ko", kt_switch_targets, KT_SWITCH_COUNT },
-	{ "plat-zxylzb_9128S.ko", kt_plat_zxylzb_9128S_targets, KT_PLAT_ZXYLZB_9128S_COUNT },
+	{ "plat_zxylzb_9128S.ko", kt_plat_zxylzb_9128S_targets, KT_PLAT_ZXYLZB_9128S_COUNT },
 	{ "idmfdb.ko", kt_idmfdb_targets, KT_IDMFDB_COUNT },
 	{ "zx_ponreg.ko", kt_zx_ponreg_targets, KT_ZX_PONREG_COUNT },
 };

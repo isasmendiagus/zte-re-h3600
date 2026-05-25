@@ -126,8 +126,13 @@ def emit(out, sigs):
             # Map our underscore-safe ident back to the actual .ko name.
             # Map our identifier-safe module key back to the actual .ko name
             # (some have hyphens, others underscores — see ext/kmodules_dump/).
+            # NOTE: the .ko file on disk is "plat-zxylzb_9128S.ko" (hyphen),
+            # but insmod translates '-' to '_' so the kernel sees
+            # "plat_zxylzb_9128S". kt_modules' mod_name is compared
+            # against mod->name in find_trace_module_v2() — so we use
+            # the kernel-visible (underscore) form here.
             ko_name_map = {
-                "plat_zxylzb_9128S": "plat-zxylzb_9128S.ko",
+                "plat_zxylzb_9128S": "plat_zxylzb_9128S.ko",
                 "zx_ponreg":         "zx_ponreg.ko",
                 "tm":                "tm.ko",
                 "switch":            "switch.ko",

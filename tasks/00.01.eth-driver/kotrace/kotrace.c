@@ -778,9 +778,42 @@ static int __init kotrace_init(void)
 	/* For each module we want to trace: if it's already loaded
 	 * (e.g. cspd brought it up before us), patch it now — the
 	 * COMING-notifier path won't fire for already-live modules.
-	 * This lets us iterate without re-flashing the rootfs. */
+	 * This lets us iterate without re-flashing the rootfs.
+	 *
+	 * Phase B-runtime: v2 first (full kt_modules[] table, ~2157 fns),
+	 * fallback to v1 (trace_modules[]) only if v2 has no entry for the
+	 * module — so we don't double-patch. */
 	{
 		unsigned int i;
+#if KOTRACE_USE_V2
+		for (i = 0; i < KT_NUM_MODULES; i++) {
+			const struct trace_module_v2 *t = &kt_modules[i];
+			/* kt_modules names end in ".ko"; mod->name is the stripped form. */
+			char nm[64];
+			size_t L = strlen(t->mod_name);
+			if (L >= 3 && L < sizeof(nm)) {
+				memcpy(nm, t->mod_name, L - 3);
+				nm[L - 3] = '\0';
+			} else {
+				continue;
+			}
+			{
+				struct module *m = p_find_module(nm);
+				if (m) {
+					uart_puts("[ko: v2 '");
+					uart_puts(nm);
+					uart_puts("' already loaded — patching now (");
+					uart_puthex(t->n_targets);
+					uart_puts(" targets)]\n");
+					patch_module(m, t->targets, t->n_targets);
+				} else {
+					uart_puts("[ko: v2 '");
+					uart_puts(nm);
+					uart_puts("' not yet loaded — will wait for COMING]\n");
+				}
+			}
+		}
+#else
 		for (i = 0; i < NUM_TRACE_MODULES; i++) {
 			const struct trace_module *t = &trace_modules[i];
 			struct module *m = p_find_module(t->mod_name);
@@ -795,6 +828,7 @@ static int __init kotrace_init(void)
 				uart_puts("' not yet loaded — will wait for COMING]\n");
 			}
 		}
+#endif
 	}
 	return 0;
 }
