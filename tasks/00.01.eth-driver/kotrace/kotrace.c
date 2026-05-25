@@ -87,7 +87,7 @@ static void uart_puthex(unsigned long v)
 
 /* ---------- Phase 3b: trace ring buffer for r0-r3 args ---------- */
 
-#define RING_ENTRIES      16384    /* 512KB — fits Phase 3c capture (~5k entries) */
+#define RING_ENTRIES      65536    /* 2 MiB — sized for full boot capture (cspd init storm = tens of thousands of fn calls). Mask needs 16 bits; thunk uses lsl#16/lsr#11 instead of lsl#18/lsr#13. */
 #define RING_ENTRY_SIZE   32        /* must be power of 2; thunk uses lsl #5 */
 #define RING_BYTES        (RING_ENTRIES * RING_ENTRY_SIZE)
 #define RING_IDX_MASK     (RING_ENTRIES - 1)
@@ -383,12 +383,12 @@ static u32 arm_encode_strb_at(int rS, int rN)
  * +12   ldr  r5, [r4]               r5 = current idx
  * +16   add  r6, r5, #1
  * +20   str  r6, [r4]               idx++ (non-atomic; init is single-thread)
- * +24   mov  r5, r5, lsl #18        @ low 14 bits → bits 31..18
- * +28   mov  r5, r5, lsr #13        @ → bits 18..5 (= (idx & 0x3FFF) << 5)
- *                                   This masks idx to RING_IDX_MASK and
- *                                   pre-shifts by 5 (since RING_ENTRY_SIZE=32).
+ * +24   mov  r5, r5, lsl #16        @ low 16 bits → bits 31..16
+ * +28   mov  r5, r5, lsr #11        @ → bits 20..5 (= (idx & 0xFFFF) << 5)
+ *                                   This masks idx to RING_IDX_MASK (RING_ENTRIES=65536)
+ *                                   and pre-shifts by 5 (RING_ENTRY_SIZE=32).
  *                                   Two-insn alternative to `and r5,r5,#imm`
- *                                   because the mask 0x3FFF doesn't encode
+ *                                   because the mask 0xFFFF doesn't encode
  *                                   as an 8-bit-rotated ARM immediate.
  * +32   movw r4, #LO(ring_buf)
  * +36   movt r4, #HI(ring_buf)
@@ -434,8 +434,8 @@ static int build_thunk(void *thunk_mem, u32 displaced, unsigned long func_addr,
 	p[3]  = 0xe5945000;   /* ldr r5, [r4] */
 	p[4]  = 0xe2856001;   /* add r6, r5, #1 */
 	p[5]  = 0xe5846000;   /* str r6, [r4] */
-	p[6]  = 0xe1a05905;   /* mov r5, r5, lsl #18 */
-	p[7]  = 0xe1a056a5;   /* mov r5, r5, lsr #13 */
+	p[6]  = 0xe1a05805;   /* mov r5, r5, lsl #16 */
+	p[7]  = 0xe1a055a5;   /* mov r5, r5, lsr #11 */
 	p[8]  = arm_encode_movw(4, (u16)(buf_ptr & 0xffff));
 	p[9]  = arm_encode_movt(4, (u16)(buf_ptr >> 16));
 	p[10] = 0xe0844005;   /* add r4, r4, r5 */
@@ -805,28 +805,35 @@ static int __init kotrace_init(void)
 		pr_err("kotrace: ioremap PL011 failed\n");
 		return -ENOMEM;
 	}
+	uart_puts("[koINIT:A ioremap_ok]\n");
 
 	ring_buf = kzalloc(RING_BYTES, GFP_KERNEL);
 	if (!ring_buf) {
+		uart_puts("[koINIT:RING_BUF_KZALLOC_FAIL]\n");
 		iounmap(pl011_base);
 		return -ENOMEM;
 	}
 	ring_idx = 0;
+	uart_puts("[koINIT:B ring_buf_ok]\n");
 
 	patches = kzalloc(sizeof(*patches) * MAX_PATCHES, GFP_KERNEL);
 	if (!patches) {
+		uart_puts("[koINIT:PATCHES_KZALLOC_FAIL]\n");
 		kfree(ring_buf);
 		iounmap(pl011_base);
 		return -ENOMEM;
 	}
 	n_patches = 0;
+	uart_puts("[koINIT:C patches_ok]\n");
 
 	proc_entry = proc_create("kotrace_dump", 0666, NULL, &kotrace_dump_fops);
 	if (!proc_entry) {
+		uart_puts("[koINIT:PROC_CREATE_FAIL]\n");
 		kfree(ring_buf);
 		iounmap(pl011_base);
 		return -ENOMEM;
 	}
+	uart_puts("[koINIT:D proc_ok]\n");
 
 	/* Resolve the un-exported helpers via kallsyms. */
 	p_module_alloc  = (void *)kallsyms_lookup_name("module_alloc");
@@ -842,9 +849,11 @@ static int __init kotrace_init(void)
 		pl011_base = NULL;
 		return -ENOENT;
 	}
+	uart_puts("[koINIT:E kallsyms_ok]\n");
 
 	uart_puts("[ko: kotrace loaded]\n");
 	register_module_notifier(&kotrace_nb);
+	uart_puts("[koINIT:F notifier_registered]\n");
 
 	/* For each module we want to trace: if it's already loaded
 	 * (e.g. cspd brought it up before us), patch it now — the
@@ -862,6 +871,7 @@ static int __init kotrace_init(void)
 			/* kt_modules names end in ".ko"; mod->name is the stripped form. */
 			char nm[64];
 			size_t L = strlen(t->mod_name);
+			uart_puts("[koINIT:G i="); uart_puthex(i); uart_puts("]\n");
 			if (L >= 3 && L < sizeof(nm)) {
 				memcpy(nm, t->mod_name, L - 3);
 				nm[L - 3] = '\0';
@@ -901,6 +911,7 @@ static int __init kotrace_init(void)
 		}
 #endif
 	}
+	uart_puts("[koINIT:Z init_done]\n");
 	return 0;
 }
 
