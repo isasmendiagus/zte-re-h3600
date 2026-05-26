@@ -1,0 +1,3540 @@
+
+Boot SPI NAND
+start read bootheader
+start read secondboot
+non secure boot 
+Jump
+ddr init enter, rate is 1600 mbps
+ddr init done 
+
+
+U-Boot 2013.04-svn214847 (Jul 20 2022 - 20:17:43)
+
+CPU  : ZX279128R@A9,800MHZ
+Board: ZXIC zx279128revb
+CONFIG_SYS_SDRAM_SIZE = 0x10000000
+DRAM:  256 MiB
+CONFIG_SYS_SDRAM_SIZE = 0x10000000
+CONFIG_SKY_VID = 156 zxic_get_vid = 156 boot sky vid = 156
+product_vid = 156
+vid=156-TQY00R
+NAND:  boot mode: 3
+id:c8-1-7f-7f
+id:c8-1-7f-7f
+is_two_plane[0]
+id:c8-1-7f-7f
+id:c8-1-7f-7f
+id:c8-1-7f-7f
+id:c8-1-7f-7f
+id:c8-1-7f-7f
+id:c8-1-7f-7f
+id:c8-1-7f-7f
+id:c8-1-7f-7f
+id:c8-1-7f-7f
+id:c8-1-7f-7f
+id:c8-1-7f-7f
+id:c8-1-7f-7f
+
+Manu ID: 0xc8, Chip ID: 0x01 (ESMT SPI NAND F50L1G41LB 128MiB 3,3V)
+128 MiB
+<nand_read_skip_bad_,1302>!mtdpart=0x1,offset=0x0,mtdpartoffset=0x180000,mtdPartsize=0x80000,length=0x20000
+In:    serial
+Out:   serial
+Err:   serial
+clk_pll env is not setted, core clk won't change
+Net:   enter ref_clk_set.. mode = 0 .
+enter pll_cfg_fractional
+ref_clk_set success!
+gpon serdes init 
+innerGeLedPolarSet 0
+innerGeLedPolarSet 0
+innerGeLedPolarSet 0
+innerGeLedPolarSet 0
+eth0
+CONFIG_SKY_VID = 156  zxic_get_vid=156 boot sky vid = 156
+[zx5201_config](line:369) zx5201_config 
+
+Hit 1 to upgrade software version
+Hit ENTER key to stop autoboot:  1  0 
+do_mcupg function enter..
+Using eth0 device
+mac 0 phy status changed: 1000M full-duplex
+-----smac_init
+multi upgrade check timeout.
+Receive multicast packet failed (>.<)
+do_mcupg function enter..
+Using eth0 device
+multi upgrade check timeout.
+Receive multicast packet failed (>.<)
+addr=200000
+addr=700000
+select=0x0
+search=0x2
+<nand_read_skip_bad_,1302>!mtdpart=0x4,offset=0x0,mtdpartoffset=0x1400000,mtdPartsize=0x100000,length=0x1000
+select=0x0
+search=0x2
+search->result[select].entry=2001e0
+mtd_length=2b58f0
+<nand_read_skip_bad_,1302>!mtdpart=0x2,offset=0x0,mtdpartoffset=0x200000,mtdPartsize=0x500000,length=0x2b58f0
+<nand_read_skip_bad_,1302>!mtdpart=0x0,offset=0x0,mtdpartoffset=0x0,mtdPartsize=0x180000,length=0x80000
+lseek=0x4686b040
+cmdline=U-Boot V1.0.0 20220720202532 
+## Booting kernel from Legacy Image at 440001e0 ...
+   Image Name:   Linux Kernel Image
+   Image Type:   ARM Linux Kernel Image (uncompressed)
+   Data Size:    2840269 Bytes = 2.7 MiB
+   Load Address: 40008000
+   Entry Point:  40008000
+   Verifying Checksum ... OK
+   Loading Kernel Image ... OK
+OK
+----------------------
+|-->setup versioninfo tag...
+
+Starting kernel ...
+
+Booting Linux on physical CPU 0x0
+Initializing cgroup subsys cpuset
+Initializing cgroup subsys cpu
+Initializing cgroup subsys cpuacct
+Linux version 4.1.25+ (david@ubuntu12) (gcc version 4.9.4 (Buildroot 2017.05-svn2186) ) #2 SMP PREEMPT Wed Jul 20 20:25:09 CST 2022
+CPU: ARMv7 Processor [414fc091] revision 1 (ARMv7), cr=18c5387d
+CPU: PIPT / VIPT nonaliasing data cache, VIPT aliasing instruction cache
+Machine model: ZTE ZX279128R
+Ignoring memory range 0x0 - 0x40000000
+Ignoring memory block 0x0 - 0x20000000
+in function:early_mem line: 766 zxic_mem_size = 0x10000000
+Memory policy: Data cache writealloc
+======= zx_map_io pon =======
+======= zx_map_io =======
+acl length 0x100000
+opc length 0x100000
+PERCPU: Embedded 11 pages/cpu @ceba0000 s15212 r8192 d21652 u45056
+Built 1 zonelists in Zone order, mobility grouping on.  Total pages: 64960
+Kernel command line: console=ttyAMA0,115200n8 root=/dev/mtdblock5 ro rootfstype=jffs2 mem=256M; U-Boot V1.0.0 20220720202532 0x200000 0x0 0x83 0x82
+PID hash table entries: 1024 (order: 0, 4096 bytes)
+Dentry cache hash table entries: 32768 (order: 5, 131072 bytes)
+Inode-cache hash table entries: 16384 (order: 4, 65536 bytes)
+Memory: 231384K/262144K available (5239K kernel code, 288K rwdata, 1756K rodata, 196K init, 2194K bss, 30760K reserved, 0K cma-reserved)
+Virtual kernel memory layout:
+    vector  : 0xffff0000 - 0xffff1000   (   4 kB)
+    fixmap  : 0xffc00000 - 0xfff00000   (3072 kB)
+    vmalloc : 0xd0800000 - 0xff000000   ( 744 MB)
+    lowmem  : 0xc0000000 - 0xd0000000   ( 256 MB)
+    modules : 0xbf000000 - 0xc0000000   (  16 MB)
+      .text : 0xc0008000 - 0xc06dce84   (6996 kB)
+      .init : 0xc06dd000 - 0xc070e000   ( 196 kB)
+      .data : 0xc070e000 - 0xc0756040   ( 289 kB)
+       .bss : 0xc0756040 - 0xc097a9e8   (2195 kB)
+SLUB: HWalign=32, Order=0-3, MinObjects=0, CPUs=2, Nodes=1
+Preemptible hierarchical RCU implementation.
+	Additional per-CPU info printed with stalls.
+NR_IRQS:16 nr_irqs:16 16
+L2C: platform modifies aux control register: 0x02030000 -> 0x32430000
+L2C: platform provided aux values permit register corruption.
+L2C: DT/platform modifies aux control register: 0x02030000 -> 0x02430000
+L2C-310 enabling early BRESP for Cortex-A9
+L2C-310 full line of zeros enabled for Cortex-A9
+L2C-310 dynamic clock gating enabled, standby mode enabled
+L2C-310 cache controller enabled, 16 ways, 256 kB
+L2C-310: CACHE_ID 0x410000c9, AUX_CTRL 0x46430001
+sched_clock: 64 bits at 500MHz, resolution 2ns, wraps every 4398046511103ns
+clocksource arm_global_timer: mask: 0xffffffffffffffff max_cycles: 0xe6a171a037, max_idle_ns: 881590485102 ns
+Calibrating delay loop... 1987.37 BogoMIPS (lpj=9936896)
+pid_max: default: 32768 minimum: 301
+Mount-cache hash table entries: 1024 (order: 0, 4096 bytes)
+Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes)
+Initializing cgroup subsys blkio
+Initializing cgroup subsys memory
+Initializing cgroup subsys devices
+Initializing cgroup subsys freezer
+Initializing cgroup subsys net_cls
+Initializing cgroup subsys net_prio
+CPU: Testing write buffer coherency: ok
+CPU0: thread -1, cpu 0, socket 0, mpidr 80000000
+Setting up static identity map for 0x400081e0 - 0x40008214
+CPU1: thread -1, cpu 1, socket 0, mpidr 80000001
+Brought up 2 CPUs
+SMP: Total of 2 processors activated (3981.31 BogoMIPS).
+CPU: All CPU(s) started in SVC mode.
+devtmpfs: initialized
+clocksource jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+pinctrl core: initialized pinctrl subsystem
+NET: Registered protocol family 16
+e8_arp_detect_init OK!
+DMA: preallocated 512 KiB pool for atomic coherent allocations
+cpuidle: using governor ladder
+cpuidle: using governor menu
+genirq: Setting trigger mode 8 for irq 39 failed (gic_set_type+0x0/0x4c)
+genirq: Setting trigger mode 8 for irq 40 failed (gic_set_type+0x0/0x4c)
+CONFIG_SKY_VID = 156 zxic_get_vid = 156 kernel sky vid = 156
+current_cputype=3,product_vid = 156
+vid=156-TQY00R
+board id=156, hardversion=V6.0, boardname=TQY00R
+cpu id=0, vendor=ZX279128S
+mux=f377aab
+mux=52ffd75
+mux=555c555
+mux=75077
+gpio_nr=12
+led_nr=8
+i=0,address=54,attribute=0,bused=1,mode=1,realgpio=6
+i=1,address=86,attribute=0,bused=1,mode=1,realgpio=20
+i=2,address=87,attribute=0,bused=1,mode=1,realgpio=21
+i=3,address=79,attribute=0,bused=1,mode=1,realgpio=55
+i=4,address=81,attribute=0,bused=1,mode=1,realgpio=57
+i=5,address=80,attribute=0,bused=1,mode=1,realgpio=58
+i=6,address=78,attribute=0,bused=1,mode=1,realgpio=59
+i=7,address=62,attribute=0,bused=1,mode=1,realgpio=60
+i=8,address=89,attribute=1,bused=1,mode=1,realgpio=8
+i=9,address=90,attribute=1,bused=1,mode=1,realgpio=10
+i=10,address=82,attribute=1,bused=1,mode=1,realgpio=12
+i=11,address=71,attribute=1,bused=1,mode=1,realgpio=38
+i=12,address=72,attribute=1,bused=1,mode=1,realgpio=39
+i=13,address=74,attribute=1,bused=1,mode=1,realgpio=40
+i=14,address=73,attribute=1,bused=1,mode=1,realgpio=41
+i=15,address=32,attribute=0,bused=1,mode=0,realgpio=0
+i=16,address=18,attribute=0,bused=1,mode=0,realgpio=18
+i=17,address=17,attribute=0,bused=1,mode=0,realgpio=15
+i=17,15,0,-1,1
+i=18,18,0,-1,1
+i=32,0,0,-1,1
+i=54,6,1,0,1
+i=62,60,1,1,1
+i=71,38,1,1,1
+i=72,39,1,0,1
+i=73,41,1,1,1
+i=74,40,1,0,1
+i=78,59,1,1,1
+i=79,55,1,1,1
+i=80,58,1,1,1
+i=81,57,1,1,1
+i=82,12,1,1,1
+i=86,20,1,1,1
+i=87,21,1,1,1
+i=89,8,1,1,1
+i=90,10,1,1,1
+fe:0
+ge:5
+opti:0
+lan:5
+pots:0
+usb:2
+wifi:2
+ups:0
+catv:0
+uart:1
+moca:0
+e1:0
+xge:0
+bob:1
+sim:0
+enet:5
+eth_emac:0,eth_mode:1,eth_rate:0,eth_nego:1,eth_cmode:1,eth_port:0
+eth_emac:0,eth_mode:1,eth_rate:0,eth_nego:1,eth_cmode:1,eth_port:1
+eth_emac:0,eth_mode:1,eth_rate:0,eth_nego:1,eth_cmode:1,eth_port:2
+eth_emac:0,eth_mode:1,eth_rate:0,eth_nego:1,eth_cmode:1,eth_port:3
+eth_emac:0,eth_mode:1,eth_rate:0,eth_nego:1,eth_cmode:1,eth_port:4
+optscheme:6,vendor=GN25L95
+[zx279128_init_machine] num_online_cpus:2 num_possible_cpus:2 num_present_cpus:2 num_active_cpus:2
+Serial: AMBA PL011 UART driver
+94405000.serial: ttyAMA0 at MMIO 0x94404000 (irq = 22, base_baud = 0) is a 
+console [ttyAMA0] enabled
+Serial: AMBA PL011 UART add port0 success
+SCSI subsystem initialized
+usbcore: registered new interface driver usbfs
+usbcore: registered new interface driver hub
+usbcore: registered new device driver usb
+Switched to clocksource arm_global_timer
+NET: Registered protocol family 2
+TCP established hash table entries: 2048 (order: 1, 8192 bytes)
+TCP bind hash table entries: 2048 (order: 2, 16384 bytes)
+TCP: Hash tables configured (established 2048 bind 2048)
+UDP hash table entries: 256 (order: 1, 8192 bytes)
+UDP-Lite hash table entries: 256 (order: 1, 8192 bytes)
+NET: Registered protocol family 1
+synopsys pcie probe enter!!!!!!
+pcie0 irq is 50
+pcie1 irq is 51
+pcie1 link down irq is 52
+pcie1 link down irq is 53
+Add synopsys PCIe port 0
+SYNOPSYS pcie port0 memory addr(PA): 0x10000000
+SYNOPSYS pcie port0 system control addr(VA): 0xf0500000
+SYNOPSYS pcie port0 reg addr(VA): 0xd0888000
+SYNOPSYS pcie port0 top crm addr(VA): 0xf0400000
+SYNOPSYS pcie port0 phy apb addr(VA): 0xd0890000
+SYNOPSYS pcie port0 cfg  addr(VA): 0xd08a0000
+SYNOPSYS pcie port0 local irq num: 50
+SYNOPSYS pcie port0 mem_offset: 0x0
+Add synopsys PCIe port 1
+SYNOPSYS pcie port1 memory addr(PA): 0x20000000
+SYNOPSYS pcie port1 system control addr(VA): 0xf0500000
+SYNOPSYS pcie port1 reg addr(VA): 0xd0898000
+SYNOPSYS pcie port1 top crm addr(VA): 0xf0400000
+SYNOPSYS pcie port1 phy apb addr(VA): 0xd08b8000
+SYNOPSYS pcie port1 cfg  addr(VA): 0xd08c0000
+SYNOPSYS pcie port1 local irq num: 51
+SYNOPSYS pcie port1 mem_offset: 0x0
+init synopsys pcie
+synopsys pcie driver preinit
+synopsys pcie  PreInit Controller 0
+synopsys pcie0 controller setting
+pinmux va base is 0xf0600000
+*0****pcie0 wifi reset pin(52)=0
+*0****pcie0 wifi reset pin(54)=0
+*1****pcie0 wifi reset pin(52)=1
+*1****pcie0 wifi reset pin(54)=1
+synopsys pcie  PreInit Controller 1
+synopsys pcie1 controller setting
+pinmux va base is 0xf0600000
+*0****pcie0 wifi reset pin(52)=1
+*0****pcie0 wifi reset pin(54)=1
+*1****pcie0 wifi reset pin(52)=1
+*1****pcie0 wifi reset pin(54)=1
+**********synopsys PCIe Setup*********
+synopsys pcie port0 controller root bus: 0
+**********synopsys PCI driver ScanBus************
+PCI host bridge to bus 0000:00
+pci_bus 0000:00: root bus resource [mem 0x10000000-0x17ffffff]
+pci_bus 0000:00: root bus resource [io  0x1000-0xffff]
+pci_bus 0000:00: No busn resource found for root bus, will use [bus 00-ff]
+PCI: bus0: Fast back to back transfers disabled
+**********synopsys PCIe Setup*********
+synopsys pcie port1 controller root bus: 1
+**********synopsys PCI driver ScanBus************
+PCI host bridge to bus 0000:01
+pci_bus 0000:01: root bus resource [mem 0x20000000-0x27ffffff]
+pci_bus 0000:01: root bus resource [io  0x10000-0x1ffff]
+pci_bus 0000:01: No busn resource found for root bus, will use [bus 01-ff]
+PCI: bus1: Fast back to back transfers disabled
+synopsys pcie0 controller waitting L0 state
+pcie0 link up,cnt 1!
+synopsys pcie port0 irqs setting
+pcie0 irq is 50
+pcie0 link down irq is 52
+request pcie link down irq failed
+synopsys pcie port0 windows map setting
+synopsys pcie controller0 enable
+synopsys pcie1 controller waitting L0 state
+pcie1 link up,cnt 1!
+synopsys pcie port1 irqs setting
+pcie1 irq is 51
+pcie1 link down irq is 53
+request pcie link down irq failed
+synopsys pcie port1 windows map setting
+synopsys pcie controller1 enable
+pci 0000:01:00.0: BAR 0: assigned [mem 0x20000000-0x200fffff]
+pci 0000:00:00.0: BAR 0: assigned [mem 0x10000000-0x100fffff 64bit pref]
+pci 0000:00:00.0: BAR 2: assigned [mem 0x10100000-0x10103fff 64bit pref]
+pci 0000:00:00.0: BAR 4: assigned [mem 0x10104000-0x10104fff 64bit pref]
+futex hash table entries: 512 (order: 2, 16384 bytes)
+squashfs: version 4.0 (2009/01/31) Phillip Lougher
+ntfs: driver 2.1.32 [Flags: R/W].
+jffs2: version 2.2. (NAND) � 2001-2006 Red Hat, Inc.
+fuse init (API version 7.23)
+io scheduler noop registered (default)
+no nand flash attach
+denali-nand-dt: probe of d80000.nand failed with error -1
+zte_spifc_reg:ce4b199c
+spifc->io_base :f0706000
+nand: device found, Manufacturer ID: 0xc8, Chip ID: 0x01
+nand: ESMT SPI NAND F50L1G41LB 128MiB 3,3V
+nand: 128 MiB, SLC, erase size: 128 KiB, page size: 2048, OOB size: 64
+is_two_plane: 0
+Specmaf_id:c8,Specdev_id:1
+NAND Chip: oobsize:0x40, pagesize:0x800, blocksize:0x20000, chipsize:0x8000000, ECC capbility is 8 bits, CRC protection is disabled is_two_plane[0]
+Scanning device for bad blocks
+Creating 13 MTD partitions on "ZX279127-ZX279131-spifc":
+0x000000000000-0x000008000000 : "whole flash"
+0x000000000000-0x000000200000 : "u-boot"
+0x000006800000-0x000006a00000 : "parameter tags"
+0x000000200000-0x000000700000 : "kernel0"
+0x000000700000-0x000000c00000 : "kernel1"
+0x000001800000-0x000003800000 : "rootfs0"
+0x000003800000-0x000005800000 : "rootfs1"
+0x000000c00000-0x000001400000 : "usercfg"
+0x000001400000-0x000001500000 : "others"
+0x000001500000-0x000001800000 : "wlan"
+0x000005800000-0x000006000000 : "middleware"
+0x000006a00000-0x000008000000 : "versionbackup"
+0x000006000000-0x000006800000 : "framework1"
+tun: Universal TUN/TAP device driver, 1.6
+tun: (C) 1999-2004 Max Krasnyansky <maxk@qualcomm.com>
+PPP generic driver version 2.4.2
+PPP MPPE Compression module registered
+NET: Registered protocol family 24
+usbcore: registered new interface driver catc
+usbcore: registered new interface driver kaweth
+pegasus: v0.9.3 (2013/04/25), Pegasus/Pegasus II USB Ethernet driver
+usbcore: registered new interface driver pegasus
+usbcore: registered new interface driver rtl8150
+usbcore: registered new interface driver r8152
+usbcore: registered new interface driver asix
+usbcore: registered new interface driver ax88179_178a
+usbcore: registered new interface driver cdc_ether
+usbcore: registered new interface driver cdc_eem
+usbcore: registered new interface driver dm9601
+usbcore: registered new interface driver sr9700
+usbcore: registered new interface driver CoreChips
+usbcore: registered new interface driver smsc75xx
+usbcore: registered new interface driver smsc95xx
+usbcore: registered new interface driver gl620a
+usbcore: registered new interface driver net1080
+usbcore: registered new interface driver plusb
+usbcore: registered new interface driver rndis_host
+usbcore: registered new interface driver cdc_subset
+usbcore: registered new interface driver MOSCHIP usb-ethernet driver
+usbcore: registered new interface driver cx82310_eth
+usbcore: registered new interface driver cdc_ncm
+usbcore: registered new interface driver huawei_cdc_ncm
+usbcore: registered new interface driver qmi_wwan_q
+usbcore: registered new interface driver qmi_wwan
+usbcore: registered new interface driver cdc_mbim
+ZX_VA_TOP_CRM+0x4C=0x3cfff
+**********TOP_CRM_BASE+0x08=0x1ff7ffff******
+dwc2 9000000.usb: 1792 invalid for host_rx_fifo_size. Check HW configuration.
+dwc2 9000000.usb: 1024 invalid for host_nperio_tx_fifo_size. Check HW configuration.
+dwc2 9000000.usb: 1024 invalid for max_packet_count. Check HW configuration.
+dwc2 9000000.usb: DWC OTG Controller
+dwc2 9000000.usb: new USB bus registered, assigned bus number 1
+dwc2 9000000.usb: irq 54, io mem 0x00000000
+usb usb1: New USB device found, idVendor=1d6b, idProduct=0002
+usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+usb usb1: Product: DWC OTG Controller
+usb usb1: Manufacturer: Linux 4.1.25+ dwc2_hsotg
+usb usb1: SerialNumber: 9000000.usb
+hub 1-0:1.0: USB hub found
+hub 1-0:1.0: 1 port detected
+ehci_hcd: USB 2.0 'Enhanced' Host Controller (EHCI) Driver
+ehci-pci: EHCI PCI platform driver
+ehci-platform: EHCI generic platform driver
+ohci_hcd: USB 1.1 'Open' Host Controller (OHCI) Driver
+ohci-pci: OHCI PCI platform driver
+ohci-platform: OHCI generic platform driver
+uhci_hcd: USB Universal Host Controller Interface driver
+xhci-hcd xhci-hcd.0.auto: xHCI Host Controller
+xhci-hcd xhci-hcd.0.auto: new USB bus registered, assigned bus number 2
+xhci-hcd xhci-hcd.0.auto: hcc params 0x0220f66c hci version 0x100 quirks 0x00010010
+xhci-hcd xhci-hcd.0.auto: irq 55, io mem 0x09100000
+usb usb2: New USB device found, idVendor=1d6b, idProduct=0002
+usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+usb usb2: Product: xHCI Host Controller
+usb usb2: Manufacturer: Linux 4.1.25+ xhci-hcd
+usb usb2: SerialNumber: xhci-hcd.0.auto
+hub 2-0:1.0: USB hub found
+hub 2-0:1.0: 1 port detected
+xhci-hcd xhci-hcd.0.auto: xHCI Host Controller
+xhci-hcd xhci-hcd.0.auto: new USB bus registered, assigned bus number 3
+usb usb3: We don't know the algorithms for LPM for this host, disabling LPM.
+usb usb3: New USB device found, idVendor=1d6b, idProduct=0003
+usb usb3: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+usb usb3: Product: xHCI Host Controller
+usb usb3: Manufacturer: Linux 4.1.25+ xhci-hcd
+usb usb3: SerialNumber: xhci-hcd.0.auto
+hub 3-0:1.0: USB hub found
+hub 3-0:1.0: 1 port detected
+fusbh200_hcd: FUSBH200 Host Controller (EHCI) Driver
+Warning! fusbh200_hcd should always be loaded before uhci_hcd and ohci_hcd, not after
+usbcore: registered new interface driver cdc_acm
+cdc_acm: USB Abstract Control Model driver for USB modems and ISDN adapters
+usbcore: registered new interface driver usblp
+usbcore: registered new interface driver cdc_wdm
+usbcore: registered new interface driver usb-storage
+usbcore: registered new interface driver usbserial
+usbcore: registered new interface driver cp210x
+usbserial: USB Serial support registered for cp210x
+usbcore: registered new interface driver ftdi_sio
+usbserial: USB Serial support registered for FTDI USB Serial Device
+usbcore: registered new interface driver ipw
+usbserial: USB Serial support registered for IPWireless converter
+usbcore: registered new interface driver option
+usbserial: USB Serial support registered for GSM modem (1-port)
+usbcore: registered new interface driver pl2303
+usbserial: USB Serial support registered for pl2303
+usbcore: registered new interface driver qcserial
+usbserial: USB Serial support registered for Qualcomm USB modem
+I2C probe start!
+zx_i2c_probe i2c-1 i2c-1->clk is ce5e4da0 ,clk rate is 100000000
+I2C probe successed!
+<pdt_wdt_init>(565):creat proc files for watchdog!!!
+<pdt_wdt_init>(569):Starting Watchdog Timer...
+wdt debug: nr_cpu_ids= 2
+zxwdt: heartbeat 8 msec, clock 500000000
+usbcore: registered new interface driver usbhid
+usbhid: USB HID core driver
+zx tempsensor: zx_bsp_tempsensor.regs = 0xf0500034,&(zx_bsp_tempsensor.regs->cfg)= 0xf0500034
+bsp_temp_start,val = 0x2f6
+<pdt_temp_init>(516):creat proc files for temper sensor!!!
+<pdt_temp_init>(521):temper sensor is running...
+zx tempsensor: work clock 0
+zx tempsensor: selector0's int num 27 allocated.
+zx tempsensor: selector1's int num 28 allocated.
+zx tempsensor: selector2's int num 29 allocated.
+Netfilter messages via NETLINK v0.30.
+nf_conntrack version 0.5.0 (3615 buckets, 26000 max)
+xt_time: kernel timezone is -0000
+ip_set: protocol 6
+zte--oss cpu usage module init
+11930:22:58 [Klogstdio][Info] [(882)LogStdioProcInit] LogStdioProcInit
+
+LogUdpWatchProcInit
+MAXNET DPI interface Loaded
+detail_process_init start
+ip_tables: (C) 2000-2006 Netfilter Core Team
+NET: Registered protocol family 10
+ip6_tables: (C) 2000-2006 Netfilter Core Team
+sit: IPv6 over IPv4 tunneling driver
+NET: Registered protocol family 17
+bridge: automatic filtering via arp/ip/ip6tables has been deprecated. Update your scripts to load br_netfilter if you need this.
+Bridge firewalling registered
+Ebtables v2.0 registered
+l2tp_core: L2TP core driver, V2.0
+l2tp_ppp: PPPoL2TP kernel driver, V2.0
+Registering SWP/SWPB emulation handler
+DevBw module init
+
+==========zxic_notifier_init success=================
+FLowRL module init
+usb 3-1: new SuperSpeed USB device number 2 using xhci-hcd
+usb 3-1: LPM exit latency is zeroed, disabling LPM.
+usb 3-1: config 1 has an invalid interface number: 12 but max is 5
+usb 3-1: config 1 has no interface number 5
+usb 3-1: New USB device found, idVendor=2c7c, idProduct=030b
+usb 3-1: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+usb 3-1: Product: EG060K-EA
+usb 3-1: Manufacturer: Quectel
+usb 3-1: SerialNumber: 260281c0
+option 3-1:1.0: GSM modem (1-port) converter detected
+usb 3-1: GSM modem (1-port) converter now attached to ttyUSB0
+csp_report_usb_serial_change_msg,1
+option 3-1:1.1: GSM modem (1-port) converter detected
+usb 3-1: GSM modem (1-port) converter now attached to ttyUSB1
+csp_report_usb_serial_change_msg,1
+option 3-1:1.2: GSM modem (1-port) converter detected
+usb 3-1: GSM modem (1-port) converter now attached to ttyUSB2
+csp_report_usb_serial_change_msg,1
+option 3-1:1.3: GSM modem (1-port) converter detected
+usb 3-1: GSM modem (1-port) converter now attached to ttyUSB3
+csp_report_usb_serial_change_msg,1
+qmi_wwan_q 3-1:1.4: cdc-wdm0: USB WDM device
+qmi_wwan_q 3-1:1.4: Quectel EG060K-EA work on RawIP mode
+qmi_wwan_q 3-1:1.4: rx_urb_size = 16384
+qmi_wwan_q 3-1:1.4 wwan0: register 'qmi_wwan_q' at usb-xhci-hcd.0.auto-1, WWAN/QMI device, c6:0b:c6:77:73:dd
+option 3-1:1.12: GSM modem (1-port) converter detected
+devpath :1
+port :1
+u_dev->bus->busnum :3
+VFS: Mounted root (jffs2 filesystem) readonly on device 31:5.
+Freeing unused kernel memory: 196K (c06dd000 - c070e000)
+This architecture does not have kernel memory protection.
+mounting /dev/mtdblock2 to /tagparam, wait ...
+  Mounting ramdisk at /var
+ Mounting ramdisk at /mnt
+  Mounting /dev/mtdblock10 to /db_excp
+  Mount mtd10 ok!
+  Mounting /dev/mtdblock7 to /userconfig
+  Mount ok!
+sismac region_code 299
+sismac region code euqal 299
+/proc/skubootenv/regioncode 
+mounting /dev/mtdblock9 to /wlan, wait ...
+Mount /dev/mtdblock12 to cmplugin
+mount: mounting /dev/mtdblock12 on /cmplugin failed: No such file or directory
+mkdir: can't create directory '/cmplugin/': Read-only file system
+Configuring MAC interfaces
+ls: /etc/sysconfig/network-scripts/ifcfg-mii*: No such file or directory
+Bringing up interface lo
+[gpio_module_init] gpio_elements:18 led_elements:8
+storage_wakeup_proc_create success!
+<verinfo_module_init>(1302)---->verinfo=U-Boot V1.0.0 20220720202532 0x200000 0x0 0x83 0x82
+verinfo: U-Boot V1.0.0 20220720202532 0x200000 0x0 0x83 0x82, u32CurrentSoftNumber: 0
+addr==200000
+<verinfo_module_init>(1307)---->s32Description is ZXIC 128R UNI V1.0.0
+s8VendorInfo is ZXIC
+<verinfo_module_init>(1309)----><verinfo_module_init>(1311)---->can find /usr/local/upgrade_module/phapp_verphapp_version_info_get error!
+fail_addr=40,i2c_probe(0x50) failed.
+bspdriver select mode is EEPROM.
+qupengchao : pon0 create success
+register fpga driver success, major=222
+pon init
+the pon mode is 8
+pon_reset =0xffffffff 
+enter ref_clk_set.. mode = 0 .
+enter pll_cfg_fractional
+ref_clk_set success!
+rxpll_ready
+get tm irq succeed,g_tm_irq:35
+pon tm init
+enter pon_tm_bppe_pool_init
+bppe_va_addr = 0xcef00000
+ZX_PA_BUF_BASE0 = 0x4ef00000
+--111---
+jumbo_bppe_va_addr = 0xcef10000
+before zxOsCacheFlush
+netif_napi_add() called with weight 512 on device pon
+DMA_DN_DESC_CNT = 0x0
+DMA_UP_DESC_CNT = 0x0
+pon_tm net init ok,248/176
+get pp irq succeed,g_pp_irq:37
+pon_pp init
+get npp irq succeed,g_npp_irq:19
+pon_npp init
+idm_status_proc success!
+idm_desc_init d0b2c000/4de10000
+request idm irq succeed 
+idm net init ok
+mult pmau 0x3810
+mac 0 link down
+mac 1 link down
+mac 2 link down
+mac 3 link down
+rgmii_in_use.
+get idm irq succeed,g_idm_irq:33
+= TM Module SYS FS Init ended successfully =
+tm_initModule begin...
+tm_pon_tm_initial----start
+tm_pon_tm_initial----finish
+tm_pon_pp_initial----start
+tm_pon_pp_initial----finish
+tm_pon_npp_initial----start
+tm_pon_npp_initial----finish
+tm_initial successed !!!
+enter tm_sdk_init  
+modify acl hash when set extern acl hash
+tm_initModule end...
+iprt_data_init success!
+ethdriver_init....
+g_mii_dev_name[0]  sw 
+g_mii_dev_name[1]  pon 
+zx279100_gpon_Init ok
+Init switch module
+zy switch detected boardtype:192
+zy uni num:5
+switch config 9127/9128 GPON  mode!
+[SW][sw_init_switch] reg hff
+[yqs]set cpu queue rate limit to 4000pps
+[SW][sw_init_switch] reg get statistics 
+Init switch module Success
+select GN25L95 mode is EEPROM.
+get tag erro id:-7
+region code:299
+region name:Quanguo
+USER_CFG is same as ETC_CFG, donot need copy
+  Database default setting is [current : 299]
+*****************pc start********************
+*****************echo 5000 > /proc/sys/vm/min_free_kbytes********************
+chmod: /usr/data: No such file or directory
+/etc/init.d/rcS: line 307: can't create /proc/sys/kernel/jembench: nonexistent directory
+/etc/init.d/rcS: line 319: can't create /proc/sys/kernel/jvm_osgi: nonexistent directory
+
+zxic login: [mem_monitor] --ENTER--
+target pid is not exist 
+./getMac.sh
+./vasdocker
+./vasdocker.conf
+/usr/bin/vasdocker_monitor.sh: line 115: can't create : nonexistent directory
+<3000000008>11930:23:04 [Klogfile][Error] [(1203)CheckLogConfFile] CheckLogConfFile%CheckRestartCntConfFile
+
+net_ratelimit: 16 callbacks suppressed
+11930:23:05 [dss_mgr][Warn] [dss_lla.c(947)si_dss_lla_main] The Dss' lpMsg is null.
+11930:23:05 [wlan_adapter][Alert] [pon_wlan_adapte(77)Get_Wifi_Type] Get_Wifi_Type:e_wifi_type WIFI_TYPE_MTK7603  =0x1
+11930:23:05 [wlan_adapter][Alert] [pon_wlan_adapte(89)Get_Wifi_Type] Get_Wifi_Type:e_wifi_type WIFI_TYPE_MTK7613  =0x5
+11930:23:05 [wlan_adapter][Alert] [pon_wlan_adapte(140)Get_Wifi_Type] Get_Wifi_Type:e_wifi_type=0x5
+11930:23:05 [wlan_adapter][Alert] [pon_wlan_adapte(211)wlan_adapter_ma] wlan_adapter_main:g_wifi_type=0x5
+11930:23:05 [wlan_adapter][Alert] [pon_wlan_adapte(215)wlan_adapter_ma] wlan_adapter_main:g_Wlan_Card_Max=0x2
+rlk_wlan_adapter_main, g_WifiType=5, g_Wlan_Card_Max=2
+11930:23:05 [integrate_mgr][Warn] [dbl_api.c(406)zxicDbGetView] dbAPIGetView VID(25) VN(IGD.PhyLinkInfo1) Err(-4)
+11930:23:05 [integrate_mgr][Error] [pdt_integrate.c(181)InteWanLedInit] phy status 0
+[si_lan_eth_filter_init 71] start.
+11930:23:06 [DB][Error] [dbc_mgr_file_xm(3175)zxicDbXMLCreate] zxicDbXMLCreateTblLoad tblname(NetWorkingDev4) ptViewParamFun is NULL error.
+11930:23:06 [DB][Error] [dbc_mgr_file_xm(3175)zxicDbXMLCreate] zxicDbXMLCreateTblLoad tblname(NetWorkingPlugin) ptViewParamFun is NULL error.
+11930:23:06 [DB][Error] [dbc_mgr_file_xm(3175)zxicDbXMLCreate] zxicDbXMLCreateTblLoad tblname(TimeTask) ptViewParamFun is NULL error.
+11930:23:06 [DB][Error] [dbc_mgr_file_xm(3175)zxicDbXMLCreate] zxicDbXMLCreateTblLoad tblname(EASYMESHCONFIG) ptViewParamFun is NULL error.
+11930:23:06 [DB][Error] [dbc_mgr_tbl.c(471)dbCreateDomainN] (WLANUPlatest) domain(MacAddr) error default value
+11930:23:06 [DB][Error] [dbc_mgr_file_xm(3175)zxicDbXMLCreate] zxicDbXMLCreateTblLoad tblname(WolinkCfg) ptViewParamFun is NULL error.
+11930:23:06 [DB][Error] [dbc_mgr_file_xm(3175)zxicDbXMLCreate] zxicDbXMLCreateTblLoad tblname(SkMqttInfo) ptViewParamFun is NULL error.
+11930:23:06 [DB][Error] [dbc_view_voip_s(33)dbDefVoIPSimula] {dbDefVOIPPhyInterface}: -2
+11930:23:06 [DB][Error] [dbc_mgr_tag_par(1036)zxic_db_init_ta] SambaUser
+11930:23:06 [DB][Error] [dbc_mgr_tag_par(1063)zxic_db_init_ta] SambaUser
+11930:23:06 [DB][Error] [dbc_mgr_tbl.c(762)dbSetDmDefault] val() table(WLANUPlatest) domain(MacAddr)
+11930:23:06 [DB][Error] [dbc_mgr_tbl.c(762)dbSetDmDefault] val() table(WLANUPlatest) domain(MacAddr)
+11930:23:06 [DB][Error] [dbc_mgr_tbl.c(762)dbSetDmDefault] val() table(WLANUPlatest) domain(MacAddr)
+11930:23:06 [DB][Error] [dbc_mgr_tbl.c(762)dbSetDmDefault] val() table(WLANUPlatest) domain(MacAddr)
+11930:23:10 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[firewall] Event[0x1100] dwUsedTicks[472]
+11930:23:10 [dss_mgr][Warn] [dss_lla.c(947)si_dss_lla_main] The Dss' lpMsg is null.
+11930:23:10 [srm_mgr][Warn] [srm_mgr.c(229)SrmInit] SrmInit g_java_cpulimit=80!
+rlk_wlan_adapter_main, g_WifiType=5, g_Wlan_Card_Max=2
+11930:23:10 [firewall][Warn] [fast_api.c(69)plib_ff_skip_se] plib_ff_skip_session, SIOADDFFSKIPRULE
+11930:23:10 [firewall][Warn] [fast_api.c(69)plib_ff_skip_se] plib_ff_skip_session, SIOADDFFSKIPRULE
+11930:23:10 [ct_userinfo_mgr][Warn] [e8_ctuserinfo_m(2938)si_get_proethdrv_dev_ioctl  ,brdev_set.port_id 1 ,brdev_set.name eth1 ,brdev_set.flag 0 
+vince] now in func si_get_province_map
+11930:23:10 [ct_userinfo_mgr][Error] [e8_ctuserinfo_m(2964)si_get_province] si_get_province_map failed,retcode is -1
+11930:23:10 [ct_userinfo_mgr][Warn] [e8_ctuserinfo_m(2967)si_get_province] Province:CHQ
+11930:23:10 [qos_mgr][Warn] [qos_mgr.c(8613)si_qq_config] 
+11930:23:10 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00012902 ,reciver = 0x00030201 , Event = 0x2311  
+11930:23:10 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 44  errno=[2:No such file or directory]  
+11930:23:10 [OSS_cspd][Error] [oss_common.c(547)ASEND] [arp_detect_mgr][00012902] Send task Message[0X2311] to [00030201] in SocketAsynSendMsg()  ERROR !
+11930:23:10 [arp_detect_mgr][Error] [e8_arp_detect_m(643)si_arp_detect_t] Register IFS/VOIP/TR069 error,re register 30 sec later!
+11930:23:10 [sweth_mgr][Warn] [pon_gpon_pmapi.(1932)pm_gpon_get_chi] VendorId=38c,ChipModel=1281,Revision = 28,IcVersion = f0624,ChipMode = 0
+11930:23:10 [cltlmt_mgr][Error] [e8_cltlmt_mgr.c(255)si_asym_registe] si_asym_register is begin
+11930:23:10 [cltlmt_mgr][Error] [e8_cltlmt_mgr.c(308)si_asym_registe] si_asym_register is end
+11930:23:10 [qos_mgr][Warn] [qos_mgr.c(3440)si_qc_config_al] si_qc_check_view error
+insmod: can't read '/kmodule/usbcore.ko': No such file or directory
+11930:23:10 [loopback_mgr][Warn] [loopback_mgr.c(1462)si_loopback_do_] loopback
+11930:23:10 [loopback_mgr][Error] [loopback_mgr.c(738)si_loopback_set] si_loopback_dIPv6: ADDRCONF(NETDEV_UP): br0: link is not ready
+o_ioctl failed! 
+11930:23:10 [dhcps][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [dhcps] ,async event [0x9c20] map fun is unknow 
+11930:23:10 [loopback_mgr][Warn] [loopback_mgr.c(1462)si_loopback_do_] loopback
+11930:23:10 [loopback_mgr][Error] [loopback_mgr.c(701)si_loopback_set] si_loopback_do_ioctl failed! 
+[si_lan_eth_filter_start 93] start.
+sh: can't create /proc/userlmt_ip: nonexistent directory
+11930:23:10 [cltlmt_mgr][Error] [e8_cltlmt_mgr.c(255)si_asym_registe] si_asym_register is begin
+11930:23:10 [cltlmt_mgr][Error] [e8_cltlmt_mgr.c(308)si_asym_registe] si_asym_register is end
+11930:23:10 [bandInfo_mgr][Warn] [e8_bandInfo_mgr(827)bandinfo_mgr_st] BandInfo_main SET_TIMER
+insmod: can't read '/kmodule/ehci-hcd.ko': No such file or directory
+11930:23:10 [dss_mgr][Error] [work_main.h(210)WORK_ASYNC_TIME] 
+ ERROR, PID [dss_mgr] ,async event [0x1154] map fun is NULL 
+
+ [210  main] 
+11930:23:10 [adapt_mgr][Warn] [ifs_adapt_mgr.c(2023)ifs_adapt_mgr_s] (ServList:1)
+iptables: Bad rule (does a matching rule exist in that chain?).
+11930:23:10 [igmpproxy_mgr][Error] [igmp_proxy_mgr.(565)si_igmp_module_] plib_ifs_get_routeif_info Fainet_ratelimit: 45 callbacks suppressed
+led
+11930:23:10 [igmpproxy_mgr][Error] [igmp_proxy_mgr.(565)si_igmp_module_] plib_ifs_get_routeif_info Failed
+11930:23:10 [adapt_mgr][Warn] [ifs_adapt_mgr.c(2023)ifs_adapt_mgr_s] (ServList:1)
+insmod: can't read '/kmodule/uhci-hcd.ko': No such file or directory
+11930:23:10 [adapt_mgr][Warn] [ifs_adapt_mgr.c(2023)ifs_adapt_mgr_s] (ServList:8)
+*##* [11439][set_bridge_dhcps] szCmdBuf:[echo "1" > /proc/rtl_dnstrap/enable]
+11930:23:10 [route_mgr][Error] [route_mgr.c(2202)si_db_init_defg] si_db_qry_default_rt: no default RT
+11930:23:10 [route_mgr][Warn] [route6_mgr.c(229)si_db_v6_init_d] si_db_qry_default_rt6: no default RT
+ip6tables: Bad rule (does a matching rule exist in that chain?).
+11930:23:11 [firewall][Warn] [fwdmz_mgr.c(138)si_fwdmz_dmz_le] IsEnable[1]
+11930:23:11 [firewall][Warn] [fwdmz_mgr.c(158)si_fwdmz_dmz_le] DB_ENABLE[0]
+11930:23:11 [OSS_cspd][Warn] [oss_common.c(741)SSEND] WARNING : [00012601] SSEND  Message[0X9704] to [00012601]  for sender is equal to receiver
+11930:23:11 [OSS_cspd][Warn] [oss_common.c(741)SSEND] WARNING : [00012601] SSEND  Message[0X9703] to [00012601]  for sender is equal to receiver
+brctl: SIOCDEVPRIVATE: Numerical result out of range
+ethdrv_dev_ioctl  ,brdev_set.port_id 2 ,brdev_set.name eth2 ,brdev_set.flag 0 
+insmod: can't read '/kmodule/ohci-hcd': No such file or directory
+11930:23:11 [route_mgr][Warn] [route_mgr.c(843)si_do_init_pr_i] CmdBufFailRetry=ip rule add fwmark 0xff table 252 pref 32765 prohibit;if [ `ip rule|grep "252 prohibit"|wc -l` -eq 0 ]; then ip rule add fwmark 0xff table 252 pref 32765 prohibit; fi
+[si_lan_eth_filter_start 130] g_eth_cnt: 5
+iptables: Bad rule (does a matching rule exist in that chain?).
+insmod: can't read '/kmodule/usb_led.ko': No such file or directory
+11930:23:11 [route_mgr][Warn] [route_mgr.c(863)si_do_init_pr_i] CmdBufFailRetry=ip rule add fwmark 0xff table 252 pref 32764;if [ `ip rule|grep "252 $"|wc -l` -eq 0 ]; then ip rule add fwmark 0xff table 252 pref 32764; fi
+mount: mounting none on /proc/bus/usb failed: No such file or directory
+11930:23:11 [sd_mgr][Error] [sd_mgr_product_(176)CspSdMgrProduct] do not have sd port
+module-gpio: GPIO_CMD_SET_ALL_ON
+sh: can't create ffe_entry_clear: Read-only file system
+iptables: Bad rule (does a matching rule exist in that chain?).
+ethdrv_dev_ioctl  ,brdev_set.port_id 3 ,brdev_set.name eth3 ,brdev_set.flag 0 
+sh: can't create ffe_entry_clear: Read-only file system
+11930:23:12 [router_task_mgr][Warn] [router_task_mgr(274)router_serv_rpt] [router_serv_rpt_start] no service cfg data info
+ctSgw_SocketCreate:pid=1090,pname=httpd, path=/var/tmp/0X00000442plugin
+libctsgw begin! pid=1090
+iptables: Bad rule (does a matching rule exist in that chain?).
+11930:23:12 [wlan_mgr][Warn] [wlan_manage.c(259)wlan_handle_par] [wlan-msg]EV_WLAN_ADDDEVICE.
+11930:23:12 [wlan_config][Warn] [wlan_config.c(473)wlan_config_pro] [wlan-msg]EV_WLAN_MM_INSTALL.
+11930:23:12 [wlan_config][Error] [wlan_config.c(1107)handle_wlan_ins] tmpType is 0x5.
+iptables: Bad rule (does a matching rule exist in that chain?).
+register mt_drv7603
+init the wifi hardware forward handler(to idm0)
+init the wifi hardware forward handler(to idm1)
+init the wifi hardware forward handler(to ponDevUplink)
+mt_drv7603 0000:01:00.0: enabling device (0140 -> 0142)
+
+
+=== pAd = d3683000, size = 1498048 ===
+
+<-- RTMPAllocTxRxRingMemory, Status=0, ErrorValue=0x
+<-- RTMPAllocAdapterBlock, Status=0
+pAd->CSRBaseAddress =0xd3800000, csr_addr=0xd3800000!
+device_id =0x7603
+RtmpChipOpsHook(474): Not support for HIF_MT yet!
+mt7603_init()-->
+mt_bcn_buf_init(224): Not support for HIF_MT yet!
+<--mt7603_init()
+load_dev_l1profile()-->
+match_index_by_chipname() MT7603 found as INDEX0
+l1set_profile_path() profile update from /etc/Wireless/RT2860/RT2860.dat to /etc/wireless/mt7603e/mt7603e.2.dat
+l1set_eeprom_offset() eeprom offset update from 0x40000 to 0x0
+l1set_eeprom_size() eeprom size update from 0x200 to 0x4000
+l1set_ifname() ifname rename from wlan0 to wlan
+l1set_ifname() ifname remain wlan
+l1set_ifname() ifname remain wlan
+l1set_ifname() ifname remain apcli
+load_dev_l1profile()-->
+l1set_profile_path() profile remain /etc/wireless/mt7603e/mt7603e.2.dat
+l1set_eeprom_offset() eeprom offset remain 0x0
+l1set_eeprom_size() eeprom size remain 0x4000
+l1set_ifname() ifname rename from wlan0 to wlan
+l1set_ifname() ifname remain wlan
+l1set_ifname() ifname remain wlan
+l1set_ifname() ifname remain apcli
+TX_BCN DESC ccac0000 size = 1600
+RX[0] DESC ccac0800 size = 2048
+RX[1] DESC ccac1000 size = 2048
+E2pAccessMode=4
+cfg_mode=9
+cfg_mode=9
+wmode_band_equal(): Band Equal!
+APSDCapable[0]=0
+APSDCapable[1]=0
+APSDCapable[2]=0
+APSDCapable[3]=0
+APSDCapable[4]=0
+APSDCapable[5]=0
+APSDCapable[6]=0
+APSDCapable[7]=0
+APSDCapable[8]=0
+APSDCapable[9]=0
+APSDCapable[10]=0
+APSDCapable[11]=0
+APSDCapable[12]=0
+APSDCapable[13]=0
+APSDCapable[14]=0
+APSDCapable[15]=0
+default ApCliAPSDCapable[0]=0
+Key1Str is Invalid key length(0) or Type(0)
+Key1Str is Invalid key length(0) or Type(0)
+Key1Str is Invalid key length(0) or Type(0)
+Key1Str is Invalid key length(0) or Type(0)
+Key2Str is Invalid key length(0) or Type(0)
+11930:23:13 [telKey2Str is Invalid key length(0) or Type(0)
+netd][Error] [tdKey2Str is Invalid key length(0) or Type(0)
+.c(547)TelnetdAcKey2Str is Invalid key length(0) or Type(0)
+tionWi] do actioKey3Str is Invalid key length(0) or Type(0)
+n with cfg:enablKey3Str is Invalid key length(0) or Type(0)
+e=0,port=23,maxcKey3Str is Invalid key length(0) or Type(0)
+on=5,usr=CMCCAdmKey3Str is Invalid key length(0) or Type(0)
+in,pwd=aDm8H%MdAKey4Str is Invalid key length(0) or Type(0)
+,ProcType=0
+11Key4Str is Invalid key length(0) or Type(0)
+930:23:13 [telneKey4Str is Invalid key length(0) or Type(0)
+td][Error] [td.cKey4Str is Invalid key length(0) or Type(0)
+(595)TelnetdActionWi] telnetd should be stopped
+[PMF]Set_PMFMFPC_Proc:: apidx=0, Desired MFPC=0
+[PMF]Set_PMFMFPR_Proc:: apidx=0, Desired MFPR=0
+[PMF]Set_PMFSHA256_Proc:: apidx=0, Desired PMFSHA256=0
+EntryLifeCheck=1024
+ed_th_nonCE = 34
+FalseCCATh = 1500
+FW Version:1
+FW Build Date:
+2016102<4000000008>11930:23:13 [Klogfile][Warn] [(1718)KLogThread] KLogThread,dwHalfFilePos:ERR
+
+7164355
+CmdAddressLenReq:(ret = 0)
+CmdFwStartReq: override = 1, address = 1048576
+CmdStartDLRsp: WiFI FW Download Success
+AsicDMASchedulerInit(): DMA Scheduler Mode=0(LMAC)
+efuse_probe: efuse = 10000002
+RtmpChipOpsEepromHook::e2p_type=4, inf_Type=5
+RtmpEepromGetDefault::e2p_dafault=1
+RtmpChipOpsEepromHook: E2P type(4), E2pAccessMode = 4, E2P default = 1
+NVM is BIN mode
+1. Phy Mode = 14
+Cal Free IC!!
+@@@  NICReadEEPROMParameters : pAd->FWLoad=0 
+11930:23:13 [webd][Warn] [my_dmenu.c(995)si_webd_add_men] no menu item with idName:mmHelp
+11930:23:13 [webd][Warn] [my_dmenu.c(995)si_webd_add_men] no menu item with idName:smPrefixMgr
+11930:23:13 [webd][Warn] [my_dmenu.c(995)si_webd_add_men] no menu item with idName:smIPTV
+11930:23:13 [webd][Warn] [my_dmenu.c(995)si_webd_add_men] no menu item with idName:smIPTV
+11930:23:13 [webd][Warn] [my_dmenu.c(995)si_webd_add_men] no menu item with idName:smTR069
+11930:23:13 [webd][Warn] [my_dmenu.c(995)si_webd_add_men] no menu item with idName:smEthAdaptor
+11930:23:13 [webd][Warn] [my_dmenu.c(995)si_webd_add_men] no menu item with idName:smHelp
+11930:23:13 [webd][Error] [thttpd.c(3970)si_webd_get_lan]  zxicDbQryView: szInstIdentity =IGD.LD1.ETH1
+Country Region from e2p = ffff
+tssi_1_target_pwr_g_band = 32
+2. Phy Mode = 14
+11930:23:13 [tr069][Warn] [pdt_t3. Phy Mode = 14
+r069_alarm(683)sNICInitPwrPinCfg(14): Not support for HIF_MT yet!
+i_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [NICInitializeAsic(588): Not support rtmp_mac_sys_reset () for HIF_MT yet!
+pdt_tr069_alarm(mt_mac_init()-->
+683)si_tr069_modmt7603_init_mac_cr()-->
+efy] new AlarmNuAsicSetMacMaxLen(1927): Set the Max RxPktLen=1024!
+mber=0.
+11930:<--mt_mac_init()
+23:13 [tr069][Wa	WTBL Segment 1 info:
+rn] [pdt_tr069_a		MemBaseAddr/FID:0x28000/0
+larm(683)si_tr06		EntrySize/Cnt:32/128
+9_modefy] new Al	WTBL Segment 2 info:
+armNumber=0.
+1		MemBaseAddr/FID:0x40000/0
+1930:23:13 [tr069][Warn]		EntrySize/Cnt:64/128
+ [pdt_tr069_alarm(683)si	WTBL Segment 3 info:
+_tr069_modefy] n		MemBaseAddr/FID:0x42000/64
+ew AlarmNumber=0		EntrySize/Cnt:64/128
+.
+11930:23:13 	WTBL Segment 4 info:
+[tr069][Warn] [p		MemBaseAddr/FID:0x44000/128
+dt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+		EntrySize/Cnt:32/128
+11930:23:13 [trAntCfgInit(2779): Not support for HIF_MT yet!
+069][Warn] [pdt_tr069_alarm(683)MCS Set = ff ff 00 00 01
+si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:13 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+11930:23:14 [dms_mgr][Warn] [dms.c(119)_dlnaDmsStart] Dms Start failed as Invalid Config!
+11930:23:15 [fm_mgr][Warn] [fm_mgr.c(5531)si_fm_igd_serve] added one igd ftp account instance success(1)!
+mt7603_switch_channel(): Switch to Ch#4(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#5(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+11930:23:18 [OSS_telnetd][Error] [oss_comm.c(2542)SocketSynSendMs] SocketSynSendMsg s32ActCount = 0  errno=[0:Success] !!! 
+11930:23:18 [OSS_telnetd][Error] [oss_comm.c(2545)SocketSynSendMs] APPID[0x3d] send EVENT[0x9702] to APPID[0x1] dwUsedTicks[502] timeout !!!
+11930:23:18 [OSS_telnetd][Error] [oss_common.c(840)SSEND] [telnetd][003D0101] SSEND Send Message[0X9702] to [00012601] socket failed  
+11930:23:18 [telnetd][Error] [fw_api.c(282)plib_fw_port_re] plib_fw_port_register_api chItemID:TELNET wEvent:9702 iRet:7ffe0005 FAILURE!
+mt7603_switch_channel(): Switch to Ch#6(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#7(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#8(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#9(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#10(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#11(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#12(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#13(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+rollback the bandwidth setting to support 20/40Mhz
+[PMF]ap_pmf_init:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+[PMF]ap_pmf_init:: apidx=1, MFPC=0, MFPR=0, SHA256=0
+[PMF]ap_pmf_init:: apidx=2, MFPC=0, MFPR=0, SHA256=0
+[PMF]ap_pmf_init:: apidx=3, MFPC=0, MFPR=0, SHA256=0
+AsicSetRalinkBurstMode(4345): Not support for HIF_MT yet!
+RTMPSetPiggyBack(961): Not support for HIF_MT yet!
+mt7603_switch_channel(): Switch to Ch#9(2T2R), BBP_BW=1
+AsicSetTxPreamble(4332): Not support for HIF_MT yet!
+The 8-BSSID mode is enabled, the BSSID byte5 MUST be the multiple of 8
+AsicSetPreTbtt(): bss_idx=0, PreTBTT timeout = 0xa0
+ap_ftkd> Initialize FT KDP Module...
+Main bssid = 34:d8:56:17:dc:24
+<==== rt28xx_init, Status=0
+@@@ ed_monitor_init : ===>
+@@@ ed_monitor_init : <===
+mt7603_set_ed_cca: TURN ON EDCCA mac 0x10618 = 0xd7c87d0f
+WiFi Startup Cost (wlan0): 9.400s
+11930:23:22 [ping_mgr][Warn] [dbl_api.c(406)zxicDbGetView] dbAPIGetView VID(25) VN(IGD.PhyLinkInfo1) Err(-5)
+11930:23:22 [ping_mgr][Error] [ping_mgr.c(146)get_wps_led_fla] Get wps_led_flag file failure!!
+11930:23:22 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[ping_mgr] Event[0x1150] dwUsedTicks[960]
+ethdrv_dev_ioctl  ,brdev_set.port_id 4 ,brdev_set.name eth4 ,brdev_set.flag 0 
+11930:23:23 [upnp_cp][Error] [ctrlpt.c(103)IGDCtrlPtStart] Lan unavailable in IGDCtrlPtStart
+11930:23:23 [upnp_cp][Error] [upnpcp.c(114)UPnPCPStart] IGDCtrlPtStart Failed
+11930:23:23 [OSS_upnpd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[upnp_cp] Event[0x1103] dwUsedTicks[850]
+11930:23:23 [OSS_telnetd][Error] [oss_comm.c(2542)SocketSynSendMs] SocketSynSendMsg s32ActCount = 0  errno=[0:Success] !!! 
+11930:23:23 [OSS_telnetd][Error] [oss_comm.c(2545)SocketSynSendMs] APPID[0x3d] send EVENT[0x9702] to APPID[0x1] dwUsedTicks[502] timeout !!!
+11930:23:23 [OSS_telnetd][Error] [oss_common.c(840)SSEND] [telnetd][003D0101] SSEND Send Message[0X9702] to [00012601] socket failed  
+11930:23:23 [telnetd][Error] [fw_api.c(282)plib_fw_port_re] plib_fw_port_register_api chItemID:WEB wEvent:9702 iRet:7ffe0005 FAILURE!
+11930:23:23 [OSS_telnetd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[telnetd] Event[0x1103] dwUsedTicks[1006]
+11930:23:24 [ctsgw_wlan_set][Warn] [ctsgw_proxy_mai(657)ctsgw_wlan_set_] ctsgw_wlan_set_main receive EV_NORMAL_START!
+register mt_drv7613
+mt_drv7613 0000:00:00.0: enabling device (0140 -> 0142)
+
+
+=== pAd = d4101000, size = 4847456 ===
+
+<-- RTMPAllocAdapterBlock, Status=0
+pAd->PciHif.CSRBaseAddress =0xd4000000, csr_addr=0xd4000000!
+RTMPInitPCIeDevice():device_id=0x7663
+mt_pci_chip_cfg(): HWVer=0x8a10, FWVer=0x8a01, pAd->ChipID=0x7663
+mt7663_init()-->
+<--mt7663_init()
+<-- RTMPAllocTxRxRingMemory, Status=0
+get_wdev_by_idx: invalid idx(0)
+get_wdev_by_idx: invalid idx(0)
+get_wdev_by_idx: invalid idx(0)
+get_wdev_by_idx: invalid idx(0)
+get_wdev_by_idx: invalid idx(0)
+get_wdev_by_idx: invalid idx(0)
+get_wdev_by_idx: invalid idx(0)
+11930:23:24 [cspd_misc][Warn] [dhcp4c_inst.c(3803)_dhcp4cRegSendO] Send code[60]fun[0x1a158c] is replaced by fun[0x71834]
+[si_lan_eth_filter_start 144] tVNLanEthFltL.dwCount = 13!
+warning! gpio event 0xa40c (keyid=0x10101  keystatus=1) has no data
+
+warning! gpio event 0xa40f (keyid=0x10101  keystatus=5) has no data
+
+warning! gpio event 0xa40f (keyid=0x10101  keystatus=2) has no data
+11930:23:24 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[cspd_misc] Event[0x1103] dwUsedTicks[1257]
+Usb_dev_mgr module send usb-serial dev change event to Osgi
+11930:23:24 [OSS_cspd][Error] [oss_common.c(522)ASEND] [usb_mgr][00013503] ASEND task Message[0XAE09] to [00012101] failed INVALID_MSGQID !!! 
+Usb_dev_mgr module send usb-serial dev change event to Osgi
+11930:23:24 [OSS_cspd][Error] [oss_common.c(522)ASEND] [usb_mgr][00013503] ASEND task Message[0XAE09] to [00012101] failed INVALID_MSGQID !!! 
+Usb_dev_mgr module send usb-serial dev change event to Osgi
+11930:23:24 [OSS_cspd][Error] [oss_common.c(522)ASEND] [usb_mgr][00013503] ASEND task Message[0XAE09] to [00012101] failed INVALID_MSGQID !!! 
+Usb_dev_mgr module send usb-serial dev change event to Osgi
+11930:23:24 [OSS_cspd][Error] [oss_common.c(522)ASEND] [usb_mgr][00013503] ASEND task Message[0XAE09] to [00012101] failed INVALID_MSGQID !!! 
+ startup set led flash.
+wlan4: ===> main_virtual_if_open
+get_wdev_by_idx: invalid idx(0)
+get_wdev_by_idx: invalid idx(0)
+get_wdev_by_idx: invalid idx(0)
+get_wdev_by_idx: invalid idx(0)
+load l1profile succeed!
+get_wdev_by_idx: invalid idx(0)
+get_wdev_by_idx: invalid idx(0)
+driver_own()::Try to Clear FW Own...
+11930:23:25 [ct_userinfo_mgr][Warn] [e8_ctuserinfo_m(2889)si_ctuserinfo_m] Operat Dns Cheat
+11930:23:25 [ct_userinfo_mgr][Warn] [e8_ctuserinfo_m(2167)si_ctuserinfo_s] si_ctuserinfo_set_register_status2_br bEnable 0
+driver_own()::Success to clear FW Own
+APWdsInitialize():WdsEntry[0]
+APWdsInitialize():WdsEntry[1]
+APWdsInitialize():WdsEntry[2]
+APWdsInitialize():WdsEntry[3]
+E2pAccessMode=4
+SSID[0]=MT7613E, EdcaIdx=0
+SSID[1]=, EdcaIdx=0
+SSID[2]=, EdcaIdx=0
+SSID[3]=, EdcaIdx=0
+cfg_mode=14
+cfg_mode=14
+cfg_mode=14
+wmode_band_equal(): Band Equal!
+auto_ch_select_set_cfg(): BandIdx0, AutoChannelAtBootup=0, AutoChannelAlg = 0
+BssIdx(0) wdev->channel=36
+BssIdx(1) wdev->channel=36
+BssIdx(2) wdev->channel=36
+BssIdx(3) wdev->channel=36
+Index0 Channel=36
+[TxPower] BAND0: 100
+[PERCENTAGEenable] BAND0: 1
+[BFBACKOFFenable] BAND0: 0
+LinkTestSupport = 0
+profile: FragThreshold[0]=2346
+APEdca0
+APEdca1
+APEdca2
+APEdca3
+DfsZeroWait Support=0/0
+DfsZeroWaitCacTime=255/255
+read_itxbf: ITxBfEn = 0
+read_itxbf: BSSID[0]
+read_itxbf: MBSS[0] ITxBfEn = 0
+read_itxbf: More BSSID[1]
+read_itxbf: More MBSS[1] ITxBfEn = 0
+read_itxbf: More BSSID[2]
+read_itxbf: More MBSS[2] ITxBfEn = 0
+read_itxbf: More BSSID[3]
+read_itxbf: More MBSS[3] ITxBfEn = 0
+read_itxbf: Common.ITxBfEn = 0
+read_etxbf: ETxBfEnCond = 0
+read_etxbf: BSSID[0]
+read_etxbf: MBSS[0] ETxBfEnCond = 0
+read_etxbf: More BSSID[1]
+read_etxbf: More MBSS[1] ETxBfEnCond = 0
+read_etxbf: More BSSID[2]
+read_etxbf: More MBSS[2] ETxBfEnCond = 0
+read_etxbf: More BSSID[3]
+read_etxbf: More MBSS[3] ETxBfEnCond = 0
+MAP_MODE=0
+rtmp_read_wds_from_file(): WDS Profile
+APWdsInitialize():WdsEntry[0]
+APWdsInitialize():WdsEntry[1]
+APWdsInitialize():WdsEntry[2]
+APWdsInitialize():WdsEntry[3]
+WDS-Enable mode=0
+AndesSendCmdMsg: Could not send in band command due to diablefRTMP_ADAPTER_MCU_SEND_IN_BAND_CMD
+AndesSendCmdMsg: Command type = ed, Extension command type = 48
+HT: WDEV[0] Ext Channel = ABOVE
+EntryLifeCheck=1024
+ICapMode = 0
+WtcSetMaxStaNum: MaxStaNum:108, BssidNum:4, WdsNum:4, ApcliNum:1, MaxNumChipRept:16, MinMcastWcid:130
+Top Init Done!
+Use dev_alloc_skb
+RX[0] DESC cb3d8000 size = 32768
+RX[1] DESC cb00e000 size = 8192
+cut_through_init(): ct sw token number = 4095
+cut_through_token_list_init(): TokenList inited done!id_head/tail=0/4096
+cut_through_token_list_init(): ccbea3c8,ccbea3c8
+cut_through_token_list_init(): TokenList inited done!id_head/tail=0/4096
+cut_through_token_list_init(): ccbea3d8,ccbea3d8
+Hif Init Done!
+ctl->txq = d459abe0
+ctl->rxq = d459abec
+ctl->ackq = d459abf8
+ctl->kickq = d459ac04
+ctl->tx_doneq = d459ac10
+ctl->rx_doneq = d459ac1c
+mt7663_fw_prepare():using E2 ROM patch
+mt7663_fw_prepare():using E2 firmware
+Parsing patch header
+	Built date: 1912310402b6540
+
+	Platform: 7663
+	HW/SW version: 0x65322d31
+	Patch version: 0x3830328a
+	Target address: 0xdc000, length: 211232
+patch is not ready && get semaphore success
+Start address = 0xdc000, DL length = 211232, Data mode = 0x80000000
+EventGenericEventHandler: CMD Success
+MtCmdAddressLenReq:(ret = 0)
+MtCmdPatchFinishReq
+EventGenericEventHandler: CMD Success
+release patch semaphore
+WfMcuHwInit: Before NICLoadFirmware, check ICapMode = 0
+Parsing CPU 0 fw tailer
+	Chip ID: 0x08
+	Eco version: 0x01
+	Region number: 0x03
+	Format version: 0x02
+	Format flag: 0x01
+	Ram version: 7663mp1827
+	Built date: 20191231040247
+	Common crc: 0xd5ce296f
+Parsing tailer region 0
+	Decomp crc: 0x0
+	Decomp size: 0x0
+	Decomp block size: 0x0
+	Target address: 0x112c00
+	Download size: 271184
+	Feature set: 0x27
+Parsing tailer region 1
+	Decomp crc: 0x0
+	Decomp size: 0x0
+	Decomp block size: 0x0
+	Target address: 0x2018400
+	Download size: 57376
+	Feature set: 0x07
+Parsing tailer region 2
+	Decomp crc: 0x0
+	Decomp size: 0x0
+	Decomp block size: 0x0
+	Target address: 0x40100000
+	Download size: 14736
+	Feature set: 0x07
+	Release info: header tag = 0, total length = 56
+	tag 1, padding length = 2, tag length = 50
+	payload: t-neptune-trunk-MT7621_AP_7603_7613-20191231040004
+Start address = 0x112c00, DL length = 271184, Data mode = 0x8000000f
+EventGenericEventHandler: CMD Success
+MtCmdAddressLenReq:(ret = 0)
+Start address = 0x2018400, DL length = 57376, Data mode = 0x8000000f
+EventGenericEventHandler: CMD Success
+MtCmdAddressLenReq:(ret = 0)
+Start address = 0x40100000, DL length = 14736, Data mode = 0x8000000f
+EventGenericEventHandler: CMD Success
+MtCmdAddressLenReq:(ret = 0)
+MtCmdFwStartReq: override = 0x1, address = 0x112c00
+EventGenericEventHandler: CMD Success
+MCU Init Done!
+efuse_probe: efuse = 511161
+RtmpChipOpsEepromHook::e2p_type=4, inf_Type=5
+RtmpEepromGetDefault::e2p_dafault=4
+RtmpChipOpsEepromHook: E2P type(4), E2pAccessMode = 4, E2P default = 4
+NVM is BIN mode
+Use 0st /wlan/MT7613E_EEPROM.bin default bin.
+rtmp_ee_load_from_bin::bin FileName=/wlan/MT7613E_EEPROM.bin
+Load EEPROM Buffer from /wlan/MT7613E_EEPROM.bin
+Cal Free IC!!
+mt7663_cal_free_data_get
+[4G_CPE] wait startup.
+Country Region from e2p = 0
+mt7663_antenna_default_reset() todo
+RTMPReadTxPwrPerRate(444): Don't Support this now!
+RcRadioInit(): DbdcMode=0, ConcurrentBand=1
+RcRadioInit(): pRadioCtrl=cc842d3c,Band=0,rfcap=3,channel=1,PhyMode=2 extCha=0xf
+AntCfgInit(3078): Not support for HIF_MT yet!
+EEPROM Init Done!
+mt_mac_init()-->
+mt_mac_pse_init(2985): Don't Support this now!
+mt7663_init_mac_cr()-->
+mt7663_init_mac_cr(): TMAC_TRCR0=0x82783c92
+MtAsicSetMacMaxLen(1075): Not support for HIF_MT yet!
+<--mt_mac_init()
+CmdRxHdrTransBLUpdateRsp::EventExtCmdResult.u4Status = 0x0
+CmdRxHdrTransBLUpdateRsp::EventExtCmdResult.u4Status = 0x0
+CmdRxHdrTransBLUpdateRsp::EventExtCmdResult.u4Status = 0x0
+MAC Init Done!
+MT7663BBPInit():BBP Initialization.....
+	Band 0: valid=1, isDBDC=0, Band=2, CBW=1, CentCh/PrimCh=1/1, prim_ch_idx=0, txStream=2
+	Band 1: valid=0, isDBDC=0, Band=0, CBW=0, CentCh/PrimCh=0/0, prim_ch_idx=0, txStream=0
+MT7663BBPInit() todo
+PHY Init Done!
+E2pAccessMode=4
+SSID[0]=MT7613E, EdcaIdx=0
+SSID[1]=, EdcaIdx=0
+SSID[2]=, EdcaIdx=0
+SSID[3]=, EdcaIdx=0
+cfg_mode=14
+cfg_mode=14
+cfg_mode=14
+wmode_band_equal(): Band Equal!
+auto_ch_select_set_cfg(): BandIdx0, AutoChannelAtBootup=0, AutoChannelAlg = 0
+BssIdx(0) wdev->channel=36
+BssIdx(1) wdev->channel=36
+BssIdx(2) wdev->channel=36
+BssIdx(3) wdev->channel=36
+Index0 Channel=36
+[TxPower] BAND0: 100
+[PERCENTAGEenable] BAND0: 1
+[BFBACKOFFenable] BAND0: 0
+LinkTestSupport = 0
+profile: FragThreshold[0]=2346
+APEdca0
+APEdca1
+APEdca2
+APEdca3
+DfsZeroWait Support=0/0
+DfsZeroWaitCacTime=255/255
+read_itxbf: ITxBfEn = 0
+read_itxbf: BSSID[0]
+read_itxbf: MBSS[0] ITxBfEn = 0
+read_itxbf: More BSSID[1]
+read_itxbf: More MBSS[1] ITxBfEn = 0
+read_itxbf: More BSSID[2]
+read_itxbf: More MBSS[2] ITxBfEn = 0
+read_itxbf: More BSSID[3]
+read_itxbf: More MBSS[3] ITxBfEn = 0
+read_itxbf: Common.ITxBfEn = 0
+read_etxbf: ETxBfEnCond = 0
+read_etxbf: BSSID[0]
+read_etxbf: MBSS[0] ETxBfEnCond = 0
+read_etxbf: More BSSID[1]
+read_etxbf: More MBSS[1] ETxBfEnCond = 0
+read_etxbf: More BSSID[2]
+read_etxbf: More MBSS[2] ETxBfEnCond = 0
+read_etxbf: More BSSID[3]
+read_etxbf: More MBSS[3] ETxBfEnCond = 0
+MAP_MODE=0
+rtmp_read_wds_from_file(): WDS Profile
+APWdsInitialize():WdsEntry[0]
+APWdsInitialize():WdsEntry[1]
+APWdsInitialize():WdsEntry[2]
+APWdsInitialize():WdsEntry[3]
+WDS-Enable mode=0
+HT: WDEV[0] Ext Channel = ABOVE
+EntryLifeCheck=1024
+ICapMode = 0
+tx_pwr_comp_init():NotSupportYet!
+MtCmdSetMacTxRx:(ret = 0)
+asic_bss_beacon_init(): NotSupportedFunc for this arch(HIF_MT)!
+MtAsicSetChBusyStat(648): Not support for HIF_MT yet!
+AsicDisableSync(): NotSupportedFunc for this arch(HIF_MT)!
+MtAsicSetRalinkBurstMode(2229): Not support for HIF_MT yet!
+MtAsicSetPiggyBack(592): Not support for HIF_MT yet!
+AsicSetPreTbtt(): NotSupportedFunc for this arch(HIF_MT)!
+ap_ftkd> Initialize FT KDP Module...
+Main bssid = 34:d8:56:17:dc:25
+AsicSetRxFilter(): NotSupportedFunc for this arch(HIF_MT)!
+MtCmdSetMacTxRx:(ret = 0)
+AsicSetRxFilter(): NotSupportedFunc for this arch(HIF_MT)!
+MtCmdSetMacTxRx:(ret = 0)
+<==== mt_wifi_init, Status=0
+TxBfModuleEnCtrl:It's not DBDC mode
+MtCmdEDCCACtrl: BandIdx: 0, EDCCACtrl: 0
+IdBss1 36:d8:56:17:dc:25
+IdBss2 36:d8:56:27:dc:25
+IdBss3 36:d8:56:37:dc:25
+MSTA_Init (1) ---> ApCli
+Register MSTA IF (apcli1) , pAd->MSTANum = 1
+hc_radio_res_request(): wdev=4, hobj is not ready!
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=2
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=0, ampdu_factor=3
+WDS_Init():
+The new WDS interface MAC = 00:00:00:00:00:00
+  MacTabMatchWCID = 0
+################hc_radio_res_request(): wdev=5, hobj is not ready!
+######handle recovered_config_tiCaller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+mer_msg
+sh: 
+phy_mode=49, ch=36, wdev_type=8
+/etc/restoreblocht_cap: ht_cap->HtCapInfo, 
+ks: not found
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=0, ampdu_factor=3
+The new WDS interface MAC = 00:00:00:00:00:00
+  MacTabMatchWCID = 0
+hc_radio_res_request(): wdev=6, hobj is not ready!
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+/proc/skubootenv
+phy_mode=49, ch=36, wdev_type=8
+/recoveredcfgcmd has no valid config
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=0, ampdu_factor=3
+The new WDS interface MAC = 00:00:00:00:00:00
+  MacTabMatchWCID = 0
+hc_radio_res_request(): wdev=7, hobj is not ready!
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=8
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=0, ampdu_factor=3
+The new WDS interface MAC = 00:00:00:00:00:00
+  MacTabMatchWCID = 0
+hc_radio_res_request(): wdev=8, hobj is not ready!
+do not need recovered config, isCaller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+ the same md5
+
+phy_mode=49, ch=36, wdev_type=8
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=0, ampdu_factor=3
+Total allocated 4 WDS interfaces!
+WtcSetMaxStaNum: MaxStaNum:108, BssidNum:4, WdsNum:4, ApcliNum:1, MaxNumChipRept:16, MinMcastWcid:130
+RedInit: set Driver/N9 RED Enable to 1.
+RedInit: RED Initiailize Done.
+cp_support_is_enabled: set Driver CP_SUPPORT to Mode 2.
+RTMP_COM_IoctlHandle -> CMD_RTPRIV_IOCTL_VIRTUAL_INF_UP
+wifi_sys_open(), wdev idx = 0
+wdev_attr_update(): wdevId0 = 34:d8:56:17:dc:25
+[BuildChannelList] BandIdx = 0, PhyMode = 49, ChListNum = 19:
+ [RadarStateCheck] RD_NORMAL_MODE  
+AsicSwitchChannel(): 5G Channel:42, then must be Channel_Band:1 !!
+Caller: wlan_operate_init+0xb0/0x10c [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+AP inf up for ra_0(func_idx) OmacIdx=0
+AsicRadioOnOffCtrl(): DbdcIdx=0 RadioOn
+ApAutoChannelAtBootUp----------------->
+ApAutoChannelAtBootUp: AutoChannelBootup[0] = 0
+ApAutoChannelAtBootUp<-----------------
+ ap_run_at_boot() : ACS is disable !!
+[PMF]APPMFInit:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+wifi_sys_linkup(), wdev idx = 0
+wtc_acquire_groupkey_wcid: Found a non-occupied wtbl_idx:135 for WDEV_TYPE:1
+ LinkToOmacIdx = 0, LinkToWdevType = 1
+bssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 8192, CmdBssInfoBmcRate.u2McTransmit = 8196
+UpdateBeaconHandler, BCN_UPDATE_INIT, OmacIdx = 0
+MtCmdTxPowerPercentCtrl: fgTxPowerPercentEn: 1, BandIdx: 0
+MtCmdBcnV2OffloadSet:(ret = 0)
+AsicSetTxStream(): NotSupportedFunc for this arch(HIF_MT)!
+AsicSetRxStream(): NotSupportedFunc for this arch(HIF_MT)!
+MtCmdSetMinPhyRate:(ret = 0)
+apidx 0 for WscUUIDInit
+Generate UUID for apidx(0)
+
+old_dev_ioctl_370 : set BRCTL_SET_BR_GREGISTERTAG !
+11930:23:31 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[ct_userinfo_mgr] Event[0x1153] dwUsedTicks[638]
+11930:23:31 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[ping_mgr] Event[0x1150] dwUsedTicks[583]
+insmod: can't read '/kmodule/fuse.ko': No such file or directory
+insmod: can't read '/kmodule/usb-storage.ko': No such file or directory
+11930:23:32 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[usb_stor] Event[0xaa52] dwUsedTicks[761]
+11930:23:32 [forward_rule][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:23:32 [U_busybox][Warn] [ifconfig.c(1003)ifconfig] SIOCGIFFLAGS
+11930:23:32 [OSS[zte_api_sw_lan_up_pon_set]lan_up is 1.lan_up_port is 0.
+_cspd][Warn] [osThe mode is lan up
+s_sche.c(849)Runzte_api_sw_lan_up_pon_set done 
+Process] RunProcess process[sweth_mgr] Event[0x1103] dwUsedTicks[2200]
+11930:23:32 [gpon_mgr][Error] [pon_gpon_adapte(185)si_gpon_comm_st] before si_gpon_lanup_set_db  lan_up_mode=0x1 lan_up_port=0
+lan_up_mode:1,lan_up_port:0
+11930:23:32 [switch_mgr][Warn] [dbl_api.c(101)zxicDbAddView] dbAPIAddView VID(2) RVN(IGD.LD1) Err(-3)
+11930:23:32 [switch_mgr][Warn] [pon_switch_adap(332)si_switch_port_] DBVIEW_ETH_PORTCONF
+11930:23:32 [switch_mgr][Error] [pon_switch_adap(397)si_switch_comm_] si_switch_port_db_init  failed!
+11930:23:32 [switch_mgr][Warn] [dbl_api.c(101)zxicDbAddView] dbAPIAddView VID(2) RVN(IGD.LD1) Err(-3)
+11930:23:32 [switch_mgr][Warn] [pon_switch_adap(332)si_switch_port_] DBVIEW_ETH_PORTCONF
+11930:23:32 [switch_mgr][Error] [pon_switch_adap(397)si_switch_comm_] si_switch_port_db_init  failed!
+11930:23:32 [switch_mgr][Warn] [dbl_api.c(101)zxicDbAddView] dbAPIAddView VID(2) RVN(IGD.LD1) Err(-3)
+11930:23:32 [switch_mgr][Warn] [pon_switch_adap(332)si_switch_port_] DBVIEW_ETH_PORTCONF
+11930:23:32 [switch_mgr][Error] [pon_switch_adap(397)si_switch_comm_] si_switch_port_db_init  failed!
+11930:23:32 [switch_mgr][Warn] [dbl_api.c(101)zxicDbAddView] dbAPIAddView VID(2) RVN(IGD.LD1) Err(-3)
+11930:23:32 [switch_mgr][Warn] [pon_switch_adap(332)si_switch_port_] DBVIEW_ETH_PORTCONF
+11930:23:32 [switch_mgr][Error] [pon_switch_adap(397)si_switch_comm_] si_switch_port_db_init  failed!
+11930:23:32 [switch_mgr][Warn] [dbl_api.c(101)zxicDbAddView] dbAPIAddView VID(2) RVN(IGD.LD1) Err(-3)
+11930:23:32 [switch_mgr][Warn] [pon_switch_adap(332)si_switch_port_] DBVIEW_ETH_PORTCONF
+11930:23:32 [switch_mgr][Error] [pon_switch_adap(397)si_switch_comm_] si_switch_port_db_init  failed!
+11930:23:32 [switch_mgr][Error] [pon_switch_mgr.(90)si_switch_main] Set Timer 35s
+11930:23:32 [forward_rule][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:23:32 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[forward_rule] Event[0x1103] dwUsedTicks[2206]
+11930:23:32 [flowrl_mgr][Error] [e8_flowrl_mgr.c(1721)si_flowrl_mgr_s]  gBversion=[0],gLan_up=[1],gLan_up_port=[0], gWlan_up=[0]
+11930:23:32 [firewall][Warn] [ifs_api.c(sip alg change port ok!
+2060)plib_ifs_geftp alg change port ok!
+t_br] [IGD.WD1.WCD1.WCPPP1]
+11930:23:32 [firewall][Warn] [ifs_api.c(2060)plib_ifs_get_br] [IGD.WD1.WCD1.WCPPP3]
+11930:23:32 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[wlan_config] Event[0xa204] dwUsedTicks[2034]
+11930:23:32 [wlan_config][Warn] [wlan_config.c(483)wlan_config_pro] [wlan-msg]EV_WLAN_MM_START.
+iptables: Bad rule (does a matching rule exist in that chain?).
+rtsp alg change port ok!
+11930:23:32 [wlan_config][Error] [wlan_config.c(2870)wifMtCmdBcnV2OffloadSet:(ret = 0)
+i_acl_init] iCardIndex=0MtCmdBcnV2OffloadSet:(ret = 0)
+
+11930:23:32 [wlan_config][Error] [wlan_config.c(3403)handle_wlan_set] @@@@ call handle_bandsteering_start, iBaseIndex = 0.
+iptables: Bad rule (does a matching rule exist in that chain?).
+11930:23:32 [wlan_config][Warn] [pon_wlan_adapte(1496)rlk_wlan_destro] g_bVAP is error iIfIndex:3, g_vap:0
+iptables: Bad rule (does a matching rule exist in that chain?).
+11930:23:33 [wlan_config][Warn] [pon_wlan_adapte(1496)rlk_wlan_destro] g_bVAP is error iIfIndex:2, g_vap:0
+11930:23:33 [wlan_config][Warn] [pon_wlan_adapte(1496)rlk_wlan_destro] g_bVAP is error iIfIndex:1, g_vap:0
+The 8-BSSID mode is enabled, the BSSID byte5 MUST be the multiple of 8
+MTPciPollTxRxEmpty
+AsicSetPreTbtt(): bss_idx=0, PreTBTT timeout = 0x0
+RTMPSetPiggyBack(961): Not support for HIF_MT yet!
+ap_ftkd> Release FT KDP Module...
+RT28xxPciAsicRadioOff(): Not support for HIF_MT yet!
+RTMPDrvClose call RT28xxPciAsicRadioOff fail !!
+tx_kickout_fail_count = 0
+tx_timeout_fail_count = 0
+rx_receive_fail_count = 0
+alloc_cmd_msg = 84
+free_cmd_msg = 84
+11930:23:34 [wlan_config][Warn] [pon_wlan_adapte(6251)rlk_set_profile] /etc/Wireless/RT2860AP/RT2860AP.dat
+11930:23:34 [wlan_config][Warn] [pon_wlan_adapte(6251)rlk_set_profile] /etc/Wireless/RT2860AP/RT2860AP.dat
+11930:23:34 [wlan_config][Warn] [pon_wlan_adapte(6251)rlk_set_profile] /etc/Wireless/RT2860AP/RT2860AP.dat
+11930:23:34 [wlan_config][Warn] [pon_wlan_adapte(6251)rlk_set_profile] /etc/Wireless/RT2860AP/RT2860AP.dat
+11930:23:34 [wlan_config][Warn] [pon_wlan_adapte(6251)rlk_set_profile] /etc/Wireless/RT2860AP/RT2860AP.dat
+load_dev_l1profile()-->
+l1set_profile_path() profile remain /etc/wireless/mt7603e/mt7603e.2.dat
+l1set_eeprom_offset() eeprom offset remain 0x0
+l1set_eeprom_size() eeprom size remain 0x4000
+l1set_ifname() ifname rename from wlan0 to wlan
+l1set_ifname() ifname remain wlan
+l1set_ifname() ifname remain wlan
+l1set_ifname() ifname remain apcli
+TX_BCN DESC ccac0000 size = 1600
+RX[0] DESC ccac0800 size = 2048
+RX[1] DESC ccac1000 size = 2048
+E2pAccessMode=4
+cfg_mode=9
+cfg_mode=9
+wmode_band_equal(): Band Equal!
+APSDCapable[0]=0
+APSDCapable[1]=0
+APSDCapable[2]=0
+APSDCapable[3]=0
+APSDCapable[4]=0
+APSDCapable[5]=0
+APSDCapable[6]=0
+APSDCapable[7]=0
+APSDCapable[8]=0
+APSDCapable[9]=0
+APSDCapable[10]=0
+APSDCapable[11]=0
+APSDCapable[12]=0
+APSDCapable[13]=0
+APSDCapable[14]=0
+APSDCapable[15]=0
+default ApCliAPSDCapable[0]=0
+Key1Str is Invalid key length(0) or Type(0)
+Key1Str is Invalid key length(0) or Type(0)
+Key1Str is Invalid key length(0) or Type(0)
+Key1Str is Invalid key length(0) or Type(0)
+Key2Str is Invalid key length(0) or Type(0)
+Key2Str is Invalid key length(0) or Type(0)
+Key2Str is Invalid key length(0) or Type(0)
+Key2Str is Invalid key length(0) or Type(0)
+Key3Str is Invalid key length(0) or Type(0)
+Key3Str is Invalid key length(0) or Type(0)
+Key3Str is Invalid key length(0) or Type(0)
+Key3Str is Invalid key length(0) or Type(0)
+Key4Str is Invalid key length(0) or Type(0)
+Key4Str is Invalid key length(0) or Type(0)
+Key4Str is Invalid key length(0) or Type(0)
+Key4Str is Invalid key length(0) or Type(0)
+[PMF]Set_PMFMFPC_Proc:: apidx=0, Desired MFPC=0
+[PMF]Set_PMFMFPR_Proc:: apidx=0, Desired MFPR=0
+[PMF]Set_PMFSHA256_Proc:: apidx=0, Desired PMFSHA256=0
+EntryLifeCheck=1024
+ed_th_nonCE = 34
+FalseCCATh = 1500
+FW Version:1
+FW Build Date:20161027164355
+AsicDMASchedulerInit(): DMA Scheduler Mode=0(LMAC)
+efuse_probe: efuse = 10000002
+RtmpChipOpsEepromHook::e2p_type=4, inf_Type=5
+RtmpEepromGetDefault::e2p_dafault=1
+RtmpChipOpsEepromHook: E2P type(4), E2pAccessMode = 4, E2P default = 1
+NVM is BIN mode
+1. Phy Mode = 14
+Cal Free IC!!
+@@@  NICReadEEPROMParameters : pAd->FWLoad=1 
+Country Region from e2p = ffff
+tssi_1_target_pwr_g_band = 32
+2. Phy Mode = 14
+3. Phy Mode = 14
+NICInitPwrPinCfg(14): Not support for HIF_MT yet!
+NICInitializeAsic(588): Not support rtmp_mac_sys_reset () for HIF_MT yet!
+mt_mac_init()-->
+mt7603_init_mac_cr()-->
+AsicSetMacMaxLen(1927): Set the Max RxPktLen=1024!
+<--mt_mac_init()
+	WTBL Segment 1 info:
+		MemBaseAddr/FID:0x28000/0
+		EntrySize/Cnt:32/128
+	WTBL Segment 2 info:
+		MemBaseAddr/FID:0x40000/0
+		EntrySize/Cnt:64/128
+	WTBL Segment 3 info:
+		MemBaseAddr/FID:0x42000/64
+		EntrySize/Cnt:64/128
+	WTBL Segment 4 info:
+		MemBaseAddr/FID:0x44000/128
+		EntrySize/Cnt:32/128
+AntCfgInit(2779): Not support for HIF_MT yet!
+MCS Set = ff ff 00 00 01
+mt7603_switch_channel(): Switch to Ch#4(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#5(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#6(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#7(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+switch_phy_int_check 438 mac 0 phy status changed: 1000M full-duplex
+pon_reset =0xffffffff 
+mt7603_switch_channel(): Switch to Ch#8(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#9(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#10(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+sw_get_port_linkStatus@sw_alarm_scanforalarm the dev is null!
+11930:23:36 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00850301 , Event = 0xa506  
+11930:23:36 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 56  errno=[2:No such file or directory]  
+11930:23:36 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA506] to [00850301] in SocketAsynSendMsg()  ERROR !
+11930:23:36 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00840401 , Event = 0xa506  
+11930:23:36 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 56  errno=[2:No such file or directory]  
+11930:23:36 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA506] to [00840401] in SocketAsynSendMsg()  ERROR !
+11930:23:36 [wlan_mgr][Warn] [wlan_manage.c(532)wlan_handle_par] EV_ETH_UP_LINK_STATUS receive.
+11930:23:36 [tr069][Warn] [e8_pdt_tr069_in(745)E8ComRecvTr069A] Receive EV_ETH_UP_LINK_STATUS��port_rate=0; port_mode=1
+11930:23:36 [tr069][Warn] [e8_pdt_tr069_in(763)E8ComRecvTr069A] Ports/lan are not available alarmNumber(id)=104006, status= 0.
+11930:23:36 [tr069][Error] [pdt_tr069_alarm(311)si_tr069_alarm_] Donnot receive normal Alarm or Repeat normal ClearAlarm:AlarmNumber= 0,alarmNo=104006
+11930:23:36 [tr069][Error] [e8_pdt_tr069_in(2698)si_tr069_unconf] clearalarm:si_tr069_alarm_stat_insert fail! 
+mt7603_switch_channel(): Switch to Ch#11(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#12(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+11930:23:37 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00750101 , Event = 0xa455  
+11930:23:37 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 32  errno=[2:No such file or directory]  
+11930:23:37 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA455] to [00750101] in SocketAsynSendMsg()  ERROR !
+mt7603_switch_channel(): Switch to Ch#13(2T2R), BBP_BW=1
+SYNC - BBP R4 to 20MHz.l
+rollback the bandwidth setting to support 20/40Mhz
+[PMF]ap_pmf_init:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+[PMF]ap_pmf_init:: apidx=1, MFPC=0, MFPR=0, SHA256=0
+[PMF]ap_pmf_init:: apidx=2, MFPC=0, MFPR=0, SHA256=0
+[PMF]ap_pmf_init:: apidx=3, MFPC=0, MFPR=0, SHA256=0
+AsicSetRalinkBurstMode(4345): Not support for HIF_MT yet!
+RTMPSetPiggyBack(961): Not support for HIF_MT yet!
+mt7603_switch_channel(): Switch to Ch#9(2T2R), BBP_BW=1
+AsicSetTxPreamble(4332): Not support for HIF_MT yet!
+The 8-BSSID mode is enabled, the BSSID byte5 MUST be the multiple of 8
+AsicSetPreTbtt(): bss_idx=0, PreTBTT timeout = 0xa0
+ap_ftkd> Initialize FT KDP Module...
+Main bssid = 34:d8:56:17:dc:24
+<==== rt28xx_init, Status=0
+@@@ ed_monitor_init : ===>
+@@@ ed_monitor_init : <===
+mt7603_set_ed_cca: TURN ON EDCCA mac 0x10618 = 0xd7c87d0f
+WiFi Startup Cost (wlan0): 3.460s
+11930:23:37 [wlan_configEntryLifeCheck Cnt = 1024.
+][Warn] [pon_wlacfg_mode=9
+n_adapte(6542)rlwmode_band_equal(): Band Equal!
+k_wlan_ioctl_] set wlan0 mcs_switch=0
+11930:23:37 [wlan_config][Warn] [pon_wlan_adapte(6542)rlk_wlan_i[PMF]ap_pmf_init:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+octl_] set wlan0 assocctl=0
+11[PMF]ap_pmf_init:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+930:23:37 [wlan_config][Warn] [pon_wlan_adapte(1[PMF]ap_pmf_init:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+496)rlk_wlan_des[PMF]RTMPMakeRsnIeCap: RSNIE Capability MFPC=0, MFPR=0
+tro] g_bVAP is error iIfAsicAddSharedKeyEntry(2093): Not support for HIF_MT yet!
+Index:1, g_vap:0
+11930:23:37 [wlan_config][Warn] [pon_wlan_adapte(1496)rlk_wlan_destro] g_bVAP is error iIfIndex:2, g_vap:0
+11930:23:37 [wlan_config][Warn] [pon_wlan_adapte(3917)rlk_wlan_enable] Ignore wlan3 for Non-EASYMESH system.
+11930:23:37 [wlan_config][Warn] [pon_wlan_adapte(6542)rlk_wlan_ioctl_] set wlan0 UseZTERateAlg=1
+11930:23:37 [wlan_config][Warn] [pon_wlan_adapte(6542)rlk_wlan_ioctl_] set wlan0 WmmType=0
+11930:23:37 [wlan_config][Warn] [pon_wlan_adapte(6542)rlk_wlan_ioctl_] set wlan0 NoForwardingMBCast=0
+11930:23:37 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[ping_mgr] Event[0x1150] dwUsedTicks[310]
+[PMF]ap_pmf_init:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+[PMF]RTMPMakeRsnIeCap: RSNIE Capability MFPC=0, MFPR=0
+AsicAddSharedKeyEntry(2093): Not support for HIF_MT yet!
+Set_AutoChannelSel_Proc Alg isn't defined
+11930:23:37 [wlan_config][Warn] [pon_wlan_adapte(6542)rlk_wlan_ioctl_] set wlan0 AutoChannelSel=8
+11930:23:39 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[route_mgr] Event[0x1103] dwUsedTicks[2822]
+
+==466===si_ipv4_res_init_load_cfg===tEnable=0=====
+pm_ipv4resurl_set_all_route_enable  parameter in: Enable:0
+
+ [3108  si_rt_if_add]Ipmode = 3 vConnectionID = IGD.LD1 add
+11930:23:39 [route_mgr][Error] [route_mgr.c(2202)si_db_init_defg] si_db_qry_default_rt: no default RT
+11930:23:39 [route_mgr][Warn] [route6_mgr.c(229)si_db_v6_init_d] si_db_qry_default_rt6: no default RT
+11930:23:39 [route_mgr][Warn] [dbl_api.c(406)zxicDbGetView] dbAPIGetView VID(17) VN(IGD.LD1) Err(-5)
+11930:23:39 [dns_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [dns_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:39 [RAServer_Mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [RAServer_Mgr] ,async event [0x9615] map fun is unknow 
+11930:23:39 [dhcp6s][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [dhcp6s] ,async event [0x9615] map fun is unknow 
+11930:23:39 [prefix_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [prefix_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:39 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+
+ [3350  si_rt_if_up]Ipmode = 1 vConnectionID = IGD.LD1 up
+11930:23:40 [route_mgr][Warn] [dbl_api.c(406)zxicDbGetView] dbAPIGetView VID(17) VN(IGD.LD1) Err(-5)
+
+ [3108  si_rt_if_add]Ipmode = 3 vConnectionID = IGD.WD1.WCD1.WCIP1 add
+11930:23:40 [route_mgr][Error] [route_mgr.c(2202)si_db_init_defg] si_db_qry_default_rt: no default RT
+11930:23:40 [route_mgr][Warn] [route6_mgr.c(229)si_db_v6_init_d] si_db_qry_default_rt6: no default RT
+11930:23:40 [qos_mgr][Warn] [dbl_api.c(406)zxicDbGetView] dbAPIGetView VID(17) VN(IGD.LD1) Err(-5)
+11930:23:40 [dns_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [dns_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [RAServer_Mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [RAServer_Mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [dhcp6s][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [dhcp6s] ,async event [0x9615] map fun is unknow 
+11930:23:40 [prefix_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [prefix_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:23:40 [ifs_mgr][Warn] [ifs_notifier.c(387)si_ifs_regnotif] not found, pid[78594]
+11930:23:40 [ifs_mgr][Warn] [ifs_notifier.c(387)si_ifs_regnotif] not found, pid[78595]
+11930:23:40 [ifs_mgr][Warn] [ifs_notifier.c(387)si_ifs_regnotif] not found, pid[78595]
+
+ [3108  si_rt_if_add]Ipmode = 3 vConnectionID = IGD.WD1.WCD1.WCPPP2 add
+11930:23:40 [route_mgr][Error] [route_mgr.c(2202)si_db_init_defg] si_db_qry_default_rt: no default RT
+11930:23:40 [route_mgr][Warn] [route6_mgr.c(229)si_db_v6_init_d] si_db_qry_default_rt6: no default RT
+11930:23:40 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:23:40 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+
+ ####0,ffffffff
+11930:23:40 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+Create brport: [eth1]--[0]
+device eth1 entered promiscuous mode
+br0: port 1(eth1) entered forwarding state
+br0: port 1(eth1) entered forwarding state
+IPv6: ADDRCONF(NETDEV_CHANGE): br0: link becomes ready
+:::::: portname:eth1 gportmap[0].mapport: eth0 ::::
+:::::: portname:eth1 gportmap[1].mapport: eth1 ::::
+port = 1
+enable = 0
+Close switch success!
+:::::: portname:eth1 gportmap[0].mapport: eth0 ::::
+:::::: portname:eth1 gportmap[1].mapport: eth1 ::::
+port = 1
+enable = 1
+Close switch success!
+11930:23:40 [qos_mgr][Warn] [dbl_api.c(406)zxicDbGetView] dbAPIGetView VID(17) VN(IGD.LD1.ETH2) Err(-5)
+11930:23:40 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [loopback_mgr][Error] [w
+ ####0,ffffffff
+ork_main.h(181)W
+ ####1,ffffffff
+ORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is un
+ ####0,ffffffff
+know 
+11930:23
+ ####1,ffffffff
+:40 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0
+ ####2,ffffffff
+x9615] map fun is unknow 
+11930:23:40 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ####0,ffffffff
+
+ ERROR, PID [l
+ ####1,ffffffff
+oopback_mgr] ,as
+ ####2,ffffffff
+ync event [0x961
+ ####3,ffffffff
+5] map fun is unknow 
+11930:23:40 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNCreate brport: [eth2]--[255]
+C_MSG_] 
+ ERROR, PID [loopback_mgr] ,async eventhe brport not config index yet
+t [0x9615] map fdevice eth2 entered promiscuous mode
+un is unknow 
+=br0: port 2(eth2) entered forwarding state
+===============pbr0: port 2(eth2) entered forwarding state
+lib_DoWanDHCPS_Forbid  type:1==================
+11930:23:40 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASY
+ ####0,ffffffff
+NC_MSG_] 
+ ERRO
+ ####1,ffffffff
+R, PID [e8_vlanbind_mgr]
+ ####2,ffffffff
+ ,async event [0
+ ####3,ffffffff
+x9615] map fun i
+ ####4,ffffffff
+s unknow 
+11930:23:40 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:40 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+:::::: portname:eth2 gportmap[0].mapport: eth0 ::::
+:::::: portname:eth2 gportmap[1].mapport: eth1 ::::
+:::::: portname:eth2 gportmap[2].mapport: eth2 ::::
+port = 2
+en####Config existed br_port[eth2]'s index[5]
+able = 0
+Close 
+ ####0,ffffffff
+switch success!
+ ####1,ffffffff
+
+:::::: portname
+ ####2,ffffffff
+:eth2 gportmap[0].mapport: eth0 ::::
+:::::: portname:eth2 gportmap[1].mapport: eth1 ::::
+:::::: portname:eth2 gportmap[2].mapport: eth2 ::::
+port = 2
+enable = 1
+Close switch success!
+11930:23:41 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [qos_mgr][Warn] [dbl_api.c(406)zxicDbGetView] dbAPIGetView VID(17) VN(IGD.LD1.ETH3) Err(-5)
+11930:23:41 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+1193
+ ####3,ffffffff
+0:23:41 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mg
+ ####4,ffffffff
+r] ,async event 
+ ####5,ffffffff
+[0x9615] map fun is unkn[0]-[0]-[0]-[1]
+ow 
+11930:23:41 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_br_filter_conf:[1]-[10]
+mgr] ,async even####Config existed br_port[eth1]
+t [0x9615] map fun is unknow 
+11930:23:41 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is 
+ ####0,ffffffff
+unknow 
+11930:
+ ####1,ffffffff
+23:41 [qos_mgr][
+ ####2,ffffffff
+Error] [work_main.h(181)WORK_ASY
+ ####3,ffffffff
+NC_MSG_] 
+ ERRO
+ ####4,ffffffff
+R, PID [qos_mgr]
+ ####5,ffffffff
+ ,async event [0
+ ####6,ffffffff
+x9615] map fun is unknow
+ ####0,ffffffff
+ 
+11930:23:41 
+ ####1,ffffffff
+[qos_mgr][Error]
+ ####2,ffffffff
+ [work_main.h(18
+ ####3,ffffffff
+1)WORK_ASYNC_MSGCreate brport: [wlan0]--[1]
+_] 
+ ERROR, PID [qos_mgr] ,asyndevice wlan0 entered promiscuous mode
+c event [0x9616]br0: port 3(wlan0) entered forwarding state
+ map fun is unknbr0: port 3(wlan0) entered forwarding state
+ow 
+11930:23:4
+ ####4,ffffffff
+1 [qos_mgr][Error] [work
+ ####5,ffffffff
+_main.h(181)WORK
+ ####6,ffffffff
+_ASYNC_MSG_] 
+ 
+ ####7,ffffffff
+ERROR, PID [qos_
+ ####0,ffffffff
+mgr] ,async even
+ ####1,ffffffff
+t [0x9615] map f
+ ####2,ffffffff
+un is unknow 
+
+ ####3,ffffffff
+11930:23:41 [e8_
+ ####4,ffffffff
+vlanbind_mgr][Er
+ ####5,ffffffff
+ror] [work_main.
+ ####6,ffffffff
+h(181)WORK_ASYNC
+ ####7,ffffffff
+_MSG_] 
+ ERROR,
+ ####8,ffffffff
+ PID [e8_vlanbin
+ ####0,ffffffff
+d_mgr] ,async ev
+ ####1,ffffffff
+ent [0x9615] map
+ ####2,ffffffff
+ fun is unknow 
+ ####3,ffffffff
+
+11930:23:41 [l
+ ####4,ffffffff
+oopback_mgr][Err
+ ####5,ffffffff
+or] [work_main.h
+ ####6,ffffffff
+(181)WORK_ASYNC_
+ ####7,ffffffff
+MSG_] 
+ ERROR, 
+ ####8,ffffffff
+PID [loopback_mg
+ ####9,ffffffff
+r] ,async event [0x9615] map fun is unkn
+ ####0,ffffffff
+ow 
+11930:23:4
+ ####2,ffffffff
+1 [loopback_mgr]
+ ####3,ffffffff
+[Error] [work_ma
+ ####4,ffffffff
+in.h(181)WORK_AS
+ ####5,ffffffff
+YNC_MSG_] 
+ ERR
+ ####6,ffffffff
+OR, PID [loopbac
+ ####7,ffffffff
+k_mgr] ,async ev
+ ####8,ffffffff
+ent [0x9615] map
+ ####9,ffffffff
+ fun is unknow 
+11930:
+ ####1,ffffffff
+23:41 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9616] map fun is unknow 
+11930:23:41 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is unknow 
+================plib_DoWanDHCPS_Forbid  type:1==================
+11930:23:41 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+:::::: portname:wlan gportmap[0].mapport: eth0 ::::
+:::::: portname:wlan gportmap[1].mapport: eth1 ::::
+:::::: portname:wlan gportmap[2].mapport: eth2 ::::
+:::::: portname:wlan gportmap[3].mapport: eth3 ::::
+:::::: portname:wlan gportmap[4].mapport: eth4 ::::
+:::::: portname:wlan gportmap[5].mapport:  ::::
+port = 0
+enable = 0
+Close switch success!
+:::::: portname:wlan gportmap[0].mapport: eth0 ::::
+:::::: portname:wlan gportmap[1].mapport: eth1 ::::
+:::::: portname:wlan gportmap[2].mapport: eth2 ::::
+:::::: portname:wlan gportmap[3].mapport: eth3 ::::
+:::::: portname:wlan gportmap[4].mapport: eth4 ::::
+:::::: portname:wlan gportmap[5].mapport:  ::::
+port = 0
+enable = 1
+Close switch success!
+
+ [210  main] 
+11930:23:41 [U_dnsmasq][Error] [dnsmasq.c(265)main] bind interf[0]-[0]-[0]-[1]
+ace socket failebr_filter_conf:[1]-[10]
+d
+11930:23:41 ####Config existed br_port[eth2]
+[OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[firewall] Event[0x1103] dwUsedTicks[3041]
+11930:23:41 [loopbac
+ ####0,ffffffff
+k_mgr][Error] [w
+ ####2,ffffffff
+ork_main.h(181)WCreate brport: [eth3]--[10]
+ORK_ASYNC_MSG_] 
+ ERRORdevice eth3 entered promiscuous mode
+, PID [loopback_br0: port 4(eth3) entered forwarding state
+mgr] ,async evenbr0: port 4(eth3) entered forwarding state
+t [0x9615] map f
+ ####3,ffffffff
+un is unknow 
+
+ ####4,ffffffff
+11930:23:41 [qos
+ ####5,ffffffff
+_mgr][Warn] [dbl
+ ####6,ffffffff
+_api.c(406)zxicD
+ ####7,ffffffff
+bGetView] dbAPIG
+ ####8,ffffffff
+etView VID(17) V
+ ####9,ffffffff
+N(IGD.LD1.WLAN1)
+ ####1,ffffffff
+ Err(-5)
+11930
+ ####10,ffffffff
+sw_get_port_linkStatus@sw_alarm_scanforalarm the dev is null!
+:23:41 [qos_mgr][Error] [work_ma[0]-[0]-[0]-[1]
+in.h(181)WORK_ASbr_filter_conf:[1]-[10]
+YNC_MSG_] 
+ ERR####Config existed br_port[wlan0]
+OR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+================plib_DoWanDHCPS_Forbid  type:1==================
+11930:23:41 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00850301 , Event = 0xa506  
+11930:23:41 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len[0]-[0]-[0]-[1]
+ = 56  errno=[2:br_filter_conf:[1]-[10]
+No such file or ####Config existed br_port[eth3]
+directory]  
+11930:23:41 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA506] to [00850301] in SocketAsynSendMsg()  ERROR !
+11930:23:41 [OSS_csCreate brport: [eth4]--[11]
+pd][Warn] [oss_cdevice eth4 entered promiscuous mode
+omm.c(2278)SocketAsynSendM] sender = 0x0br0: port 5(eth4) entered forwarding state
+0010000 ,reciverbr0: port 5(eth4) entered forwarding state
+ = 0x00840401 , Event = 0xa506  
+11930:23:41 [OSS_cspd][Warn] [oss_comm.c(2280
+ ####0,ffffffff
+)SocketAsynSendM] send ilen = -1 Len = 56  errno=[2:No such file or directory]  
+11930:23:41 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA506] to [00840401] in SocketAsynSendMsg()  ERROR !
+11930:23:41 [wlan_mgr][Warn] [wlan_manage.c(532)wlan_handle_par] EV_ETH_UP_LINK_STATUS receive.
+11930:23:41 [tr069][Warn] [e8_pdt_tr069_in(745)E8ComRecvTr069A] Receive EV_ETH_UP_LINK_STATUS��port_rate=3; port_mode=0
+11930:23:41 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [tr069][Warn] [e8_pdt_tr069_in(763)E8ComRecvTr069A] Ports/lan are not available alarmNumber(id)=104006, status= 1.
+:::::: portname:eth3 gportmap[0].mapport: eth0 ::::
+:::::: portname:eth3 gportmap[1].mapport: eth1 ::::
+:::::: portname:eth3 gportmap[2].mapport: eth2 ::::
+:::::: portname:eth3 gportmap[3].mapport: eth3 ::::
+port = 3
+enable = 0
+Close switch success!
+:::::: portname:eth3 gportmap[0].mapport: eth0 ::::
+:::::: portname:eth3 gportmap[1].mapport: eth1 ::::
+:::::: portname:eth3 gportmap[2].mapport: eth2 ::::
+:::::: portname:eth3 gportmap[3].mapport: eth3 ::::
+port = 3
+enable = 1
+Close switch success!
+11930:23:41 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0,104006.
+================plib_DoWanDHCPS_Forbid  type:1==================
+11930:23:41 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [qos_mgr][Warn] [dbl_api.c(406)zxicDbGetView] dbAPIGetView VID(17) VN(IGD.LD1.ETH4) Err(-5)
+11930:23:41 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+:::::: portname:eth4 gportmap[0].mapport: eth0 ::::
+:::::: portname:eth4 gportmap[1].mapport: eth1 ::::
+:::::: portname:eth4 gportmap[2].mapport: eth2 ::::
+:::::: portname:eth4 gportmap[3].mapport: eth3 ::::
+:::::: portname:eth4 gportmap[4].mapport: eth4 ::::
+port = 4
+enable = 0
+Close switch success!
+:::::: portname:eth4 gportmap[0].mapport: eth0 ::::
+:::::: portname:eth4 gportmap[1].mapport: eth1 ::::
+:::::: portname:eth4 gportmap[2].mapport: eth2 ::::
+:::::: portname:eth4 gportmap[3].mapport: eth3 ::::
+:::::: portname:eth4 gportmap[4].mapport: eth4 ::::
+port = 4
+enable = 1
+Close switch success!
+11930:23:41 [qos_mgr][Warn] [dbl_api.c(406)zxicDbGetView] dbAPIGetView VID(17) VN(IGD.LD1.ETH5) Err(-5)
+11930:23:41 [qos_mgr][
+ ####2,ffffffff
+Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:41 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_
+ ####3,ffffffff
+mgr] ,async even
+ ####4,ffffffff
+t [0x9615] map f
+ ####5,ffffffff
+un is unknow 
+
+ ####6,ffffffff
+11930:23:42 [qos_mgr][Warn] [dbl
+ ####7,ffffffff
+_api.c(406)zxicD
+ ####8,ffffffff
+bGetView] dbAPIGetView VID(17) VN(IGD.LD1.WLAN1) Err(-5)
+11930:23:42 [loopback_mgr][Erdevice wlan0 left promiscuous mode
+ror] [work_main.br0: port 3(wlan0) entered disabled state
+h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9614] map fun is unknow 
+
+ ####9,ffffffff
+11930:23:42 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00750101 , Event = 0xa456  
+11930:23:42 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 32  errno=[2:No such file or directory]  
+11930:23:42 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA456] to [00750101] in SocketAsynSendMsg()  ERROR !
+11930:23:42 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9616] map fun is unknow 
+11930:23:42 [xpon_mgr][Warn] [xpon_mgr.c(1073)si_eth_link_eve] event_port=eth0, event=1, port_rate=0, port_mode=1, linkport=0
+11930:23:42 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9616] map fun is unknow 
+*##*come to [si_xpon_link_event] wEvent:[EV_XPON_LINK_UP] [08:00:49]
+11930:23:42 [loopback_mgr][Error] [work_main.h(18
+ ####1,ffffffff
+1)WORK_ASYNC_MSG
+ ####10,ffffffff
+_] 
+ ERROR, PIDCreate brport: [wlan0]--[1]
+ [loopback_mgr] ,async event [0x9615] madevice wlan0 entered promiscuous mode
+p fun is unknow br0: port 3(wlan0) entered forwarding state
+
+11930:23:42 [br0: port 3(wlan0) entered forwarding state
+qos_mgr][Error] 
+ ####11,ffffffff
+[work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:42 [e8_vlanbind_mgr][Error] [work_[0]-[0]-[0]-[1]
+main.h(181)WORK_br_filter_conf:[1]-[10]
+ASYNC_MSG_] 
+ E####Config existed br_port[wlan0]
+RROR, PID [e8_vl
+ ####0,ffffffff
+anbind_mgr] ,asy
+ ####2,ffffffff
+nc event [0x9615
+ ####3,ffffffff
+] map fun is unk
+ ####4,ffffffff
+now 
+==========
+ ####5,ffffffff
+======plib_DoWan
+ ####6,ffffffff
+DHCPS_Forbid  type:1==================
+11930:23:42 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:42 [brgrp_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [brgrp_mgr] ,async event [0x9614] map fun is unknow 
+11930:23:42 [binding_mgr][Error] [work_main.h(172)WORK_ASYNC_MSG_] 
+ ERROR, PID [binding_mgr] ,async event [0x9614] map fun is NULL 
+:::::: portname:
+ ####7,ffffffff
+wlan gportmap[0].mapport: eth0 :random: nonblocking pool is initialized
+:::
+:::::: portname:wlan gportmap[1].mapport: eth1 ::::
+:::::: portname:wlan gportmap[2].mapport: eth2 ::::
+:::::: portname:wlan gpor
+ ####8,ffffffff
+tmap[3].mapport: eth3 ::::
+:::::: portname:wlan gportmap[4].mapport: eth4 ::::
+:::::: portname:wlan gportmap[5].mapport:  ::::
+port = 0
+enable = 0
+Close switch success!
+:::::: portname:wlan gportmap[0].mapport:
+ ####9,ffffffff
+ eth0 ::::
+:::::: portname:wlan gportmap[1].mapport: eth1 ::::
+:::::: portname:wlan gportmap[2].mapport: eth2 ::::
+:::::: portname:wlan gportmap[3].mapport: eth3 ::::
+:::::: portname:wlan gportmap[4].mapport: eth4 ::::
+:::::: portname:wlan gportmap[5].mapport:  ::::
+port = 0
+enable = 1
+Close switch success!
+11930:23:42 [qos_mgr][Warn] [dbl_api.c(406)zxicDbGetView] dbAPIGetView VID(17) VN(IGD.LD1.WLAN1) Err(-5)
+11930:23:42 [q
+ ####10,ffffffff
+os_mgr][Error] [
+ ####11,ffffffff
+work_main.h(181)
+ ####1,ffffffff
+WORK_ASYNC_MSG_] 
+ ERRO[0]-[0]-[0]-[1]
+R, PID [qos_mgr]br_filter_conf:[1]-[10]
+ ,async event [0####Config existed br_port[eth4]
+x9615] map fun is unknow 
+11930:23:42 [dss_mgr][Warn] [dss_main.c(941)si_dss_main_dea] plib_ifs_get_routeif_info[IGD.LD1]
+11930:23:42 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:42 [xpon_mgr][Warn] [xpon_mgr.c(1073)si_eth_link_eve] event_port=eth0, event=0, port_rate=3, port_mode=0, linkport=0
+*##*come to [si_xpon_link_event] wEvent:[EV_XPON_LINK_DOWN] [08:00:49]
+11930:23:42 [route_mgr][Warn] [dbl_api.c(406)zxicDbGetView] dbAPIGetView VID(17) VN(IGD.LD1) Err(-5)
+[si_mirror_async[pon_driver_adapter_schedue_mode_set] the qos mode is not changed
+_phylink_up]mirr
+ setVal=0or phylink up PH
+ rdVal=0YLINK_ID IGD.WD1
+[si_mirror_async_phylink_up]mirror phylink up tIF_NAME
+ IGD.WD1.WCD1
+[si_mirror_async_
+ Capacity=16000phylink_down]mirzte_api_sw_port_set_port_ratelimit port:(0) direct:(1) enable:(0) rate:(1250000 kpbs) ifgMode:(1)
+ror phylink down[1]-[10]-[0]-[1]
+ PHYLINK_ID IGD.####Config existed br_port[wlan0]
+WD1
+11930:23:42 [multiwcd_mgr][Warn] [dbl_api.c(630)zxicDbLstView] dbAPILstView VID(16) RVN(IGD.WD1.WCD1) Err(-19)
+[si_mirror_async_phylink_down]mirror phylink down tIF_NAME IGD.WD1.WCD1
+11930:23:42 [route_mgr][Warn] [dbl_api.c(406)zxicDbGetView] dbAPIGetView VID(17) VN(IGD.LD1) Err(-5)
+11930:23:42 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+RTNETLINK answers: No such file or directory
+================plib_DoWanDHCPS_Forbid  type:1==================
+11930:23:42 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+in sp_parse_opt, speed 1***sp_init, default 8, Tbl 7-6-5-4***
+56250000, head 0, burst 1268336, tbuff 126833, mtu 1528, linktype 4
+11930:23:42 [qos_mgr][Warn] [qos_mgr.c(3547)si_qc_config_al] si_qc_check_view error
+11930:23:42 [qos_mgr][Warn] [dbl_api.c(406)zxicDbGSP Removed from interface pon0 
+etView] dbAPIGetView VID(17) VN(IGD.LD1) Err(-5)
+11930:23:44 [multi_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [multi_mgr] ,async event [0x9616] map fun is unknow 
+11930:23:44 [multi_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [multi_mgr] ,async event [0x9616] map fun is unknow 
+
+ [210  main] 
+fpga write: reg=0x000c0000, data=0x00bb6003
+phyid = 0x2
+addr = 0x0
+data = 0x1940
+Close switch success!
+mt7603_switch_channel(): Switch to Ch#4(2T2R), BBP_BW=0
+SYNC - BBP R4 to 20MHz.l
+switch_phy_int_check 430 mac 0 phy status changed: 1000M full-duplex
+mt7603_switch_channel(): Switch to Ch#5(2T2R), BBP_BW=0
+SYNC - BBP R4 to 20MHz.l
+[4G_CPE] set AT+CFUN 0
+mt7603_switch_channel(): Switch to Ch#6(2T2R), BBP_BW=0
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#7(2T2R), BBP_BW=0
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#8(2T2R), BBP_BW=0
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#9(2T2R), BBP_BW=0
+SYNC - BBP R4 to 20MHz.l
+sw_get_port_linkStatus@sw_alarm_scanforalarm the dev is null!
+11930:23:46 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00850301 , Event = 0xa506  
+11930:23:46 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 56  errno=[2:No such file or directory]  
+11930:23:46 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA506] to [00850301] in SocketAsynSendMsg()  ERROR !
+11930:23:46 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00840401 , Event = 0xa506  
+11930:23:46 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 56  errno=[2:No such file or directory]  
+11930:23:46 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA506] to [00840401] in SocketAsynSendMsg()  ERROR !
+11930:23:46 [tr069][Warn] [e8_pdt_tr069_in(745)E8ComRecvTr069A] Receive EV_ETH_UP_LINK_STATUS��port_rate=0; port_mode=1
+11930:23:46 [xpon_mgr][Warn] [xpon_mgr.c(1073)si_eth_link_eve] event_port=eth0, event=1, port_rate=0, port_mode=1, linkport=0
+11930:23:46 [tr069][Warn] [e8_pdt_tr069_in(763)E8ComRecvTr069A] Ports/lan are not available alarmNumber(id)=104006, status= 0.
+11930:23:46 [wlan_mgr][Warn] [wlan_manage.c(532)wlan_handle_par] EV_ETH_UP_LINK_STATUS receive.
+11930:23:46 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+mt7603_switch_channel(): Switch to Ch#10(2T2R), BBP_BW=0
+SYNC - BBP R4 to 20MHz.l
+*##*come to [si_xpon_link_event] wEvent:[EV_XPON_LINK_UP] [08:00:54]
+11930:23:47 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00750101 , Event = 0xa455  
+11930:23:47 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 32  errno=[2:No such file or directory]  
+11930:23:47 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA455] to [00750101] in SocketAsynSendMsg()  ERROR !
+mt7603_switch_channel(): Switch to Ch#11(2T2R), BBP_BW=0
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#12(2T2R), BBP_BW=0
+SYNC - BBP R4 to 20MHz.l
+mt7603_switch_channel(): Switch to Ch#13(2T2R), BBP_BW=0
+SYNC - BBP R4 to 20MHz.l
+11930:23:47 [qos_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+mt7603_switch_channel(): Switch to Ch#11(2T2R), BBP_BW=0
+AsicSetPreTbtt(): bss_idx=0, PreTBTT timeout = 0x0
+RTMPSetPiggyBack(961): Not support for HIF_MT yet!
+System halted, removed or MlmeRest, exit MlmeTask!(QNum = 1)
+ap_ftkd> Release FT KDP Module...
+[PMF]ap_pmf_init:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+[PMF]RTMPMakeRsnIeCap: RSNIE Capability MFPC=0, MFPR=0
+[PMF]ap_pmf_init:: apidx=1, MFPC=0, MFPR=0, SHA256=0
+[PMF]ap_pmf_init:: apidx=2, MFPC=0, MFPR=0, SHA256=0
+[PMF]ap_pmf_init:: apidx=3, MFPC=0, MFPR=0, SHA256=0
+AsicSetRalinkBurstMode(4345): Not support for HIF_MT yet!
+RTMPSetPiggyBack(961): Not support for HIF_MT yet!
+mt7603_switch_channel(): Switch to Ch#11(2T2R), BBP_BW=0
+AsicSetTxPreamble(4332): Not support for HIF_MT yet!
+AsicAddSharedKeyEntry(2093): Not support for HIF_MT yet!
+The 8-BSSID mode is enabled, the BSSID byte5 MUST be the multiple of 8
+AsicSetPreTbtt(): bss_idx=0, PreTBTT timeout = 0xa0
+ap_ftkd> Initialize FT KDP Module...
+Main bssid = 34:d8:56:17:dc:24
+BndStrg is already Disable
+
+
+ ####12,ffffefff
+11930:23:48 [bandwidth_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [bandwidth_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [bandInfo_mgr][Error
+ ####13,ffffefff
+] [work_main.h(1
+ ####12,ffffcfff
+81)WORK_ASYNC_MSG_] 
+ ERROR, PID [bandInfo_mgr] ,async 
+ ####13,0
+event [0x9615] map fun is unknow 
+11930:23:48 [sntp_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [sntp_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [dns_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [dns_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [RAServer_Mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [RAServer_Mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [prefix_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [prefix_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [wlan_config][Warn] [pon_wlan_adapte(6542)rlk_wlan_ioctl_] set wlan0 BndStrgClearEntry=1
+11930:23:48 [sntp_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [sntp_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [pptp_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [pptp_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [arp_detect_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [arp_detect_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [bandwidth_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [bandwidth_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [bandInfo_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [bandInfo_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [dns_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [dns_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [RAServer_Mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [RAServer_Mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [pptp_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [pptp_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [arp_detect_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [arp_detect_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [bandwidth_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [bandwidth_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [bandInfo_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [bandInfo_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [sntp_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [sntp_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [bandwidth_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [bandwidth_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [bandInfo_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [bandInfo_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [sntp_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [sntp_mgr] ,async event [0x9615] map fun is unknow 
+[si_mirror_async_phylink_up]mirror phylink up PHYLINK_ID IGD.WD1
+[si_mirror_async_phylink_up]mirror phylink up tIF_NAME IGD.WD1.WCD1
+11930:23:48 [route_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [route_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [route_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [route_mgr] ,async event [0x9615] map fun is unknow 
+found 5G , wlan4 INTERRUPT, ID is 50
+11930:23:48 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [pingkeep_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [pingkeep_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [pingkeep_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [pingkeep_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [pingkeep_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [pingkeep_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [pingkeep_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [pingkeep_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [prefix_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [prefix_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:48 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[multi_mgr] Event[0x9615] dwUsedTicks[346]
+RTNETLINK answers: No such file or directory
+
+ [3350  si_rt_if_up]Ipmode = 1 vConnectionID = IGD.WD1.WCD1.WCIP1 up
+11930:23:48 [multi_mgr][Warn] [dbl_api.c(101)zxicDbAddView] dbAPIAddView VID(233) RVN(IGD) Err(-3)
+in sp_parse_opt, speed 1***sp_init, default 8, Tbl 7-6-5-4***
+56250000, head 0, burst 1268336, tbuff 126833, mtu 1528, linktype 4
+The 8-BSSID mode is enabled, the BSSID byte5 MUST be the multiple of 8
+[PMF]ApCli_Open:: MFPC=0, MFPR=0, SHA256=0
+apcli0 open wlan_uplink=0x1 
+11930:23:48 [qos_mgr][Warn] [qos_mgr.c(3547)si_qc_config_al] si_qc_check_view error
+11930:23:48 [multi_mgr][Warn] [dbl_api.c(101)zxicDbAddView] dbAPIAddView VID(233) RVN(IGD) Err(-3)
+11930:23:49 [multi_mgr][Warn] [dbl_api.c(101)zxicDbAddView] dbAPIAddView VID(233) RVN(IGD) Err(-3)
+11930:23:49 [multi_mgr][Warn] [dbl_api.c(101)zxicDbAddView] dbAPIAddView VID(233) RVN(IGD) Err(-3)
+11930:23:49 [multi_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [multi_mgr] ,async event [0x9616] map fun is unknow 
+11930:23:49 [multi_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [multi_mgr] ,async event [0x9616] map fun is unknow 
+11930:23:49 [ipv6_masquerade][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [ipv6_masquerade] ,async event [0x9a05] map fun is unknow 
+11930:23:49 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:23:49 [ping_mgr][E[yqs]disable cpu queue rate limit
+rror] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [ping_mgr] ,async event [0x9402] map fun is unknow 
+v4route_up close limit_rate start
+v4route_up close limit_rate end
+test pm_eth_set_cpu_queues_limit_rate 0
+11930:23:49 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00013102 ,reciver = 0x00490101 , Event = 0x9622  
+11930:23:49 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 40  errno=[2:No such file or directory]  
+11930:23:49 [OSS_cspd][Error] [oss_common.c(547)ASEND] [dns_mgr][00013102] Send task Message[0X9622] to [00490101] in SocketAsynSendMsg()  ERROR !
+11930:23:49 [forward_rule][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+RTNETLINK answers: File exists
+11930:23:50 [forward_rule][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:23:50 [mldproxy_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [mldproxy_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:50 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[wlan_config] Event[0xa205] dwUsedTicks[1730]
+11930:23:50 [wlan_config][Warn] [wlan_config.c(556)wlan_config_pro] EV_ETH_UP_LINK_STATUS receive.
+11930:23:50 [wlan_config][Warn] [wlan_config.c(557)wlan_config_pro] ifname eth0,mode 1,rate 0.
+11930:23:50 [wlan_config][Warn] [wlan_config.c(560)wlan_config_pro] @@@@ Set WAN port link status as 1.
+11930:23:50 [wlan_config][Warn] [wlan_config.c(556)wlan_config_pro] EV_ETH_UP_LINK_STATUS receive.
+11930:23:50 [wlan_config][Warn] [wlan_config.c(557)wlan_config_pro] ifname eth0,mode 0,rate 3.
+11930:23:50 [wlan_config][Warn] [wlan_config.c(560)wlan_config_pro] @@@@ Set WAN port link status as 0.
+11930:23:50 [wlan_config][Warn] [wlan_config.c(556)wlan_config_pro] EV_ETH_UP_LINK_STATUS receive.
+11930:23:50 [wlan_config][Warn] [wlan_config.c(557)wlan_config_pro] ifname eth0,mode 1,rate 0.
+11930:23:50 [wlan_config][Warn] [wlan_config.c(560)wlan_config_pro] @@@@ Set WAN port link status as 1.
+11930:23:50 [wlan_mgr][Warn] [wlan_manage.c(3502)wlan_handle_msg] Process config ok for mm start, cDevName wifi0.
+11930:23:50 [wlan_mgr][Warn] [wlan_manage.c(3507)wlan_handle_msg] @@@@ Bring up 5s timer (timeout: 5).
+11930:23:50 [wlan_config][Warn] [wlan_config.c(473)wlan_config_pro] [wlan-msg]EV_WLAN_MM_INSTALL.
+11930:23:50 [wlan_config][Error] [wlan_config.c(1107)handle_wlan_ins] tmpType is 0x5.
+11930:23:50 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:23:50 [mldproxy_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [mldproxy_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:50 [firewall][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+sh: can't create /proc/net/policyroute: nonexistent directory
+11930:23:50 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00013102 ,reciver = 0x00490101 , Event = 0x9622  
+11930:23:50 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 40  errno=[2:No such file or directory]  
+11930:23:50 [OSS_cspd][Error] [oss_common.c(547)ASEND] [dns_mgr][00013102] Send task Message[0X9622] to [00490101] in SocketAsynSendMsg()  ERROR !
+11930:23:50 [upnp_igd][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:23:50 [prefix_mgr][Warn] [prefix_mgr.c(2483)si_prefix_get_p] not find prefix
+11930:23:50 [upnp_igd][Warn] [upnpsdk_mgr.c(150)UpnpSdkStart] Upnp SDK state inconsistence
+11930:23:50 [multi_mgr][Warn] [dbl_api.c(101)zxicDbAddView] dbAPIAddView VID(233) RVN(IGD) Err(-3)
+11930:23:50 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+
+ [3350  si_rt_if_up]Ipmode = 2 vConnectionID = IGD.WD1.WCD1.WCIP1 up
+11930:23:50 [forward_rule][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [forward_rule] ,async event [0x9a0b] map fun is unknow 
+11930:23:50 [pptp_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [pptp_mgr] ,async event [0x9a0b] map fun is unknow 
+11930:23:50 [firewall][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [firewall] ,async event [0x9a0b] map fun is unknow 
+11930:23:50 [ipv6_masquerade][Warn] [ipv6_masquerade(265)ipv6DefaultGw_e] ipv6 gateway up,but not to check prefix to add NAT66
+11930:23:51 [wlan_config][Warn] [wlan_config.c(483)wlan_config_pro] [wlan-msg]EV_WLAN_MM_START.
+11930:23:51 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:23:51 [prefix_mgr][Warn] [prefix_mgr.c(2483)si_prefix_get_p] not find prefix
+11930:23:51 [wlan_config][Error]MtCmdBcnV2OffloadSet:(ret = 0)
+ [wlan_config.c(2870)wifMtCmdBcnV2OffloadSet:(ret = 0)
+i_acl_init] iCardIndex=4MtCmdBcnV2OffloadSet:(ret = 0)
+
+11930:23:51 [wlan_conMtCmdBcnV2OffloadSet:(ret = 0)
+fig][Error] [wlan_config.c(3403)handle_wlan_set] @@@@ call handle_bandstMtCmdBcnV2OffloadSet:(ret = 0)
+eering_start, iBaseIndex = 1.
+MtCmdBcnV2OffloadSet:(ret = 0)
+MtCmdBcnV2OffloadSet:(ret = 0)
+MtCmdBcnV2OffloadSet:(ret = 0)
+MtCmdBcnV2OffloadSet:(ret = 0)
+MtCmdBcnV2OffloadSet:(ret = 0)
+11930:23:51 [wlan_config][Warn] [pon_wlan_adapte(1496)rlk_wlan_destro] g_bVAP is error iIfIndex:7, g_vap:0
+11930:23:51 [wlan_config][Warn] [pon_wlan_adapte(1496)rlk_wlan_destro] g_bVAP is error iIfIndex:6, g_vap:0
+11930:23:51 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:23:51 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00013102 ,reciver = 0x00490101 , Event = 0x9622  
+11930:23:51 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 40  errno=[2:Nwlan4: ===> main_virtual_if_close
+o such file or dwifi_sys_linkdown(), wdev idx = 0
+irectory]  
+11ExtEventBeaconLostHandler::FW LOG, Beacon lost (34:d8:56:17:dc:25), Reason 0x10
+930:23:51 [OSS_c  Beacon lost - AP disabled!!!
+spd][Error] [ossMtCmdBcnV2OffloadSet:(ret = 0)
+_common.c(547)ASEND] [dns_mgr][00013102] Send tabssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 0, CmdBssInfoBmcRate.u2McTransmit = 0
+sk Message[0X9622] to [00490101] in Sockwifi_sys_close(), wdev idx = 0
+etAsynSendMsg() APStop(), oper(0) bssid(0)=34:d8:56:17:dc:25
+ ERROR !
+11930AsicSetPreTbtt(): NotSupportedFunc for this arch(HIF_MT)!
+:23:51 [wlan_conMtCmdBcnV2OffloadSet:(ret = 0)
+fig][Warn] [pon_MtAsicSetPiggyBack(592): Not support for HIF_MT yet!
+wlan_adapte(1496AsicDisableSync(): NotSupportedFunc for this arch(HIF_MT)!
+)rlk_wlan_destroasic_bss_beacon_exit(): NotSupportedFunc for this arch(HIF_MT)!
+] g_bVAP is error iIfIndex:5, g_vap:0
+wifi_sys_close(), wdev idx = 0
+ap_ftkd> Release FT KDP Module...
+AsicDisableBeacon(): NotSupportedFunc for this arch(HIF_MT)!
+AsicSetPreTbtt(): NotSupportedFunc for this arch(HIF_MT)!
+MtAsicSetPiggyBack(592): Not support for HIF_MT yet!
+AsicDisableSync(): NotSupportedFunc for this arch(HIF_MT)!
+asic_bss_beacon_exit(): NotSupportedFunc for this arch(HIF_MT)!
+wifi_sys_close(), wdev idx = 1
+AsicDisableBeacon(): NotSupportedFunc for this arch(HIF_MT)!
+AsicSetPreTbtt(): NotSupportedFunc for this arch(HIF_MT)!
+MtAsicSetPiggyBack(592): Not support for HIF_MT yet!
+AsicDisableSync(): NotSupportedFunc for this arch(HIF_MT)!
+asic_bss_beacon_exit(): NotSupportedFunc for this arch(HIF_MT)!
+wifi_sys_close(), wdev idx = 2
+AsicDisableBeacon(): NotSupportedFunc for this arch(HIF_MT)!
+AsicSetPreTbtt(): NotSupportedFunc for this arch(HIF_MT)!
+MtAsicSetPiggyBack(592): Not support for HIF_MT yet!
+AsicDisableSync(): NotSupportedFunc for this arch(HIF_MT)!
+asic_bss_beacon_exit(): NotSupportedFunc for this arch(HIF_MT)!
+wifi_sys_close(), wdev idx = 3
+AsicDisableSync(): NotSupportedFunc for this arch(HIF_MT)!
+CmdReStartDLRsp: WiFI FW Download Success
+RT28xxPciAsicRadioOff(): Not support for HIF_MT yet!
+RTMPDrvClose call RT28xxPciAsicRadioOff fail !!
+tx_kickout_fail_count = 0
+tx_timeout_fail_count = 0
+rx_receive_fail_count = 0
+alloc_cmd_msg = 1358
+free_cmd_msg = 1358
+cut_through_token_list_destroy(): ccbea3c8,ccbea3c8
+cut_through_token_list_destroy(): ccbea3d8,ccbea3d8
+AsicResetWPDMA(): NotSupportedFunc for this arch(HIF_MT)!
+fw_own(): Write 1 to MT_CONN_HIF_ON_LPCTL bit 0 to set FW own
+RTMP_AllTimerListRelease: Size=36
+RTMP_AllTimerListRelease: Cancel timer obj d44e8698!
+RTMP_AllTimerListRelease: Timer is allocated by scan_partial_init+0x50/0x5c [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d44e8658!
+RTMP_AllTimerListRelease: Timer is allocated by sync_fsm_init+0x230/0x29c [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d427c924!
+RTMP_AllTimerListRelease: Timer is allocated by WscInitClientTimers+0x58/0xd0 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4210fb4!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4210fe8!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d42162e4!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4216318!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d421b614!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d421b648!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4220944!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4220978!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4225c74!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4225ca8!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d422afa4!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d422afd8!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d42302d4!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4230308!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4235604!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4235638!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d423a934!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d423a968!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d423fc64!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d423fc98!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4244f94!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4244fc8!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d424a2c4!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d424a2f8!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d424f5f4!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d424f628!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4254924!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4254958!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4259c54!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d4259c88!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d425ef84!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x40/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d425efb8!
+RTMP_AllTimerListRelease: Timer is allocated by RRM_CfgInit+0x5c/0x114 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+RTMP_AllTimerListRelease: Cancel timer obj d45a0020!
+RTMP_AllTimerListRelease: Timer is allocated by RedInit+0xf4/0x1c0 [mtk7613e_ap],Valid:1,Lock:d45a03fc,State:0
+fw_own(): Write 1 to MT_CONN_HIF_ON_LPCTL bit 0 to set FW own
+<---HwCtrlThread
+11930:23:52 [wlan_config][Warn] [pon_wlan_adapte(1496)rlk_wlan_destro] g_bVAP is error iIfIndex:4, g_vap:0
+11930:23:52 [wlan_config][Warn] [pon_wlan_adapte(7385)rlk_wlan_enable] Ignore wlan3 for Non-EASYMESH system.
+11930:23:52 [wlan_config][Warn] [pon_wlan_adapte(6251)rlk_set_profile] /etc/Wireless/RT2860AP/RT2860AP_5G.dat
+11930:23:52 [wlan_config][Warn] [pon_wlan_adapte(6251)rlk_set_profile] /etc/Wireless/RT2860AP/RT2860AP_5G.dat
+11930:23:52 [wlan_config][Warn] [pon_wlan_adapte(6251)rlk_set_profile] /etc/Wireless/RT2860AP/RT2860AP_5G.dat
+11930:23:52 [wlan_config][Warn] [pon_wlan_adapte(6251)rlk_set_profile] /etc/Wireless/RT2860AP/RT2860AP_5G.dat
+11930:23:52 [wlan_config][Warn] [pon_wlan_adwlan4: ===> main_virtual_if_open
+apte(6251)rlk_seload l1profile succeed!
+t_profile] /etc/driver_own()::Try to Clear FW Own...
+Wireless/RT2860AP/RT2860AP_5G.dat
+11930:23:52 [ping_mgr][Error] [ping_mgr.c(607)si_network_chec] net_check_time_deal v4 can net led
+11930:23:52 [ping_mgr][Error] [ping_mgr.c(146)get_wps_led_fla] Get wps_led_flag file failure!!
+driver_own()::Success to clear FW Own
+APWdsInitialize():WdsEntry[0]
+APWdsInitialize():WdsEntry[1]
+APWdsInitialize():WdsEntry[2]
+APWdsInitialize():WdsEntry[3]
+E2pAccessMode=4
+SSID[0]=MT7613E, EdcaIdx=0
+SSID[1]=, EdcaIdx=0
+SSID[2]=, EdcaIdx=0
+SSID[3]=, EdcaIdx=0
+cfg_mode=14
+cfg_mode=14
+cfg_mode=14
+wmode_band_equal(): Band Equal!
+auto_ch_select_set_cfg(): BandIdx0, AutoChannelAtBootup=0, AutoChannelAlg = 0
+BssIdx(0) wdev->channel=36
+BssIdx(1) wdev->channel=36
+BssIdx(2) wdev->channel=36
+BssIdx(3) wdev->channel=36
+Index0 Channel=36
+[TxPower] BAND0: 100
+[PERCENTAGEenable] BAND0: 1
+[BFBACKOFFenable] BAND0: 0
+LinkTestSupport = 0
+profile: FragThreshold[0]=2346
+APEdca0
+APEdca1
+APEdca2
+APEdca3
+DfsZeroWait Support=0/0
+DfsZeroWaitCacTime=255/255
+read_itxbf: ITxBfEn = 0
+read_itxbf: BSSID[0]
+read_itxbf: MBSS[0] ITxBfEn = 0
+read_itxbf: More BSSID[1]
+read_itxbf: More MBSS[1] ITxBfEn = 0
+read_itxbf: More BSSID[2]
+read_itxbf: More MBSS[2] ITxBfEn = 0
+read_itxbf: More BSSID[3]
+read_itxbf: More MBSS[3] ITxBfEn = 0
+read_itxbf: Common.ITxBfEn = 0
+read_etxbf: ETxBfEnCond = 0
+read_etxbf: BSSID[0]
+read_etxbf: MBSS[0] ETxBfEnCond = 0
+read_etxbf: More BSSID[1]
+read_etxbf: More MBSS[1] ETxBfEnCond = 0
+read_etxbf: More BSSID[2]
+read_etxbf: More MBSS[2] ETxBfEnCond = 0
+read_etxbf: More BSSID[3]
+read_etxbf: More MBSS[3] ETxBfEnCond = 0
+MAP_MODE=0
+rtmp_read_wds_from_file(): WDS Profile
+APWdsInitialize():WdsEntry[0]
+APWdsInitialize():WdsEntry[1]
+APWdsInitialize():WdsEntry[2]
+APWdsInitialize():WdsEntry[3]
+WDS-Enable mode=0
+AndesSendCmdMsg: Could not send in band command due to diablefRTMP_ADAPTER_MCU_SEND_IN_BAND_CMD
+AndesSendCmdMsg: Command type = ed, Extension command type = 48
+HT: WDEV[0] Ext Channel = ABOVE
+EntryLifeCheck=1024
+ICapMode = 0
+WtcSetMaxStaNum: MaxStaNum:108, BssidNum:4, WdsNum:4, ApcliNum:1, MaxNumChipRept:16, MinMcastWcid:130
+Top Init Done!
+Use dev_alloc_skb
+RX[0] DESC cb3d8000 size = 32768
+RX[1] DESC cb00e000 size = 8192
+cut_through_init(): ct sw token number = 4095
+cut_through_token_list_init(): TokenList inited done!id_head/tail=0/4096
+cut_through_token_list_init(): ce5f15a8,ce5f15a8
+cut_through_token_list_init(): TokenList inited done!id_head/tail=0/4096
+cut_through_token_list_init(): ce5f15b8,ce5f15b8
+Hif Init Done!
+ctl->txq = d459abe0
+ctl->rxq = d459abec
+ctl->ackq = d459abf8
+ctl->kickq = d459ac04
+ctl->tx_doneq = d459ac10
+ctl->rx_doneq = d459ac1c
+mt7663_fw_prepare():using E2 ROM patch
+mt7663_fw_prepare():using E2 firmware
+Parsing patch header
+	Built date: 1912310402b6540
+
+	Platform: 7663
+	HW/SW version: 0x65322d31
+	Patch version: 0x3830328a
+	Target address: 0xdc000, length: 211232
+patch is ready, continue to ILM/DLM DL
+WfMcuHwInit: Before NICLoadFirmware, check ICapMode = 0
+Parsing CPU 0 fw tailer
+	Chip ID: 0x08
+	Eco version: 0x01
+	Region number: 0x03
+	Format version: 0x02
+	Format flag: 0x01
+	Ram version: 7663mp1827
+	Built date: 20191231040247
+	Common crc: 0xd5ce296f
+Parsing tailer region 0
+	Decomp crc: 0x0
+	Decomp size: 0x0
+	Decomp block size: 0x0
+	Target address: 0x112c00
+	Download size: 271184
+	Feature set: 0x27
+Parsing tailer region 1
+	Decomp crc: 0x0
+	Decomp size: 0x0
+	Decomp block size: 0x0
+	Target address: 0x2018400
+	Download size: 57376
+	Feature set: 0x07
+Parsing tailer region 2
+	Decomp crc: 0x0
+	Decomp size: 0x0
+	Decomp block size: 0x0
+	Target address: 0x40100000
+	Download size: 14736
+	Feature set: 0x07
+	Release info: header tag = 0, total length = 56
+	tag 1, padding length = 2, tag length = 50
+	payload: t-neptune-trunk-MT7621_AP_7603_7613-20191231040004
+Start address = 0x112c00, DL length = 271184, Data mode = 0x8000000f
+EventGenericEventHandler: CMD Success
+MtCmdAddressLenReq:(ret = 0)
+Start address = 0x2018400, DL length = 57376, Data mode = 0x8000000f
+EventGenericEventHandler: CMD Success
+MtCmdAddressLenReq:(ret = 0)
+Start address = 0x40100000, DL length = 14736, Data mode = 0x8000000f
+EventGenericEventHandler: CMD Success
+MtCmdAddressLenReq:(ret = 0)
+MtCmdFwStartReq: override = 0x1, address = 0x112c00
+EventGenericEventHandler: CMD Success
+MCU Init Done!
+efuse_probe: efuse = 511161
+RtmpChipOpsEepromHook::e2p_type=4, inf_Type=5
+RtmpEepromGetDefault::e2p_dafault=4
+RtmpChipOpsEepromHook: E2P type(4), E2pAccessMode = 4, E2P default = 4
+NVM is BIN mode
+Use 0st /wlan/MT7613E_EEPROM.bin default bin.
+rtmp_ee_load_from_bin::bin FileName=/wlan/MT7613E_EEPROM.bin
+Load EEPROM Buffer from /wlan/MT7613E_EEPROM.bin
+Cal Free IC!!
+mt7663_cal_free_data_get
+Country Region from e2p = 0
+mt7663_antenna_default_reset() todo
+RTMPReadTxPwrPerRate(444): Don't Support this now!
+RcRadioInit(): DbdcMode=0, ConcurrentBand=1
+RcRadioInit(): pRadioCtrl=cc842d3c,Band=0,rfcap=3,channel=1,PhyMode=2 extCha=0xf
+AntCfgInit(3078): Not support for HIF_MT yet!
+EEPROM Init Done!
+mt_mac_init()-->
+mt_mac_pse_init(2985): Don't Support this now!
+mt7663_init_mac_cr()-->
+mt7663_init_mac_cr(): TMAC_TRCR0=0x82783c92
+MtAsicSetMacMaxLen(1075): Not support for HIF_MT yet!
+<--mt_mac_init()
+CmdRxHdrTransBLUpdateRsp::EventExtCmdResult.u4Status = 0x0
+CmdRxHdrTransBLUpdateRsp::EventExtCmdResult.u4Status = 0x0
+CmdRxHdrTransBLUpdateRsp::EventExtCmdResult.u4Status = 0x0
+MAC Init Done!
+MT7663BBPInit():BBP Initialization.....
+	Band 0: valid=1, isDBDC=0, Band=2, CBW=1, CentCh/PrimCh=1/1, prim_ch_idx=0, txStream=2
+	Band 1: valid=0, isDBDC=0, Band=0, CBW=0, CentCh/PrimCh=0/0, prim_ch_idx=0, txStream=0
+MT7663BBPInit() todo
+PHY Init Done!
+E2pAccessMode=4
+SSID[0]=MT7613E, EdcaIdx=0
+SSID[1]=, EdcaIdx=0
+SSID[2]=, EdcaIdx=0
+SSID[3]=, EdcaIdx=0
+cfg_mode=14
+cfg_mode=14
+cfg_mode=14
+wmode_band_equal(): Band Equal!
+auto_ch_select_set_cfg(): BandIdx0, AutoChannelAtBootup=0, AutoChannelAlg = 0
+BssIdx(0) wdev->channel=36
+BssIdx(1) wdev->channel=36
+BssIdx(2) wdev->channel=36
+BssIdx(3) wdev->channel=36
+Index0 Channel=36
+[TxPower] BAND0: 100
+[PERCENTAGEenable] BAND0: 1
+[BFBACKOFFenable] BAND0: 0
+LinkTestSupport = 0
+profile: FragThreshold[0]=2346
+APEdca0
+APEdca1
+APEdca2
+APEdca3
+DfsZeroWait Support=0/0
+DfsZeroWaitCacTime=255/255
+read_itxbf: ITxBfEn = 0
+read_itxbf: BSSID[0]
+read_itxbf: MBSS[0] ITxBfEn = 0
+read_itxbf: More BSSID[1]
+read_itxbf: More MBSS[1] ITxBfEn = 0
+read_itxbf: More BSSID[2]
+read_itxbf: More MBSS[2] ITxBfEn = 0
+read_itxbf: More BSSID[3]
+read_itxbf: More MBSS[3] ITxBfEn = 0
+read_itxbf: Common.ITxBfEn = 0
+read_etxbf: ETxBfEnCond = 0
+read_etxbf: BSSID[0]
+read_etxbf: MBSS[0] ETxBfEnCond = 0
+read_etxbf: More BSSID[1]
+read_etxbf: More MBSS[1] ETxBfEnCond = 0
+read_etxbf: More BSSID[2]
+read_etxbf: More MBSS[2] ETxBfEnCond = 0
+read_etxbf: More BSSID[3]
+read_etxbf: More MBSS[3] ETxBfEnCond = 0
+MAP_MODE=0
+rtmp_read_wds_from_file(): WDS Profile
+APWdsInitialize():WdsEntry[0]
+APWdsInitialize():WdsEntry[1]
+APWdsInitialize():WdsEntry[2]
+APWdsInitialize():WdsEntry[3]
+WDS-Enable mode=0
+HT: WDEV[0] Ext Channel = ABOVE
+EntryLifeCheck=1024
+ICapMode = 0
+tx_pwr_comp_init():NotSupportYet!
+MtCmdSetMacTxRx:(ret = 0)
+asic_bss_beacon_init(): NotSupportedFunc for this arch(HIF_MT)!
+AsicDisableSync(): NotSupportedFunc for this arch(HIF_MT)!
+MtAsicSetRalinkBurstMode(2229): Not support for HIF_MT yet!
+MtAsicSetPiggyBack(592): Not support for HIF_MT yet!
+AsicSetPreTbtt(): NotSupportedFunc for this arch(HIF_MT)!
+ap_ftkd> Initialize FT KDP Module...
+Main bssid = 34:d8:56:17:dc:25
+AsicSetRxFilter(): NotSupportedFunc for this arch(HIF_MT)!
+MtCmdSetMacTxRx:(ret = 0)
+AsicSetRxFilter(): NotSupportedFunc for this arch(HIF_MT)!
+MtCmdSetMacTxRx:(ret = 0)
+<==== mt_wifi_init, Status=0
+TxBfModuleEnCtrl:It's not DBDC mode
+MtCmdEDCCACtrl: BandIdx: 0, EDCCACtrl: 0
+WtcSetMaxStaNum: MaxStaNum:108, BssidNum:4, WdsNum:4, ApcliNum:1, MaxNumChipRept:16, MinMcastWcid:130
+11930:23:58 [OSS_cspd][Error] [oss_common.c(824)SSEND] [dns_mgr][00013102] SSEND  Message[0X2402] to [00012505] VOS_TakeSem  dwTmpTimeout [6000] 
+
+===725==plib_default_route_get===plib_default_route_wancip_get fail!!!======iRet=-3==
+11930:23:58 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[dns_mgr] Event[0x9c22] dwUsedTicks[601]
+RedInit: set Driver/N9 RED Enable to 1.
+RedInit: RED Initiailize Done.
+cp_support_is_enabled: set Driver CP_SUPPORT to Mode 2.
+RTMP_COM_IoctlHandle -> CMD_RTPRIV_IOCTL_VIRTUAL_INF_UP
+wifi_sys_open(), wdev idx = 0
+wdev_attr_update(): wdevId0 = 34:d8:56:17:dc:25
+[BuildChannelList] BandIdx = 0, PhyMode = 49, ChListNum = 19:
+ [RadarStateCheck] RD_NORMAL_MODE  
+AsicSwitchChannel(): 5G Channel:42, then must be Channel_Band:1 !!
+Caller: wlan_operate_init+0xb0/0x10c [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+AP inf up for ra_0(func_idx) OmacIdx=0
+AsicRadioOnOffCtrl(): DbdcIdx=0 RadioOn
+ApAutoChannelAtBootUp----------------->
+ApAutoChannelAtBootUp: AutoChannelBootup[0] = 0
+ApAutoChannelAtBootUp<-----------------
+ ap_run_at_boot() : ACS is disable !!
+[PMF]APPMFInit:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+wifi_sys_linkup(), wdev idx = 0
+wtc_acquire_groupkey_wcid: Found a non-occupied wtbl_idx:135 for WDEV_TYPE:1
+ LinkToOmacIdx = 0, LinkToWdevType = 1
+bssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 8192, CmdBssInfoBmcRate.u2McTransmit = 8196
+UpdateBeaconHandler, BCN_UPDATE_INIT, OmacIdx = 0
+MtCmdTxPowerPercentCtrl: fgTxPowerPercentEn: 1, BandIdx: 0
+MtCmdBcnV2OffloadSet:(ret = 0)
+AsicSetTxStream(): NotSupportedFunc for this arch(HIF_MT)!
+AsicSetRxStream(): NotSupportedFunc for this arch(HIF_MT)!
+MtCmdSetMinPhyRate:(ret = 0)
+apidx 0 for WscUUIDInit
+Generate UUID for apidx(0)
+11930:23:59 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[bandInfo_mgr] Event[0x1150] dwUsedTicks[676]
+11930:23:59 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[ifs_mgr] Event[0x960d] dwUsedTicks[676]
+11930:2cfg_mode=14
+3:59 [OSS_cspd][Error] [oss_common.c(439)OSSSendAckData] Sender PID [00013102] SSEND Event[2402] has timeout ! 
+11930:23:59 [OSS_cspd][Error] [oss_common.c(441)OSSSendAckData] Msg Check Count = 4  dwSSendMsgCnt = 0x4
+11930:23:59 [wlan_config][Warn] [pon_wlan_adapte(1496)rlk_wlan_destro] g_bVAP is error iIfIndex:5, g_vap:0
+11930:23:59 [wlan_config][Warn] [pon_wlan_adapte(1496)rlk_wlan_destro] g_bVAP is error iIfIndex:6, g_vap:0
+11930:23:59 [wlan_config][Warn] [pon_wlan_adapte(3917)rlk_wlan_enable] Ignore wlan7 for Non-EASYMESH system.
+11930:23:59 [multi_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [multi_mgr] ,async event [0x9616] map fun is unknow 
+11930:23:59 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9616] map fun is unknow 
+11930:23:59 [loopback_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [loopback_mgr] ,async event [0x9615] map fun is unknow 
+11930:23:59 [multi_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [multi_mgr] ,async event [0x9616] map fun is unknow 
+11930:23:59 [qos_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:23:59 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9616] map fun is unknow 
+11930:23:59 [qos_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [qos_mgr] ,async event [0x9615] map fun is unknow 
+Caller: wlan_operate_init+0xb0/0x10c [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+Caller: wlan_operate_init+0xb0/0x10c [mtk7613e_ap]
+MtCmdBcnV2OffloadSet:(ret = 0)
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=1,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=0, ampdu_factor=3
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=1,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=0, ampdu_factor=3
+Caller: wlan_operate_init+0xb0/0x10c [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=1,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+11930:23:59 [e8_mdpu_density=0, ampdu_factor=3
+vlanbind_mgr][ErCaller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ror] [work_main.ht_cap: ht_cap->HtCapInfo, 
+h(181)WORK_ASYNCldpc=1,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+_MSG_] 
+ ERROR,mdpu_density=0, ampdu_factor=3
+ PID [e8_vlanbinCaller: wlan_operate_init+0xb0/0x10c [mtk7613e_ap]
+d_mgr] ,async ev
+phy_mode=49, ch=36, wdev_type=1
+ent [0x9615] mapht_cap: ht_cap->HtCapInfo, 
+ fun is unknow ldpc=1,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=0, ampdu_factor=3
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+:::::: portname:
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+wlan gportmap[0]ldpc=1,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+.mapport: eth0 :ht_cap: ht_cap->HtCapParm, 
+:::
+mdpu_density=0, ampdu_factor=3
+:::::: portname:
+ ####0,ffffffff
+
+ ####2,ffffffff
+wlan gportmap[1]
+ ####3,ffffffff
+.mapport: eth1 :
+ ####4,ffffffff
+:::
+:::::: port
+ ####5,ffffffff
+
+ ####7,ffffffff
+name:wlan gportm
+ ####8,ffffffff
+
+ ####9,ffffffff
+ap[2].mapport: e
+ ####10,ffffffff
+
+ ####11,ffffffff
+th2 ::::
+::::::
+ ####1,ffffffff
+ portname:wlan g
+ ####6,ffffffff
+Create brport: [wlan4]--[6]
+portmap[3].mappodevice wlan4 entered promiscuous mode
+br0: port 6(wlan4) entered forwarding state
+br0: port 6(wlan4) entered forwarding state
+rt: eth3 ::::
+:Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+::::: portname:wht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+lan gportmap[4].ht_cap: ht_cap->HtCapParm, 
+mapport: eth4 ::mdpu_density=5, ampdu_factor=3
+::
+:::::: portnSet_RTSThreshold_Proc: set wdev0 rts length threshold=2347(0x92b)
+ame:wlan gportmaSet_FragThreshold_Proc::set wdev0 FragThreshold=2346)
+[BuildChannelList] BandIdx = 0, PhyMode = 49, ChListNum = 19:
+p[5].mapport:  :Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+:::
+port = 0
+e
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+nable = 0
+Closeldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ switch success!ht_cap: ht_cap->HtCapParm, 
+
+:::::: portnammdpu_density=5, ampdu_factor=3
+e:wlan gportmap[Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+0].mapport: eth0
+phy_mode=49, ch=36, wdev_type=1
+ ::::
+:::::: poht_cap: ht_cap->HtCapInfo, 
+rtname:wlan gporldpc=1,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+tmap[1].mapport:ht_cap: ht_cap->HtCapParm, 
+ eth1 ::::
+::::mdpu_density=0, ampdu_factor=3
+:: portname:wlanCaller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+ gportmap[2].map
+phy_mode=49, ch=36, wdev_type=1
+port: eth2 ::::ht_cap: ht_cap->HtCapInfo, 
+
+:::::: portnameldpc=1,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+:wlan gportmap[3ht_cap: ht_cap->HtCapParm, 
+].mapport: eth3 mdpu_density=0, ampdu_factor=3
+::::
+:::::: porCaller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+tname:wlan gport
+phy_mode=49, ch=36, wdev_type=1
+map[4].mapport: ht_cap: ht_cap->HtCapInfo, 
+eth4 ::::
+:::::ldpc=1,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+: portname:wlan ht_cap: ht_cap->HtCapParm, 
+mdpu_density=0, ampdu_factor=3
+gportmap[5].mapphc_radio_res_request(): wdev=4, hobj is not ready!
+ort:  ::::
+portCaller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+ = 0
+enable = 1
+phy_mode=49, ch=36, wdev_type=2
+
+Close switch sht_cap: ht_cap->HtCapInfo, 
+uccess!
+11930:ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+23:59 [qos_mgr][ht_cap: ht_cap->HtCapParm, 
+Warn] [dbl_api.cmdpu_density=0, ampdu_factor=3
+(406)zxicDbGetVihc_radio_res_request(): wdev=5, hobj is not ready!
+ew] dbAPIGetViewCaller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+ VID(17) VN(IGD.
+phy_mode=49, ch=36, wdev_type=8
+LD1.WLAN5) Err(-ht_cap: ht_cap->HtCapInfo, 
+5)
+11930:23:59ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ [qos_mgr][Errorht_cap: ht_cap->HtCapParm, 
+] [work_main.h(1mdpu_density=0, ampdu_factor=3
+81)WORK_ASYNC_MShc_radio_res_request(): wdev=6, hobj is not ready!
+G_] 
+ ERROR, PICaller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+D [qos_mgr] ,asy
+phy_mode=49, ch=36, wdev_type=8
+nc event [0x9615ht_cap: ht_cap->HtCapInfo, 
+] map fun is unkldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+now 
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=0, ampdu_factor=3
+hc_radio_res_request(): wdev=7, hobj is not ready!
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=8
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=0, ampdu_factor=3
+hc_radio_res_request(): wdev=8, hobj is not ready!
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=8
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=0, ampdu_factor=3
+hc_radio_res_request(): wdev=4, hobj is not ready!
+hc_radio_res_request(): wdev=5, hobj is not ready!
+hc_radio_res_request(): wdev=6, hobj is not ready!
+hc_radio_res_request(): wdev=7, hobj is not ready!
+hc_radio_res_request(): wdev=8, hobj is not ready!
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+Set_AutoChannelSelCheckTime_Proc(): ACSCheckTime[0]=0 seconds
+Set_TxPower_Proc: BandIdx = 0
+[PMF]APPMFInit:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+wifi_sys_linkdown(), wdev idx = 0
+MtCmdBcnV2OffloadSet:(ret = 0)
+MtCmdBcnV2OffloadSet:(ret = 0)
+ExtEventBeaconLostHandler::FW LOG, Beacon lost (34:d8:56:17:dc:25), Reason 0x10
+  Beacon lost - AP disabled!!!
+MtCmdBcnV2OffloadSet:(ret = 0)
+bssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 0, CmdBssInfoBmcRate.u2McTransmit = 0
+wmm_ctrl_release_entry(): Can't find HdevObj or Edca not required
+wifi_sys_close(), wdev idx = 0
+wifi_sys_open(), wdev idx = 0
+wdev_attr_update(): wdevId0 = 34:d8:56:17:dc:25
+Caller: wlan_operate_init+0xb0/0x10c [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+wifi_sys_linkup(), wdev idx = 0
+wtc_acquire_groupkey_wcid: Found a non-occupied wtbl_idx:135 for WDEV_TYPE:1
+ LinkToOmacIdx = 0, LinkToWdevType = 1
+bssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 8192, CmdBssInfoBmcRate.u2McTransmit = 8196
+UpdateBeaconHandler, BCN_UPDATE_INIT, OmacIdx = 0
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+MtCmdBcnV2OffloadSet:(ret = 0)
+
+phy_mode=49, ch=36, wdev_type=1
+MtCmdBcnV2OffloadSet:(ret = 0)
+
+ht_cap: ht_cap->HtCapInfo, 
+ [3350  si_rt_ifldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+_up]Ipmode = 2 vht_cap: ht_cap->HtCapParm, 
+ConnectionID = Imdpu_density=5, ampdu_factor=3
+GD.WD1.WCD1.WCIP[PMF]APPMFInit:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+1 up
+11930:24:wifi_sys_linkdown(), wdev idx = 0
+00 [loopback_mgrExtEventBeaconLostHandler::FW LOG, Beacon lost (34:d8:56:17:dc:25), Reason 0x10
+][Error] [work_m  Beacon lost - AP disabled!!!
+ain.h(181)WORK_AMtCmdBcnV2OffloadSet:(ret = 0)
+SYNC_MSG_] 
+ ERROR, PID [loopback_mgr] bssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 0, CmdBssInfoBmcRate.u2McTransmit = 0
+,async event [0x9615] map fun is unknow 
+wifi_sys_close(), wdev idx = 0
+wifi_sys_open(), wdev idx = 0
+wdev_attr_update(): wdevId0 = 34:d8:56:17:dc:25
+Caller: wlan_operate_init+0xb0/0x10c [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+wifi_sys_linkup(), wdev idx = 0
+wtc_acquire_groupkey_wcid: Found a non-occupied wtbl_idx:135 for WDEV_TYPE:1
+ LinkToOmacIdx = 0, LinkToWdevType = 1
+bssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 8192, CmdBssInfoBmcRate.u2McTransmit = 8196
+UpdateBeaconHandler, BCN_UPDATE_INIT, OmacIdx = 0
+MtCmdBcnV2OffloadSet:(ret = 0)
+[PMF]APPMFInit:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+wifi_sys_linkdown(), wdev idx = 0
+MtCmdBcnV2OffloadSet:(ret = 0)
+ExtEventBeaconLostHandler::FW LOG, Beacon lost (34:d8:56:17:dc:25), Reason 0x10
+  Beacon lost - AP disabled!!!
+MtCmdBcnV2OffloadSet:(ret = 0)
+bssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 0, CmdBssInfoBmcRate.u2McTransmit = 0
+wifi_sys_close(), wdev idx = 0
+wifi_sys_open(), wdev idx = 0
+wdev_attr_update(): wdevId0 = 34:d8:56:17:dc:25
+Caller: wlan_operate_init+0xb0/0x10c [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+wifi_sys_linkup(), wdev idx = 0
+wtc_acquire_groupkey_wcid: Found a non-occupied wtbl_idx:135 for WDEV_TYPE:1
+ LinkToOmacIdx = 0, LinkToWdevType = 1
+bssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 8192, CmdBssInfoBmcRate.u2McTransmit = 8196
+UpdateBeaconHandler, BCN_UPDATE_INIT, OmacIdx = 0
+[PMF]APPMFInit:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+wifi_sys_linkdown(), wdev idx = 0
+MtCmdBcnV2OffloadSet:(ret = 0)
+MtCmdBcnV2OffloadSet:(ret = 0)
+ExtEventBeaconLostHandler::FW LOG, Beacon lost (34:d8:56:17:dc:25), Reason 0x10
+  Beacon lost - AP disabled!!!
+MtCmdBcnV2OffloadSet:(ret = 0)
+bssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 0, CmdBssInfoBmcRate.u2McTransmit = 0
+wifi_sys_close(), wdev idx = 0
+wifi_sys_open(), wdev idx = 0
+wdev_attr_update(): wdevId0 = 34:d8:56:17:dc:25
+Caller: wlan_operate_init+0xb0/0x10c [mtk7613e_ap]
+
+phy_mode=49, ch=36, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+wifi_sys_linkup(), wdev idx = 0
+wtc_acquire_groupkey_wcid: Found a non-occupied wtbl_idx:135 for WDEV_TYPE:1
+ LinkToOmacIdx = 0, LinkToWdevType = 1
+bssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 8192, CmdBssInfoBmcRate.u2McTransmit = 8196
+UpdateBeaconHandler, BCN_UPDATE_INIT, OmacIdx = 0
+The Access Control List is empty!
+No need to clear the Access Control List!
+11930:24:00 [wlaIF(ra0) Set_AccessPolicy_Proc::(AccessPolicy=0)
+n_config][Warn] MtCmdBcnV2OffloadSet:(ret = 0)
+[pon_wlan_adapte(3267)rlk_wifi_dMtCmdBcnV2OffloadSet:(ret = 0)
+o_mac] Open the WLAN WhiMtCmdBcnV2OffloadSet:(ret = 0)
+te name functionSet_AutoChannelSel_Proc: Alg = 3 
+ but have no valMtCmdBcnV2OffloadSet:(ret = 0)
+id entry!
+=====[AutoChSelBuildChannelListFor5G] ChListNum5G = 19
+===========plib_AutoChSelScanStart: IsABand = 1, ChannelListNum = 12
+DoWanDHCPS_Forbi[build_acs_scan_ch_list] ------------>
+d  type:1=======[build_acs_scan_ch_list] Support channel: PrimCh=36, CentCh=42, DFS=0, skip 0
+===========
+[build_acs_scan_ch_list] Support channel: PrimCh=40, CentCh=42, DFS=0, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=44, CentCh=42, DFS=0, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=48, CentCh=42, DFS=0, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=52, CentCh=58, DFS=1, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=56, CentCh=58, DFS=1, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=60, CentCh=58, DFS=1, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=64, CentCh=58, DFS=1, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=100, CentCh=106, DFS=1, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=104, CentCh=106, DFS=1, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=108, CentCh=106, DFS=1, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=112, CentCh=106, DFS=1, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=116, CentCh=122, DFS=1, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=120, CentCh=122, DFS=1, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=124, CentCh=122, DFS=1, skip 0
+[build_acs_scan_ch_list] Support channel: PrimCh=128, CentCh=122, DFS=1, skip 0
+AsicSwitchChannel(): 5G Channel:36, then must be Channel_Band:1 !!
+channel 36 busytime 803
+AsicSwitchChannel(): 5G Channel:40, then must be Channel_Band:1 !!
+channel 40 busytime 0
+AsicSwitchChannel(): 5G Channel:44, then must be Channel_Band:1 !!
+sw_get_port_linkStatus@sw_alarm_scanforalarm the dev is null!
+11930:24:01 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00850301 , Event = 0xa506  
+11930:24:01 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 56  errno=[2:No such file or directory]  
+11930:24:01 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA506] to [00850301] in SocketAsynSendMsg()  ERROR !
+11930:24:01 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00840401 , Event = 0xa506  
+11930:24:01 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 56  errno=[2:No such file or directory]  
+11930:24:01 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA506] channel 44 busytime 0
+to [00840401] inAsicSwitchChannel(): 5G Channel:48, then must be Channel_Band:1 !!
+ SocketAsynSendMsg()  ERROR !
+11930:24:01 [tr069][Warn] [e8_pdt_tr069_in(745)E8ComRecvTr069A] Receive EV_ETH_UP_LINK_STATUS��port_rate=3; port_mode=0
+11930:24:01 [wlan_mgr][Warn] [wlan_manage.c(532)wlan_handle_par] EV_ETH_UP_LINK_STATUS receive.
+11930:24:01 [tr069][Warn] [e8_pdt_tr069_in(763)E8ComRecvTr069A] Ports/lan are not available alarmNumber(id)=104006, status= 1.
+11930:24:01 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0,104006.
+channel 48 busytime 0
+AsicSwitchChannel(): 5G Channel:52, then must be Channel_Band:1 !!
+11930:24:02 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00750101 , Event = 0xa456  
+11930:24:02 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 32  errno=[2:No such file or directory]  
+11930:24:02 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA456] to [00750101] in SocketAsynSendMsg()  ERROR !
+channel 52 busytime 0
+AsicSwitchChannel(): 5G Channel:56, then must be Channel_Band:1 !!
+channel 56 busytime 0
+AsicSwitchChannel(): 5G Channel:60, then must be Channel_Band:1 !!
+channel 60 busytime 715
+AsicSwitchChannel(): 5G Channel:64, then must be Channel_Band:1 !!
+switch_phy_int_check 430 mac 0 phy status changed: 1000M full-duplex
+[4G_CPE] network port as uplink, not dial up.
+channel 64 busytime 0
+AsicSwitchChannel(): 5G Channel:100, then must be Channel_Band:1 !!
+channel 100 busytime 0
+AsicSwitchChannel(): 5G Channel:104, then must be Channel_Band:1 !!
+sw_get_port_linkStatus@sw_alarm_scanforalarm the dev is null!
+11930:24:04 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00850301 , Event = 0xa506  
+11930:24:04 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 56  errno=[2:No such file or directory]  
+11930:24:04 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA506] to [00850301] in SocketAsynSendMsg()  ERROR !
+11930:24:04 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00840401 , Event = 0xa506  
+11930:24:04 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 56  errno=[2:No such file or directory]  
+11930:24:04 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA506] to [00840401] in SocketAsynSendMsg()  ERROR !
+11930:24:04 [tr069][Warn] [e8_pdt_tr069_in(745)E8ComRecvTr069A] Receive EV_ETH_UP_LINK_STATUS��port_rate=0; port_mode=1
+11930:24:04 [tr069][Warn] [e8_pdt_tr069_in(763)E8ComRecvTr069A] Ports/lan are not available alarmNumber(id)=104006, status= 0.
+11930:24:04 [wlan_mgr][Warn] [wlan_manage.c(532)wlan_handle_par] EV_ETH_UP_LINK_STATUS receive.
+11930:24:04 [tr069][Warn] [pdt_tr069_alarm(683)si_tr069_modefy] new AlarmNumber=0.
+target pid is not exist 
+channel 104 busytime 3
+AsicSwitchChannel(): 5G Channel:108, then must be Channel_Band:1 !!
+channel 108 busytime 759
+AsicSwitchChannel(): 5G Channel:112, then must be Channel_Band:1 !!
+11930:24:04 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00010000 ,reciver = 0x00750101 , Event = 0xa455  
+11930:24:04 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 32  errno=[2:No such file or directory]  
+11930:24:04 [OSS_cspd][Error] [oss_common.c(547)ASEND] [][00010000] Send task Message[0XA455] to [00750101] in SocketAsynSendMsg()  ERROR !
+channel 112 busytime 0
+=====================================================
+Channel 36 : Busy Time = 803, Score 100,Skip Channel = FALSE
+=====================================================
+Channel 40 : Busy Time = 0, Score 100,Skip Channel = FALSE
+=====================================================
+Channel 44 : Busy Time = 0, Score 100,Skip Channel = FALSE
+=====================================================
+Channel 48 : Busy Time = 0, Score 100,Skip Channel = FALSE
+=====================================================
+Channel 52 : Busy Time = 0, Score 100,Skip Channel = FALSE
+=====================================================
+Channel 56 : Busy Time = 0, Score 100,Skip Channel = FALSE
+=====================================================
+Channel 60 : Busy Time = 715, Score 100,Skip Channel = FALSE
+=====================================================
+Channel 64 : Busy Time = 0, Score 100,Skip Channel = FALSE
+=====================================================
+Channel 100 : Busy Time = 0, Score 100,Skip Channel = FALSE
+=====================================================
+Channel 104 : Busy Time = 3, Score 100,Skip Channel = FALSE
+=====================================================
+Channel 108 : Busy Time = 759, Score 100,Skip Channel = FALSE
+=====================================================
+Channel 112 : Busy Time = 0, Score 100,Skip Channel = FALSE
+=====================================================
+Channel 116 : Busy Time = 0, Score 100,Skip Channel = TRUE
+=====================================================
+Channel 120 : Busy Time = 0, Score 100,Skip Channel = TRUE
+=====================================================
+Channel 124 : Busy Time = 0, Score 100,Skip Channel = TRUE
+=====================================================
+Channel 128 : Busy Time = 0, Score 100,Skip Channel = TRUE
+=====================================================
+=============== select best ch for 5G ===============
+ChIdx=0 control-Channle=40 cen-channel=42 Max_BUSY_TIME=803
+ChIdx=1 control-Channle=52 cen-channel=58 Max_BUSY_TIME=715
+ChIdx=2 control-Channle=100 cen-channel=106 Max_BUSY_TIME=759
+=================ACS score board===================
+CH36 final score is 100
+CH40 final score is 100
+CH44 final score is 100
+CH48 final score is 100
+CH52 final score is 100
+CH56 final score is 100
+CH60 final score is 100
+CH64 final score is 100
+CH100 final score is 100
+CH104 final score is 100
+CH108 final score is 100
+CH112 final score is 100
+CH116 final score is 100
+CH120 final score is 100
+CH124 final score is 100
+CH128 final score is 100
+Min Busy Time=715,select best channel 52
+====================================================
+AsicSwitchChannel(): 5G Channel:42, then must be Channel_Band:1 !!
+scan_ch_restore - End of SCAN(TYPE: 0, BandIdx: 0), restore to BW(2) channel 42, Total BSS[00]
+AsicSetSyncModeAndEnable(): NotSupportedFunc for this arch(HIF_MT)!
+MtCmdBcnV2OffloadSet:(ret = 0)
+MtCmdBcnV2OffloadSet:(ret = 0)
+[si_tp_on_hear_beat] 3 dwExecPolicy = -1,dwAppId = 6
+module-gpio: GPIO_CMD_SET_ALL_ON
+11930:24:05 [upgrade_mgr][Error] [upgrade_mgr.c(4089)upgradeProcTime] Start to sync version !
+11930:24:05 [upgrade_mgr][Warn] [upgrade_mgr.c(4114)upgradeProcTime] never comp upgrade, not need sync !
+APStop(), oper(2) bssid(0)=34:d8:56:17:dc:25
+ExtEventBeaconLostHandler::FW LOG, Beacon lost (34:d8:56:17:dc:25), Reason 0x10
+  Beacon lost - AP disabled!!!
+MtCmdBcnV2OffloadSet:(ret = 0)
+AsicSetPreTbtt(): NotSupportedFunc for this arch(HIF_MT)!
+MtAsicSetPiggyBack(592): Not support for HIF_MT yet!
+AsicDisableSync(): NotSupportedFunc for this arch(HIF_MT)!
+asic_bss_beacon_exit(): NotSupportedFunc for this arch(HIF_MT)!
+wifi_sys_linkdown(), wdev idx = 0
+ExtEventBeaconLostHandler::FW LOG, Beacon lost (34:d8:56:17:dc:25), Reason 0x10
+  Beacon lost - AP disabled!!!
+MtCmdBcnV2OffloadSet:(ret = 0)
+bssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 0, CmdBssInfoBmcRate.u2McTransmit = 0
+wifi_sys_close(), wdev idx = 0
+ap_ftkd> Release FT KDP Module...
+APStartUp(), oper(2) bssid(0)=34:d8:56:17:dc:25
+wifi_sys_open(), wdev idx = 0
+wdev_attr_update(): wdevId0 = 34:d8:56:17:dc:25
+ [RadarStateCheck] RD_SILENCE_MODE  
+[DfsCacNormalStart] CAC 100 seconds start . Disable MAC TX
+AsicSwitchChannel(): 5G Channel:58, then must be Channel_Band:1 !!
+[DfsSwitchCheck]: DFS ByPass TX calibration.
+[WrapDfsRadarDetectStart]: DfsChBand[0]: 1, DfsChBand[1]: 0
+Caller: wlan_operate_init+0xb0/0x10c [mtk7613e_ap]
+
+phy_mode=49, ch=52, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+AP inf up for ra_0(func_idx) OmacIdx=0
+AsicRadioOnOffCtrl(): DbdcIdx=0 RadioOn
+ApAutoChannelAtBootUp----------------->
+ApAutoChannelAtBootUp: AutoChannelBootup[0] = 0
+ApAutoChannelAtBootUp<-----------------
+ ap_run_at_boot() : ACS is disable !!
+[PMF]APPMFInit:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=52, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+wifi_sys_linkup(), wdev idx = 0
+wtc_acquire_groupkey_wcid: Found a non-occupied wtbl_idx:135 for WDEV_TYPE:1
+ LinkToOmacIdx = 0, LinkToWdevType = 1
+bssUpdateBmcMngRate (BSS_INFO_BROADCAST_INFO), CmdBssInfoBmcRate.u2BcTransmit= 8192, CmdBssInfoBmcRate.u2McTransmit = 8196
+UpdateBeaconHandler, BCN_UPDATE_INIT, OmacIdx = 0
+MtCmdTxPowerPercentCtrl: fgTxPowerPercentEn: 1, BandIdx: 0
+MtCmdBcnV2OffloadSet:(ret = 0)
+AsicSetTxStream(): NotSupportedFunc for this arch(HIF_MT)!
+AsicSetRxStream(): NotSupportedFunc for this arch(HIF_MT)!
+MtCmdSetMinPhyRate:(ret = 0)
+apidx 0 for WscUUIDInit
+Generate UUID for apidx(0)
+[PMF]APPMFInit:: apidx=0, MFPC=0, MFPR=0, SHA256=0
+Caller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+
+phy_mode=49, ch=52, wdev_type=1
+ht_cap: ht_cap->HtCapInfo, 
+ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+ht_cap: ht_cap->HtCapParm, 
+mdpu_density=5, ampdu_factor=3
+MtCmdTxPowerPercentCtrl: fgTxPowerPercentEn: 1, BandIdx: 0
+AsicSetTxStream(): NotSupportedFunc for this arch(HIF_MT)!
+AsicSetRxStream(): NotSupportedFunc for this arch(HIF_MT)!
+MtCmdBcnV2OffloadSet:(ret = 0)
+MtCmdSetMinPhyRate:(ret = 0)
+asic_bss_beacon_init(): NotSupportedFunc for this arch(HIF_MT)!
+AsicSetPreTbtt(): NotSupportedFunc for this arch(HIF_MT)!
+ap_ftkd> Initialize FT KDP Module...
+Main bssid = 34:d8:56:17:dc:25
+MtCmdBcnV2OffloadSet:(ret = 0)
+MtCmdSetDfsTxStart:(ret = 0)
+Set_AutoChannelSel_Proc() wait channel setting success.
+11930:24:07 [wlaBndStrg is already Disable
+n_config][Warn] [pon_wlan_adapte(6542)rlk_wlan_i
+octl_] set wlan0 BndStrgInit=1
+11930:24:07 [wlan_config][Warn] [pon_wlan_adapte(6542)rlk_wlan_ioctl_] set wlan0 BndStrgLoadingMethod=0
+11930:24:07 [wlan_config][Warn] [pon_wlan_adapte(6542)rlk_wlan_ioctl_] set wlan0 BndStrgLoadingMethod[0]-[0]-[0]-[1]
+=3
+11930:24:07br_filter_conf:[1]-[10]
+ [wlan_config][Warn] [pon_wlan_adapte(6542)rlk_wlan_ioct####Config existed br_port[wlan4]
+l_] set wlan0 BndStrgCndChk=30
+11930:24:07 [wlan_config][Warn] [pon_wlan_adapte(6542)rlk_wlan_ioctl_] set wlan0 BndStrgClearEntry=1
+found 5G , wlan4 INTERRUPT, ID is 50
+11930:24:07 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[e8_vlanbind_mgr] Event[0x9613] dwUsedTicks[644]
+11930:24:07 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[bandInfo_mgr] Event[0x1150] dwUsedTicks[614]
+11930:24:07 [e8_vlanbind_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [e8_vlanbind_mgr] ,async event [0x9615] map fun is unknow 
+11930:24:07 [qos_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:07 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[multi_mgr] Event[0x9615] dwUsedTicks[815]
+11930:24:07 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:07 [OSS_cspd][Warn] [oss_sche.c(911)SynRunProcess] SynRunProcess process[route_mgr] Event[0x9a12] dwUsedTicks[719]
+11930:24:07 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[ifs_mgr] Event[0x960d] dwUsedTicks[722]
+11930:24:07 [xpon_mgr][Warapcli1: ===> msta_virtual_if_open
+n] [xpon_mgr.c(1RTMP_COM_IoctlHandle -> CMD_RTPRIV_IOCTL_VIRTUAL_INF_UP
+073)si_eth_link_wifi_sys_open(), wdev idx = 4
+eve] event_port= [RadarStateCheck] RD_SILENCE_MODE  
+eth0, event=0, p[DfsCacNormalStart] CAC 100 seconds start . Disable MAC TX
+ort_rate=3, port[WrapDfsRadarDetectStart]: DfsChBand[0]: 1, DfsChBand[1]: 0
+_mode=0, linkport=0
+*##*come to [si_xpon_link_event] wECaller: wlan_operate_init+0xb0/0x10c [mtk7613e_ap]
+vent:[EV_XPON_LI
+phy_mode=49, ch=52, wdev_type=2
+NK_DOWN] [19:44:ht_cap: ht_cap->HtCapInfo, 
+19]
+11930:24:0ldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+7 [xpon_mgr][Warht_cap: ht_cap->HtCapParm, 
+n] [xpon_mgr.c(1mdpu_density=0, ampdu_factor=3
+073)si_eth_link_eve] event_port=eth0, event=1, port_rateCaller: SetCommonHT+0xac/0x124 [mtk7613e_ap]
+=0, port_mode=1,
+phy_mode=49, ch=52, wdev_type=2
+ linkport=0
+*##ht_cap: ht_cap->HtCapInfo, 
+*come to [si_xpoldpc=0,ch_width=1,gf=0,sgi20=1,sgi40=1,tx_stbc=1,rx_stbc=1,amsdu_size=0
+n_link_event] wEht_cap: ht_cap->HtCapParm, 
+vent:[EV_XPON_LImdpu_density=0, ampdu_factor=3
+NK_UP] [19:44:19MSTA interface up for apcli0 func_idx=0 OmacIdx=1
+]
+11930:24:07 apcli1 open wlan_uplink=0x3 
+[OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00013102 ,reciver = 0x00490101 , Event = 0x9622  
+11930:24:07 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 40  errno=[2:No such file or directory]  
+11930:24:07 [OSS_cspd][Error] [oss_common.c(547)ASEND] [dns_mgr][00013102] Send task Message[0X9622] to [00490101] in SocketAsynSendMsg()  ERROR !
+11930:24:07 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:07 [binding_mgr][Error] [work_main.h(172)WORK_ASYNC_MSG_] 
+ ERROR, PID [binding_mgr] ,async event [0x9614] map fun is NULL 
+11930:24:07 [sntp_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [sntp_mgr] ,async event [0x9614] map fun is unknow 
+11930:24:07 [binding_mgr][Error] [work_main.h(172)WORK_ASYNC_MSG_] 
+ ERROR, PID [binding_mgr] ,async event [0x9614] map fun is NULL 
+11930:24:07 [sntp_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [sntp_mgr] ,async event [0x9614] map fun is unknowSP Removed from interface pon0 
+ 
+11930:24:07 [multiwcd_mgr][Warn] [dbl_api.c(630)zxicDbLstView] dbAPILstView VID(16) RVN(IGD.WD1.WCD1) Err(-19)
+[si_mirror_async_phylink_down]mirror phylink down PHYLINK_ID IGD.WD1
+[si_mirror_async_phylink_down]mirror phylink down tIF_NAME IGD.WD1.WCD1
+[si_mirror_async_phylink_up]mirror phylink up PHYLINK_ID IGD.WD1
+[si_mirror_async_phylink_up]mirror phylink up tIF_NAME IGD.WD1.WCD1
+RTNETLINK answers: No such file or directory
+in sp_parse_opt, speed 1***sp_init, default 8, Tbl 7-6-5-4***
+56250000, head 0, burst 1268336, tbuff 126833, mtu 1528, linktype 4
+11930:24:08 [qos_mgr][Warn] [qos_mgr.c(3547)si_qc_config_al] si_qc_check_view error
+11930:24:08 [firewall][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:08 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+ ignore  ,dns_vpn_filter_load 429 unknown vpn_name  
+11930:24:08 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+
+ [3420  si_rt_if_down]Ipmode = 2 vConnectionID = IGD.WD1.WCD1.WCIP1 down
+11930:24:08 [forward_rule][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [forward_rule] ,async event [0x9a0c] map fun is unknow 
+11930:24:08 [firewall][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [firewall] ,async event [0x9a0c] map fun is unknow 
+11930:24:08 [pptp_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [pptp_mgr] ,async event [0x9a0c] map fun is unknow 
+11930:24:08 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+ip6tables: No chain/target/match by that name.
+11930:24:08 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[wlan_config] Event[0xa205] dwUsedTicks[1751]
+11930:24:08 [wlan_config][Warn] [wlan_config.c(556)wlan_config_pro] EV_ETH_UP_LINK_STATUS receive.
+11930:24:08 [wlan_config][Warn] [wlan_config.c(557)wlan_config_pro] ifname eth0,mode 0,rate 3.
+11930:24:08 [wlan_config][Warn] [wlan_config.c(560)wlan_config_pro] @@@@ Set WAN port link status as 0.
+11930:24:08 [wlan_config][Warn] [wlan_config.c(556)wlan_config_pro] EV_ETH_UP_LINK_STATUS receive.
+11930:24:08 [wlan_config][Warn] [wlan_config.c(557)wlan_config_pro] ifname eth0,mode 1,rate 0.
+11930:24:08 [wlan_config][Warn] [wlan_config.c(560)wlan_config_pro] @@@@ Set WAN port link status as 1.
+11930:24:08 [wlan_mgr][Error] [wlan_manage.c(3404)wlan_handle_cac] GetDeviceByDev failed iRet:-1, oldevent:0xaa52
+11930:24:08 [wlan_mgr][Error] [wlan_manage.c(3391)wlan_handle_cac] event_queue_pop failed iRet:-1
+11930:24:08 [wlan_mgr][Error] [wlan_manage.c(3450)wlan_handle_cac] old_event:0xaa52
+11930:24:08 [wlan_mgr][Warn] [wlan_manage.c(3502)wlan_handle_msg] Process config ok for mm start, cDevName wifi1.
+
+ [3420  si_rt_if_down]Ipmode = 1 vConnectionID = IGD.WD1.WCD1.WCIP1 down
+11930:24:08 [upnp_igd][Warn] [upnpsdk_mgr.c(265)UpnpSdkStop] Upnp SDK state inconsistence
+11930:24:08 [ipv6_masquerade][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [ipv6_masquerade] ,async event [0x9a06] map fun is unknow 
+11930:24:08 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:08 [ifs_mgr][Warn] [ifs_notifier.c(154)si_ifs_regnotif] repeat Reg Msg[00420102]
+
+ [3350  si_rt_if_up]Ipmode = 1 vConnectionID = IGD.WD1.WCD1.WCIP1 up
+11930:24:09 [forward_rule][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:09 [ping_mgr][Error] [ping_mgr.c(146)get_wps_led_fla] Get wps_led_flag file failure!!
+11930:24:09 [OSS_cspd][Warn] [oss_sche.c(849)RunProcess] RunProcess process[ping_mgr] Event[0x1150] dwUsedTicks[939]
+11930:24:09 [ping_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [ping_mgr] ,async event [0x9403] map fun is unknow 
+11930:24:09 [pingkeep_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [pingkeep_mgr] ,async event [0x9614] map fun is unknow 
+11930:24:09 [pingkeep_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [pingkeep_mgr] ,async event [0x9614] map fun is unknow 
+11930:24:09 [ipv6_masquerade][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [ipv6_masquerade] ,async event [0x9a05] map fun is unknow 
+11930:24:09 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:09 [ping_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [ping_mgr] ,async event [0x9402] map fun is unknow 
+RTNETLINK answers: File exists
+11930:24:09 [forward_rule][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:10 [firewall][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:10 [forward_rule][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:10 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:10 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00013102 ,reciver = 0x00490101 , Event = 0x9622  
+11930:24:10 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 40  errno=[2:No such file or directory]  
+11930:24:10 [OSS_cspd][Error] [oss_common.c(547)ASEND] [dns_mgr][00013102] Send task Message[0X9622] to [00490101] in SocketAsynSendMsg()  ERROR !
+sh: can't create /proc/net/policyroute: nonexistent directory
+11930:24:10 [prefix_mgr][Warn] [prefix_mgr.c(2483)si_prefix_get_p] not find prefix
+11930:24:10 [upnp_igd][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:10 [upnp_igd][Warn] [upnpsdk_mgr.c(150)UpnpSdkStart] Upnp SDK state inconsistence
+11930:24:10 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:10 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00013102 ,reciver = 0x00490101 , Event = 0x9622  
+11930:24:10 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 40  errno=[2:No such file or directory]  
+11930:24:10 [OSS_cspd][Error] [oss_common.c(547)ASEND] [dns_mgr][00013102] Send task Message[0X9622] to [00490101] in SocketAsynSendMsg()  ERROR !
+
+ [3350  si_rt_if_up]Ipmode = 2 vConnectionID = IGD.WD1.WCD1.WCIP1 up
+11930:24:11 [forward_rule][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [forward_rule] ,async event [0x9a0b] map fun is unknow 
+11930:24:11 [firewall][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [firewall] ,async event [0x9a0b] map fun is unknow 
+11930:24:11 [pptp_mgr][Error] [work_main.h(181)WORK_ASYNC_MSG_] 
+ ERROR, PID [pptp_mgr] ,async event [0x9a0b] map fun is unknow 
+RTNETLINK answers: File exists
+11930:24:11 [ipv6_masquerade][Warn] [ipv6_masquerade(265)ipv6DefaultGw_e] ipv6 gateway up,but not to check prefix to add NAT66
+11930:24:11 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:11 [prefix_mgr][Warn] [prefix_mgr.c(2483)si_prefix_get_p] not find prefix
+11930:24:11 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00013102 ,reciver = 0x00490101 , Event = 0x9622  
+11930:24:11 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 40  errno=[2:No such file or directory]  
+11930:24:11 [OSS_cspd][Error] [oss_common.c(547)ASEND] [dns_mgr][00013102] Send task Message[0X9622] to [00490101] in SocketAsynSendMsg()  ERROR !
+11930:24:11 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:12 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00013102 ,reciver = 0x00490101 , Event = 0x9622  
+11930:24:12 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 40  errno=[2:No such file or directory]  
+11930:24:12 [OSS_cspd][Error] [oss_common.c(547)ASEND] [dns_mgr][00013102] Send task Message[0X9622] to [00490101] in SocketAsynSendMsg()  ERROR !
+[4G_CPE] wlan_state changed [-1] -> [1]
+11930:24:13 [ping_mgr][Error] [ping_mgr.c(607)si_network_chec] net_check_time_deal v4 can net led
+11930:24:13 [ping_mgr][Error] [ping_mgr.c(146)get_wps_led_fla] Get wps_led_flag file failure!!
+
+ [3350  si_rt_if_up]Ipmode = 2 vConnectionID = IGD.WD1.WCD1.WCIP1 up
+11930:24:13 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:13 [OSS_cspd][Warn] [oss_comm.c(2278)SocketAsynSendM] sender = 0x00013102 ,reciver = 0x00490101 , Event = 0x9622  
+11930:24:13 [OSS_cspd][Warn] [oss_comm.c(2280)SocketAsynSendM] send ilen = -1 Len = 40  errno=[2:No such file or directory]  
+11930:24:13 [OSS_cspd][Error] [oss_common.c(547)ASEND] [dns_mgr][00013102] Send task Message[0X9622] to [00490101] in SocketAsynSendMsg()  ERROR !
+11930:24:13 [route_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+11930:24:18 [qos_mgr][Error] [fw_api.c(431)plib_fw_ffe_cle] echo 0 > /proc/ffe/ffe_entry_remove
+[4G_CPE] network port as uplink, not dial up.
+rcv boot end signal
+[4G_CPE] network port as uplink, not dial up.
+target pid is not exist 
+11930:25:10 [srm_mgr][Error] [srm_mgr.c(531)SrmProcTimerMsg] recv Timer8Event event, Memory reclamation once after startup!

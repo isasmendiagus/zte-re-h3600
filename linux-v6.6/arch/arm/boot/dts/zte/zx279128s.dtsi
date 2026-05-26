@@ -173,13 +173,20 @@
 			status = "disabled";
 		};
 
-		/* Integrated ethernet block: NPP @ 0x921c0000, MAC[0..4] and PP
-		 * follow at +0x40000 strides. Single ioremap covers the whole
-		 * 2 MiB stretch — sub-bases are derived inside the driver. */
+		/* Integrated ethernet block. Layout cross-checked against the
+		 * sibling ZX279128R reference DTS in refs/zte-zx279128R/:
+		 *   PON-side regs    : 0x92000000..0x921bffff
+		 *   NPP/TM/PP/IDM    : 0x921c0000..0x923bffff
+		 * The driver currently maps both windows but also still
+		 * devm_ioremaps the hardcoded addresses for the PON window
+		 * and TOPCRM — Phase 10b (task #71) migrates the driver to
+		 * read from these DT properties instead. */
 		eth: ethernet@921c0000 {
 			compatible = "zte,zx279128s-eth";
-			reg = <0x921c0000 0x200000>;
-			/* IRQs verified against stock DTS:
+			reg = <0x92000000 0x1c0000>,	/* pon */
+			      <0x921c0000 0x200000>;	/* npp+tm+pp+idm */
+			reg-names = "pon", "npp";
+			/* IRQs verified against stock + sibling DTS:
 			 *   NPP main : GIC_SPI 0x23 (35) — pon_npp
 			 *   TM       : GIC_SPI 0x24 (36) — pon_tm = CPU↔switch traffic ⭐
 			 *   PP       : GIC_SPI 0x25 (37) — pon_pp (not used)
@@ -188,6 +195,7 @@
 				     <GIC_SPI 0x23 IRQ_TYPE_LEVEL_HIGH>,	/* npp */
 				     <GIC_SPI 0x24 IRQ_TYPE_LEVEL_HIGH>;	/* tm */
 			interrupt-names = "idm", "npp", "tm";
+			zte,topcrm = <&topcrm>;
 			status = "disabled";
 		};
 

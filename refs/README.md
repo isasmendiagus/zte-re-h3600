@@ -13,6 +13,7 @@ for our specific H3600 unit), **trust `ext/`**.
 |---|---|---|
 | `orca-h3600p/` | Marcos del Sol Vives' ("orca") prior RE work on his own H3600P unit. **Same model family as ours, but a different physical device.** | Ghidra symbols (unstripped `kernel.elf`), DTS cross-check |
 | `stefan-zx297520/` | Stefan's Linux kernel port for the sibling ZXIC SoC ZX297520v3 (D-Link DWR-932M etc). | Reference for `mach-zx` patterns, GPIO/IRQ/QSPI driver shape, dts conventions, what an "almost working" mainline port looks like |
+| `zte-zx279128R/` | DTS dumped from a ZTE ZX279128R sibling modem (provided 2026-05-26). Same family as our 279128S. | **Authoritative HW block layout** — separate per-block DT nodes (pon/npp/sw/tm/pp/idm/mdio/gephy) with compatible strings + addresses. The target shape for our binding/DTS once we DSA-ify. |
 
 ## Why these are NOT in `ext/`
 

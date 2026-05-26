@@ -27,6 +27,15 @@ description: |
   In addition the driver pokes the SoC top-level clock/reset manager
   (TOPCRM at 0x94000000) to enable PON-side clocks during probe.
 
+  Note (planned per-block split): a sibling ZX279128R reference DTS
+  (kept in refs/zte-zx279128R/ in this project) treats each HW block
+  (pon, npp, sw, tm, pp, idm, mdio, gephy) as a separate DT node with
+  its own compatible. That is the upstream-correct shape and the
+  target architecture for this driver — likely as a Linux DSA driver
+  with a CPU conduit (NPP+IDM) plus user-port PHY drivers. This YAML
+  documents the current monolithic intermediate; future revisions will
+  split it apart.
+
 maintainers:
   - Agustin Isasmendi <infra@quecomere.com>
 
