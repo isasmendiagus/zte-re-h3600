@@ -62,6 +62,10 @@ SKIP_RANGES = [
     # pon_early off=-0xfffc0..-0xfbff8 (16 KB). 4080× 0x4bef + 2 footer
     # words. Becomes zx_pon_tail_lookup_init().
     (-0xfffc0, 4082 * 4),
+    # Phase 9f: NPP twin-pair sub-blocks. NPP base 0..0x10000 covers
+    # instances 0..7; pairs (0,1), (2,3), (6,7) are bit-identical;
+    # instances 4 and 5 have no writes. Safe to skip the whole range.
+    (0, 0x10000),
 ]
 
 

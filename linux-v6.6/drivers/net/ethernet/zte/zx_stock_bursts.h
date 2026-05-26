@@ -7,11 +7,11 @@
  * (off, val) singletons. Same writes, dramatically fewer operations.
  *
  * Source entries : 22363
- * Skipped blocks : ['NPP_AUX', 'PON_LOW'] (5278 entries via 125 runs)
+ * Skipped blocks : ['NPP_AUX', 'PON_LOW'] (6782 entries via 557 runs)
  *                  → handled by explicit zx_<block>_init() in the driver
- * Bursts (≥4 entries): 954, covering 6761 entries
- * Short runs    : 7275, covering 10324 entries
- * Total ops     : 11278 (vs 17085 replayed)
+ * Bursts (≥4 entries): 826, covering 5689 entries
+ * Short runs    : 6971, covering 9892 entries
+ * Total ops     : 10718 (vs 15581 replayed)
  */
 #ifndef ZX_STOCK_BURSTS_H
 #define ZX_STOCK_BURSTS_H
@@ -1762,1646 +1762,958 @@ static const u32 zx_burst_4565_data[6] = {
 	0x000061a8, 0x000000c8, 0x0d820200, 0x00000096, 0x000009c4, 0x00989680,
 };
 
-/* burst #5854: NPP/base off=0x60 → 0x70 (5 regs) */
-static const u32 zx_burst_5854_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5856: NPP/base off=0x184 → 0x1b4 (13 regs) */
-static const u32 zx_burst_5856_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5859: NPP/base off=0x460 → 0x470 (5 regs) */
-static const u32 zx_burst_5859_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5861: NPP/base off=0x584 → 0x5b4 (13 regs) */
-static const u32 zx_burst_5861_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5864: NPP/base off=0x860 → 0x870 (5 regs) */
-static const u32 zx_burst_5864_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5866: NPP/base off=0x984 → 0x9b4 (13 regs) */
-static const u32 zx_burst_5866_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5869: NPP/base off=0xc60 → 0xc70 (5 regs) */
-static const u32 zx_burst_5869_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5871: NPP/base off=0xd84 → 0xdb4 (13 regs) */
-static const u32 zx_burst_5871_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5874: NPP/base off=0x1060 → 0x1070 (5 regs) */
-static const u32 zx_burst_5874_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5876: NPP/base off=0x1184 → 0x11b4 (13 regs) */
-static const u32 zx_burst_5876_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5879: NPP/base off=0x1460 → 0x1470 (5 regs) */
-static const u32 zx_burst_5879_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5881: NPP/base off=0x1584 → 0x15b4 (13 regs) */
-static const u32 zx_burst_5881_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5884: NPP/base off=0x1860 → 0x1870 (5 regs) */
-static const u32 zx_burst_5884_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5886: NPP/base off=0x1984 → 0x19b4 (13 regs) */
-static const u32 zx_burst_5886_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5889: NPP/base off=0x1c60 → 0x1c70 (5 regs) */
-static const u32 zx_burst_5889_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5891: NPP/base off=0x1d84 → 0x1db4 (13 regs) */
-static const u32 zx_burst_5891_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5894: NPP/base off=0x2060 → 0x2070 (5 regs) */
-static const u32 zx_burst_5894_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5896: NPP/base off=0x2184 → 0x21b4 (13 regs) */
-static const u32 zx_burst_5896_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5899: NPP/base off=0x2460 → 0x2470 (5 regs) */
-static const u32 zx_burst_5899_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5901: NPP/base off=0x2584 → 0x25b4 (13 regs) */
-static const u32 zx_burst_5901_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5904: NPP/base off=0x2860 → 0x2870 (5 regs) */
-static const u32 zx_burst_5904_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5906: NPP/base off=0x2984 → 0x29b4 (13 regs) */
-static const u32 zx_burst_5906_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5909: NPP/base off=0x2c60 → 0x2c70 (5 regs) */
-static const u32 zx_burst_5909_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5911: NPP/base off=0x2d84 → 0x2db4 (13 regs) */
-static const u32 zx_burst_5911_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5914: NPP/base off=0x3060 → 0x3070 (5 regs) */
-static const u32 zx_burst_5914_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5916: NPP/base off=0x3184 → 0x31b4 (13 regs) */
-static const u32 zx_burst_5916_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5919: NPP/base off=0x3460 → 0x3470 (5 regs) */
-static const u32 zx_burst_5919_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5921: NPP/base off=0x3584 → 0x35b4 (13 regs) */
-static const u32 zx_burst_5921_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5924: NPP/base off=0x3860 → 0x3870 (5 regs) */
-static const u32 zx_burst_5924_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5926: NPP/base off=0x3984 → 0x39b4 (13 regs) */
-static const u32 zx_burst_5926_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5929: NPP/base off=0x3c60 → 0x3c70 (5 regs) */
-static const u32 zx_burst_5929_data[5] = {
-	0x00201000, 0x00201000, 0x00201000, 0x00201000, 0x00a01000,
-};
-
-/* burst #5931: NPP/base off=0x3d84 → 0x3db4 (13 regs) */
-static const u32 zx_burst_5931_data[13] = {
-	0x07d00001, 0x00007654, 0x00007530, 0x0000c350, 0x00013880, 0x000186a0, 0x000186a0, 0x00030d40,
-	0x000249f0, 0x000249f0, 0x000493e0, 0x000186a0, 0x00000003,
-};
-
-/* burst #5933: NPP/base off=0x40f0 → 0x4100 (5 regs) */
-static const u32 zx_burst_5933_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #5941: NPP/base off=0x4250 → 0x4268 (7 regs) */
-static const u32 zx_burst_5941_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #5944: NPP/base off=0x44f0 → 0x4500 (5 regs) */
-static const u32 zx_burst_5944_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #5952: NPP/base off=0x4650 → 0x4668 (7 regs) */
-static const u32 zx_burst_5952_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #5955: NPP/base off=0x48f0 → 0x4900 (5 regs) */
-static const u32 zx_burst_5955_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #5963: NPP/base off=0x4a50 → 0x4a68 (7 regs) */
-static const u32 zx_burst_5963_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #5966: NPP/base off=0x4cf0 → 0x4d00 (5 regs) */
-static const u32 zx_burst_5966_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #5974: NPP/base off=0x4e50 → 0x4e68 (7 regs) */
-static const u32 zx_burst_5974_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #5977: NPP/base off=0x50f0 → 0x5100 (5 regs) */
-static const u32 zx_burst_5977_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #5985: NPP/base off=0x5250 → 0x5268 (7 regs) */
-static const u32 zx_burst_5985_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #5988: NPP/base off=0x54f0 → 0x5500 (5 regs) */
-static const u32 zx_burst_5988_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #5996: NPP/base off=0x5650 → 0x5668 (7 regs) */
-static const u32 zx_burst_5996_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #5999: NPP/base off=0x58f0 → 0x5900 (5 regs) */
-static const u32 zx_burst_5999_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #6007: NPP/base off=0x5a50 → 0x5a68 (7 regs) */
-static const u32 zx_burst_6007_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #6010: NPP/base off=0x5cf0 → 0x5d00 (5 regs) */
-static const u32 zx_burst_6010_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #6018: NPP/base off=0x5e50 → 0x5e68 (7 regs) */
-static const u32 zx_burst_6018_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #6021: NPP/base off=0x60f0 → 0x6100 (5 regs) */
-static const u32 zx_burst_6021_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #6029: NPP/base off=0x6250 → 0x6268 (7 regs) */
-static const u32 zx_burst_6029_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #6032: NPP/base off=0x64f0 → 0x6500 (5 regs) */
-static const u32 zx_burst_6032_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #6040: NPP/base off=0x6650 → 0x6668 (7 regs) */
-static const u32 zx_burst_6040_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #6043: NPP/base off=0x68f0 → 0x6900 (5 regs) */
-static const u32 zx_burst_6043_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #6051: NPP/base off=0x6a50 → 0x6a68 (7 regs) */
-static const u32 zx_burst_6051_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #6054: NPP/base off=0x6cf0 → 0x6d00 (5 regs) */
-static const u32 zx_burst_6054_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #6062: NPP/base off=0x6e50 → 0x6e68 (7 regs) */
-static const u32 zx_burst_6062_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #6065: NPP/base off=0x70f0 → 0x7100 (5 regs) */
-static const u32 zx_burst_6065_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #6073: NPP/base off=0x7250 → 0x7268 (7 regs) */
-static const u32 zx_burst_6073_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #6076: NPP/base off=0x74f0 → 0x7500 (5 regs) */
-static const u32 zx_burst_6076_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #6084: NPP/base off=0x7650 → 0x7668 (7 regs) */
-static const u32 zx_burst_6084_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #6087: NPP/base off=0x78f0 → 0x7900 (5 regs) */
-static const u32 zx_burst_6087_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #6095: NPP/base off=0x7a50 → 0x7a68 (7 regs) */
-static const u32 zx_burst_6095_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #6098: NPP/base off=0x7cf0 → 0x7d00 (5 regs) */
-static const u32 zx_burst_6098_data[5] = {
-	0x00008100, 0x0dd00010, 0x00000010, 0x00000010, 0x00000010,
-};
-
-/* burst #6106: NPP/base off=0x7e50 → 0x7e68 (7 regs) */
-static const u32 zx_burst_6106_data[7] = {
-	0x07cc07cc, 0x07cc07cc, 0x01040201, 0x003703ff, 0x01048821, 0x00452211, 0x00008421,
-};
-
-/* burst #6110: NPP/base off=0xc034 → 0xc044 (5 regs) */
-static const u32 zx_burst_6110_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6112: NPP/base off=0xc0d0 → 0xc0e4 (6 regs) */
-static const u32 zx_burst_6112_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6113: NPP/base off=0xc100 → 0xc124 (10 regs) */
-static const u32 zx_burst_6113_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6118: NPP/base off=0xc280 → 0xc2bc (16 regs) */
-static const u32 zx_burst_6118_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6121: NPP/base off=0xc434 → 0xc444 (5 regs) */
-static const u32 zx_burst_6121_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6123: NPP/base off=0xc4d0 → 0xc4e4 (6 regs) */
-static const u32 zx_burst_6123_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6124: NPP/base off=0xc500 → 0xc524 (10 regs) */
-static const u32 zx_burst_6124_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6129: NPP/base off=0xc680 → 0xc6bc (16 regs) */
-static const u32 zx_burst_6129_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6132: NPP/base off=0xc834 → 0xc844 (5 regs) */
-static const u32 zx_burst_6132_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6134: NPP/base off=0xc8d0 → 0xc8e4 (6 regs) */
-static const u32 zx_burst_6134_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6135: NPP/base off=0xc900 → 0xc924 (10 regs) */
-static const u32 zx_burst_6135_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6140: NPP/base off=0xca80 → 0xcabc (16 regs) */
-static const u32 zx_burst_6140_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6143: NPP/base off=0xcc34 → 0xcc44 (5 regs) */
-static const u32 zx_burst_6143_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6145: NPP/base off=0xccd0 → 0xcce4 (6 regs) */
-static const u32 zx_burst_6145_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6146: NPP/base off=0xcd00 → 0xcd24 (10 regs) */
-static const u32 zx_burst_6146_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6151: NPP/base off=0xce80 → 0xcebc (16 regs) */
-static const u32 zx_burst_6151_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6154: NPP/base off=0xd034 → 0xd044 (5 regs) */
-static const u32 zx_burst_6154_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6156: NPP/base off=0xd0d0 → 0xd0e4 (6 regs) */
-static const u32 zx_burst_6156_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6157: NPP/base off=0xd100 → 0xd124 (10 regs) */
-static const u32 zx_burst_6157_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6162: NPP/base off=0xd280 → 0xd2bc (16 regs) */
-static const u32 zx_burst_6162_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6165: NPP/base off=0xd434 → 0xd444 (5 regs) */
-static const u32 zx_burst_6165_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6167: NPP/base off=0xd4d0 → 0xd4e4 (6 regs) */
-static const u32 zx_burst_6167_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6168: NPP/base off=0xd500 → 0xd524 (10 regs) */
-static const u32 zx_burst_6168_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6173: NPP/base off=0xd680 → 0xd6bc (16 regs) */
-static const u32 zx_burst_6173_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6176: NPP/base off=0xd834 → 0xd844 (5 regs) */
-static const u32 zx_burst_6176_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6178: NPP/base off=0xd8d0 → 0xd8e4 (6 regs) */
-static const u32 zx_burst_6178_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6179: NPP/base off=0xd900 → 0xd924 (10 regs) */
-static const u32 zx_burst_6179_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6184: NPP/base off=0xda80 → 0xdabc (16 regs) */
-static const u32 zx_burst_6184_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6187: NPP/base off=0xdc34 → 0xdc44 (5 regs) */
-static const u32 zx_burst_6187_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6189: NPP/base off=0xdcd0 → 0xdce4 (6 regs) */
-static const u32 zx_burst_6189_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6190: NPP/base off=0xdd00 → 0xdd24 (10 regs) */
-static const u32 zx_burst_6190_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6195: NPP/base off=0xde80 → 0xdebc (16 regs) */
-static const u32 zx_burst_6195_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6198: NPP/base off=0xe034 → 0xe044 (5 regs) */
-static const u32 zx_burst_6198_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6200: NPP/base off=0xe0d0 → 0xe0e4 (6 regs) */
-static const u32 zx_burst_6200_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6201: NPP/base off=0xe100 → 0xe124 (10 regs) */
-static const u32 zx_burst_6201_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6206: NPP/base off=0xe280 → 0xe2bc (16 regs) */
-static const u32 zx_burst_6206_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6209: NPP/base off=0xe434 → 0xe444 (5 regs) */
-static const u32 zx_burst_6209_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6211: NPP/base off=0xe4d0 → 0xe4e4 (6 regs) */
-static const u32 zx_burst_6211_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6212: NPP/base off=0xe500 → 0xe524 (10 regs) */
-static const u32 zx_burst_6212_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6217: NPP/base off=0xe680 → 0xe6bc (16 regs) */
-static const u32 zx_burst_6217_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6220: NPP/base off=0xe834 → 0xe844 (5 regs) */
-static const u32 zx_burst_6220_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6222: NPP/base off=0xe8d0 → 0xe8e4 (6 regs) */
-static const u32 zx_burst_6222_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6223: NPP/base off=0xe900 → 0xe924 (10 regs) */
-static const u32 zx_burst_6223_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6228: NPP/base off=0xea80 → 0xeabc (16 regs) */
-static const u32 zx_burst_6228_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6231: NPP/base off=0xec34 → 0xec44 (5 regs) */
-static const u32 zx_burst_6231_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6233: NPP/base off=0xecd0 → 0xece4 (6 regs) */
-static const u32 zx_burst_6233_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6234: NPP/base off=0xed00 → 0xed24 (10 regs) */
-static const u32 zx_burst_6234_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6239: NPP/base off=0xee80 → 0xeebc (16 regs) */
-static const u32 zx_burst_6239_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6242: NPP/base off=0xf034 → 0xf044 (5 regs) */
-static const u32 zx_burst_6242_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6244: NPP/base off=0xf0d0 → 0xf0e4 (6 regs) */
-static const u32 zx_burst_6244_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6245: NPP/base off=0xf100 → 0xf124 (10 regs) */
-static const u32 zx_burst_6245_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6250: NPP/base off=0xf280 → 0xf2bc (16 regs) */
-static const u32 zx_burst_6250_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6253: NPP/base off=0xf434 → 0xf444 (5 regs) */
-static const u32 zx_burst_6253_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6255: NPP/base off=0xf4d0 → 0xf4e4 (6 regs) */
-static const u32 zx_burst_6255_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6256: NPP/base off=0xf500 → 0xf524 (10 regs) */
-static const u32 zx_burst_6256_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6261: NPP/base off=0xf680 → 0xf6bc (16 regs) */
-static const u32 zx_burst_6261_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6264: NPP/base off=0xf834 → 0xf844 (5 regs) */
-static const u32 zx_burst_6264_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6266: NPP/base off=0xf8d0 → 0xf8e4 (6 regs) */
-static const u32 zx_burst_6266_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6267: NPP/base off=0xf900 → 0xf924 (10 regs) */
-static const u32 zx_burst_6267_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6272: NPP/base off=0xfa80 → 0xfabc (16 regs) */
-static const u32 zx_burst_6272_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6275: NPP/base off=0xfc34 → 0xfc44 (5 regs) */
-static const u32 zx_burst_6275_data[5] = {
-	0x00001001, 0x00000318, 0x00000318, 0x01980000, 0x00000011,
-};
-
-/* burst #6277: NPP/base off=0xfcd0 → 0xfce4 (6 regs) */
-static const u32 zx_burst_6277_data[6] = {
-	0x0000034d, 0x00110011, 0x00110011, 0x02850081, 0x00110011, 0x00300000,
-};
-
-/* burst #6278: NPP/base off=0xfd00 → 0xfd24 (10 regs) */
-static const u32 zx_burst_6278_data[10] = {
-	0x0004f408, 0x00c800c8, 0x000004f4, 0x00048d0c, 0x00001020, 0x000004f4, 0x02800080, 0x3c010000,
-	0x21012c00, 0x0000025b,
-};
-
-/* burst #6283: NPP/base off=0xfe80 → 0xfebc (16 regs) */
-static const u32 zx_burst_6283_data[16] = {
-	0xc8a362e9, 0x5900f4f6, 0x470f4264, 0x08004500, 0x00b8a4f6, 0x40004006, 0x11c6c0a8, 0x0101c0a8,
-	0x01320016, 0x9f18c507, 0xb939b935, 0x3e5b8018, 0x04811447, 0x00000101, 0x080a0000, 0x0b5d8773,
-};
-
-/* burst #6284: NPP/base off=0x14000 → 0x14018 (7 regs) */
-static const u32 zx_burst_6284_data[7] = {
+/* burst #5852: NPP/base off=0x14000 → 0x14018 (7 regs) */
+static const u32 zx_burst_5852_data[7] = {
 	0xffffffff, 0xffffffff, 0x00003fff, 0xffffffff, 0x3fffffff, 0x01400007, 0x00000001,
 };
 
-/* burst #6285: NPP/base off=0x14040 → 0x14054 (6 regs) */
-static const u32 zx_burst_6285_data[6] = {
+/* burst #5853: NPP/base off=0x14040 → 0x14054 (6 regs) */
+static const u32 zx_burst_5853_data[6] = {
 	0xffffffff, 0xffffffff, 0x0007ffff, 0xffffffff, 0xffffffff, 0x03ff05dc,
 };
 
-/* burst #6290: NPP/base off=0x14120 → 0x1413c (8 regs) */
-static const u32 zx_burst_6290_data[8] = {
+/* burst #5858: NPP/base off=0x14120 → 0x1413c (8 regs) */
+static const u32 zx_burst_5858_data[8] = {
 	0x470f4264, 0x0000f4f6, 0x470f4265, 0x0000f4f6, 0x470f4266, 0x0000f4f6, 0x470f4267, 0x0000f4f6,
 };
 
-/* burst #6291: NPP/base off=0x14240 → 0x14284 (18 regs) */
-static const u32 zx_burst_6291_data[18] = {
+/* burst #5859: NPP/base off=0x14240 → 0x14284 (18 regs) */
+static const u32 zx_burst_5859_data[18] = {
 	0x00650650, 0x00650650, 0x00650650, 0x00650650, 0x00650650, 0x00650650, 0x00650650, 0x00650650,
 	0x00650650, 0x00650650, 0x00650650, 0x00650650, 0x00650650, 0x00650650, 0x00650650, 0x00650650,
 	0x00650650, 0x00650650,
 };
 
-/* burst #6292: NPP/base off=0x14300 → 0x14320 (9 regs) */
-static const u32 zx_burst_6292_data[9] = {
+/* burst #5860: NPP/base off=0x14300 → 0x14320 (9 regs) */
+static const u32 zx_burst_5860_data[9] = {
 	0x50555555, 0x95541555, 0x10554155, 0x55555555, 0x000005aa, 0x50555555, 0x15551555, 0x10554045,
 	0x55555555,
 };
 
-/* burst #6293: NPP/base off=0x14328 → 0x14334 (4 regs) */
-static const u32 zx_burst_6293_data[4] = {
+/* burst #5861: NPP/base off=0x14328 → 0x14334 (4 regs) */
+static const u32 zx_burst_5861_data[4] = {
 	0x50555555, 0x15551555, 0x10554045, 0x55555555,
 };
 
-/* burst #6294: NPP/base off=0x1433c → 0x14348 (4 regs) */
-static const u32 zx_burst_6294_data[4] = {
+/* burst #5862: NPP/base off=0x1433c → 0x14348 (4 regs) */
+static const u32 zx_burst_5862_data[4] = {
 	0x50555555, 0x15551555, 0x10554045, 0x55555555,
 };
 
-/* burst #6295: NPP/base off=0x14350 → 0x1435c (4 regs) */
-static const u32 zx_burst_6295_data[4] = {
+/* burst #5863: NPP/base off=0x14350 → 0x1435c (4 regs) */
+static const u32 zx_burst_5863_data[4] = {
 	0x50555555, 0x15551555, 0x10554045, 0x55555555,
 };
 
-/* burst #6296: NPP/base off=0x14364 → 0x14370 (4 regs) */
-static const u32 zx_burst_6296_data[4] = {
+/* burst #5864: NPP/base off=0x14364 → 0x14370 (4 regs) */
+static const u32 zx_burst_5864_data[4] = {
 	0x50555555, 0x15541555, 0x10554045, 0x55555555,
 };
 
-/* burst #6297: NPP/base off=0x14378 → 0x14384 (4 regs) */
-static const u32 zx_burst_6297_data[4] = {
+/* burst #5865: NPP/base off=0x14378 → 0x14384 (4 regs) */
+static const u32 zx_burst_5865_data[4] = {
 	0x50555555, 0x15551555, 0x10554045, 0x55555555,
 };
 
-/* burst #6298: NPP/base off=0x1438c → 0x14398 (4 regs) */
-static const u32 zx_burst_6298_data[4] = {
+/* burst #5866: NPP/base off=0x1438c → 0x14398 (4 regs) */
+static const u32 zx_burst_5866_data[4] = {
 	0x50555555, 0x15551555, 0x10554045, 0x55555555,
 };
 
-/* burst #6302: NPP/base off=0x145e4 → 0x14614 (13 regs) */
-static const u32 zx_burst_6302_data[13] = {
+/* burst #5870: NPP/base off=0x145e4 → 0x14614 (13 regs) */
+static const u32 zx_burst_5870_data[13] = {
 	0x000004f4, 0x00000040, 0x28d100c6, 0x1003461a, 0x40100000, 0x20060000, 0x70620584, 0x11100000,
 	0x00000002, 0x8e1e84c8, 0x0003e9ec, 0x0000818c, 0x00000600,
 };
 
-/* burst #6310: TM/base off=0x1804e8 → 0x1804fc (6 regs) */
-static const u32 zx_burst_6310_data[6] = {
+/* burst #5878: TM/base off=0x1804e8 → 0x1804fc (6 regs) */
+static const u32 zx_burst_5878_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6316: TM/base off=0x1808e8 → 0x1808fc (6 regs) */
-static const u32 zx_burst_6316_data[6] = {
+/* burst #5884: TM/base off=0x1808e8 → 0x1808fc (6 regs) */
+static const u32 zx_burst_5884_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6322: TM/base off=0x180ce8 → 0x180cfc (6 regs) */
-static const u32 zx_burst_6322_data[6] = {
+/* burst #5890: TM/base off=0x180ce8 → 0x180cfc (6 regs) */
+static const u32 zx_burst_5890_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6328: TM/base off=0x1810e8 → 0x1810fc (6 regs) */
-static const u32 zx_burst_6328_data[6] = {
+/* burst #5896: TM/base off=0x1810e8 → 0x1810fc (6 regs) */
+static const u32 zx_burst_5896_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6334: TM/base off=0x1814e8 → 0x1814fc (6 regs) */
-static const u32 zx_burst_6334_data[6] = {
+/* burst #5902: TM/base off=0x1814e8 → 0x1814fc (6 regs) */
+static const u32 zx_burst_5902_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6340: TM/base off=0x1818e8 → 0x1818fc (6 regs) */
-static const u32 zx_burst_6340_data[6] = {
+/* burst #5908: TM/base off=0x1818e8 → 0x1818fc (6 regs) */
+static const u32 zx_burst_5908_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6346: TM/base off=0x181ce8 → 0x181cfc (6 regs) */
-static const u32 zx_burst_6346_data[6] = {
+/* burst #5914: TM/base off=0x181ce8 → 0x181cfc (6 regs) */
+static const u32 zx_burst_5914_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6352: TM/base off=0x1820e8 → 0x1820fc (6 regs) */
-static const u32 zx_burst_6352_data[6] = {
+/* burst #5920: TM/base off=0x1820e8 → 0x1820fc (6 regs) */
+static const u32 zx_burst_5920_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6358: TM/base off=0x1824e8 → 0x1824fc (6 regs) */
-static const u32 zx_burst_6358_data[6] = {
+/* burst #5926: TM/base off=0x1824e8 → 0x1824fc (6 regs) */
+static const u32 zx_burst_5926_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6364: TM/base off=0x1828e8 → 0x1828fc (6 regs) */
-static const u32 zx_burst_6364_data[6] = {
+/* burst #5932: TM/base off=0x1828e8 → 0x1828fc (6 regs) */
+static const u32 zx_burst_5932_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6370: TM/base off=0x182ce8 → 0x182cfc (6 regs) */
-static const u32 zx_burst_6370_data[6] = {
+/* burst #5938: TM/base off=0x182ce8 → 0x182cfc (6 regs) */
+static const u32 zx_burst_5938_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6376: TM/base off=0x1830e8 → 0x1830fc (6 regs) */
-static const u32 zx_burst_6376_data[6] = {
+/* burst #5944: TM/base off=0x1830e8 → 0x1830fc (6 regs) */
+static const u32 zx_burst_5944_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6382: TM/base off=0x1834e8 → 0x1834fc (6 regs) */
-static const u32 zx_burst_6382_data[6] = {
+/* burst #5950: TM/base off=0x1834e8 → 0x1834fc (6 regs) */
+static const u32 zx_burst_5950_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6388: TM/base off=0x1838e8 → 0x1838fc (6 regs) */
-static const u32 zx_burst_6388_data[6] = {
+/* burst #5956: TM/base off=0x1838e8 → 0x1838fc (6 regs) */
+static const u32 zx_burst_5956_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6394: TM/base off=0x183ce8 → 0x183cfc (6 regs) */
-static const u32 zx_burst_6394_data[6] = {
+/* burst #5962: TM/base off=0x183ce8 → 0x183cfc (6 regs) */
+static const u32 zx_burst_5962_data[6] = {
 	0x4e700000, 0x4e710000, 0x4ff1f000, 0x4ec20000, 0x4fe20000, 0x28000900,
 };
 
-/* burst #6400: TM/base off=0x184014 → 0x184028 (6 regs) */
-static const u32 zx_burst_6400_data[6] = {
+/* burst #5968: TM/base off=0x184014 → 0x184028 (6 regs) */
+static const u32 zx_burst_5968_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6408: TM/base off=0x184100 → 0x18410c (4 regs) */
-static const u32 zx_burst_6408_data[4] = {
+/* burst #5976: TM/base off=0x184100 → 0x18410c (4 regs) */
+static const u32 zx_burst_5976_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6421: TM/base off=0x184414 → 0x184428 (6 regs) */
-static const u32 zx_burst_6421_data[6] = {
+/* burst #5989: TM/base off=0x184414 → 0x184428 (6 regs) */
+static const u32 zx_burst_5989_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6429: TM/base off=0x184500 → 0x18450c (4 regs) */
-static const u32 zx_burst_6429_data[4] = {
+/* burst #5997: TM/base off=0x184500 → 0x18450c (4 regs) */
+static const u32 zx_burst_5997_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6442: TM/base off=0x184814 → 0x184828 (6 regs) */
-static const u32 zx_burst_6442_data[6] = {
+/* burst #6010: TM/base off=0x184814 → 0x184828 (6 regs) */
+static const u32 zx_burst_6010_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6450: TM/base off=0x184900 → 0x18490c (4 regs) */
-static const u32 zx_burst_6450_data[4] = {
+/* burst #6018: TM/base off=0x184900 → 0x18490c (4 regs) */
+static const u32 zx_burst_6018_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6463: TM/base off=0x184c14 → 0x184c28 (6 regs) */
-static const u32 zx_burst_6463_data[6] = {
+/* burst #6031: TM/base off=0x184c14 → 0x184c28 (6 regs) */
+static const u32 zx_burst_6031_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6471: TM/base off=0x184d00 → 0x184d0c (4 regs) */
-static const u32 zx_burst_6471_data[4] = {
+/* burst #6039: TM/base off=0x184d00 → 0x184d0c (4 regs) */
+static const u32 zx_burst_6039_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6484: TM/base off=0x185014 → 0x185028 (6 regs) */
-static const u32 zx_burst_6484_data[6] = {
+/* burst #6052: TM/base off=0x185014 → 0x185028 (6 regs) */
+static const u32 zx_burst_6052_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6492: TM/base off=0x185100 → 0x18510c (4 regs) */
-static const u32 zx_burst_6492_data[4] = {
+/* burst #6060: TM/base off=0x185100 → 0x18510c (4 regs) */
+static const u32 zx_burst_6060_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6505: TM/base off=0x185414 → 0x185428 (6 regs) */
-static const u32 zx_burst_6505_data[6] = {
+/* burst #6073: TM/base off=0x185414 → 0x185428 (6 regs) */
+static const u32 zx_burst_6073_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6513: TM/base off=0x185500 → 0x18550c (4 regs) */
-static const u32 zx_burst_6513_data[4] = {
+/* burst #6081: TM/base off=0x185500 → 0x18550c (4 regs) */
+static const u32 zx_burst_6081_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6526: TM/base off=0x185814 → 0x185828 (6 regs) */
-static const u32 zx_burst_6526_data[6] = {
+/* burst #6094: TM/base off=0x185814 → 0x185828 (6 regs) */
+static const u32 zx_burst_6094_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6534: TM/base off=0x185900 → 0x18590c (4 regs) */
-static const u32 zx_burst_6534_data[4] = {
+/* burst #6102: TM/base off=0x185900 → 0x18590c (4 regs) */
+static const u32 zx_burst_6102_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6547: TM/base off=0x185c14 → 0x185c28 (6 regs) */
-static const u32 zx_burst_6547_data[6] = {
+/* burst #6115: TM/base off=0x185c14 → 0x185c28 (6 regs) */
+static const u32 zx_burst_6115_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6555: TM/base off=0x185d00 → 0x185d0c (4 regs) */
-static const u32 zx_burst_6555_data[4] = {
+/* burst #6123: TM/base off=0x185d00 → 0x185d0c (4 regs) */
+static const u32 zx_burst_6123_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6568: TM/base off=0x186014 → 0x186028 (6 regs) */
-static const u32 zx_burst_6568_data[6] = {
+/* burst #6136: TM/base off=0x186014 → 0x186028 (6 regs) */
+static const u32 zx_burst_6136_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6576: TM/base off=0x186100 → 0x18610c (4 regs) */
-static const u32 zx_burst_6576_data[4] = {
+/* burst #6144: TM/base off=0x186100 → 0x18610c (4 regs) */
+static const u32 zx_burst_6144_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6589: TM/base off=0x186414 → 0x186428 (6 regs) */
-static const u32 zx_burst_6589_data[6] = {
+/* burst #6157: TM/base off=0x186414 → 0x186428 (6 regs) */
+static const u32 zx_burst_6157_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6597: TM/base off=0x186500 → 0x18650c (4 regs) */
-static const u32 zx_burst_6597_data[4] = {
+/* burst #6165: TM/base off=0x186500 → 0x18650c (4 regs) */
+static const u32 zx_burst_6165_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6610: TM/base off=0x186814 → 0x186828 (6 regs) */
-static const u32 zx_burst_6610_data[6] = {
+/* burst #6178: TM/base off=0x186814 → 0x186828 (6 regs) */
+static const u32 zx_burst_6178_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6618: TM/base off=0x186900 → 0x18690c (4 regs) */
-static const u32 zx_burst_6618_data[4] = {
+/* burst #6186: TM/base off=0x186900 → 0x18690c (4 regs) */
+static const u32 zx_burst_6186_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6631: TM/base off=0x186c14 → 0x186c28 (6 regs) */
-static const u32 zx_burst_6631_data[6] = {
+/* burst #6199: TM/base off=0x186c14 → 0x186c28 (6 regs) */
+static const u32 zx_burst_6199_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6639: TM/base off=0x186d00 → 0x186d0c (4 regs) */
-static const u32 zx_burst_6639_data[4] = {
+/* burst #6207: TM/base off=0x186d00 → 0x186d0c (4 regs) */
+static const u32 zx_burst_6207_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6652: TM/base off=0x187014 → 0x187028 (6 regs) */
-static const u32 zx_burst_6652_data[6] = {
+/* burst #6220: TM/base off=0x187014 → 0x187028 (6 regs) */
+static const u32 zx_burst_6220_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6660: TM/base off=0x187100 → 0x18710c (4 regs) */
-static const u32 zx_burst_6660_data[4] = {
+/* burst #6228: TM/base off=0x187100 → 0x18710c (4 regs) */
+static const u32 zx_burst_6228_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6673: TM/base off=0x187414 → 0x187428 (6 regs) */
-static const u32 zx_burst_6673_data[6] = {
+/* burst #6241: TM/base off=0x187414 → 0x187428 (6 regs) */
+static const u32 zx_burst_6241_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6681: TM/base off=0x187500 → 0x18750c (4 regs) */
-static const u32 zx_burst_6681_data[4] = {
+/* burst #6249: TM/base off=0x187500 → 0x18750c (4 regs) */
+static const u32 zx_burst_6249_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6694: TM/base off=0x187814 → 0x187828 (6 regs) */
-static const u32 zx_burst_6694_data[6] = {
+/* burst #6262: TM/base off=0x187814 → 0x187828 (6 regs) */
+static const u32 zx_burst_6262_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6702: TM/base off=0x187900 → 0x18790c (4 regs) */
-static const u32 zx_burst_6702_data[4] = {
+/* burst #6270: TM/base off=0x187900 → 0x18790c (4 regs) */
+static const u32 zx_burst_6270_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6715: TM/base off=0x187c14 → 0x187c28 (6 regs) */
-static const u32 zx_burst_6715_data[6] = {
+/* burst #6283: TM/base off=0x187c14 → 0x187c28 (6 regs) */
+static const u32 zx_burst_6283_data[6] = {
 	0x0100017f, 0x00000001, 0xff803fff, 0x0100ff80, 0x00100200, 0x00000020,
 };
 
-/* burst #6723: TM/base off=0x187d00 → 0x187d0c (4 regs) */
-static const u32 zx_burst_6723_data[4] = {
+/* burst #6291: TM/base off=0x187d00 → 0x187d0c (4 regs) */
+static const u32 zx_burst_6291_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #6736: TM/base off=0x188028 → 0x188034 (4 regs) */
-static const u32 zx_burst_6736_data[4] = {
+/* burst #6304: TM/base off=0x188028 → 0x188034 (4 regs) */
+static const u32 zx_burst_6304_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6738: TM/base off=0x188080 → 0x188098 (7 regs) */
-static const u32 zx_burst_6738_data[7] = {
+/* burst #6306: TM/base off=0x188080 → 0x188098 (7 regs) */
+static const u32 zx_burst_6306_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6745: TM/base off=0x188428 → 0x188434 (4 regs) */
-static const u32 zx_burst_6745_data[4] = {
+/* burst #6313: TM/base off=0x188428 → 0x188434 (4 regs) */
+static const u32 zx_burst_6313_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6746: TM/base off=0x188440 → 0x18844c (4 regs) */
-static const u32 zx_burst_6746_data[4] = {
+/* burst #6314: TM/base off=0x188440 → 0x18844c (4 regs) */
+static const u32 zx_burst_6314_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6748: TM/base off=0x188480 → 0x188498 (7 regs) */
-static const u32 zx_burst_6748_data[7] = {
+/* burst #6316: TM/base off=0x188480 → 0x188498 (7 regs) */
+static const u32 zx_burst_6316_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6755: TM/base off=0x188828 → 0x188834 (4 regs) */
-static const u32 zx_burst_6755_data[4] = {
+/* burst #6323: TM/base off=0x188828 → 0x188834 (4 regs) */
+static const u32 zx_burst_6323_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6756: TM/base off=0x188840 → 0x18884c (4 regs) */
-static const u32 zx_burst_6756_data[4] = {
+/* burst #6324: TM/base off=0x188840 → 0x18884c (4 regs) */
+static const u32 zx_burst_6324_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6758: TM/base off=0x188880 → 0x188898 (7 regs) */
-static const u32 zx_burst_6758_data[7] = {
+/* burst #6326: TM/base off=0x188880 → 0x188898 (7 regs) */
+static const u32 zx_burst_6326_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6765: TM/base off=0x188c28 → 0x188c34 (4 regs) */
-static const u32 zx_burst_6765_data[4] = {
+/* burst #6333: TM/base off=0x188c28 → 0x188c34 (4 regs) */
+static const u32 zx_burst_6333_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6766: TM/base off=0x188c40 → 0x188c4c (4 regs) */
-static const u32 zx_burst_6766_data[4] = {
+/* burst #6334: TM/base off=0x188c40 → 0x188c4c (4 regs) */
+static const u32 zx_burst_6334_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6768: TM/base off=0x188c80 → 0x188c98 (7 regs) */
-static const u32 zx_burst_6768_data[7] = {
+/* burst #6336: TM/base off=0x188c80 → 0x188c98 (7 regs) */
+static const u32 zx_burst_6336_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6775: TM/base off=0x189028 → 0x189034 (4 regs) */
-static const u32 zx_burst_6775_data[4] = {
+/* burst #6343: TM/base off=0x189028 → 0x189034 (4 regs) */
+static const u32 zx_burst_6343_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6776: TM/base off=0x189040 → 0x18904c (4 regs) */
-static const u32 zx_burst_6776_data[4] = {
+/* burst #6344: TM/base off=0x189040 → 0x18904c (4 regs) */
+static const u32 zx_burst_6344_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6778: TM/base off=0x189080 → 0x189098 (7 regs) */
-static const u32 zx_burst_6778_data[7] = {
+/* burst #6346: TM/base off=0x189080 → 0x189098 (7 regs) */
+static const u32 zx_burst_6346_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6785: TM/base off=0x189428 → 0x189434 (4 regs) */
-static const u32 zx_burst_6785_data[4] = {
+/* burst #6353: TM/base off=0x189428 → 0x189434 (4 regs) */
+static const u32 zx_burst_6353_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6786: TM/base off=0x189440 → 0x18944c (4 regs) */
-static const u32 zx_burst_6786_data[4] = {
+/* burst #6354: TM/base off=0x189440 → 0x18944c (4 regs) */
+static const u32 zx_burst_6354_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6788: TM/base off=0x189480 → 0x189498 (7 regs) */
-static const u32 zx_burst_6788_data[7] = {
+/* burst #6356: TM/base off=0x189480 → 0x189498 (7 regs) */
+static const u32 zx_burst_6356_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6795: TM/base off=0x189828 → 0x189834 (4 regs) */
-static const u32 zx_burst_6795_data[4] = {
+/* burst #6363: TM/base off=0x189828 → 0x189834 (4 regs) */
+static const u32 zx_burst_6363_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6796: TM/base off=0x189840 → 0x18984c (4 regs) */
-static const u32 zx_burst_6796_data[4] = {
+/* burst #6364: TM/base off=0x189840 → 0x18984c (4 regs) */
+static const u32 zx_burst_6364_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6798: TM/base off=0x189880 → 0x189898 (7 regs) */
-static const u32 zx_burst_6798_data[7] = {
+/* burst #6366: TM/base off=0x189880 → 0x189898 (7 regs) */
+static const u32 zx_burst_6366_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6805: TM/base off=0x189c28 → 0x189c34 (4 regs) */
-static const u32 zx_burst_6805_data[4] = {
+/* burst #6373: TM/base off=0x189c28 → 0x189c34 (4 regs) */
+static const u32 zx_burst_6373_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6806: TM/base off=0x189c40 → 0x189c4c (4 regs) */
-static const u32 zx_burst_6806_data[4] = {
+/* burst #6374: TM/base off=0x189c40 → 0x189c4c (4 regs) */
+static const u32 zx_burst_6374_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6808: TM/base off=0x189c80 → 0x189c98 (7 regs) */
-static const u32 zx_burst_6808_data[7] = {
+/* burst #6376: TM/base off=0x189c80 → 0x189c98 (7 regs) */
+static const u32 zx_burst_6376_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6815: TM/base off=0x18a028 → 0x18a034 (4 regs) */
-static const u32 zx_burst_6815_data[4] = {
+/* burst #6383: TM/base off=0x18a028 → 0x18a034 (4 regs) */
+static const u32 zx_burst_6383_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6816: TM/base off=0x18a040 → 0x18a04c (4 regs) */
-static const u32 zx_burst_6816_data[4] = {
+/* burst #6384: TM/base off=0x18a040 → 0x18a04c (4 regs) */
+static const u32 zx_burst_6384_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6818: TM/base off=0x18a080 → 0x18a098 (7 regs) */
-static const u32 zx_burst_6818_data[7] = {
+/* burst #6386: TM/base off=0x18a080 → 0x18a098 (7 regs) */
+static const u32 zx_burst_6386_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6825: TM/base off=0x18a428 → 0x18a434 (4 regs) */
-static const u32 zx_burst_6825_data[4] = {
+/* burst #6393: TM/base off=0x18a428 → 0x18a434 (4 regs) */
+static const u32 zx_burst_6393_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6826: TM/base off=0x18a440 → 0x18a44c (4 regs) */
-static const u32 zx_burst_6826_data[4] = {
+/* burst #6394: TM/base off=0x18a440 → 0x18a44c (4 regs) */
+static const u32 zx_burst_6394_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6828: TM/base off=0x18a480 → 0x18a498 (7 regs) */
-static const u32 zx_burst_6828_data[7] = {
+/* burst #6396: TM/base off=0x18a480 → 0x18a498 (7 regs) */
+static const u32 zx_burst_6396_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6835: TM/base off=0x18a828 → 0x18a834 (4 regs) */
-static const u32 zx_burst_6835_data[4] = {
+/* burst #6403: TM/base off=0x18a828 → 0x18a834 (4 regs) */
+static const u32 zx_burst_6403_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6836: TM/base off=0x18a840 → 0x18a84c (4 regs) */
-static const u32 zx_burst_6836_data[4] = {
+/* burst #6404: TM/base off=0x18a840 → 0x18a84c (4 regs) */
+static const u32 zx_burst_6404_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6838: TM/base off=0x18a880 → 0x18a898 (7 regs) */
-static const u32 zx_burst_6838_data[7] = {
+/* burst #6406: TM/base off=0x18a880 → 0x18a898 (7 regs) */
+static const u32 zx_burst_6406_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6845: TM/base off=0x18ac28 → 0x18ac34 (4 regs) */
-static const u32 zx_burst_6845_data[4] = {
+/* burst #6413: TM/base off=0x18ac28 → 0x18ac34 (4 regs) */
+static const u32 zx_burst_6413_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6846: TM/base off=0x18ac40 → 0x18ac4c (4 regs) */
-static const u32 zx_burst_6846_data[4] = {
+/* burst #6414: TM/base off=0x18ac40 → 0x18ac4c (4 regs) */
+static const u32 zx_burst_6414_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6848: TM/base off=0x18ac80 → 0x18ac98 (7 regs) */
-static const u32 zx_burst_6848_data[7] = {
+/* burst #6416: TM/base off=0x18ac80 → 0x18ac98 (7 regs) */
+static const u32 zx_burst_6416_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6855: TM/base off=0x18b028 → 0x18b034 (4 regs) */
-static const u32 zx_burst_6855_data[4] = {
+/* burst #6423: TM/base off=0x18b028 → 0x18b034 (4 regs) */
+static const u32 zx_burst_6423_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6856: TM/base off=0x18b040 → 0x18b04c (4 regs) */
-static const u32 zx_burst_6856_data[4] = {
+/* burst #6424: TM/base off=0x18b040 → 0x18b04c (4 regs) */
+static const u32 zx_burst_6424_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6858: TM/base off=0x18b080 → 0x18b098 (7 regs) */
-static const u32 zx_burst_6858_data[7] = {
+/* burst #6426: TM/base off=0x18b080 → 0x18b098 (7 regs) */
+static const u32 zx_burst_6426_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6865: TM/base off=0x18b428 → 0x18b434 (4 regs) */
-static const u32 zx_burst_6865_data[4] = {
+/* burst #6433: TM/base off=0x18b428 → 0x18b434 (4 regs) */
+static const u32 zx_burst_6433_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6866: TM/base off=0x18b440 → 0x18b44c (4 regs) */
-static const u32 zx_burst_6866_data[4] = {
+/* burst #6434: TM/base off=0x18b440 → 0x18b44c (4 regs) */
+static const u32 zx_burst_6434_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6868: TM/base off=0x18b480 → 0x18b498 (7 regs) */
-static const u32 zx_burst_6868_data[7] = {
+/* burst #6436: TM/base off=0x18b480 → 0x18b498 (7 regs) */
+static const u32 zx_burst_6436_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6875: TM/base off=0x18b828 → 0x18b834 (4 regs) */
-static const u32 zx_burst_6875_data[4] = {
+/* burst #6443: TM/base off=0x18b828 → 0x18b834 (4 regs) */
+static const u32 zx_burst_6443_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6876: TM/base off=0x18b840 → 0x18b84c (4 regs) */
-static const u32 zx_burst_6876_data[4] = {
+/* burst #6444: TM/base off=0x18b840 → 0x18b84c (4 regs) */
+static const u32 zx_burst_6444_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6878: TM/base off=0x18b880 → 0x18b898 (7 regs) */
-static const u32 zx_burst_6878_data[7] = {
+/* burst #6446: TM/base off=0x18b880 → 0x18b898 (7 regs) */
+static const u32 zx_burst_6446_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #6885: TM/base off=0x18bc28 → 0x18bc34 (4 regs) */
-static const u32 zx_burst_6885_data[4] = {
+/* burst #6453: TM/base off=0x18bc28 → 0x18bc34 (4 regs) */
+static const u32 zx_burst_6453_data[4] = {
 	0x00010004, 0x00010004, 0x01010101, 0x00000101,
 };
 
-/* burst #6886: TM/base off=0x18bc40 → 0x18bc4c (4 regs) */
-static const u32 zx_burst_6886_data[4] = {
+/* burst #6454: TM/base off=0x18bc40 → 0x18bc4c (4 regs) */
+static const u32 zx_burst_6454_data[4] = {
 	0x00720023, 0x00500001, 0x00000050, 0x00660050,
 };
 
-/* burst #6888: TM/base off=0x18bc80 → 0x18bc98 (7 regs) */
-static const u32 zx_burst_6888_data[7] = {
+/* burst #6456: TM/base off=0x18bc80 → 0x18bc98 (7 regs) */
+static const u32 zx_burst_6456_data[7] = {
 	0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f, 0x00000a23, 0x00000001, 0x00000a22,
 };
 
-/* burst #7065: TM/base off=0x190180 → 0x19018c (4 regs) */
-static const u32 zx_burst_7065_data[4] = {
+/* burst #6633: TM/base off=0x190180 → 0x19018c (4 regs) */
+static const u32 zx_burst_6633_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7069: TM/base off=0x1901c0 → 0x1901cc (4 regs) */
-static const u32 zx_burst_7069_data[4] = {
+/* burst #6637: TM/base off=0x1901c0 → 0x1901cc (4 regs) */
+static const u32 zx_burst_6637_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7070: TM/base off=0x19038c → 0x1903b8 (12 regs) */
-static const u32 zx_burst_7070_data[12] = {
+/* burst #6638: TM/base off=0x19038c → 0x1903b8 (12 regs) */
+static const u32 zx_burst_6638_data[12] = {
 	0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103, 0x01030103,
 	0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7071: TM/base off=0x1903d0 → 0x1903dc (4 regs) */
-static const u32 zx_burst_7071_data[4] = {
+/* burst #6639: TM/base off=0x1903d0 → 0x1903dc (4 regs) */
+static const u32 zx_burst_6639_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7075: TM/base off=0x190420 → 0x19043c (8 regs) */
-static const u32 zx_burst_7075_data[8] = {
+/* burst #6643: TM/base off=0x190420 → 0x19043c (8 regs) */
+static const u32 zx_burst_6643_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7085: TM/base off=0x190580 → 0x19058c (4 regs) */
-static const u32 zx_burst_7085_data[4] = {
+/* burst #6653: TM/base off=0x190580 → 0x19058c (4 regs) */
+static const u32 zx_burst_6653_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7089: TM/base off=0x1905c0 → 0x1905cc (4 regs) */
-static const u32 zx_burst_7089_data[4] = {
+/* burst #6657: TM/base off=0x1905c0 → 0x1905cc (4 regs) */
+static const u32 zx_burst_6657_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7090: TM/base off=0x190788 → 0x1907b8 (13 regs) */
-static const u32 zx_burst_7090_data[13] = {
+/* burst #6658: TM/base off=0x190788 → 0x1907b8 (13 regs) */
+static const u32 zx_burst_6658_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7091: TM/base off=0x1907d0 → 0x1907dc (4 regs) */
-static const u32 zx_burst_7091_data[4] = {
+/* burst #6659: TM/base off=0x1907d0 → 0x1907dc (4 regs) */
+static const u32 zx_burst_6659_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7095: TM/base off=0x190820 → 0x19083c (8 regs) */
-static const u32 zx_burst_7095_data[8] = {
+/* burst #6663: TM/base off=0x190820 → 0x19083c (8 regs) */
+static const u32 zx_burst_6663_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7105: TM/base off=0x190980 → 0x19098c (4 regs) */
-static const u32 zx_burst_7105_data[4] = {
+/* burst #6673: TM/base off=0x190980 → 0x19098c (4 regs) */
+static const u32 zx_burst_6673_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7109: TM/base off=0x1909c0 → 0x1909cc (4 regs) */
-static const u32 zx_burst_7109_data[4] = {
+/* burst #6677: TM/base off=0x1909c0 → 0x1909cc (4 regs) */
+static const u32 zx_burst_6677_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7110: TM/base off=0x190b88 → 0x190bb8 (13 regs) */
-static const u32 zx_burst_7110_data[13] = {
+/* burst #6678: TM/base off=0x190b88 → 0x190bb8 (13 regs) */
+static const u32 zx_burst_6678_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7111: TM/base off=0x190bd0 → 0x190bdc (4 regs) */
-static const u32 zx_burst_7111_data[4] = {
+/* burst #6679: TM/base off=0x190bd0 → 0x190bdc (4 regs) */
+static const u32 zx_burst_6679_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7115: TM/base off=0x190c20 → 0x190c3c (8 regs) */
-static const u32 zx_burst_7115_data[8] = {
+/* burst #6683: TM/base off=0x190c20 → 0x190c3c (8 regs) */
+static const u32 zx_burst_6683_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7125: TM/base off=0x190d80 → 0x190d8c (4 regs) */
-static const u32 zx_burst_7125_data[4] = {
+/* burst #6693: TM/base off=0x190d80 → 0x190d8c (4 regs) */
+static const u32 zx_burst_6693_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7129: TM/base off=0x190dc0 → 0x190dcc (4 regs) */
-static const u32 zx_burst_7129_data[4] = {
+/* burst #6697: TM/base off=0x190dc0 → 0x190dcc (4 regs) */
+static const u32 zx_burst_6697_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7130: TM/base off=0x190f88 → 0x190fb8 (13 regs) */
-static const u32 zx_burst_7130_data[13] = {
+/* burst #6698: TM/base off=0x190f88 → 0x190fb8 (13 regs) */
+static const u32 zx_burst_6698_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7131: TM/base off=0x190fd0 → 0x190fdc (4 regs) */
-static const u32 zx_burst_7131_data[4] = {
+/* burst #6699: TM/base off=0x190fd0 → 0x190fdc (4 regs) */
+static const u32 zx_burst_6699_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7135: TM/base off=0x191020 → 0x19103c (8 regs) */
-static const u32 zx_burst_7135_data[8] = {
+/* burst #6703: TM/base off=0x191020 → 0x19103c (8 regs) */
+static const u32 zx_burst_6703_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7145: TM/base off=0x191180 → 0x19118c (4 regs) */
-static const u32 zx_burst_7145_data[4] = {
+/* burst #6713: TM/base off=0x191180 → 0x19118c (4 regs) */
+static const u32 zx_burst_6713_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7149: TM/base off=0x1911c0 → 0x1911cc (4 regs) */
-static const u32 zx_burst_7149_data[4] = {
+/* burst #6717: TM/base off=0x1911c0 → 0x1911cc (4 regs) */
+static const u32 zx_burst_6717_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7150: TM/base off=0x191388 → 0x1913b8 (13 regs) */
-static const u32 zx_burst_7150_data[13] = {
+/* burst #6718: TM/base off=0x191388 → 0x1913b8 (13 regs) */
+static const u32 zx_burst_6718_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7151: TM/base off=0x1913d0 → 0x1913dc (4 regs) */
-static const u32 zx_burst_7151_data[4] = {
+/* burst #6719: TM/base off=0x1913d0 → 0x1913dc (4 regs) */
+static const u32 zx_burst_6719_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7155: TM/base off=0x191420 → 0x19143c (8 regs) */
-static const u32 zx_burst_7155_data[8] = {
+/* burst #6723: TM/base off=0x191420 → 0x19143c (8 regs) */
+static const u32 zx_burst_6723_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7165: TM/base off=0x191580 → 0x19158c (4 regs) */
-static const u32 zx_burst_7165_data[4] = {
+/* burst #6733: TM/base off=0x191580 → 0x19158c (4 regs) */
+static const u32 zx_burst_6733_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7169: TM/base off=0x1915c0 → 0x1915cc (4 regs) */
-static const u32 zx_burst_7169_data[4] = {
+/* burst #6737: TM/base off=0x1915c0 → 0x1915cc (4 regs) */
+static const u32 zx_burst_6737_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7170: TM/base off=0x191788 → 0x1917b8 (13 regs) */
-static const u32 zx_burst_7170_data[13] = {
+/* burst #6738: TM/base off=0x191788 → 0x1917b8 (13 regs) */
+static const u32 zx_burst_6738_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7171: TM/base off=0x1917d0 → 0x1917dc (4 regs) */
-static const u32 zx_burst_7171_data[4] = {
+/* burst #6739: TM/base off=0x1917d0 → 0x1917dc (4 regs) */
+static const u32 zx_burst_6739_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7175: TM/base off=0x191820 → 0x19183c (8 regs) */
-static const u32 zx_burst_7175_data[8] = {
+/* burst #6743: TM/base off=0x191820 → 0x19183c (8 regs) */
+static const u32 zx_burst_6743_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7185: TM/base off=0x191980 → 0x19198c (4 regs) */
-static const u32 zx_burst_7185_data[4] = {
+/* burst #6753: TM/base off=0x191980 → 0x19198c (4 regs) */
+static const u32 zx_burst_6753_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7189: TM/base off=0x1919c0 → 0x1919cc (4 regs) */
-static const u32 zx_burst_7189_data[4] = {
+/* burst #6757: TM/base off=0x1919c0 → 0x1919cc (4 regs) */
+static const u32 zx_burst_6757_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7190: TM/base off=0x191b88 → 0x191bb8 (13 regs) */
-static const u32 zx_burst_7190_data[13] = {
+/* burst #6758: TM/base off=0x191b88 → 0x191bb8 (13 regs) */
+static const u32 zx_burst_6758_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7191: TM/base off=0x191bd0 → 0x191bdc (4 regs) */
-static const u32 zx_burst_7191_data[4] = {
+/* burst #6759: TM/base off=0x191bd0 → 0x191bdc (4 regs) */
+static const u32 zx_burst_6759_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7195: TM/base off=0x191c20 → 0x191c3c (8 regs) */
-static const u32 zx_burst_7195_data[8] = {
+/* burst #6763: TM/base off=0x191c20 → 0x191c3c (8 regs) */
+static const u32 zx_burst_6763_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7205: TM/base off=0x191d80 → 0x191d8c (4 regs) */
-static const u32 zx_burst_7205_data[4] = {
+/* burst #6773: TM/base off=0x191d80 → 0x191d8c (4 regs) */
+static const u32 zx_burst_6773_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7209: TM/base off=0x191dc0 → 0x191dcc (4 regs) */
-static const u32 zx_burst_7209_data[4] = {
+/* burst #6777: TM/base off=0x191dc0 → 0x191dcc (4 regs) */
+static const u32 zx_burst_6777_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7210: TM/base off=0x191f88 → 0x191fb8 (13 regs) */
-static const u32 zx_burst_7210_data[13] = {
+/* burst #6778: TM/base off=0x191f88 → 0x191fb8 (13 regs) */
+static const u32 zx_burst_6778_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7211: TM/base off=0x191fd0 → 0x191fdc (4 regs) */
-static const u32 zx_burst_7211_data[4] = {
+/* burst #6779: TM/base off=0x191fd0 → 0x191fdc (4 regs) */
+static const u32 zx_burst_6779_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7215: TM/base off=0x192020 → 0x19203c (8 regs) */
-static const u32 zx_burst_7215_data[8] = {
+/* burst #6783: TM/base off=0x192020 → 0x19203c (8 regs) */
+static const u32 zx_burst_6783_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7225: TM/base off=0x192180 → 0x19218c (4 regs) */
-static const u32 zx_burst_7225_data[4] = {
+/* burst #6793: TM/base off=0x192180 → 0x19218c (4 regs) */
+static const u32 zx_burst_6793_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7229: TM/base off=0x1921c0 → 0x1921cc (4 regs) */
-static const u32 zx_burst_7229_data[4] = {
+/* burst #6797: TM/base off=0x1921c0 → 0x1921cc (4 regs) */
+static const u32 zx_burst_6797_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7230: TM/base off=0x192388 → 0x1923b8 (13 regs) */
-static const u32 zx_burst_7230_data[13] = {
+/* burst #6798: TM/base off=0x192388 → 0x1923b8 (13 regs) */
+static const u32 zx_burst_6798_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7231: TM/base off=0x1923d0 → 0x1923dc (4 regs) */
-static const u32 zx_burst_7231_data[4] = {
+/* burst #6799: TM/base off=0x1923d0 → 0x1923dc (4 regs) */
+static const u32 zx_burst_6799_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7235: TM/base off=0x192420 → 0x19243c (8 regs) */
-static const u32 zx_burst_7235_data[8] = {
+/* burst #6803: TM/base off=0x192420 → 0x19243c (8 regs) */
+static const u32 zx_burst_6803_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7245: TM/base off=0x192580 → 0x19258c (4 regs) */
-static const u32 zx_burst_7245_data[4] = {
+/* burst #6813: TM/base off=0x192580 → 0x19258c (4 regs) */
+static const u32 zx_burst_6813_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7249: TM/base off=0x1925c0 → 0x1925cc (4 regs) */
-static const u32 zx_burst_7249_data[4] = {
+/* burst #6817: TM/base off=0x1925c0 → 0x1925cc (4 regs) */
+static const u32 zx_burst_6817_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7250: TM/base off=0x192788 → 0x1927b8 (13 regs) */
-static const u32 zx_burst_7250_data[13] = {
+/* burst #6818: TM/base off=0x192788 → 0x1927b8 (13 regs) */
+static const u32 zx_burst_6818_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7251: TM/base off=0x1927d0 → 0x1927dc (4 regs) */
-static const u32 zx_burst_7251_data[4] = {
+/* burst #6819: TM/base off=0x1927d0 → 0x1927dc (4 regs) */
+static const u32 zx_burst_6819_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7255: TM/base off=0x192820 → 0x19283c (8 regs) */
-static const u32 zx_burst_7255_data[8] = {
+/* burst #6823: TM/base off=0x192820 → 0x19283c (8 regs) */
+static const u32 zx_burst_6823_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7265: TM/base off=0x192980 → 0x19298c (4 regs) */
-static const u32 zx_burst_7265_data[4] = {
+/* burst #6833: TM/base off=0x192980 → 0x19298c (4 regs) */
+static const u32 zx_burst_6833_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7269: TM/base off=0x1929c0 → 0x1929cc (4 regs) */
-static const u32 zx_burst_7269_data[4] = {
+/* burst #6837: TM/base off=0x1929c0 → 0x1929cc (4 regs) */
+static const u32 zx_burst_6837_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7270: TM/base off=0x192b88 → 0x192bb8 (13 regs) */
-static const u32 zx_burst_7270_data[13] = {
+/* burst #6838: TM/base off=0x192b88 → 0x192bb8 (13 regs) */
+static const u32 zx_burst_6838_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7271: TM/base off=0x192bd0 → 0x192bdc (4 regs) */
-static const u32 zx_burst_7271_data[4] = {
+/* burst #6839: TM/base off=0x192bd0 → 0x192bdc (4 regs) */
+static const u32 zx_burst_6839_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7275: TM/base off=0x192c20 → 0x192c3c (8 regs) */
-static const u32 zx_burst_7275_data[8] = {
+/* burst #6843: TM/base off=0x192c20 → 0x192c3c (8 regs) */
+static const u32 zx_burst_6843_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7285: TM/base off=0x192d80 → 0x192d8c (4 regs) */
-static const u32 zx_burst_7285_data[4] = {
+/* burst #6853: TM/base off=0x192d80 → 0x192d8c (4 regs) */
+static const u32 zx_burst_6853_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7289: TM/base off=0x192dc0 → 0x192dcc (4 regs) */
-static const u32 zx_burst_7289_data[4] = {
+/* burst #6857: TM/base off=0x192dc0 → 0x192dcc (4 regs) */
+static const u32 zx_burst_6857_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7290: TM/base off=0x192f88 → 0x192fb8 (13 regs) */
-static const u32 zx_burst_7290_data[13] = {
+/* burst #6858: TM/base off=0x192f88 → 0x192fb8 (13 regs) */
+static const u32 zx_burst_6858_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7291: TM/base off=0x192fd0 → 0x192fdc (4 regs) */
-static const u32 zx_burst_7291_data[4] = {
+/* burst #6859: TM/base off=0x192fd0 → 0x192fdc (4 regs) */
+static const u32 zx_burst_6859_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7295: TM/base off=0x193020 → 0x19303c (8 regs) */
-static const u32 zx_burst_7295_data[8] = {
+/* burst #6863: TM/base off=0x193020 → 0x19303c (8 regs) */
+static const u32 zx_burst_6863_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7305: TM/base off=0x193180 → 0x19318c (4 regs) */
-static const u32 zx_burst_7305_data[4] = {
+/* burst #6873: TM/base off=0x193180 → 0x19318c (4 regs) */
+static const u32 zx_burst_6873_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7309: TM/base off=0x1931c0 → 0x1931cc (4 regs) */
-static const u32 zx_burst_7309_data[4] = {
+/* burst #6877: TM/base off=0x1931c0 → 0x1931cc (4 regs) */
+static const u32 zx_burst_6877_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7310: TM/base off=0x193388 → 0x1933b8 (13 regs) */
-static const u32 zx_burst_7310_data[13] = {
+/* burst #6878: TM/base off=0x193388 → 0x1933b8 (13 regs) */
+static const u32 zx_burst_6878_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7311: TM/base off=0x1933d0 → 0x1933dc (4 regs) */
-static const u32 zx_burst_7311_data[4] = {
+/* burst #6879: TM/base off=0x1933d0 → 0x1933dc (4 regs) */
+static const u32 zx_burst_6879_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7315: TM/base off=0x193420 → 0x19343c (8 regs) */
-static const u32 zx_burst_7315_data[8] = {
+/* burst #6883: TM/base off=0x193420 → 0x19343c (8 regs) */
+static const u32 zx_burst_6883_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7325: TM/base off=0x193580 → 0x19358c (4 regs) */
-static const u32 zx_burst_7325_data[4] = {
+/* burst #6893: TM/base off=0x193580 → 0x19358c (4 regs) */
+static const u32 zx_burst_6893_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7329: TM/base off=0x1935c0 → 0x1935cc (4 regs) */
-static const u32 zx_burst_7329_data[4] = {
+/* burst #6897: TM/base off=0x1935c0 → 0x1935cc (4 regs) */
+static const u32 zx_burst_6897_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7330: TM/base off=0x193788 → 0x1937b8 (13 regs) */
-static const u32 zx_burst_7330_data[13] = {
+/* burst #6898: TM/base off=0x193788 → 0x1937b8 (13 regs) */
+static const u32 zx_burst_6898_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7331: TM/base off=0x1937d0 → 0x1937dc (4 regs) */
-static const u32 zx_burst_7331_data[4] = {
+/* burst #6899: TM/base off=0x1937d0 → 0x1937dc (4 regs) */
+static const u32 zx_burst_6899_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7335: TM/base off=0x193820 → 0x19383c (8 regs) */
-static const u32 zx_burst_7335_data[8] = {
+/* burst #6903: TM/base off=0x193820 → 0x19383c (8 regs) */
+static const u32 zx_burst_6903_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7345: TM/base off=0x193980 → 0x19398c (4 regs) */
-static const u32 zx_burst_7345_data[4] = {
+/* burst #6913: TM/base off=0x193980 → 0x19398c (4 regs) */
+static const u32 zx_burst_6913_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7349: TM/base off=0x1939c0 → 0x1939cc (4 regs) */
-static const u32 zx_burst_7349_data[4] = {
+/* burst #6917: TM/base off=0x1939c0 → 0x1939cc (4 regs) */
+static const u32 zx_burst_6917_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7350: TM/base off=0x193b88 → 0x193bb8 (13 regs) */
-static const u32 zx_burst_7350_data[13] = {
+/* burst #6918: TM/base off=0x193b88 → 0x193bb8 (13 regs) */
+static const u32 zx_burst_6918_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7351: TM/base off=0x193bd0 → 0x193bdc (4 regs) */
-static const u32 zx_burst_7351_data[4] = {
+/* burst #6919: TM/base off=0x193bd0 → 0x193bdc (4 regs) */
+static const u32 zx_burst_6919_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7355: TM/base off=0x193c20 → 0x193c3c (8 regs) */
-static const u32 zx_burst_7355_data[8] = {
+/* burst #6923: TM/base off=0x193c20 → 0x193c3c (8 regs) */
+static const u32 zx_burst_6923_data[8] = {
 	0x00000020, 0x00000020, 0x00000001, 0x00000001, 0x0000c350, 0x00000040, 0x00010001, 0x00400040,
 };
 
-/* burst #7365: TM/base off=0x193d80 → 0x193d8c (4 regs) */
-static const u32 zx_burst_7365_data[4] = {
+/* burst #6933: TM/base off=0x193d80 → 0x193d8c (4 regs) */
+static const u32 zx_burst_6933_data[4] = {
 	0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
 };
 
-/* burst #7369: TM/base off=0x193dc0 → 0x193dcc (4 regs) */
-static const u32 zx_burst_7369_data[4] = {
+/* burst #6937: TM/base off=0x193dc0 → 0x193dcc (4 regs) */
+static const u32 zx_burst_6937_data[4] = {
 	0x006001a8, 0x504e8000, 0x10042002, 0x5f0d2190,
 };
 
-/* burst #7370: TM/base off=0x193f88 → 0x193fb8 (13 regs) */
-static const u32 zx_burst_7370_data[13] = {
+/* burst #6938: TM/base off=0x193f88 → 0x193fb8 (13 regs) */
+static const u32 zx_burst_6938_data[13] = {
 	0x00131217, 0x01030103, 0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x01030103, 0x01030103,
 	0x01030103, 0x01040104, 0x01030103, 0x00000101, 0x00000101,
 };
 
-/* burst #7371: TM/base off=0x193fd0 → 0x193fdc (4 regs) */
-static const u32 zx_burst_7371_data[4] = {
+/* burst #6939: TM/base off=0x193fd0 → 0x193fdc (4 regs) */
+static const u32 zx_burst_6939_data[4] = {
 	0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
 };
 
-/* burst #7377: TM/base off=0x1941f8 → 0x19420c (6 regs) */
-static const u32 zx_burst_7377_data[6] = {
+/* burst #6945: TM/base off=0x1941f8 → 0x19420c (6 regs) */
+static const u32 zx_burst_6945_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7381: TM/base off=0x194340 → 0x1943dc (40 regs) */
-static const u32 zx_burst_7381_data[40] = {
+/* burst #6949: TM/base off=0x194340 → 0x1943dc (40 regs) */
+static const u32 zx_burst_6949_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3409,13 +2721,13 @@ static const u32 zx_burst_7381_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7387: TM/base off=0x1945f8 → 0x19460c (6 regs) */
-static const u32 zx_burst_7387_data[6] = {
+/* burst #6955: TM/base off=0x1945f8 → 0x19460c (6 regs) */
+static const u32 zx_burst_6955_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7391: TM/base off=0x194740 → 0x1947dc (40 regs) */
-static const u32 zx_burst_7391_data[40] = {
+/* burst #6959: TM/base off=0x194740 → 0x1947dc (40 regs) */
+static const u32 zx_burst_6959_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3423,13 +2735,13 @@ static const u32 zx_burst_7391_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7397: TM/base off=0x1949f8 → 0x194a0c (6 regs) */
-static const u32 zx_burst_7397_data[6] = {
+/* burst #6965: TM/base off=0x1949f8 → 0x194a0c (6 regs) */
+static const u32 zx_burst_6965_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7401: TM/base off=0x194b40 → 0x194bdc (40 regs) */
-static const u32 zx_burst_7401_data[40] = {
+/* burst #6969: TM/base off=0x194b40 → 0x194bdc (40 regs) */
+static const u32 zx_burst_6969_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3437,13 +2749,13 @@ static const u32 zx_burst_7401_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7407: TM/base off=0x194df8 → 0x194e0c (6 regs) */
-static const u32 zx_burst_7407_data[6] = {
+/* burst #6975: TM/base off=0x194df8 → 0x194e0c (6 regs) */
+static const u32 zx_burst_6975_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7411: TM/base off=0x194f40 → 0x194fdc (40 regs) */
-static const u32 zx_burst_7411_data[40] = {
+/* burst #6979: TM/base off=0x194f40 → 0x194fdc (40 regs) */
+static const u32 zx_burst_6979_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3451,13 +2763,13 @@ static const u32 zx_burst_7411_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7417: TM/base off=0x1951f8 → 0x19520c (6 regs) */
-static const u32 zx_burst_7417_data[6] = {
+/* burst #6985: TM/base off=0x1951f8 → 0x19520c (6 regs) */
+static const u32 zx_burst_6985_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7421: TM/base off=0x195340 → 0x1953dc (40 regs) */
-static const u32 zx_burst_7421_data[40] = {
+/* burst #6989: TM/base off=0x195340 → 0x1953dc (40 regs) */
+static const u32 zx_burst_6989_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3465,13 +2777,13 @@ static const u32 zx_burst_7421_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7427: TM/base off=0x1955f8 → 0x19560c (6 regs) */
-static const u32 zx_burst_7427_data[6] = {
+/* burst #6995: TM/base off=0x1955f8 → 0x19560c (6 regs) */
+static const u32 zx_burst_6995_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7431: TM/base off=0x195740 → 0x1957dc (40 regs) */
-static const u32 zx_burst_7431_data[40] = {
+/* burst #6999: TM/base off=0x195740 → 0x1957dc (40 regs) */
+static const u32 zx_burst_6999_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3479,13 +2791,13 @@ static const u32 zx_burst_7431_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7437: TM/base off=0x1959f8 → 0x195a0c (6 regs) */
-static const u32 zx_burst_7437_data[6] = {
+/* burst #7005: TM/base off=0x1959f8 → 0x195a0c (6 regs) */
+static const u32 zx_burst_7005_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7441: TM/base off=0x195b40 → 0x195bdc (40 regs) */
-static const u32 zx_burst_7441_data[40] = {
+/* burst #7009: TM/base off=0x195b40 → 0x195bdc (40 regs) */
+static const u32 zx_burst_7009_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3493,13 +2805,13 @@ static const u32 zx_burst_7441_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7447: TM/base off=0x195df8 → 0x195e0c (6 regs) */
-static const u32 zx_burst_7447_data[6] = {
+/* burst #7015: TM/base off=0x195df8 → 0x195e0c (6 regs) */
+static const u32 zx_burst_7015_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7451: TM/base off=0x195f40 → 0x195fdc (40 regs) */
-static const u32 zx_burst_7451_data[40] = {
+/* burst #7019: TM/base off=0x195f40 → 0x195fdc (40 regs) */
+static const u32 zx_burst_7019_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3507,13 +2819,13 @@ static const u32 zx_burst_7451_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7457: TM/base off=0x1961f8 → 0x19620c (6 regs) */
-static const u32 zx_burst_7457_data[6] = {
+/* burst #7025: TM/base off=0x1961f8 → 0x19620c (6 regs) */
+static const u32 zx_burst_7025_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7461: TM/base off=0x196340 → 0x1963dc (40 regs) */
-static const u32 zx_burst_7461_data[40] = {
+/* burst #7029: TM/base off=0x196340 → 0x1963dc (40 regs) */
+static const u32 zx_burst_7029_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3521,13 +2833,13 @@ static const u32 zx_burst_7461_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7467: TM/base off=0x1965f8 → 0x19660c (6 regs) */
-static const u32 zx_burst_7467_data[6] = {
+/* burst #7035: TM/base off=0x1965f8 → 0x19660c (6 regs) */
+static const u32 zx_burst_7035_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7471: TM/base off=0x196740 → 0x1967dc (40 regs) */
-static const u32 zx_burst_7471_data[40] = {
+/* burst #7039: TM/base off=0x196740 → 0x1967dc (40 regs) */
+static const u32 zx_burst_7039_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3535,13 +2847,13 @@ static const u32 zx_burst_7471_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7477: TM/base off=0x1969f8 → 0x196a0c (6 regs) */
-static const u32 zx_burst_7477_data[6] = {
+/* burst #7045: TM/base off=0x1969f8 → 0x196a0c (6 regs) */
+static const u32 zx_burst_7045_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7481: TM/base off=0x196b40 → 0x196bdc (40 regs) */
-static const u32 zx_burst_7481_data[40] = {
+/* burst #7049: TM/base off=0x196b40 → 0x196bdc (40 regs) */
+static const u32 zx_burst_7049_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3549,13 +2861,13 @@ static const u32 zx_burst_7481_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7487: TM/base off=0x196df8 → 0x196e0c (6 regs) */
-static const u32 zx_burst_7487_data[6] = {
+/* burst #7055: TM/base off=0x196df8 → 0x196e0c (6 regs) */
+static const u32 zx_burst_7055_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7491: TM/base off=0x196f40 → 0x196fdc (40 regs) */
-static const u32 zx_burst_7491_data[40] = {
+/* burst #7059: TM/base off=0x196f40 → 0x196fdc (40 regs) */
+static const u32 zx_burst_7059_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3563,13 +2875,13 @@ static const u32 zx_burst_7491_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7497: TM/base off=0x1971f8 → 0x19720c (6 regs) */
-static const u32 zx_burst_7497_data[6] = {
+/* burst #7065: TM/base off=0x1971f8 → 0x19720c (6 regs) */
+static const u32 zx_burst_7065_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7501: TM/base off=0x197340 → 0x1973dc (40 regs) */
-static const u32 zx_burst_7501_data[40] = {
+/* burst #7069: TM/base off=0x197340 → 0x1973dc (40 regs) */
+static const u32 zx_burst_7069_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3577,13 +2889,13 @@ static const u32 zx_burst_7501_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7507: TM/base off=0x1975f8 → 0x19760c (6 regs) */
-static const u32 zx_burst_7507_data[6] = {
+/* burst #7075: TM/base off=0x1975f8 → 0x19760c (6 regs) */
+static const u32 zx_burst_7075_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7511: TM/base off=0x197740 → 0x1977dc (40 regs) */
-static const u32 zx_burst_7511_data[40] = {
+/* burst #7079: TM/base off=0x197740 → 0x1977dc (40 regs) */
+static const u32 zx_burst_7079_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3591,13 +2903,13 @@ static const u32 zx_burst_7511_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7517: TM/base off=0x1979f8 → 0x197a0c (6 regs) */
-static const u32 zx_burst_7517_data[6] = {
+/* burst #7085: TM/base off=0x1979f8 → 0x197a0c (6 regs) */
+static const u32 zx_burst_7085_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7521: TM/base off=0x197b40 → 0x197bdc (40 regs) */
-static const u32 zx_burst_7521_data[40] = {
+/* burst #7089: TM/base off=0x197b40 → 0x197bdc (40 regs) */
+static const u32 zx_burst_7089_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3605,13 +2917,13 @@ static const u32 zx_burst_7521_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7527: TM/base off=0x197df8 → 0x197e0c (6 regs) */
-static const u32 zx_burst_7527_data[6] = {
+/* burst #7095: TM/base off=0x197df8 → 0x197e0c (6 regs) */
+static const u32 zx_burst_7095_data[6] = {
 	0xf400f400, 0x0000f400, 0xf40000f4, 0x000000e8, 0x000000f4, 0x00f400f4,
 };
 
-/* burst #7531: TM/base off=0x197f40 → 0x197fdc (40 regs) */
-static const u32 zx_burst_7531_data[40] = {
+/* burst #7099: TM/base off=0x197f40 → 0x197fdc (40 regs) */
+static const u32 zx_burst_7099_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
@@ -3619,1388 +2931,1388 @@ static const u32 zx_burst_7531_data[40] = {
 	0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7532: PP_FUC/base off=0x1c0004 → 0x1c0010 (4 regs) */
-static const u32 zx_burst_7532_data[4] = {
+/* burst #7100: PP_FUC/base off=0x1c0004 → 0x1c0010 (4 regs) */
+static const u32 zx_burst_7100_data[4] = {
 	0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7535: PP_FUC/base off=0x1c003c → 0x1c0048 (4 regs) */
-static const u32 zx_burst_7535_data[4] = {
+/* burst #7103: PP_FUC/base off=0x1c003c → 0x1c0048 (4 regs) */
+static const u32 zx_burst_7103_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7539: PP_FUC/base off=0x1c00ac → 0x1c00b8 (4 regs) */
-static const u32 zx_burst_7539_data[4] = {
+/* burst #7107: PP_FUC/base off=0x1c00ac → 0x1c00b8 (4 regs) */
+static const u32 zx_burst_7107_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7540: PP_FUC/base off=0x1c00c0 → 0x1c00e0 (9 regs) */
-static const u32 zx_burst_7540_data[9] = {
+/* burst #7108: PP_FUC/base off=0x1c00c0 → 0x1c00e0 (9 regs) */
+static const u32 zx_burst_7108_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7541: PP_FUC/base off=0x1c0100 → 0x1c0118 (7 regs) */
-static const u32 zx_burst_7541_data[7] = {
+/* burst #7109: PP_FUC/base off=0x1c0100 → 0x1c0118 (7 regs) */
+static const u32 zx_burst_7109_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7542: PP_FUC/base off=0x1c0400 → 0x1c0410 (5 regs) */
-static const u32 zx_burst_7542_data[5] = {
+/* burst #7110: PP_FUC/base off=0x1c0400 → 0x1c0410 (5 regs) */
+static const u32 zx_burst_7110_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7543: PP_FUC/base off=0x1c0420 → 0x1c0434 (6 regs) */
-static const u32 zx_burst_7543_data[6] = {
+/* burst #7111: PP_FUC/base off=0x1c0420 → 0x1c0434 (6 regs) */
+static const u32 zx_burst_7111_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7544: PP_FUC/base off=0x1c043c → 0x1c0448 (4 regs) */
-static const u32 zx_burst_7544_data[4] = {
+/* burst #7112: PP_FUC/base off=0x1c043c → 0x1c0448 (4 regs) */
+static const u32 zx_burst_7112_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7548: PP_FUC/base off=0x1c04ac → 0x1c04b8 (4 regs) */
-static const u32 zx_burst_7548_data[4] = {
+/* burst #7116: PP_FUC/base off=0x1c04ac → 0x1c04b8 (4 regs) */
+static const u32 zx_burst_7116_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7549: PP_FUC/base off=0x1c04c0 → 0x1c04e0 (9 regs) */
-static const u32 zx_burst_7549_data[9] = {
+/* burst #7117: PP_FUC/base off=0x1c04c0 → 0x1c04e0 (9 regs) */
+static const u32 zx_burst_7117_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7550: PP_FUC/base off=0x1c0500 → 0x1c0518 (7 regs) */
-static const u32 zx_burst_7550_data[7] = {
+/* burst #7118: PP_FUC/base off=0x1c0500 → 0x1c0518 (7 regs) */
+static const u32 zx_burst_7118_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7551: PP_FUC/base off=0x1c0800 → 0x1c0810 (5 regs) */
-static const u32 zx_burst_7551_data[5] = {
+/* burst #7119: PP_FUC/base off=0x1c0800 → 0x1c0810 (5 regs) */
+static const u32 zx_burst_7119_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7552: PP_FUC/base off=0x1c0820 → 0x1c0834 (6 regs) */
-static const u32 zx_burst_7552_data[6] = {
+/* burst #7120: PP_FUC/base off=0x1c0820 → 0x1c0834 (6 regs) */
+static const u32 zx_burst_7120_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7553: PP_FUC/base off=0x1c083c → 0x1c0848 (4 regs) */
-static const u32 zx_burst_7553_data[4] = {
+/* burst #7121: PP_FUC/base off=0x1c083c → 0x1c0848 (4 regs) */
+static const u32 zx_burst_7121_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7557: PP_FUC/base off=0x1c08ac → 0x1c08b8 (4 regs) */
-static const u32 zx_burst_7557_data[4] = {
+/* burst #7125: PP_FUC/base off=0x1c08ac → 0x1c08b8 (4 regs) */
+static const u32 zx_burst_7125_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7558: PP_FUC/base off=0x1c08c0 → 0x1c08e0 (9 regs) */
-static const u32 zx_burst_7558_data[9] = {
+/* burst #7126: PP_FUC/base off=0x1c08c0 → 0x1c08e0 (9 regs) */
+static const u32 zx_burst_7126_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7559: PP_FUC/base off=0x1c0900 → 0x1c0918 (7 regs) */
-static const u32 zx_burst_7559_data[7] = {
+/* burst #7127: PP_FUC/base off=0x1c0900 → 0x1c0918 (7 regs) */
+static const u32 zx_burst_7127_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7560: PP_FUC/base off=0x1c0c00 → 0x1c0c10 (5 regs) */
-static const u32 zx_burst_7560_data[5] = {
+/* burst #7128: PP_FUC/base off=0x1c0c00 → 0x1c0c10 (5 regs) */
+static const u32 zx_burst_7128_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7561: PP_FUC/base off=0x1c0c20 → 0x1c0c34 (6 regs) */
-static const u32 zx_burst_7561_data[6] = {
+/* burst #7129: PP_FUC/base off=0x1c0c20 → 0x1c0c34 (6 regs) */
+static const u32 zx_burst_7129_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7562: PP_FUC/base off=0x1c0c3c → 0x1c0c48 (4 regs) */
-static const u32 zx_burst_7562_data[4] = {
+/* burst #7130: PP_FUC/base off=0x1c0c3c → 0x1c0c48 (4 regs) */
+static const u32 zx_burst_7130_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7566: PP_FUC/base off=0x1c0cac → 0x1c0cb8 (4 regs) */
-static const u32 zx_burst_7566_data[4] = {
+/* burst #7134: PP_FUC/base off=0x1c0cac → 0x1c0cb8 (4 regs) */
+static const u32 zx_burst_7134_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7567: PP_FUC/base off=0x1c0cc0 → 0x1c0ce0 (9 regs) */
-static const u32 zx_burst_7567_data[9] = {
+/* burst #7135: PP_FUC/base off=0x1c0cc0 → 0x1c0ce0 (9 regs) */
+static const u32 zx_burst_7135_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7568: PP_FUC/base off=0x1c0d00 → 0x1c0d18 (7 regs) */
-static const u32 zx_burst_7568_data[7] = {
+/* burst #7136: PP_FUC/base off=0x1c0d00 → 0x1c0d18 (7 regs) */
+static const u32 zx_burst_7136_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7569: PP_FUC/base off=0x1c1000 → 0x1c1010 (5 regs) */
-static const u32 zx_burst_7569_data[5] = {
+/* burst #7137: PP_FUC/base off=0x1c1000 → 0x1c1010 (5 regs) */
+static const u32 zx_burst_7137_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7570: PP_FUC/base off=0x1c1020 → 0x1c1034 (6 regs) */
-static const u32 zx_burst_7570_data[6] = {
+/* burst #7138: PP_FUC/base off=0x1c1020 → 0x1c1034 (6 regs) */
+static const u32 zx_burst_7138_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7571: PP_FUC/base off=0x1c103c → 0x1c1048 (4 regs) */
-static const u32 zx_burst_7571_data[4] = {
+/* burst #7139: PP_FUC/base off=0x1c103c → 0x1c1048 (4 regs) */
+static const u32 zx_burst_7139_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7575: PP_FUC/base off=0x1c10ac → 0x1c10b8 (4 regs) */
-static const u32 zx_burst_7575_data[4] = {
+/* burst #7143: PP_FUC/base off=0x1c10ac → 0x1c10b8 (4 regs) */
+static const u32 zx_burst_7143_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7576: PP_FUC/base off=0x1c10c0 → 0x1c10e0 (9 regs) */
-static const u32 zx_burst_7576_data[9] = {
+/* burst #7144: PP_FUC/base off=0x1c10c0 → 0x1c10e0 (9 regs) */
+static const u32 zx_burst_7144_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7577: PP_FUC/base off=0x1c1100 → 0x1c1118 (7 regs) */
-static const u32 zx_burst_7577_data[7] = {
+/* burst #7145: PP_FUC/base off=0x1c1100 → 0x1c1118 (7 regs) */
+static const u32 zx_burst_7145_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7578: PP_FUC/base off=0x1c1400 → 0x1c1410 (5 regs) */
-static const u32 zx_burst_7578_data[5] = {
+/* burst #7146: PP_FUC/base off=0x1c1400 → 0x1c1410 (5 regs) */
+static const u32 zx_burst_7146_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7579: PP_FUC/base off=0x1c1420 → 0x1c1434 (6 regs) */
-static const u32 zx_burst_7579_data[6] = {
+/* burst #7147: PP_FUC/base off=0x1c1420 → 0x1c1434 (6 regs) */
+static const u32 zx_burst_7147_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7580: PP_FUC/base off=0x1c143c → 0x1c1448 (4 regs) */
-static const u32 zx_burst_7580_data[4] = {
+/* burst #7148: PP_FUC/base off=0x1c143c → 0x1c1448 (4 regs) */
+static const u32 zx_burst_7148_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7584: PP_FUC/base off=0x1c14ac → 0x1c14b8 (4 regs) */
-static const u32 zx_burst_7584_data[4] = {
+/* burst #7152: PP_FUC/base off=0x1c14ac → 0x1c14b8 (4 regs) */
+static const u32 zx_burst_7152_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7585: PP_FUC/base off=0x1c14c0 → 0x1c14e0 (9 regs) */
-static const u32 zx_burst_7585_data[9] = {
+/* burst #7153: PP_FUC/base off=0x1c14c0 → 0x1c14e0 (9 regs) */
+static const u32 zx_burst_7153_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7586: PP_FUC/base off=0x1c1500 → 0x1c1518 (7 regs) */
-static const u32 zx_burst_7586_data[7] = {
+/* burst #7154: PP_FUC/base off=0x1c1500 → 0x1c1518 (7 regs) */
+static const u32 zx_burst_7154_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7587: PP_FUC/base off=0x1c1800 → 0x1c1810 (5 regs) */
-static const u32 zx_burst_7587_data[5] = {
+/* burst #7155: PP_FUC/base off=0x1c1800 → 0x1c1810 (5 regs) */
+static const u32 zx_burst_7155_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7588: PP_FUC/base off=0x1c1820 → 0x1c1834 (6 regs) */
-static const u32 zx_burst_7588_data[6] = {
+/* burst #7156: PP_FUC/base off=0x1c1820 → 0x1c1834 (6 regs) */
+static const u32 zx_burst_7156_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7589: PP_FUC/base off=0x1c183c → 0x1c1848 (4 regs) */
-static const u32 zx_burst_7589_data[4] = {
+/* burst #7157: PP_FUC/base off=0x1c183c → 0x1c1848 (4 regs) */
+static const u32 zx_burst_7157_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7593: PP_FUC/base off=0x1c18ac → 0x1c18b8 (4 regs) */
-static const u32 zx_burst_7593_data[4] = {
+/* burst #7161: PP_FUC/base off=0x1c18ac → 0x1c18b8 (4 regs) */
+static const u32 zx_burst_7161_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7594: PP_FUC/base off=0x1c18c0 → 0x1c18e0 (9 regs) */
-static const u32 zx_burst_7594_data[9] = {
+/* burst #7162: PP_FUC/base off=0x1c18c0 → 0x1c18e0 (9 regs) */
+static const u32 zx_burst_7162_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7595: PP_FUC/base off=0x1c1900 → 0x1c1918 (7 regs) */
-static const u32 zx_burst_7595_data[7] = {
+/* burst #7163: PP_FUC/base off=0x1c1900 → 0x1c1918 (7 regs) */
+static const u32 zx_burst_7163_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7596: PP_FUC/base off=0x1c1c00 → 0x1c1c10 (5 regs) */
-static const u32 zx_burst_7596_data[5] = {
+/* burst #7164: PP_FUC/base off=0x1c1c00 → 0x1c1c10 (5 regs) */
+static const u32 zx_burst_7164_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7597: PP_FUC/base off=0x1c1c20 → 0x1c1c34 (6 regs) */
-static const u32 zx_burst_7597_data[6] = {
+/* burst #7165: PP_FUC/base off=0x1c1c20 → 0x1c1c34 (6 regs) */
+static const u32 zx_burst_7165_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7598: PP_FUC/base off=0x1c1c3c → 0x1c1c48 (4 regs) */
-static const u32 zx_burst_7598_data[4] = {
+/* burst #7166: PP_FUC/base off=0x1c1c3c → 0x1c1c48 (4 regs) */
+static const u32 zx_burst_7166_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7602: PP_FUC/base off=0x1c1cac → 0x1c1cb8 (4 regs) */
-static const u32 zx_burst_7602_data[4] = {
+/* burst #7170: PP_FUC/base off=0x1c1cac → 0x1c1cb8 (4 regs) */
+static const u32 zx_burst_7170_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7603: PP_FUC/base off=0x1c1cc0 → 0x1c1ce0 (9 regs) */
-static const u32 zx_burst_7603_data[9] = {
+/* burst #7171: PP_FUC/base off=0x1c1cc0 → 0x1c1ce0 (9 regs) */
+static const u32 zx_burst_7171_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7604: PP_FUC/base off=0x1c1d00 → 0x1c1d18 (7 regs) */
-static const u32 zx_burst_7604_data[7] = {
+/* burst #7172: PP_FUC/base off=0x1c1d00 → 0x1c1d18 (7 regs) */
+static const u32 zx_burst_7172_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7605: PP_FUC/base off=0x1c2000 → 0x1c2010 (5 regs) */
-static const u32 zx_burst_7605_data[5] = {
+/* burst #7173: PP_FUC/base off=0x1c2000 → 0x1c2010 (5 regs) */
+static const u32 zx_burst_7173_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7606: PP_FUC/base off=0x1c2020 → 0x1c2034 (6 regs) */
-static const u32 zx_burst_7606_data[6] = {
+/* burst #7174: PP_FUC/base off=0x1c2020 → 0x1c2034 (6 regs) */
+static const u32 zx_burst_7174_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7607: PP_FUC/base off=0x1c203c → 0x1c2048 (4 regs) */
-static const u32 zx_burst_7607_data[4] = {
+/* burst #7175: PP_FUC/base off=0x1c203c → 0x1c2048 (4 regs) */
+static const u32 zx_burst_7175_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7611: PP_FUC/base off=0x1c20ac → 0x1c20b8 (4 regs) */
-static const u32 zx_burst_7611_data[4] = {
+/* burst #7179: PP_FUC/base off=0x1c20ac → 0x1c20b8 (4 regs) */
+static const u32 zx_burst_7179_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7612: PP_FUC/base off=0x1c20c0 → 0x1c20e0 (9 regs) */
-static const u32 zx_burst_7612_data[9] = {
+/* burst #7180: PP_FUC/base off=0x1c20c0 → 0x1c20e0 (9 regs) */
+static const u32 zx_burst_7180_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7613: PP_FUC/base off=0x1c2100 → 0x1c2118 (7 regs) */
-static const u32 zx_burst_7613_data[7] = {
+/* burst #7181: PP_FUC/base off=0x1c2100 → 0x1c2118 (7 regs) */
+static const u32 zx_burst_7181_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7614: PP_FUC/base off=0x1c2400 → 0x1c2410 (5 regs) */
-static const u32 zx_burst_7614_data[5] = {
+/* burst #7182: PP_FUC/base off=0x1c2400 → 0x1c2410 (5 regs) */
+static const u32 zx_burst_7182_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7615: PP_FUC/base off=0x1c2420 → 0x1c2434 (6 regs) */
-static const u32 zx_burst_7615_data[6] = {
+/* burst #7183: PP_FUC/base off=0x1c2420 → 0x1c2434 (6 regs) */
+static const u32 zx_burst_7183_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7616: PP_FUC/base off=0x1c243c → 0x1c2448 (4 regs) */
-static const u32 zx_burst_7616_data[4] = {
+/* burst #7184: PP_FUC/base off=0x1c243c → 0x1c2448 (4 regs) */
+static const u32 zx_burst_7184_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7620: PP_FUC/base off=0x1c24ac → 0x1c24b8 (4 regs) */
-static const u32 zx_burst_7620_data[4] = {
+/* burst #7188: PP_FUC/base off=0x1c24ac → 0x1c24b8 (4 regs) */
+static const u32 zx_burst_7188_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7621: PP_FUC/base off=0x1c24c0 → 0x1c24e0 (9 regs) */
-static const u32 zx_burst_7621_data[9] = {
+/* burst #7189: PP_FUC/base off=0x1c24c0 → 0x1c24e0 (9 regs) */
+static const u32 zx_burst_7189_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7622: PP_FUC/base off=0x1c2500 → 0x1c2518 (7 regs) */
-static const u32 zx_burst_7622_data[7] = {
+/* burst #7190: PP_FUC/base off=0x1c2500 → 0x1c2518 (7 regs) */
+static const u32 zx_burst_7190_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7623: PP_FUC/base off=0x1c2800 → 0x1c2810 (5 regs) */
-static const u32 zx_burst_7623_data[5] = {
+/* burst #7191: PP_FUC/base off=0x1c2800 → 0x1c2810 (5 regs) */
+static const u32 zx_burst_7191_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7624: PP_FUC/base off=0x1c2820 → 0x1c2834 (6 regs) */
-static const u32 zx_burst_7624_data[6] = {
+/* burst #7192: PP_FUC/base off=0x1c2820 → 0x1c2834 (6 regs) */
+static const u32 zx_burst_7192_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7625: PP_FUC/base off=0x1c283c → 0x1c2848 (4 regs) */
-static const u32 zx_burst_7625_data[4] = {
+/* burst #7193: PP_FUC/base off=0x1c283c → 0x1c2848 (4 regs) */
+static const u32 zx_burst_7193_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7629: PP_FUC/base off=0x1c28ac → 0x1c28b8 (4 regs) */
-static const u32 zx_burst_7629_data[4] = {
+/* burst #7197: PP_FUC/base off=0x1c28ac → 0x1c28b8 (4 regs) */
+static const u32 zx_burst_7197_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7630: PP_FUC/base off=0x1c28c0 → 0x1c28e0 (9 regs) */
-static const u32 zx_burst_7630_data[9] = {
+/* burst #7198: PP_FUC/base off=0x1c28c0 → 0x1c28e0 (9 regs) */
+static const u32 zx_burst_7198_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7631: PP_FUC/base off=0x1c2900 → 0x1c2918 (7 regs) */
-static const u32 zx_burst_7631_data[7] = {
+/* burst #7199: PP_FUC/base off=0x1c2900 → 0x1c2918 (7 regs) */
+static const u32 zx_burst_7199_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7632: PP_FUC/base off=0x1c2c00 → 0x1c2c10 (5 regs) */
-static const u32 zx_burst_7632_data[5] = {
+/* burst #7200: PP_FUC/base off=0x1c2c00 → 0x1c2c10 (5 regs) */
+static const u32 zx_burst_7200_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7633: PP_FUC/base off=0x1c2c20 → 0x1c2c34 (6 regs) */
-static const u32 zx_burst_7633_data[6] = {
+/* burst #7201: PP_FUC/base off=0x1c2c20 → 0x1c2c34 (6 regs) */
+static const u32 zx_burst_7201_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7634: PP_FUC/base off=0x1c2c3c → 0x1c2c48 (4 regs) */
-static const u32 zx_burst_7634_data[4] = {
+/* burst #7202: PP_FUC/base off=0x1c2c3c → 0x1c2c48 (4 regs) */
+static const u32 zx_burst_7202_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7638: PP_FUC/base off=0x1c2cac → 0x1c2cb8 (4 regs) */
-static const u32 zx_burst_7638_data[4] = {
+/* burst #7206: PP_FUC/base off=0x1c2cac → 0x1c2cb8 (4 regs) */
+static const u32 zx_burst_7206_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7639: PP_FUC/base off=0x1c2cc0 → 0x1c2ce0 (9 regs) */
-static const u32 zx_burst_7639_data[9] = {
+/* burst #7207: PP_FUC/base off=0x1c2cc0 → 0x1c2ce0 (9 regs) */
+static const u32 zx_burst_7207_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7640: PP_FUC/base off=0x1c2d00 → 0x1c2d18 (7 regs) */
-static const u32 zx_burst_7640_data[7] = {
+/* burst #7208: PP_FUC/base off=0x1c2d00 → 0x1c2d18 (7 regs) */
+static const u32 zx_burst_7208_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7641: PP_FUC/base off=0x1c3000 → 0x1c3010 (5 regs) */
-static const u32 zx_burst_7641_data[5] = {
+/* burst #7209: PP_FUC/base off=0x1c3000 → 0x1c3010 (5 regs) */
+static const u32 zx_burst_7209_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7642: PP_FUC/base off=0x1c3020 → 0x1c3034 (6 regs) */
-static const u32 zx_burst_7642_data[6] = {
+/* burst #7210: PP_FUC/base off=0x1c3020 → 0x1c3034 (6 regs) */
+static const u32 zx_burst_7210_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7643: PP_FUC/base off=0x1c303c → 0x1c3048 (4 regs) */
-static const u32 zx_burst_7643_data[4] = {
+/* burst #7211: PP_FUC/base off=0x1c303c → 0x1c3048 (4 regs) */
+static const u32 zx_burst_7211_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7647: PP_FUC/base off=0x1c30ac → 0x1c30b8 (4 regs) */
-static const u32 zx_burst_7647_data[4] = {
+/* burst #7215: PP_FUC/base off=0x1c30ac → 0x1c30b8 (4 regs) */
+static const u32 zx_burst_7215_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7648: PP_FUC/base off=0x1c30c0 → 0x1c30e0 (9 regs) */
-static const u32 zx_burst_7648_data[9] = {
+/* burst #7216: PP_FUC/base off=0x1c30c0 → 0x1c30e0 (9 regs) */
+static const u32 zx_burst_7216_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7649: PP_FUC/base off=0x1c3100 → 0x1c3118 (7 regs) */
-static const u32 zx_burst_7649_data[7] = {
+/* burst #7217: PP_FUC/base off=0x1c3100 → 0x1c3118 (7 regs) */
+static const u32 zx_burst_7217_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7650: PP_FUC/base off=0x1c3400 → 0x1c3410 (5 regs) */
-static const u32 zx_burst_7650_data[5] = {
+/* burst #7218: PP_FUC/base off=0x1c3400 → 0x1c3410 (5 regs) */
+static const u32 zx_burst_7218_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7651: PP_FUC/base off=0x1c3420 → 0x1c3434 (6 regs) */
-static const u32 zx_burst_7651_data[6] = {
+/* burst #7219: PP_FUC/base off=0x1c3420 → 0x1c3434 (6 regs) */
+static const u32 zx_burst_7219_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7652: PP_FUC/base off=0x1c343c → 0x1c3448 (4 regs) */
-static const u32 zx_burst_7652_data[4] = {
+/* burst #7220: PP_FUC/base off=0x1c343c → 0x1c3448 (4 regs) */
+static const u32 zx_burst_7220_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7656: PP_FUC/base off=0x1c34ac → 0x1c34b8 (4 regs) */
-static const u32 zx_burst_7656_data[4] = {
+/* burst #7224: PP_FUC/base off=0x1c34ac → 0x1c34b8 (4 regs) */
+static const u32 zx_burst_7224_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7657: PP_FUC/base off=0x1c34c0 → 0x1c34e0 (9 regs) */
-static const u32 zx_burst_7657_data[9] = {
+/* burst #7225: PP_FUC/base off=0x1c34c0 → 0x1c34e0 (9 regs) */
+static const u32 zx_burst_7225_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7658: PP_FUC/base off=0x1c3500 → 0x1c3518 (7 regs) */
-static const u32 zx_burst_7658_data[7] = {
+/* burst #7226: PP_FUC/base off=0x1c3500 → 0x1c3518 (7 regs) */
+static const u32 zx_burst_7226_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7659: PP_FUC/base off=0x1c3800 → 0x1c3810 (5 regs) */
-static const u32 zx_burst_7659_data[5] = {
+/* burst #7227: PP_FUC/base off=0x1c3800 → 0x1c3810 (5 regs) */
+static const u32 zx_burst_7227_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7660: PP_FUC/base off=0x1c3820 → 0x1c3834 (6 regs) */
-static const u32 zx_burst_7660_data[6] = {
+/* burst #7228: PP_FUC/base off=0x1c3820 → 0x1c3834 (6 regs) */
+static const u32 zx_burst_7228_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7661: PP_FUC/base off=0x1c383c → 0x1c3848 (4 regs) */
-static const u32 zx_burst_7661_data[4] = {
+/* burst #7229: PP_FUC/base off=0x1c383c → 0x1c3848 (4 regs) */
+static const u32 zx_burst_7229_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7665: PP_FUC/base off=0x1c38ac → 0x1c38b8 (4 regs) */
-static const u32 zx_burst_7665_data[4] = {
+/* burst #7233: PP_FUC/base off=0x1c38ac → 0x1c38b8 (4 regs) */
+static const u32 zx_burst_7233_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7666: PP_FUC/base off=0x1c38c0 → 0x1c38e0 (9 regs) */
-static const u32 zx_burst_7666_data[9] = {
+/* burst #7234: PP_FUC/base off=0x1c38c0 → 0x1c38e0 (9 regs) */
+static const u32 zx_burst_7234_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7667: PP_FUC/base off=0x1c3900 → 0x1c3918 (7 regs) */
-static const u32 zx_burst_7667_data[7] = {
+/* burst #7235: PP_FUC/base off=0x1c3900 → 0x1c3918 (7 regs) */
+static const u32 zx_burst_7235_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7668: PP_FUC/base off=0x1c3c00 → 0x1c3c10 (5 regs) */
-static const u32 zx_burst_7668_data[5] = {
+/* burst #7236: PP_FUC/base off=0x1c3c00 → 0x1c3c10 (5 regs) */
+static const u32 zx_burst_7236_data[5] = {
 	0x00000001, 0x02abfc8d, 0x00000001, 0x00640064, 0x00000001,
 };
 
-/* burst #7669: PP_FUC/base off=0x1c3c20 → 0x1c3c34 (6 regs) */
-static const u32 zx_burst_7669_data[6] = {
+/* burst #7237: PP_FUC/base off=0x1c3c20 → 0x1c3c34 (6 regs) */
+static const u32 zx_burst_7237_data[6] = {
 	0x00000fff, 0x00000106, 0x01070104, 0x00000106, 0x00000101, 0x00010001,
 };
 
-/* burst #7670: PP_FUC/base off=0x1c3c3c → 0x1c3c48 (4 regs) */
-static const u32 zx_burst_7670_data[4] = {
+/* burst #7238: PP_FUC/base off=0x1c3c3c → 0x1c3c48 (4 regs) */
+static const u32 zx_burst_7238_data[4] = {
 	0x00000106, 0x01030101, 0x00000106, 0x00111111,
 };
 
-/* burst #7674: PP_FUC/base off=0x1c3cac → 0x1c3cb8 (4 regs) */
-static const u32 zx_burst_7674_data[4] = {
+/* burst #7242: PP_FUC/base off=0x1c3cac → 0x1c3cb8 (4 regs) */
+static const u32 zx_burst_7242_data[4] = {
 	0x0000f42e, 0x00220022, 0x002e002e, 0x00f400f4,
 };
 
-/* burst #7675: PP_FUC/base off=0x1c3cc0 → 0x1c3ce0 (9 regs) */
-static const u32 zx_burst_7675_data[9] = {
+/* burst #7243: PP_FUC/base off=0x1c3cc0 → 0x1c3ce0 (9 regs) */
+static const u32 zx_burst_7243_data[9] = {
 	0x04f4052e, 0x04f40000, 0x04f4052e, 0x04f4052e, 0x04f40000, 0x0000052e, 0x0000052e, 0x04f4052e,
 	0x0a220a22,
 };
 
-/* burst #7676: PP_FUC/base off=0x1c3d00 → 0x1c3d18 (7 regs) */
-static const u32 zx_burst_7676_data[7] = {
+/* burst #7244: PP_FUC/base off=0x1c3d00 → 0x1c3d18 (7 regs) */
+static const u32 zx_burst_7244_data[7] = {
 	0x0000000f, 0x000242f0, 0x00000064, 0x00000411, 0x22008e3f, 0xc7000007, 0xf000107c,
 };
 
-/* burst #7677: PP_FUC/base off=0x1c4000 → 0x1c4018 (7 regs) */
-static const u32 zx_burst_7677_data[7] = {
+/* burst #7245: PP_FUC/base off=0x1c4000 → 0x1c4018 (7 regs) */
+static const u32 zx_burst_7245_data[7] = {
 	0x00000021, 0x00002008, 0x000003e8, 0x0bebc200, 0x00000834, 0x00000004, 0x00000001,
 };
 
-/* burst #7684: PP_FUC/base off=0x1c5000 → 0x1c5018 (7 regs) */
-static const u32 zx_burst_7684_data[7] = {
+/* burst #7252: PP_FUC/base off=0x1c5000 → 0x1c5018 (7 regs) */
+static const u32 zx_burst_7252_data[7] = {
 	0x00000021, 0x00002008, 0x000003e8, 0x0bebc200, 0x00000834, 0x00000004, 0x00000001,
 };
 
-/* burst #7691: PP_FUC/base off=0x1c6000 → 0x1c6018 (7 regs) */
-static const u32 zx_burst_7691_data[7] = {
+/* burst #7259: PP_FUC/base off=0x1c6000 → 0x1c6018 (7 regs) */
+static const u32 zx_burst_7259_data[7] = {
 	0x00000021, 0x00002008, 0x000003e8, 0x0bebc200, 0x00000834, 0x00000004, 0x00000001,
 };
 
-/* burst #7698: PP_FUC/base off=0x1c7000 → 0x1c7018 (7 regs) */
-static const u32 zx_burst_7698_data[7] = {
+/* burst #7266: PP_FUC/base off=0x1c7000 → 0x1c7018 (7 regs) */
+static const u32 zx_burst_7266_data[7] = {
 	0x00000021, 0x00002008, 0x000003e8, 0x0bebc200, 0x00000834, 0x00000004, 0x00000001,
 };
 
-/* burst #7711: PP_FUC/base off=0x1c83c0 → 0x1c83dc (8 regs) */
-static const u32 zx_burst_7711_data[8] = {
+/* burst #7279: PP_FUC/base off=0x1c83c0 → 0x1c83dc (8 regs) */
+static const u32 zx_burst_7279_data[8] = {
 	0x000000fe, 0x000000fd, 0x000000fb, 0x000000f7, 0x000000ef, 0x000000df, 0x000000ff, 0x000000ff,
 };
 
-/* burst #7714: PP_FUC/base off=0x1c8c00 → 0x1c8c24 (10 regs) */
-static const u32 zx_burst_7714_data[10] = {
+/* burst #7282: PP_FUC/base off=0x1c8c00 → 0x1c8c24 (10 regs) */
+static const u32 zx_burst_7282_data[10] = {
 	0x00002222, 0xe6000000, 0xda480000, 0xda480000, 0xda480000, 0xda480000, 0xda480000, 0xda480000,
 	0x00101000, 0x00f40000,
 };
 
-/* burst #7720: PP_FUC/base off=0x1c8e00 → 0x1c8e14 (6 regs) */
-static const u32 zx_burst_7720_data[6] = {
+/* burst #7288: PP_FUC/base off=0x1c8e00 → 0x1c8e14 (6 regs) */
+static const u32 zx_burst_7288_data[6] = {
 	0x40d1c042, 0x2843ff1a, 0x16000000, 0x10830001, 0x383102c2, 0x00880000,
 };
 
-/* burst #7722: PP_FUC/base off=0x1cc014 → 0x1cc030 (8 regs) */
-static const u32 zx_burst_7722_data[8] = {
+/* burst #7290: PP_FUC/base off=0x1cc014 → 0x1cc030 (8 regs) */
+static const u32 zx_burst_7290_data[8] = {
 	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
 };
 
-/* burst #7729: PP_FUC/base off=0x1cc1e0 → 0x1cc220 (17 regs) */
-static const u32 zx_burst_7729_data[17] = {
+/* burst #7297: PP_FUC/base off=0x1cc1e0 → 0x1cc220 (17 regs) */
+static const u32 zx_burst_7297_data[17] = {
 	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
 	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
 	0x0b5d0000,
 };
 
-/* burst #7730: PP_FUC/base off=0x1cc260 → 0x1cc284 (10 regs) */
-static const u32 zx_burst_7730_data[10] = {
+/* burst #7298: PP_FUC/base off=0x1cc260 → 0x1cc284 (10 regs) */
+static const u32 zx_burst_7298_data[10] = {
 	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
 	0x002d3e30, 0x0001726a,
 };
 
-/* burst #7731: PP_FUC/base off=0x1cc290 → 0x1cc29c (4 regs) */
-static const u32 zx_burst_7731_data[4] = {
+/* burst #7299: PP_FUC/base off=0x1cc290 → 0x1cc29c (4 regs) */
+static const u32 zx_burst_7299_data[4] = {
 	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
 };
 
-/* burst #7733: PP_FUC/base off=0x1cc394 → 0x1cc3b0 (8 regs) */
-static const u32 zx_burst_7733_data[8] = {
+/* burst #7301: PP_FUC/base off=0x1cc394 → 0x1cc3b0 (8 regs) */
+static const u32 zx_burst_7301_data[8] = {
 	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
 };
 
-/* burst #7736: PP_FUC/base off=0x1cc3e0 → 0x1cc3f8 (7 regs) */
-static const u32 zx_burst_7736_data[7] = {
+/* burst #7304: PP_FUC/base off=0x1cc3e0 → 0x1cc3f8 (7 regs) */
+static const u32 zx_burst_7304_data[7] = {
 	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
 };
 
-/* burst #7737: PP_FUC/base off=0x1cc814 → 0x1cc830 (8 regs) */
-static const u32 zx_burst_7737_data[8] = {
+/* burst #7305: PP_FUC/base off=0x1cc814 → 0x1cc830 (8 regs) */
+static const u32 zx_burst_7305_data[8] = {
 	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
 };
 
-/* burst #7745: PP_FUC/base off=0x1cc9e0 → 0x1cca20 (17 regs) */
-static const u32 zx_burst_7745_data[17] = {
+/* burst #7313: PP_FUC/base off=0x1cc9e0 → 0x1cca20 (17 regs) */
+static const u32 zx_burst_7313_data[17] = {
 	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
 	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
 	0x0b5d0000,
 };
 
-/* burst #7746: PP_FUC/base off=0x1cca60 → 0x1cca84 (10 regs) */
-static const u32 zx_burst_7746_data[10] = {
+/* burst #7314: PP_FUC/base off=0x1cca60 → 0x1cca84 (10 regs) */
+static const u32 zx_burst_7314_data[10] = {
 	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
 	0x002d3e30, 0x0001726a,
 };
 
-/* burst #7747: PP_FUC/base off=0x1cca90 → 0x1cca9c (4 regs) */
-static const u32 zx_burst_7747_data[4] = {
+/* burst #7315: PP_FUC/base off=0x1cca90 → 0x1cca9c (4 regs) */
+static const u32 zx_burst_7315_data[4] = {
 	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
 };
 
-/* burst #7749: PP_FUC/base off=0x1ccb94 → 0x1ccbb0 (8 regs) */
-static const u32 zx_burst_7749_data[8] = {
+/* burst #7317: PP_FUC/base off=0x1ccb94 → 0x1ccbb0 (8 regs) */
+static const u32 zx_burst_7317_data[8] = {
 	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
 };
 
-/* burst #7752: PP_FUC/base off=0x1ccbe0 → 0x1ccbf8 (7 regs) */
-static const u32 zx_burst_7752_data[7] = {
+/* burst #7320: PP_FUC/base off=0x1ccbe0 → 0x1ccbf8 (7 regs) */
+static const u32 zx_burst_7320_data[7] = {
 	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
 };
 
-/* burst #7753: PP_FUC/base off=0x1cd014 → 0x1cd030 (8 regs) */
-static const u32 zx_burst_7753_data[8] = {
+/* burst #7321: PP_FUC/base off=0x1cd014 → 0x1cd030 (8 regs) */
+static const u32 zx_burst_7321_data[8] = {
 	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
 };
 
-/* burst #7761: PP_FUC/base off=0x1cd1e0 → 0x1cd220 (17 regs) */
-static const u32 zx_burst_7761_data[17] = {
+/* burst #7329: PP_FUC/base off=0x1cd1e0 → 0x1cd220 (17 regs) */
+static const u32 zx_burst_7329_data[17] = {
 	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
 	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
 	0x0b5d0000,
 };
 
-/* burst #7762: PP_FUC/base off=0x1cd260 → 0x1cd284 (10 regs) */
-static const u32 zx_burst_7762_data[10] = {
+/* burst #7330: PP_FUC/base off=0x1cd260 → 0x1cd284 (10 regs) */
+static const u32 zx_burst_7330_data[10] = {
 	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
 	0x002d3e30, 0x0001726a,
 };
 
-/* burst #7763: PP_FUC/base off=0x1cd290 → 0x1cd29c (4 regs) */
-static const u32 zx_burst_7763_data[4] = {
+/* burst #7331: PP_FUC/base off=0x1cd290 → 0x1cd29c (4 regs) */
+static const u32 zx_burst_7331_data[4] = {
 	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
 };
 
-/* burst #7765: PP_FUC/base off=0x1cd394 → 0x1cd3b0 (8 regs) */
-static const u32 zx_burst_7765_data[8] = {
+/* burst #7333: PP_FUC/base off=0x1cd394 → 0x1cd3b0 (8 regs) */
+static const u32 zx_burst_7333_data[8] = {
 	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
 };
 
-/* burst #7768: PP_FUC/base off=0x1cd3e0 → 0x1cd3f8 (7 regs) */
-static const u32 zx_burst_7768_data[7] = {
+/* burst #7336: PP_FUC/base off=0x1cd3e0 → 0x1cd3f8 (7 regs) */
+static const u32 zx_burst_7336_data[7] = {
 	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
 };
 
-/* burst #7769: PP_FUC/base off=0x1cd814 → 0x1cd830 (8 regs) */
+/* burst #7337: PP_FUC/base off=0x1cd814 → 0x1cd830 (8 regs) */
+static const u32 zx_burst_7337_data[8] = {
+	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
+};
+
+/* burst #7345: PP_FUC/base off=0x1cd9e0 → 0x1cda20 (17 regs) */
+static const u32 zx_burst_7345_data[17] = {
+	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
+	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
+	0x0b5d0000,
+};
+
+/* burst #7346: PP_FUC/base off=0x1cda60 → 0x1cda84 (10 regs) */
+static const u32 zx_burst_7346_data[10] = {
+	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
+	0x002d3e30, 0x0001726a,
+};
+
+/* burst #7347: PP_FUC/base off=0x1cda90 → 0x1cda9c (4 regs) */
+static const u32 zx_burst_7347_data[4] = {
+	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
+};
+
+/* burst #7349: PP_FUC/base off=0x1cdb94 → 0x1cdbb0 (8 regs) */
+static const u32 zx_burst_7349_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
+};
+
+/* burst #7352: PP_FUC/base off=0x1cdbe0 → 0x1cdbf8 (7 regs) */
+static const u32 zx_burst_7352_data[7] = {
+	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
+};
+
+/* burst #7353: PP_FUC/base off=0x1ce014 → 0x1ce030 (8 regs) */
+static const u32 zx_burst_7353_data[8] = {
+	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
+};
+
+/* burst #7361: PP_FUC/base off=0x1ce1e0 → 0x1ce220 (17 regs) */
+static const u32 zx_burst_7361_data[17] = {
+	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
+	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
+	0x0b5d0000,
+};
+
+/* burst #7362: PP_FUC/base off=0x1ce260 → 0x1ce284 (10 regs) */
+static const u32 zx_burst_7362_data[10] = {
+	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
+	0x002d3e30, 0x0001726a,
+};
+
+/* burst #7363: PP_FUC/base off=0x1ce290 → 0x1ce29c (4 regs) */
+static const u32 zx_burst_7363_data[4] = {
+	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
+};
+
+/* burst #7365: PP_FUC/base off=0x1ce394 → 0x1ce3b0 (8 regs) */
+static const u32 zx_burst_7365_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
+};
+
+/* burst #7368: PP_FUC/base off=0x1ce3e0 → 0x1ce3f8 (7 regs) */
+static const u32 zx_burst_7368_data[7] = {
+	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
+};
+
+/* burst #7369: PP_FUC/base off=0x1ce814 → 0x1ce830 (8 regs) */
+static const u32 zx_burst_7369_data[8] = {
+	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
+};
+
+/* burst #7377: PP_FUC/base off=0x1ce9e0 → 0x1cea20 (17 regs) */
+static const u32 zx_burst_7377_data[17] = {
+	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
+	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
+	0x0b5d0000,
+};
+
+/* burst #7378: PP_FUC/base off=0x1cea60 → 0x1cea84 (10 regs) */
+static const u32 zx_burst_7378_data[10] = {
+	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
+	0x002d3e30, 0x0001726a,
+};
+
+/* burst #7379: PP_FUC/base off=0x1cea90 → 0x1cea9c (4 regs) */
+static const u32 zx_burst_7379_data[4] = {
+	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
+};
+
+/* burst #7381: PP_FUC/base off=0x1ceb94 → 0x1cebb0 (8 regs) */
+static const u32 zx_burst_7381_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
+};
+
+/* burst #7384: PP_FUC/base off=0x1cebe0 → 0x1cebf8 (7 regs) */
+static const u32 zx_burst_7384_data[7] = {
+	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
+};
+
+/* burst #7385: PP_FUC/base off=0x1cf014 → 0x1cf030 (8 regs) */
+static const u32 zx_burst_7385_data[8] = {
+	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
+};
+
+/* burst #7393: PP_FUC/base off=0x1cf1e0 → 0x1cf220 (17 regs) */
+static const u32 zx_burst_7393_data[17] = {
+	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
+	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
+	0x0b5d0000,
+};
+
+/* burst #7394: PP_FUC/base off=0x1cf260 → 0x1cf284 (10 regs) */
+static const u32 zx_burst_7394_data[10] = {
+	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
+	0x002d3e30, 0x0001726a,
+};
+
+/* burst #7395: PP_FUC/base off=0x1cf290 → 0x1cf29c (4 regs) */
+static const u32 zx_burst_7395_data[4] = {
+	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
+};
+
+/* burst #7397: PP_FUC/base off=0x1cf394 → 0x1cf3b0 (8 regs) */
+static const u32 zx_burst_7397_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
+};
+
+/* burst #7400: PP_FUC/base off=0x1cf3e0 → 0x1cf3f8 (7 regs) */
+static const u32 zx_burst_7400_data[7] = {
+	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
+};
+
+/* burst #7401: PP_FUC/base off=0x1cf814 → 0x1cf830 (8 regs) */
+static const u32 zx_burst_7401_data[8] = {
+	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
+};
+
+/* burst #7409: PP_FUC/base off=0x1cf9e0 → 0x1cfa20 (17 regs) */
+static const u32 zx_burst_7409_data[17] = {
+	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
+	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
+	0x0b5d0000,
+};
+
+/* burst #7410: PP_FUC/base off=0x1cfa60 → 0x1cfa84 (10 regs) */
+static const u32 zx_burst_7410_data[10] = {
+	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
+	0x002d3e30, 0x0001726a,
+};
+
+/* burst #7411: PP_FUC/base off=0x1cfa90 → 0x1cfa9c (4 regs) */
+static const u32 zx_burst_7411_data[4] = {
+	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
+};
+
+/* burst #7413: PP_FUC/base off=0x1cfb94 → 0x1cfbb0 (8 regs) */
+static const u32 zx_burst_7413_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
+};
+
+/* burst #7416: PP_FUC/base off=0x1cfbe0 → 0x1cfbf8 (7 regs) */
+static const u32 zx_burst_7416_data[7] = {
+	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
+};
+
+/* burst #7424: PP_FUC/base off=0x1d4148 → 0x1d4154 (4 regs) */
+static const u32 zx_burst_7424_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7427: PP_FUC/base off=0x1d4240 → 0x1d425c (8 regs) */
+static const u32 zx_burst_7427_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7435: PP_FUC/base off=0x1d4548 → 0x1d4554 (4 regs) */
+static const u32 zx_burst_7435_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7438: PP_FUC/base off=0x1d4640 → 0x1d465c (8 regs) */
+static const u32 zx_burst_7438_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7446: PP_FUC/base off=0x1d4948 → 0x1d4954 (4 regs) */
+static const u32 zx_burst_7446_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7449: PP_FUC/base off=0x1d4a40 → 0x1d4a5c (8 regs) */
+static const u32 zx_burst_7449_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7457: PP_FUC/base off=0x1d4d48 → 0x1d4d54 (4 regs) */
+static const u32 zx_burst_7457_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7460: PP_FUC/base off=0x1d4e40 → 0x1d4e5c (8 regs) */
+static const u32 zx_burst_7460_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7468: PP_FUC/base off=0x1d5148 → 0x1d5154 (4 regs) */
+static const u32 zx_burst_7468_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7471: PP_FUC/base off=0x1d5240 → 0x1d525c (8 regs) */
+static const u32 zx_burst_7471_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7479: PP_FUC/base off=0x1d5548 → 0x1d5554 (4 regs) */
+static const u32 zx_burst_7479_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7482: PP_FUC/base off=0x1d5640 → 0x1d565c (8 regs) */
+static const u32 zx_burst_7482_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7490: PP_FUC/base off=0x1d5948 → 0x1d5954 (4 regs) */
+static const u32 zx_burst_7490_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7493: PP_FUC/base off=0x1d5a40 → 0x1d5a5c (8 regs) */
+static const u32 zx_burst_7493_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7501: PP_FUC/base off=0x1d5d48 → 0x1d5d54 (4 regs) */
+static const u32 zx_burst_7501_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7504: PP_FUC/base off=0x1d5e40 → 0x1d5e5c (8 regs) */
+static const u32 zx_burst_7504_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7512: PP_FUC/base off=0x1d6148 → 0x1d6154 (4 regs) */
+static const u32 zx_burst_7512_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7515: PP_FUC/base off=0x1d6240 → 0x1d625c (8 regs) */
+static const u32 zx_burst_7515_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7523: PP_FUC/base off=0x1d6548 → 0x1d6554 (4 regs) */
+static const u32 zx_burst_7523_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7526: PP_FUC/base off=0x1d6640 → 0x1d665c (8 regs) */
+static const u32 zx_burst_7526_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7534: PP_FUC/base off=0x1d6948 → 0x1d6954 (4 regs) */
+static const u32 zx_burst_7534_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7537: PP_FUC/base off=0x1d6a40 → 0x1d6a5c (8 regs) */
+static const u32 zx_burst_7537_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7545: PP_FUC/base off=0x1d6d48 → 0x1d6d54 (4 regs) */
+static const u32 zx_burst_7545_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7548: PP_FUC/base off=0x1d6e40 → 0x1d6e5c (8 regs) */
+static const u32 zx_burst_7548_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7556: PP_FUC/base off=0x1d7148 → 0x1d7154 (4 regs) */
+static const u32 zx_burst_7556_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7559: PP_FUC/base off=0x1d7240 → 0x1d725c (8 regs) */
+static const u32 zx_burst_7559_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7567: PP_FUC/base off=0x1d7548 → 0x1d7554 (4 regs) */
+static const u32 zx_burst_7567_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7570: PP_FUC/base off=0x1d7640 → 0x1d765c (8 regs) */
+static const u32 zx_burst_7570_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7578: PP_FUC/base off=0x1d7948 → 0x1d7954 (4 regs) */
+static const u32 zx_burst_7578_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7581: PP_FUC/base off=0x1d7a40 → 0x1d7a5c (8 regs) */
+static const u32 zx_burst_7581_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7589: PP_FUC/base off=0x1d7d48 → 0x1d7d54 (4 regs) */
+static const u32 zx_burst_7589_data[4] = {
+	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
+};
+
+/* burst #7592: PP_FUC/base off=0x1d7e40 → 0x1d7e5c (8 regs) */
+static const u32 zx_burst_7592_data[8] = {
+	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
+};
+
+/* burst #7597: PP_FUC/base off=0x1d8080 → 0x1d80c4 (18 regs) */
+static const u32 zx_burst_7597_data[18] = {
+	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
+	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
+	0x00688688, 0x00688688,
+};
+
+/* burst #7600: PP_FUC/base off=0x1d8124 → 0x1d8134 (5 regs) */
+static const u32 zx_burst_7600_data[5] = {
+	0x28d100c6, 0x1003461a, 0x40100000, 0x00060000, 0x000102c2,
+};
+
+/* burst #7601: PP_FUC/base off=0x1d8140 → 0x1d814c (4 regs) */
+static const u32 zx_burst_7601_data[4] = {
+	0x2387a132, 0xac807a7b, 0xe451b174, 0x60540080,
+};
+
+/* burst #7608: PP_FUC/base off=0x1d9080 → 0x1d90c4 (18 regs) */
+static const u32 zx_burst_7608_data[18] = {
+	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
+	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
+	0x00688688, 0x00688688,
+};
+
+/* burst #7611: PP_FUC/base off=0x1d9124 → 0x1d9134 (5 regs) */
+static const u32 zx_burst_7611_data[5] = {
+	0x28d100c6, 0x1003461a, 0x40100000, 0x00060000, 0x000102c2,
+};
+
+/* burst #7612: PP_FUC/base off=0x1d9140 → 0x1d914c (4 regs) */
+static const u32 zx_burst_7612_data[4] = {
+	0x2387a132, 0xac807a7b, 0xe451b174, 0x60540080,
+};
+
+/* burst #7619: PP_FUC/base off=0x1da080 → 0x1da0c4 (18 regs) */
+static const u32 zx_burst_7619_data[18] = {
+	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
+	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
+	0x00688688, 0x00688688,
+};
+
+/* burst #7622: PP_FUC/base off=0x1da124 → 0x1da134 (5 regs) */
+static const u32 zx_burst_7622_data[5] = {
+	0x28d100c6, 0x1003461a, 0x40100000, 0x00060000, 0x000102c2,
+};
+
+/* burst #7623: PP_FUC/base off=0x1da140 → 0x1da14c (4 regs) */
+static const u32 zx_burst_7623_data[4] = {
+	0x2387a132, 0xac807a7b, 0xe451b174, 0x60540080,
+};
+
+/* burst #7630: PP_FUC/base off=0x1db080 → 0x1db0c4 (18 regs) */
+static const u32 zx_burst_7630_data[18] = {
+	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
+	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
+	0x00688688, 0x00688688,
+};
+
+/* burst #7633: PP_FUC/base off=0x1db124 → 0x1db134 (5 regs) */
+static const u32 zx_burst_7633_data[5] = {
+	0x28d100c6, 0x1003461a, 0x40100000, 0x00060000, 0x000102c2,
+};
+
+/* burst #7634: PP_FUC/base off=0x1db140 → 0x1db14c (4 regs) */
+static const u32 zx_burst_7634_data[4] = {
+	0x2387a132, 0xac807a7b, 0xe451b174, 0x60540080,
+};
+
+/* burst #7637: PP_FUC/base off=0x1dc014 → 0x1dc020 (4 regs) */
+static const u32 zx_burst_7637_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7639: PP_FUC/base off=0x1dc080 → 0x1dc098 (7 regs) */
+static const u32 zx_burst_7639_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7641: PP_FUC/base off=0x1dc0b8 → 0x1dc0d4 (8 regs) */
+static const u32 zx_burst_7641_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7644: PP_FUC/base off=0x1dc414 → 0x1dc420 (4 regs) */
+static const u32 zx_burst_7644_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7646: PP_FUC/base off=0x1dc480 → 0x1dc498 (7 regs) */
+static const u32 zx_burst_7646_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7648: PP_FUC/base off=0x1dc4b8 → 0x1dc4d4 (8 regs) */
+static const u32 zx_burst_7648_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7651: PP_FUC/base off=0x1dc814 → 0x1dc820 (4 regs) */
+static const u32 zx_burst_7651_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7653: PP_FUC/base off=0x1dc880 → 0x1dc898 (7 regs) */
+static const u32 zx_burst_7653_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7655: PP_FUC/base off=0x1dc8b8 → 0x1dc8d4 (8 regs) */
+static const u32 zx_burst_7655_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7658: PP_FUC/base off=0x1dcc14 → 0x1dcc20 (4 regs) */
+static const u32 zx_burst_7658_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7660: PP_FUC/base off=0x1dcc80 → 0x1dcc98 (7 regs) */
+static const u32 zx_burst_7660_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7662: PP_FUC/base off=0x1dccb8 → 0x1dccd4 (8 regs) */
+static const u32 zx_burst_7662_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7665: PP_FUC/base off=0x1dd014 → 0x1dd020 (4 regs) */
+static const u32 zx_burst_7665_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7667: PP_FUC/base off=0x1dd080 → 0x1dd098 (7 regs) */
+static const u32 zx_burst_7667_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7669: PP_FUC/base off=0x1dd0b8 → 0x1dd0d4 (8 regs) */
+static const u32 zx_burst_7669_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7672: PP_FUC/base off=0x1dd414 → 0x1dd420 (4 regs) */
+static const u32 zx_burst_7672_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7674: PP_FUC/base off=0x1dd480 → 0x1dd498 (7 regs) */
+static const u32 zx_burst_7674_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7676: PP_FUC/base off=0x1dd4b8 → 0x1dd4d4 (8 regs) */
+static const u32 zx_burst_7676_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7679: PP_FUC/base off=0x1dd814 → 0x1dd820 (4 regs) */
+static const u32 zx_burst_7679_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7681: PP_FUC/base off=0x1dd880 → 0x1dd898 (7 regs) */
+static const u32 zx_burst_7681_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7683: PP_FUC/base off=0x1dd8b8 → 0x1dd8d4 (8 regs) */
+static const u32 zx_burst_7683_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7686: PP_FUC/base off=0x1ddc14 → 0x1ddc20 (4 regs) */
+static const u32 zx_burst_7686_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7688: PP_FUC/base off=0x1ddc80 → 0x1ddc98 (7 regs) */
+static const u32 zx_burst_7688_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7690: PP_FUC/base off=0x1ddcb8 → 0x1ddcd4 (8 regs) */
+static const u32 zx_burst_7690_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7693: PP_FUC/base off=0x1de014 → 0x1de020 (4 regs) */
+static const u32 zx_burst_7693_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7695: PP_FUC/base off=0x1de080 → 0x1de098 (7 regs) */
+static const u32 zx_burst_7695_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7697: PP_FUC/base off=0x1de0b8 → 0x1de0d4 (8 regs) */
+static const u32 zx_burst_7697_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7700: PP_FUC/base off=0x1de414 → 0x1de420 (4 regs) */
+static const u32 zx_burst_7700_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7702: PP_FUC/base off=0x1de480 → 0x1de498 (7 regs) */
+static const u32 zx_burst_7702_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7704: PP_FUC/base off=0x1de4b8 → 0x1de4d4 (8 regs) */
+static const u32 zx_burst_7704_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7707: PP_FUC/base off=0x1de814 → 0x1de820 (4 regs) */
+static const u32 zx_burst_7707_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7709: PP_FUC/base off=0x1de880 → 0x1de898 (7 regs) */
+static const u32 zx_burst_7709_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7711: PP_FUC/base off=0x1de8b8 → 0x1de8d4 (8 regs) */
+static const u32 zx_burst_7711_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7714: PP_FUC/base off=0x1dec14 → 0x1dec20 (4 regs) */
+static const u32 zx_burst_7714_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7716: PP_FUC/base off=0x1dec80 → 0x1dec98 (7 regs) */
+static const u32 zx_burst_7716_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7718: PP_FUC/base off=0x1decb8 → 0x1decd4 (8 regs) */
+static const u32 zx_burst_7718_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7721: PP_FUC/base off=0x1df014 → 0x1df020 (4 regs) */
+static const u32 zx_burst_7721_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7723: PP_FUC/base off=0x1df080 → 0x1df098 (7 regs) */
+static const u32 zx_burst_7723_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7725: PP_FUC/base off=0x1df0b8 → 0x1df0d4 (8 regs) */
+static const u32 zx_burst_7725_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7728: PP_FUC/base off=0x1df414 → 0x1df420 (4 regs) */
+static const u32 zx_burst_7728_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7730: PP_FUC/base off=0x1df480 → 0x1df498 (7 regs) */
+static const u32 zx_burst_7730_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7732: PP_FUC/base off=0x1df4b8 → 0x1df4d4 (8 regs) */
+static const u32 zx_burst_7732_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7735: PP_FUC/base off=0x1df814 → 0x1df820 (4 regs) */
+static const u32 zx_burst_7735_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7737: PP_FUC/base off=0x1df880 → 0x1df898 (7 regs) */
+static const u32 zx_burst_7737_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7739: PP_FUC/base off=0x1df8b8 → 0x1df8d4 (8 regs) */
+static const u32 zx_burst_7739_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7742: PP_FUC/base off=0x1dfc14 → 0x1dfc20 (4 regs) */
+static const u32 zx_burst_7742_data[4] = {
+	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
+};
+
+/* burst #7744: PP_FUC/base off=0x1dfc80 → 0x1dfc98 (7 regs) */
+static const u32 zx_burst_7744_data[7] = {
+	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
+};
+
+/* burst #7746: PP_FUC/base off=0x1dfcb8 → 0x1dfcd4 (8 regs) */
+static const u32 zx_burst_7746_data[8] = {
+	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
+};
+
+/* burst #7750: PP_FUC/base off=0x1e001c → 0x1e002c (5 regs) */
+static const u32 zx_burst_7750_data[5] = {
+	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
+};
+
+/* burst #7751: PP_FUC/base off=0x1e0118 → 0x1e0134 (8 regs) */
+static const u32 zx_burst_7751_data[8] = {
+	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
+};
+
+/* burst #7754: PP_FUC/base off=0x1e03e0 → 0x1e03fc (8 regs) */
+static const u32 zx_burst_7754_data[8] = {
+	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
+};
+
+/* burst #7756: PP_FUC/base off=0x1e081c → 0x1e082c (5 regs) */
+static const u32 zx_burst_7756_data[5] = {
+	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
+};
+
+/* burst #7757: PP_FUC/base off=0x1e0918 → 0x1e0934 (8 regs) */
+static const u32 zx_burst_7757_data[8] = {
+	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
+};
+
+/* burst #7760: PP_FUC/base off=0x1e0be0 → 0x1e0bfc (8 regs) */
+static const u32 zx_burst_7760_data[8] = {
+	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
+};
+
+/* burst #7762: PP_FUC/base off=0x1e101c → 0x1e102c (5 regs) */
+static const u32 zx_burst_7762_data[5] = {
+	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
+};
+
+/* burst #7763: PP_FUC/base off=0x1e1118 → 0x1e1134 (8 regs) */
+static const u32 zx_burst_7763_data[8] = {
+	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
+};
+
+/* burst #7766: PP_FUC/base off=0x1e13e0 → 0x1e13fc (8 regs) */
+static const u32 zx_burst_7766_data[8] = {
+	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
+};
+
+/* burst #7768: PP_FUC/base off=0x1e181c → 0x1e182c (5 regs) */
+static const u32 zx_burst_7768_data[5] = {
+	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
+};
+
+/* burst #7769: PP_FUC/base off=0x1e1918 → 0x1e1934 (8 regs) */
 static const u32 zx_burst_7769_data[8] = {
-	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
+	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
 };
 
-/* burst #7777: PP_FUC/base off=0x1cd9e0 → 0x1cda20 (17 regs) */
-static const u32 zx_burst_7777_data[17] = {
-	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
-	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
-	0x0b5d0000,
+/* burst #7772: PP_FUC/base off=0x1e1be0 → 0x1e1bfc (8 regs) */
+static const u32 zx_burst_7772_data[8] = {
+	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
 };
 
-/* burst #7778: PP_FUC/base off=0x1cda60 → 0x1cda84 (10 regs) */
-static const u32 zx_burst_7778_data[10] = {
-	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
-	0x002d3e30, 0x0001726a,
+/* burst #7774: PP_FUC/base off=0x1e201c → 0x1e202c (5 regs) */
+static const u32 zx_burst_7774_data[5] = {
+	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
 };
 
-/* burst #7779: PP_FUC/base off=0x1cda90 → 0x1cda9c (4 regs) */
-static const u32 zx_burst_7779_data[4] = {
-	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
+/* burst #7775: PP_FUC/base off=0x1e2118 → 0x1e2134 (8 regs) */
+static const u32 zx_burst_7775_data[8] = {
+	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
 };
 
-/* burst #7781: PP_FUC/base off=0x1cdb94 → 0x1cdbb0 (8 regs) */
+/* burst #7778: PP_FUC/base off=0x1e23e0 → 0x1e23fc (8 regs) */
+static const u32 zx_burst_7778_data[8] = {
+	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
+};
+
+/* burst #7780: PP_FUC/base off=0x1e281c → 0x1e282c (5 regs) */
+static const u32 zx_burst_7780_data[5] = {
+	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
+};
+
+/* burst #7781: PP_FUC/base off=0x1e2918 → 0x1e2934 (8 regs) */
 static const u32 zx_burst_7781_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
-};
-
-/* burst #7784: PP_FUC/base off=0x1cdbe0 → 0x1cdbf8 (7 regs) */
-static const u32 zx_burst_7784_data[7] = {
-	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
-};
-
-/* burst #7785: PP_FUC/base off=0x1ce014 → 0x1ce030 (8 regs) */
-static const u32 zx_burst_7785_data[8] = {
-	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
-};
-
-/* burst #7793: PP_FUC/base off=0x1ce1e0 → 0x1ce220 (17 regs) */
-static const u32 zx_burst_7793_data[17] = {
-	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
-	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
-	0x0b5d0000,
-};
-
-/* burst #7794: PP_FUC/base off=0x1ce260 → 0x1ce284 (10 regs) */
-static const u32 zx_burst_7794_data[10] = {
-	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
-	0x002d3e30, 0x0001726a,
-};
-
-/* burst #7795: PP_FUC/base off=0x1ce290 → 0x1ce29c (4 regs) */
-static const u32 zx_burst_7795_data[4] = {
-	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
-};
-
-/* burst #7797: PP_FUC/base off=0x1ce394 → 0x1ce3b0 (8 regs) */
-static const u32 zx_burst_7797_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
-};
-
-/* burst #7800: PP_FUC/base off=0x1ce3e0 → 0x1ce3f8 (7 regs) */
-static const u32 zx_burst_7800_data[7] = {
-	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
-};
-
-/* burst #7801: PP_FUC/base off=0x1ce814 → 0x1ce830 (8 regs) */
-static const u32 zx_burst_7801_data[8] = {
-	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
-};
-
-/* burst #7809: PP_FUC/base off=0x1ce9e0 → 0x1cea20 (17 regs) */
-static const u32 zx_burst_7809_data[17] = {
-	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
-	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
-	0x0b5d0000,
-};
-
-/* burst #7810: PP_FUC/base off=0x1cea60 → 0x1cea84 (10 regs) */
-static const u32 zx_burst_7810_data[10] = {
-	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
-	0x002d3e30, 0x0001726a,
-};
-
-/* burst #7811: PP_FUC/base off=0x1cea90 → 0x1cea9c (4 regs) */
-static const u32 zx_burst_7811_data[4] = {
-	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
-};
-
-/* burst #7813: PP_FUC/base off=0x1ceb94 → 0x1cebb0 (8 regs) */
-static const u32 zx_burst_7813_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
-};
-
-/* burst #7816: PP_FUC/base off=0x1cebe0 → 0x1cebf8 (7 regs) */
-static const u32 zx_burst_7816_data[7] = {
-	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
-};
-
-/* burst #7817: PP_FUC/base off=0x1cf014 → 0x1cf030 (8 regs) */
-static const u32 zx_burst_7817_data[8] = {
-	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
-};
-
-/* burst #7825: PP_FUC/base off=0x1cf1e0 → 0x1cf220 (17 regs) */
-static const u32 zx_burst_7825_data[17] = {
-	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
-	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
-	0x0b5d0000,
-};
-
-/* burst #7826: PP_FUC/base off=0x1cf260 → 0x1cf284 (10 regs) */
-static const u32 zx_burst_7826_data[10] = {
-	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
-	0x002d3e30, 0x0001726a,
-};
-
-/* burst #7827: PP_FUC/base off=0x1cf290 → 0x1cf29c (4 regs) */
-static const u32 zx_burst_7827_data[4] = {
-	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
-};
-
-/* burst #7829: PP_FUC/base off=0x1cf394 → 0x1cf3b0 (8 regs) */
-static const u32 zx_burst_7829_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
-};
-
-/* burst #7832: PP_FUC/base off=0x1cf3e0 → 0x1cf3f8 (7 regs) */
-static const u32 zx_burst_7832_data[7] = {
-	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
-};
-
-/* burst #7833: PP_FUC/base off=0x1cf814 → 0x1cf830 (8 regs) */
-static const u32 zx_burst_7833_data[8] = {
-	0x00000004, 0x00000001, 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355, 0x00000ff0,
-};
-
-/* burst #7841: PP_FUC/base off=0x1cf9e0 → 0x1cfa20 (17 regs) */
-static const u32 zx_burst_7841_data[17] = {
-	0xf4f6470f, 0x4264c8a3, 0x62e95900, 0x08004500, 0x003463d7, 0x40004006, 0x5369c0a8, 0x0132c0a8,
-	0x01019f18, 0x0016b935, 0x3e5bc507, 0xb9bd8010, 0x004ba242, 0x00000101, 0x080a8773, 0xa8560000,
-	0x0b5d0000,
-};
-
-/* burst #7842: PP_FUC/base off=0x1cfa60 → 0x1cfa84 (10 regs) */
-static const u32 zx_burst_7842_data[10] = {
-	0x4b000000, 0xc5d39000, 0x1000b200, 0x00688a00, 0x8000c7ae, 0xa6d2800c, 0x02658150, 0x02038150,
-	0x002d3e30, 0x0001726a,
-};
-
-/* burst #7843: PP_FUC/base off=0x1cfa90 → 0x1cfa9c (4 regs) */
-static const u32 zx_burst_7843_data[4] = {
-	0x00000097, 0x0000006c, 0x00000001, 0x00000038,
-};
-
-/* burst #7845: PP_FUC/base off=0x1cfb94 → 0x1cfbb0 (8 regs) */
-static const u32 zx_burst_7845_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00840000,
-};
-
-/* burst #7848: PP_FUC/base off=0x1cfbe0 → 0x1cfbf8 (7 regs) */
-static const u32 zx_burst_7848_data[7] = {
-	0x40d1c042, 0x2843ff1a, 0x96000000, 0x81610841, 0x00001c18, 0x00000044, 0x00000055,
-};
-
-/* burst #7856: PP_FUC/base off=0x1d4148 → 0x1d4154 (4 regs) */
-static const u32 zx_burst_7856_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7859: PP_FUC/base off=0x1d4240 → 0x1d425c (8 regs) */
-static const u32 zx_burst_7859_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7867: PP_FUC/base off=0x1d4548 → 0x1d4554 (4 regs) */
-static const u32 zx_burst_7867_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7870: PP_FUC/base off=0x1d4640 → 0x1d465c (8 regs) */
-static const u32 zx_burst_7870_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7878: PP_FUC/base off=0x1d4948 → 0x1d4954 (4 regs) */
-static const u32 zx_burst_7878_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7881: PP_FUC/base off=0x1d4a40 → 0x1d4a5c (8 regs) */
-static const u32 zx_burst_7881_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7889: PP_FUC/base off=0x1d4d48 → 0x1d4d54 (4 regs) */
-static const u32 zx_burst_7889_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7892: PP_FUC/base off=0x1d4e40 → 0x1d4e5c (8 regs) */
-static const u32 zx_burst_7892_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7900: PP_FUC/base off=0x1d5148 → 0x1d5154 (4 regs) */
-static const u32 zx_burst_7900_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7903: PP_FUC/base off=0x1d5240 → 0x1d525c (8 regs) */
-static const u32 zx_burst_7903_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7911: PP_FUC/base off=0x1d5548 → 0x1d5554 (4 regs) */
-static const u32 zx_burst_7911_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7914: PP_FUC/base off=0x1d5640 → 0x1d565c (8 regs) */
-static const u32 zx_burst_7914_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7922: PP_FUC/base off=0x1d5948 → 0x1d5954 (4 regs) */
-static const u32 zx_burst_7922_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7925: PP_FUC/base off=0x1d5a40 → 0x1d5a5c (8 regs) */
-static const u32 zx_burst_7925_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7933: PP_FUC/base off=0x1d5d48 → 0x1d5d54 (4 regs) */
-static const u32 zx_burst_7933_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7936: PP_FUC/base off=0x1d5e40 → 0x1d5e5c (8 regs) */
-static const u32 zx_burst_7936_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7944: PP_FUC/base off=0x1d6148 → 0x1d6154 (4 regs) */
-static const u32 zx_burst_7944_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7947: PP_FUC/base off=0x1d6240 → 0x1d625c (8 regs) */
-static const u32 zx_burst_7947_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7955: PP_FUC/base off=0x1d6548 → 0x1d6554 (4 regs) */
-static const u32 zx_burst_7955_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7958: PP_FUC/base off=0x1d6640 → 0x1d665c (8 regs) */
-static const u32 zx_burst_7958_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7966: PP_FUC/base off=0x1d6948 → 0x1d6954 (4 regs) */
-static const u32 zx_burst_7966_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7969: PP_FUC/base off=0x1d6a40 → 0x1d6a5c (8 regs) */
-static const u32 zx_burst_7969_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7977: PP_FUC/base off=0x1d6d48 → 0x1d6d54 (4 regs) */
-static const u32 zx_burst_7977_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7980: PP_FUC/base off=0x1d6e40 → 0x1d6e5c (8 regs) */
-static const u32 zx_burst_7980_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7988: PP_FUC/base off=0x1d7148 → 0x1d7154 (4 regs) */
-static const u32 zx_burst_7988_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #7991: PP_FUC/base off=0x1d7240 → 0x1d725c (8 regs) */
-static const u32 zx_burst_7991_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #7999: PP_FUC/base off=0x1d7548 → 0x1d7554 (4 regs) */
-static const u32 zx_burst_7999_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #8002: PP_FUC/base off=0x1d7640 → 0x1d765c (8 regs) */
-static const u32 zx_burst_8002_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #8010: PP_FUC/base off=0x1d7948 → 0x1d7954 (4 regs) */
-static const u32 zx_burst_8010_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #8013: PP_FUC/base off=0x1d7a40 → 0x1d7a5c (8 regs) */
-static const u32 zx_burst_8013_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #8021: PP_FUC/base off=0x1d7d48 → 0x1d7d54 (4 regs) */
-static const u32 zx_burst_8021_data[4] = {
-	0x00000022, 0x000004d5, 0x0000001c, 0x00000012,
-};
-
-/* burst #8024: PP_FUC/base off=0x1d7e40 → 0x1d7e5c (8 regs) */
-static const u32 zx_burst_8024_data[8] = {
-	0x40d1c042, 0x2843ff1a, 0xaa200000, 0x81610841, 0x00000e0c, 0x80000022, 0x000000ea, 0x00021000,
-};
-
-/* burst #8029: PP_FUC/base off=0x1d8080 → 0x1d80c4 (18 regs) */
-static const u32 zx_burst_8029_data[18] = {
-	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
-	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
-	0x00688688, 0x00688688,
-};
-
-/* burst #8032: PP_FUC/base off=0x1d8124 → 0x1d8134 (5 regs) */
-static const u32 zx_burst_8032_data[5] = {
-	0x28d100c6, 0x1003461a, 0x40100000, 0x00060000, 0x000102c2,
-};
-
-/* burst #8033: PP_FUC/base off=0x1d8140 → 0x1d814c (4 regs) */
-static const u32 zx_burst_8033_data[4] = {
-	0x2387a132, 0xac807a7b, 0xe451b174, 0x60540080,
-};
-
-/* burst #8040: PP_FUC/base off=0x1d9080 → 0x1d90c4 (18 regs) */
-static const u32 zx_burst_8040_data[18] = {
-	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
-	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
-	0x00688688, 0x00688688,
-};
-
-/* burst #8043: PP_FUC/base off=0x1d9124 → 0x1d9134 (5 regs) */
-static const u32 zx_burst_8043_data[5] = {
-	0x28d100c6, 0x1003461a, 0x40100000, 0x00060000, 0x000102c2,
-};
-
-/* burst #8044: PP_FUC/base off=0x1d9140 → 0x1d914c (4 regs) */
-static const u32 zx_burst_8044_data[4] = {
-	0x2387a132, 0xac807a7b, 0xe451b174, 0x60540080,
-};
-
-/* burst #8051: PP_FUC/base off=0x1da080 → 0x1da0c4 (18 regs) */
-static const u32 zx_burst_8051_data[18] = {
-	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
-	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
-	0x00688688, 0x00688688,
-};
-
-/* burst #8054: PP_FUC/base off=0x1da124 → 0x1da134 (5 regs) */
-static const u32 zx_burst_8054_data[5] = {
-	0x28d100c6, 0x1003461a, 0x40100000, 0x00060000, 0x000102c2,
-};
-
-/* burst #8055: PP_FUC/base off=0x1da140 → 0x1da14c (4 regs) */
-static const u32 zx_burst_8055_data[4] = {
-	0x2387a132, 0xac807a7b, 0xe451b174, 0x60540080,
-};
-
-/* burst #8062: PP_FUC/base off=0x1db080 → 0x1db0c4 (18 regs) */
-static const u32 zx_burst_8062_data[18] = {
-	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
-	0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688, 0x00688688,
-	0x00688688, 0x00688688,
-};
-
-/* burst #8065: PP_FUC/base off=0x1db124 → 0x1db134 (5 regs) */
-static const u32 zx_burst_8065_data[5] = {
-	0x28d100c6, 0x1003461a, 0x40100000, 0x00060000, 0x000102c2,
-};
-
-/* burst #8066: PP_FUC/base off=0x1db140 → 0x1db14c (4 regs) */
-static const u32 zx_burst_8066_data[4] = {
-	0x2387a132, 0xac807a7b, 0xe451b174, 0x60540080,
-};
-
-/* burst #8069: PP_FUC/base off=0x1dc014 → 0x1dc020 (4 regs) */
-static const u32 zx_burst_8069_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8071: PP_FUC/base off=0x1dc080 → 0x1dc098 (7 regs) */
-static const u32 zx_burst_8071_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8073: PP_FUC/base off=0x1dc0b8 → 0x1dc0d4 (8 regs) */
-static const u32 zx_burst_8073_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8076: PP_FUC/base off=0x1dc414 → 0x1dc420 (4 regs) */
-static const u32 zx_burst_8076_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8078: PP_FUC/base off=0x1dc480 → 0x1dc498 (7 regs) */
-static const u32 zx_burst_8078_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8080: PP_FUC/base off=0x1dc4b8 → 0x1dc4d4 (8 regs) */
-static const u32 zx_burst_8080_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8083: PP_FUC/base off=0x1dc814 → 0x1dc820 (4 regs) */
-static const u32 zx_burst_8083_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8085: PP_FUC/base off=0x1dc880 → 0x1dc898 (7 regs) */
-static const u32 zx_burst_8085_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8087: PP_FUC/base off=0x1dc8b8 → 0x1dc8d4 (8 regs) */
-static const u32 zx_burst_8087_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8090: PP_FUC/base off=0x1dcc14 → 0x1dcc20 (4 regs) */
-static const u32 zx_burst_8090_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8092: PP_FUC/base off=0x1dcc80 → 0x1dcc98 (7 regs) */
-static const u32 zx_burst_8092_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8094: PP_FUC/base off=0x1dccb8 → 0x1dccd4 (8 regs) */
-static const u32 zx_burst_8094_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8097: PP_FUC/base off=0x1dd014 → 0x1dd020 (4 regs) */
-static const u32 zx_burst_8097_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8099: PP_FUC/base off=0x1dd080 → 0x1dd098 (7 regs) */
-static const u32 zx_burst_8099_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8101: PP_FUC/base off=0x1dd0b8 → 0x1dd0d4 (8 regs) */
-static const u32 zx_burst_8101_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8104: PP_FUC/base off=0x1dd414 → 0x1dd420 (4 regs) */
-static const u32 zx_burst_8104_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8106: PP_FUC/base off=0x1dd480 → 0x1dd498 (7 regs) */
-static const u32 zx_burst_8106_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8108: PP_FUC/base off=0x1dd4b8 → 0x1dd4d4 (8 regs) */
-static const u32 zx_burst_8108_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8111: PP_FUC/base off=0x1dd814 → 0x1dd820 (4 regs) */
-static const u32 zx_burst_8111_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8113: PP_FUC/base off=0x1dd880 → 0x1dd898 (7 regs) */
-static const u32 zx_burst_8113_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8115: PP_FUC/base off=0x1dd8b8 → 0x1dd8d4 (8 regs) */
-static const u32 zx_burst_8115_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8118: PP_FUC/base off=0x1ddc14 → 0x1ddc20 (4 regs) */
-static const u32 zx_burst_8118_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8120: PP_FUC/base off=0x1ddc80 → 0x1ddc98 (7 regs) */
-static const u32 zx_burst_8120_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8122: PP_FUC/base off=0x1ddcb8 → 0x1ddcd4 (8 regs) */
-static const u32 zx_burst_8122_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8125: PP_FUC/base off=0x1de014 → 0x1de020 (4 regs) */
-static const u32 zx_burst_8125_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8127: PP_FUC/base off=0x1de080 → 0x1de098 (7 regs) */
-static const u32 zx_burst_8127_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8129: PP_FUC/base off=0x1de0b8 → 0x1de0d4 (8 regs) */
-static const u32 zx_burst_8129_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8132: PP_FUC/base off=0x1de414 → 0x1de420 (4 regs) */
-static const u32 zx_burst_8132_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8134: PP_FUC/base off=0x1de480 → 0x1de498 (7 regs) */
-static const u32 zx_burst_8134_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8136: PP_FUC/base off=0x1de4b8 → 0x1de4d4 (8 regs) */
-static const u32 zx_burst_8136_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8139: PP_FUC/base off=0x1de814 → 0x1de820 (4 regs) */
-static const u32 zx_burst_8139_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8141: PP_FUC/base off=0x1de880 → 0x1de898 (7 regs) */
-static const u32 zx_burst_8141_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8143: PP_FUC/base off=0x1de8b8 → 0x1de8d4 (8 regs) */
-static const u32 zx_burst_8143_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8146: PP_FUC/base off=0x1dec14 → 0x1dec20 (4 regs) */
-static const u32 zx_burst_8146_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8148: PP_FUC/base off=0x1dec80 → 0x1dec98 (7 regs) */
-static const u32 zx_burst_8148_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8150: PP_FUC/base off=0x1decb8 → 0x1decd4 (8 regs) */
-static const u32 zx_burst_8150_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8153: PP_FUC/base off=0x1df014 → 0x1df020 (4 regs) */
-static const u32 zx_burst_8153_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8155: PP_FUC/base off=0x1df080 → 0x1df098 (7 regs) */
-static const u32 zx_burst_8155_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8157: PP_FUC/base off=0x1df0b8 → 0x1df0d4 (8 regs) */
-static const u32 zx_burst_8157_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8160: PP_FUC/base off=0x1df414 → 0x1df420 (4 regs) */
-static const u32 zx_burst_8160_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8162: PP_FUC/base off=0x1df480 → 0x1df498 (7 regs) */
-static const u32 zx_burst_8162_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8164: PP_FUC/base off=0x1df4b8 → 0x1df4d4 (8 regs) */
-static const u32 zx_burst_8164_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8167: PP_FUC/base off=0x1df814 → 0x1df820 (4 regs) */
-static const u32 zx_burst_8167_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8169: PP_FUC/base off=0x1df880 → 0x1df898 (7 regs) */
-static const u32 zx_burst_8169_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8171: PP_FUC/base off=0x1df8b8 → 0x1df8d4 (8 regs) */
-static const u32 zx_burst_8171_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8174: PP_FUC/base off=0x1dfc14 → 0x1dfc20 (4 regs) */
-static const u32 zx_burst_8174_data[4] = {
-	0x03000003, 0x00000001, 0x470f4267, 0x0000f4f6,
-};
-
-/* burst #8176: PP_FUC/base off=0x1dfc80 → 0x1dfc98 (7 regs) */
-static const u32 zx_burst_8176_data[7] = {
-	0x04f404f4, 0x619a619a, 0x04f404f4, 0x000000c6, 0x000001b0, 0x000004f4, 0x04f404f4,
-};
-
-/* burst #8178: PP_FUC/base off=0x1dfcb8 → 0x1dfcd4 (8 regs) */
-static const u32 zx_burst_8178_data[8] = {
-	0x00000047, 0x30000400, 0x1a40c604, 0x001c1803, 0x08844400, 0x60009a20, 0x468d0000, 0x001a20d1,
-};
-
-/* burst #8182: PP_FUC/base off=0x1e001c → 0x1e002c (5 regs) */
-static const u32 zx_burst_8182_data[5] = {
-	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
-};
-
-/* burst #8183: PP_FUC/base off=0x1e0118 → 0x1e0134 (8 regs) */
-static const u32 zx_burst_8183_data[8] = {
 	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
 };
 
-/* burst #8186: PP_FUC/base off=0x1e03e0 → 0x1e03fc (8 regs) */
-static const u32 zx_burst_8186_data[8] = {
+/* burst #7784: PP_FUC/base off=0x1e2be0 → 0x1e2bfc (8 regs) */
+static const u32 zx_burst_7784_data[8] = {
 	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
 };
 
-/* burst #8188: PP_FUC/base off=0x1e081c → 0x1e082c (5 regs) */
-static const u32 zx_burst_8188_data[5] = {
+/* burst #7786: PP_FUC/base off=0x1e301c → 0x1e302c (5 regs) */
+static const u32 zx_burst_7786_data[5] = {
 	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
 };
 
-/* burst #8189: PP_FUC/base off=0x1e0918 → 0x1e0934 (8 regs) */
-static const u32 zx_burst_8189_data[8] = {
+/* burst #7787: PP_FUC/base off=0x1e3118 → 0x1e3134 (8 regs) */
+static const u32 zx_burst_7787_data[8] = {
 	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
 };
 
-/* burst #8192: PP_FUC/base off=0x1e0be0 → 0x1e0bfc (8 regs) */
-static const u32 zx_burst_8192_data[8] = {
+/* burst #7790: PP_FUC/base off=0x1e33e0 → 0x1e33fc (8 regs) */
+static const u32 zx_burst_7790_data[8] = {
 	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
 };
 
-/* burst #8194: PP_FUC/base off=0x1e101c → 0x1e102c (5 regs) */
-static const u32 zx_burst_8194_data[5] = {
+/* burst #7792: PP_FUC/base off=0x1e381c → 0x1e382c (5 regs) */
+static const u32 zx_burst_7792_data[5] = {
 	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
 };
 
-/* burst #8195: PP_FUC/base off=0x1e1118 → 0x1e1134 (8 regs) */
-static const u32 zx_burst_8195_data[8] = {
+/* burst #7793: PP_FUC/base off=0x1e3918 → 0x1e3934 (8 regs) */
+static const u32 zx_burst_7793_data[8] = {
 	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
 };
 
-/* burst #8198: PP_FUC/base off=0x1e13e0 → 0x1e13fc (8 regs) */
-static const u32 zx_burst_8198_data[8] = {
-	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
-};
-
-/* burst #8200: PP_FUC/base off=0x1e181c → 0x1e182c (5 regs) */
-static const u32 zx_burst_8200_data[5] = {
-	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
-};
-
-/* burst #8201: PP_FUC/base off=0x1e1918 → 0x1e1934 (8 regs) */
-static const u32 zx_burst_8201_data[8] = {
-	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
-};
-
-/* burst #8204: PP_FUC/base off=0x1e1be0 → 0x1e1bfc (8 regs) */
-static const u32 zx_burst_8204_data[8] = {
-	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
-};
-
-/* burst #8206: PP_FUC/base off=0x1e201c → 0x1e202c (5 regs) */
-static const u32 zx_burst_8206_data[5] = {
-	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
-};
-
-/* burst #8207: PP_FUC/base off=0x1e2118 → 0x1e2134 (8 regs) */
-static const u32 zx_burst_8207_data[8] = {
-	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
-};
-
-/* burst #8210: PP_FUC/base off=0x1e23e0 → 0x1e23fc (8 regs) */
-static const u32 zx_burst_8210_data[8] = {
-	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
-};
-
-/* burst #8212: PP_FUC/base off=0x1e281c → 0x1e282c (5 regs) */
-static const u32 zx_burst_8212_data[5] = {
-	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
-};
-
-/* burst #8213: PP_FUC/base off=0x1e2918 → 0x1e2934 (8 regs) */
-static const u32 zx_burst_8213_data[8] = {
-	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
-};
-
-/* burst #8216: PP_FUC/base off=0x1e2be0 → 0x1e2bfc (8 regs) */
-static const u32 zx_burst_8216_data[8] = {
-	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
-};
-
-/* burst #8218: PP_FUC/base off=0x1e301c → 0x1e302c (5 regs) */
-static const u32 zx_burst_8218_data[5] = {
-	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
-};
-
-/* burst #8219: PP_FUC/base off=0x1e3118 → 0x1e3134 (8 regs) */
-static const u32 zx_burst_8219_data[8] = {
-	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
-};
-
-/* burst #8222: PP_FUC/base off=0x1e33e0 → 0x1e33fc (8 regs) */
-static const u32 zx_burst_8222_data[8] = {
-	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
-};
-
-/* burst #8224: PP_FUC/base off=0x1e381c → 0x1e382c (5 regs) */
-static const u32 zx_burst_8224_data[5] = {
-	0x21200000, 0x4eb20000, 0x4e720000, 0x00000640, 0x00000708,
-};
-
-/* burst #8225: PP_FUC/base off=0x1e3918 → 0x1e3934 (8 regs) */
-static const u32 zx_burst_8225_data[8] = {
-	0x00008100, 0x00009100, 0x000088a8, 0x00009200, 0x00008100, 0x00008100, 0x00008100, 0x00008100,
-};
-
-/* burst #8228: PP_FUC/base off=0x1e3be0 → 0x1e3bfc (8 regs) */
-static const u32 zx_burst_8228_data[8] = {
+/* burst #7796: PP_FUC/base off=0x1e3be0 → 0x1e3bfc (8 regs) */
+static const u32 zx_burst_7796_data[8] = {
 	0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040, 0x00000040,
 };
 
 /* Master operation table — replay in order. Each entry is either a
  * single writel() or a contiguous run flushed via __iowrite32_copy(). */
-static const struct zx_stock_op zx_stock_ops[11278] = {
+static const struct zx_stock_op zx_stock_ops[10718] = {
 	/* ──── PON_B (ops 0..) ──── */
 	{    0x40000, 0x27912810, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
 	{    0x40018, 0x00000002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
@@ -13039,590 +12351,30 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x17fc44, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
 	{   0x17fc50, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
 	/* ──── NPP (ops 8035..) ──── */
-	{        0x4, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{        0xc, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{       0x60,     5, zx_burst_5854_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5854 */
-	{      0x114, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{      0x184,    13, zx_burst_5856_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5856 */
-	{      0x404, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{      0x40c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{      0x460,     5, zx_burst_5859_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5859 */
-	{      0x514, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{      0x584,    13, zx_burst_5861_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5861 */
-	{      0x804, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{      0x80c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{      0x860,     5, zx_burst_5864_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5864 */
-	{      0x914, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{      0x984,    13, zx_burst_5866_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5866 */
-	{      0xc04, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{      0xc0c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{      0xc60,     5, zx_burst_5869_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5869 */
-	{      0xd14, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{      0xd84,    13, zx_burst_5871_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5871 */
-	{     0x1004, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x100c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x1060,     5, zx_burst_5874_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5874 */
-	{     0x1114, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x1184,    13, zx_burst_5876_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5876 */
-	{     0x1404, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x140c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x1460,     5, zx_burst_5879_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5879 */
-	{     0x1514, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x1584,    13, zx_burst_5881_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5881 */
-	{     0x1804, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x180c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x1860,     5, zx_burst_5884_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5884 */
-	{     0x1914, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x1984,    13, zx_burst_5886_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5886 */
-	{     0x1c04, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x1c0c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x1c60,     5, zx_burst_5889_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5889 */
-	{     0x1d14, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x1d84,    13, zx_burst_5891_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5891 */
-	{     0x2004, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x200c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x2060,     5, zx_burst_5894_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5894 */
-	{     0x2114, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x2184,    13, zx_burst_5896_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5896 */
-	{     0x2404, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x240c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x2460,     5, zx_burst_5899_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5899 */
-	{     0x2514, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x2584,    13, zx_burst_5901_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5901 */
-	{     0x2804, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x280c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x2860,     5, zx_burst_5904_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5904 */
-	{     0x2914, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x2984,    13, zx_burst_5906_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5906 */
-	{     0x2c04, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x2c0c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x2c60,     5, zx_burst_5909_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5909 */
-	{     0x2d14, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x2d84,    13, zx_burst_5911_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5911 */
-	{     0x3004, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x300c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x3060,     5, zx_burst_5914_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5914 */
-	{     0x3114, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x3184,    13, zx_burst_5916_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5916 */
-	{     0x3404, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x340c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x3460,     5, zx_burst_5919_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5919 */
-	{     0x3514, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x3584,    13, zx_burst_5921_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5921 */
-	{     0x3804, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x380c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x3860,     5, zx_burst_5924_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5924 */
-	{     0x3914, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x3984,    13, zx_burst_5926_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5926 */
-	{     0x3c04, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x3c0c, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x3c60,     5, zx_burst_5929_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5929 */
-	{     0x3d14, 0x00000004, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x3d84,    13, zx_burst_5931_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5931 */
-	{     0x4000, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4004, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x40f0,     5, zx_burst_5933_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5933 */
-	{     0x410c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4118, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x413c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4160, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4184, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4220, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4224, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4230, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4250,     7, zx_burst_5941_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5941 */
-	{     0x42c0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4400, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4404, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x44f0,     5, zx_burst_5944_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5944 */
-	{     0x450c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4518, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x453c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4560, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4584, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4620, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4624, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4630, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4650,     7, zx_burst_5952_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5952 */
-	{     0x46c0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4800, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4804, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x48f0,     5, zx_burst_5955_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5955 */
-	{     0x490c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4918, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x493c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4960, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4984, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4a20, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4a24, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4a30, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4a50,     7, zx_burst_5963_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5963 */
-	{     0x4ac0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4c00, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4c04, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4cf0,     5, zx_burst_5966_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5966 */
-	{     0x4d0c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4d18, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4d3c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4d60, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4d84, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4e20, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4e24, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4e30, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x4e50,     7, zx_burst_5974_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5974 */
-	{     0x4ec0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5000, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5004, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x50f0,     5, zx_burst_5977_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5977 */
-	{     0x510c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5118, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x513c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5160, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5184, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5220, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5224, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5230, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5250,     7, zx_burst_5985_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5985 */
-	{     0x52c0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5400, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5404, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x54f0,     5, zx_burst_5988_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5988 */
-	{     0x550c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5518, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x553c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5560, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5584, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5620, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5624, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5630, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5650,     7, zx_burst_5996_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5996 */
-	{     0x56c0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5800, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5804, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x58f0,     5, zx_burst_5999_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5999 */
-	{     0x590c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5918, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x593c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5960, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5984, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5a20, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5a24, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5a30, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5a50,     7, zx_burst_6007_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6007 */
-	{     0x5ac0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5c00, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5c04, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5cf0,     5, zx_burst_6010_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6010 */
-	{     0x5d0c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5d18, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5d3c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5d60, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5d84, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5e20, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5e24, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5e30, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x5e50,     7, zx_burst_6018_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6018 */
-	{     0x5ec0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6000, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6004, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x60f0,     5, zx_burst_6021_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6021 */
-	{     0x610c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6118, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x613c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6160, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6184, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6220, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6224, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6230, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6250,     7, zx_burst_6029_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6029 */
-	{     0x62c0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6400, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6404, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x64f0,     5, zx_burst_6032_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6032 */
-	{     0x650c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6518, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x653c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6560, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6584, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6620, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6624, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6630, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6650,     7, zx_burst_6040_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6040 */
-	{     0x66c0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6800, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6804, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x68f0,     5, zx_burst_6043_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6043 */
-	{     0x690c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6918, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x693c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6960, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6984, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6a20, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6a24, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6a30, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6a50,     7, zx_burst_6051_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6051 */
-	{     0x6ac0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6c00, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6c04, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6cf0,     5, zx_burst_6054_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6054 */
-	{     0x6d0c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6d18, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6d3c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6d60, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6d84, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6e20, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6e24, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6e30, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x6e50,     7, zx_burst_6062_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6062 */
-	{     0x6ec0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7000, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7004, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x70f0,     5, zx_burst_6065_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6065 */
-	{     0x710c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7118, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x713c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7160, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7184, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7220, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7224, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7230, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7250,     7, zx_burst_6073_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6073 */
-	{     0x72c0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7400, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7404, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x74f0,     5, zx_burst_6076_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6076 */
-	{     0x750c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7518, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x753c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7560, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7584, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7620, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7624, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7630, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7650,     7, zx_burst_6084_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6084 */
-	{     0x76c0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7800, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7804, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x78f0,     5, zx_burst_6087_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6087 */
-	{     0x790c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7918, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x793c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7960, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7984, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7a20, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7a24, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7a30, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7a50,     7, zx_burst_6095_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6095 */
-	{     0x7ac0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7c00, 0x07cc000c, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7c04, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7cf0,     5, zx_burst_6098_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6098 */
-	{     0x7d0c, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7d18, 0x2d2d2d00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7d3c, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7d60, 0x0000002d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7d84, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7e20, 0x30000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7e24, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7e30, 0x00220002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0x7e50,     7, zx_burst_6106_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6106 */
-	{     0x7ec0, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc000, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc004, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc008, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc018, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc01c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc020, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc034,     5, zx_burst_6110_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6110 */
-	{     0xc0c0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc0d0,     6, zx_burst_6112_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6112 */
-	{     0xc100,    10, zx_burst_6113_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6113 */
-	{     0xc138, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc144, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc150, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc154, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc158, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc160, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc280,    16, zx_burst_6118_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6118 */
-	{     0xc400, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc404, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc408, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc418, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc41c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc420, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc434,     5, zx_burst_6121_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6121 */
-	{     0xc4c0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc4d0,     6, zx_burst_6123_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6123 */
-	{     0xc500,    10, zx_burst_6124_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6124 */
-	{     0xc538, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc544, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc550, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc554, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc558, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc560, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc680,    16, zx_burst_6129_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6129 */
-	{     0xc800, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc804, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc808, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc818, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc81c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc820, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc834,     5, zx_burst_6132_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6132 */
-	{     0xc8c0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc8d0,     6, zx_burst_6134_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6134 */
-	{     0xc900,    10, zx_burst_6135_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6135 */
-	{     0xc938, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc944, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc950, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc954, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc958, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xc960, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xca80,    16, zx_burst_6140_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6140 */
-	{     0xcc00, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xcc04, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xcc08, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xcc18, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xcc1c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xcc20, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xcc34,     5, zx_burst_6143_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6143 */
-	{     0xccc0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xccd0,     6, zx_burst_6145_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6145 */
-	{     0xcd00,    10, zx_burst_6146_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6146 */
-	{     0xcd38, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xcd44, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xcd50, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xcd54, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xcd58, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xcd60, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xce80,    16, zx_burst_6151_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6151 */
-	{     0xd000, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd004, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd008, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd018, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd01c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd020, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd034,     5, zx_burst_6154_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6154 */
-	{     0xd0c0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd0d0,     6, zx_burst_6156_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6156 */
-	{     0xd100,    10, zx_burst_6157_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6157 */
-	{     0xd138, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd144, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd150, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd154, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd158, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd160, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd280,    16, zx_burst_6162_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6162 */
-	{     0xd400, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd404, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd408, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd418, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd41c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd420, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd434,     5, zx_burst_6165_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6165 */
-	{     0xd4c0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd4d0,     6, zx_burst_6167_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6167 */
-	{     0xd500,    10, zx_burst_6168_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6168 */
-	{     0xd538, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd544, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd550, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd554, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd558, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd560, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd680,    16, zx_burst_6173_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6173 */
-	{     0xd800, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd804, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd808, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd818, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd81c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd820, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd834,     5, zx_burst_6176_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6176 */
-	{     0xd8c0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd8d0,     6, zx_burst_6178_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6178 */
-	{     0xd900,    10, zx_burst_6179_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6179 */
-	{     0xd938, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd944, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd950, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd954, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd958, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xd960, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xda80,    16, zx_burst_6184_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6184 */
-	{     0xdc00, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xdc04, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xdc08, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xdc18, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xdc1c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xdc20, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xdc34,     5, zx_burst_6187_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6187 */
-	{     0xdcc0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xdcd0,     6, zx_burst_6189_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6189 */
-	{     0xdd00,    10, zx_burst_6190_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6190 */
-	{     0xdd38, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xdd44, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xdd50, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xdd54, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xdd58, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xdd60, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xde80,    16, zx_burst_6195_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6195 */
-	{     0xe000, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe004, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe008, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe018, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe01c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe020, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe034,     5, zx_burst_6198_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6198 */
-	{     0xe0c0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe0d0,     6, zx_burst_6200_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6200 */
-	{     0xe100,    10, zx_burst_6201_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6201 */
-	{     0xe138, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe144, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe150, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe154, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe158, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe160, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe280,    16, zx_burst_6206_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6206 */
-	{     0xe400, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe404, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe408, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe418, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe41c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe420, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe434,     5, zx_burst_6209_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6209 */
-	{     0xe4c0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe4d0,     6, zx_burst_6211_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6211 */
-	{     0xe500,    10, zx_burst_6212_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6212 */
-	{     0xe538, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe544, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe550, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe554, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe558, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe560, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe680,    16, zx_burst_6217_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6217 */
-	{     0xe800, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe804, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe808, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe818, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe81c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe820, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe834,     5, zx_burst_6220_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6220 */
-	{     0xe8c0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe8d0,     6, zx_burst_6222_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6222 */
-	{     0xe900,    10, zx_burst_6223_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6223 */
-	{     0xe938, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe944, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe950, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe954, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe958, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xe960, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xea80,    16, zx_burst_6228_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6228 */
-	{     0xec00, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xec04, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xec08, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xec18, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xec1c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xec20, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xec34,     5, zx_burst_6231_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6231 */
-	{     0xecc0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xecd0,     6, zx_burst_6233_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6233 */
-	{     0xed00,    10, zx_burst_6234_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6234 */
-	{     0xed38, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xed44, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xed50, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xed54, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xed58, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xed60, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xee80,    16, zx_burst_6239_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6239 */
-	{     0xf000, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf004, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf008, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf018, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf01c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf020, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf034,     5, zx_burst_6242_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6242 */
-	{     0xf0c0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf0d0,     6, zx_burst_6244_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6244 */
-	{     0xf100,    10, zx_burst_6245_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6245 */
-	{     0xf138, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf144, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf150, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf154, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf158, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf160, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf280,    16, zx_burst_6250_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6250 */
-	{     0xf400, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf404, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf408, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf418, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf41c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf420, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf434,     5, zx_burst_6253_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6253 */
-	{     0xf4c0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf4d0,     6, zx_burst_6255_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6255 */
-	{     0xf500,    10, zx_burst_6256_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6256 */
-	{     0xf538, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf544, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf550, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf554, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf558, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf560, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf680,    16, zx_burst_6261_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6261 */
-	{     0xf800, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf804, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf808, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf818, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf81c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf820, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf834,     5, zx_burst_6264_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6264 */
-	{     0xf8c0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf8d0,     6, zx_burst_6266_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6266 */
-	{     0xf900,    10, zx_burst_6267_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6267 */
-	{     0xf938, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf944, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf950, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf954, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf958, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xf960, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfa80,    16, zx_burst_6272_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6272 */
-	{     0xfc00, 0x00000011, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfc04, 0x000d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfc08, 0x00000844, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfc18, 0x00000005, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfc1c, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfc20, 0x0000000d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfc34,     5, zx_burst_6275_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6275 */
-	{     0xfcc0, 0x00021104, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfcd0,     6, zx_burst_6277_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6277 */
-	{     0xfd00,    10, zx_burst_6278_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6278 */
-	{     0xfd38, 0x00184117, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfd44, 0x00011111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfd50, 0x00000008, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfd54, 0x00048d08, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfd58, 0x04040404, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfd60, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{     0xfe80,    16, zx_burst_6283_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6283 */
-	{    0x14000,     7, zx_burst_6284_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6284 */
-	{    0x14040,     6, zx_burst_6285_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6285 */
+	{    0x14000,     7, zx_burst_5852_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5852 */
+	{    0x14040,     6, zx_burst_5853_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5853 */
 	{    0x1405c, 0x00000002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0x14064, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0x1407c, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0x1408c, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0x14090, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0x14094, 0x00000204, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{    0x14120,     8, zx_burst_6290_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6290 */
-	{    0x14240,    18, zx_burst_6291_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6291 */
-	{    0x14300,     9, zx_burst_6292_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6292 */
-	{    0x14328,     4, zx_burst_6293_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6293 */
-	{    0x1433c,     4, zx_burst_6294_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6294 */
-	{    0x14350,     4, zx_burst_6295_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6295 */
-	{    0x14364,     4, zx_burst_6296_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6296 */
-	{    0x14378,     4, zx_burst_6297_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6297 */
-	{    0x1438c,     4, zx_burst_6298_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6298 */
+	{    0x14120,     8, zx_burst_5858_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5858 */
+	{    0x14240,    18, zx_burst_5859_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5859 */
+	{    0x14300,     9, zx_burst_5860_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5860 */
+	{    0x14328,     4, zx_burst_5861_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5861 */
+	{    0x1433c,     4, zx_burst_5862_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5862 */
+	{    0x14350,     4, zx_burst_5863_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5863 */
+	{    0x14364,     4, zx_burst_5864_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5864 */
+	{    0x14378,     4, zx_burst_5865_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5865 */
+	{    0x1438c,     4, zx_burst_5866_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5866 */
 	{    0x14500, 0x00002121, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0x14504, 0x21210042, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0x145cc, 0x00210000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0x145d0, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0x145dc, 0x0000f4f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{    0x145e4,    13, zx_burst_6302_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6302 */
-	/* ──── TM (ops 8618..) ──── */
+	{    0x145e4,    13, zx_burst_5870_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5870 */
+	/* ──── TM (ops 8058..) ──── */
 	{   0x180000, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180004, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1800f0, 0x4ff1f000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13632,111 +12384,111 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x180134, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180400, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180404, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1804e8,     6, zx_burst_6310_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6310 */
+	{   0x1804e8,     6, zx_burst_5878_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5878 */
 	{   0x180504, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180524, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18052c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180534, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180800, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180804, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1808e8,     6, zx_burst_6316_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6316 */
+	{   0x1808e8,     6, zx_burst_5884_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5884 */
 	{   0x180904, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180924, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18092c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180934, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180c00, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180c04, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x180ce8,     6, zx_burst_6322_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6322 */
+	{   0x180ce8,     6, zx_burst_5890_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5890 */
 	{   0x180d04, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180d24, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180d2c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180d34, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181000, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181004, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1810e8,     6, zx_burst_6328_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6328 */
+	{   0x1810e8,     6, zx_burst_5896_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5896 */
 	{   0x181104, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181124, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18112c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181134, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181400, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181404, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1814e8,     6, zx_burst_6334_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6334 */
+	{   0x1814e8,     6, zx_burst_5902_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5902 */
 	{   0x181504, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181524, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18152c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181534, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181800, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181804, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1818e8,     6, zx_burst_6340_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6340 */
+	{   0x1818e8,     6, zx_burst_5908_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5908 */
 	{   0x181904, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181924, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18192c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181934, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181c00, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181c04, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x181ce8,     6, zx_burst_6346_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6346 */
+	{   0x181ce8,     6, zx_burst_5914_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5914 */
 	{   0x181d04, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181d24, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181d2c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x181d34, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182000, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182004, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1820e8,     6, zx_burst_6352_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6352 */
+	{   0x1820e8,     6, zx_burst_5920_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5920 */
 	{   0x182104, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182124, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18212c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182134, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182400, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182404, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1824e8,     6, zx_burst_6358_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6358 */
+	{   0x1824e8,     6, zx_burst_5926_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5926 */
 	{   0x182504, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182524, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18252c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182534, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182800, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182804, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1828e8,     6, zx_burst_6364_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6364 */
+	{   0x1828e8,     6, zx_burst_5932_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5932 */
 	{   0x182904, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182924, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18292c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182934, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182c00, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182c04, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x182ce8,     6, zx_burst_6370_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6370 */
+	{   0x182ce8,     6, zx_burst_5938_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5938 */
 	{   0x182d04, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182d24, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182d2c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x182d34, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183000, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183004, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1830e8,     6, zx_burst_6376_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6376 */
+	{   0x1830e8,     6, zx_burst_5944_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5944 */
 	{   0x183104, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183124, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18312c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183134, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183400, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183404, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1834e8,     6, zx_burst_6382_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6382 */
+	{   0x1834e8,     6, zx_burst_5950_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5950 */
 	{   0x183504, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183524, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18352c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183534, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183800, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183804, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1838e8,     6, zx_burst_6388_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6388 */
+	{   0x1838e8,     6, zx_burst_5956_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5956 */
 	{   0x183904, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183924, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18392c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183934, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183c00, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183c04, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x183ce8,     6, zx_burst_6394_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6394 */
+	{   0x183ce8,     6, zx_burst_5962_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5962 */
 	{   0x183d04, 0xfffffffc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183d24, 0x03ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183d2c, 0x00001fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x183d34, 0x001fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184004, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x184014,     6, zx_burst_6400_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6400 */
+	{   0x184014,     6, zx_burst_5968_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5968 */
 	{   0x184040, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184068, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184074, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13746,7 +12498,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x184090, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1840a4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1840b4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x184100,     4, zx_burst_6408_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6408 */
+	{   0x184100,     4, zx_burst_5976_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5976 */
 	{   0x184154, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184158, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184180, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13763,7 +12515,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x184288, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184294, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184404, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x184414,     6, zx_burst_6421_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6421 */
+	{   0x184414,     6, zx_burst_5989_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5989 */
 	{   0x184440, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184468, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184474, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13773,7 +12525,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x184490, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1844a4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1844b4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x184500,     4, zx_burst_6429_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6429 */
+	{   0x184500,     4, zx_burst_5997_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5997 */
 	{   0x184554, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184558, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184580, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13790,7 +12542,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x184688, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184694, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184804, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x184814,     6, zx_burst_6442_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6442 */
+	{   0x184814,     6, zx_burst_6010_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6010 */
 	{   0x184840, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184868, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184874, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13800,7 +12552,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x184890, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1848a4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1848b4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x184900,     4, zx_burst_6450_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6450 */
+	{   0x184900,     4, zx_burst_6018_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6018 */
 	{   0x184954, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184958, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184980, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13817,7 +12569,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x184a88, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184a94, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184c04, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x184c14,     6, zx_burst_6463_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6463 */
+	{   0x184c14,     6, zx_burst_6031_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6031 */
 	{   0x184c40, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184c68, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184c74, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13827,7 +12579,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x184c90, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184ca4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184cb4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x184d00,     4, zx_burst_6471_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6471 */
+	{   0x184d00,     4, zx_burst_6039_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6039 */
 	{   0x184d54, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184d58, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184d80, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13844,7 +12596,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x184e88, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x184e94, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185004, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x185014,     6, zx_burst_6484_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6484 */
+	{   0x185014,     6, zx_burst_6052_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6052 */
 	{   0x185040, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185068, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185074, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13854,7 +12606,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x185090, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1850a4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1850b4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x185100,     4, zx_burst_6492_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6492 */
+	{   0x185100,     4, zx_burst_6060_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6060 */
 	{   0x185154, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185158, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185180, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13871,7 +12623,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x185288, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185294, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185404, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x185414,     6, zx_burst_6505_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6505 */
+	{   0x185414,     6, zx_burst_6073_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6073 */
 	{   0x185440, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185468, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185474, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13881,7 +12633,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x185490, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1854a4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1854b4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x185500,     4, zx_burst_6513_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6513 */
+	{   0x185500,     4, zx_burst_6081_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6081 */
 	{   0x185554, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185558, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185580, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13898,7 +12650,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x185688, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185694, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185804, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x185814,     6, zx_burst_6526_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6526 */
+	{   0x185814,     6, zx_burst_6094_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6094 */
 	{   0x185840, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185868, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185874, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13908,7 +12660,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x185890, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1858a4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1858b4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x185900,     4, zx_burst_6534_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6534 */
+	{   0x185900,     4, zx_burst_6102_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6102 */
 	{   0x185954, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185958, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185980, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13925,7 +12677,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x185a88, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185a94, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185c04, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x185c14,     6, zx_burst_6547_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6547 */
+	{   0x185c14,     6, zx_burst_6115_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6115 */
 	{   0x185c40, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185c68, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185c74, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13935,7 +12687,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x185c90, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185ca4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185cb4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x185d00,     4, zx_burst_6555_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6555 */
+	{   0x185d00,     4, zx_burst_6123_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6123 */
 	{   0x185d54, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185d58, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185d80, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13952,7 +12704,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x185e88, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x185e94, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186004, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x186014,     6, zx_burst_6568_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6568 */
+	{   0x186014,     6, zx_burst_6136_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6136 */
 	{   0x186040, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186068, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186074, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13962,7 +12714,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x186090, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1860a4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1860b4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x186100,     4, zx_burst_6576_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6576 */
+	{   0x186100,     4, zx_burst_6144_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6144 */
 	{   0x186154, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186158, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186180, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13979,7 +12731,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x186288, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186294, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186404, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x186414,     6, zx_burst_6589_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6589 */
+	{   0x186414,     6, zx_burst_6157_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6157 */
 	{   0x186440, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186468, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186474, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -13989,7 +12741,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x186490, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1864a4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1864b4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x186500,     4, zx_burst_6597_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6597 */
+	{   0x186500,     4, zx_burst_6165_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6165 */
 	{   0x186554, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186558, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186580, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14006,7 +12758,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x186688, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186694, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186804, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x186814,     6, zx_burst_6610_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6610 */
+	{   0x186814,     6, zx_burst_6178_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6178 */
 	{   0x186840, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186868, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186874, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14016,7 +12768,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x186890, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1868a4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1868b4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x186900,     4, zx_burst_6618_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6618 */
+	{   0x186900,     4, zx_burst_6186_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6186 */
 	{   0x186954, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186958, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186980, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14033,7 +12785,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x186a88, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186a94, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186c04, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x186c14,     6, zx_burst_6631_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6631 */
+	{   0x186c14,     6, zx_burst_6199_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6199 */
 	{   0x186c40, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186c68, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186c74, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14043,7 +12795,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x186c90, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186ca4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186cb4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x186d00,     4, zx_burst_6639_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6639 */
+	{   0x186d00,     4, zx_burst_6207_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6207 */
 	{   0x186d54, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186d58, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186d80, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14060,7 +12812,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x186e88, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x186e94, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187004, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x187014,     6, zx_burst_6652_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6652 */
+	{   0x187014,     6, zx_burst_6220_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6220 */
 	{   0x187040, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187068, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187074, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14070,7 +12822,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x187090, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1870a4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1870b4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x187100,     4, zx_burst_6660_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6660 */
+	{   0x187100,     4, zx_burst_6228_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6228 */
 	{   0x187154, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187158, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187180, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14087,7 +12839,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x187288, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187294, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187404, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x187414,     6, zx_burst_6673_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6673 */
+	{   0x187414,     6, zx_burst_6241_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6241 */
 	{   0x187440, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187468, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187474, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14097,7 +12849,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x187490, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1874a4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1874b4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x187500,     4, zx_burst_6681_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6681 */
+	{   0x187500,     4, zx_burst_6249_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6249 */
 	{   0x187554, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187558, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187580, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14114,7 +12866,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x187688, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187694, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187804, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x187814,     6, zx_burst_6694_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6694 */
+	{   0x187814,     6, zx_burst_6262_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6262 */
 	{   0x187840, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187868, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187874, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14124,7 +12876,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x187890, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1878a4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1878b4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x187900,     4, zx_burst_6702_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6702 */
+	{   0x187900,     4, zx_burst_6270_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6270 */
 	{   0x187954, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187958, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187980, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14141,7 +12893,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x187a88, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187a94, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187c04, 0x000000de, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x187c14,     6, zx_burst_6715_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6715 */
+	{   0x187c14,     6, zx_burst_6283_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6283 */
 	{   0x187c40, 0x000003ff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187c68, 0x0000001b, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187c74, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14151,7 +12903,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x187c90, 0x00000a22, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187ca4, 0x000a2200, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187cb4, 0x09000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x187d00,     4, zx_burst_6723_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6723 */
+	{   0x187d00,     4, zx_burst_6291_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6291 */
 	{   0x187d54, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187d58, 0x000005c8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187d80, 0x052e0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14168,10 +12920,10 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x187e88, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x187e94, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x188010, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x188028,     4, zx_burst_6736_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6736 */
+	{   0x188028,     4, zx_burst_6304_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6304 */
 	{   0x188040, 0x00720023, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x188044, 0x00500001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x188080,     7, zx_burst_6738_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6738 */
+	{   0x188080,     7, zx_burst_6306_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6306 */
 	{   0x1880a8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1880b0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1880b4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14185,11 +12937,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x188404, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x188408, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x188410, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x188428,     4, zx_burst_6745_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6745 */
-	{   0x188440,     4, zx_burst_6746_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6746 */
+	{   0x188428,     4, zx_burst_6313_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6313 */
+	{   0x188440,     4, zx_burst_6314_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6314 */
 	{   0x188458, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18845c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x188480,     7, zx_burst_6748_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6748 */
+	{   0x188480,     7, zx_burst_6316_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6316 */
 	{   0x1884a8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1884b0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1884b4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14203,11 +12955,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x188804, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x188808, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x188810, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x188828,     4, zx_burst_6755_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6755 */
-	{   0x188840,     4, zx_burst_6756_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6756 */
+	{   0x188828,     4, zx_burst_6323_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6323 */
+	{   0x188840,     4, zx_burst_6324_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6324 */
 	{   0x188858, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18885c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x188880,     7, zx_burst_6758_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6758 */
+	{   0x188880,     7, zx_burst_6326_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6326 */
 	{   0x1888a8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1888b0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1888b4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14221,11 +12973,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x188c04, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x188c08, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x188c10, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x188c28,     4, zx_burst_6765_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6765 */
-	{   0x188c40,     4, zx_burst_6766_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6766 */
+	{   0x188c28,     4, zx_burst_6333_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6333 */
+	{   0x188c40,     4, zx_burst_6334_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6334 */
 	{   0x188c58, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x188c5c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x188c80,     7, zx_burst_6768_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6768 */
+	{   0x188c80,     7, zx_burst_6336_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6336 */
 	{   0x188ca8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x188cb0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x188cb4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14239,11 +12991,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x189004, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x189008, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x189010, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x189028,     4, zx_burst_6775_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6775 */
-	{   0x189040,     4, zx_burst_6776_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6776 */
+	{   0x189028,     4, zx_burst_6343_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6343 */
+	{   0x189040,     4, zx_burst_6344_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6344 */
 	{   0x189058, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18905c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x189080,     7, zx_burst_6778_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6778 */
+	{   0x189080,     7, zx_burst_6346_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6346 */
 	{   0x1890a8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1890b0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1890b4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14257,11 +13009,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x189404, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x189408, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x189410, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x189428,     4, zx_burst_6785_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6785 */
-	{   0x189440,     4, zx_burst_6786_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6786 */
+	{   0x189428,     4, zx_burst_6353_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6353 */
+	{   0x189440,     4, zx_burst_6354_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6354 */
 	{   0x189458, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18945c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x189480,     7, zx_burst_6788_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6788 */
+	{   0x189480,     7, zx_burst_6356_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6356 */
 	{   0x1894a8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1894b0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1894b4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14275,11 +13027,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x189804, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x189808, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x189810, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x189828,     4, zx_burst_6795_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6795 */
-	{   0x189840,     4, zx_burst_6796_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6796 */
+	{   0x189828,     4, zx_burst_6363_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6363 */
+	{   0x189840,     4, zx_burst_6364_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6364 */
 	{   0x189858, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18985c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x189880,     7, zx_burst_6798_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6798 */
+	{   0x189880,     7, zx_burst_6366_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6366 */
 	{   0x1898a8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1898b0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1898b4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14293,11 +13045,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x189c04, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x189c08, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x189c10, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x189c28,     4, zx_burst_6805_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6805 */
-	{   0x189c40,     4, zx_burst_6806_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6806 */
+	{   0x189c28,     4, zx_burst_6373_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6373 */
+	{   0x189c40,     4, zx_burst_6374_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6374 */
 	{   0x189c58, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x189c5c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x189c80,     7, zx_burst_6808_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6808 */
+	{   0x189c80,     7, zx_burst_6376_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6376 */
 	{   0x189ca8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x189cb0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x189cb4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14311,11 +13063,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x18a004, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a008, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a010, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18a028,     4, zx_burst_6815_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6815 */
-	{   0x18a040,     4, zx_burst_6816_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6816 */
+	{   0x18a028,     4, zx_burst_6383_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6383 */
+	{   0x18a040,     4, zx_burst_6384_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6384 */
 	{   0x18a058, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a05c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18a080,     7, zx_burst_6818_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6818 */
+	{   0x18a080,     7, zx_burst_6386_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6386 */
 	{   0x18a0a8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a0b0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a0b4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14329,11 +13081,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x18a404, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a408, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a410, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18a428,     4, zx_burst_6825_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6825 */
-	{   0x18a440,     4, zx_burst_6826_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6826 */
+	{   0x18a428,     4, zx_burst_6393_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6393 */
+	{   0x18a440,     4, zx_burst_6394_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6394 */
 	{   0x18a458, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a45c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18a480,     7, zx_burst_6828_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6828 */
+	{   0x18a480,     7, zx_burst_6396_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6396 */
 	{   0x18a4a8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a4b0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a4b4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14347,11 +13099,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x18a804, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a808, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a810, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18a828,     4, zx_burst_6835_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6835 */
-	{   0x18a840,     4, zx_burst_6836_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6836 */
+	{   0x18a828,     4, zx_burst_6403_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6403 */
+	{   0x18a840,     4, zx_burst_6404_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6404 */
 	{   0x18a858, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a85c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18a880,     7, zx_burst_6838_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6838 */
+	{   0x18a880,     7, zx_burst_6406_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6406 */
 	{   0x18a8a8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a8b0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18a8b4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14365,11 +13117,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x18ac04, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18ac08, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18ac10, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18ac28,     4, zx_burst_6845_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6845 */
-	{   0x18ac40,     4, zx_burst_6846_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6846 */
+	{   0x18ac28,     4, zx_burst_6413_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6413 */
+	{   0x18ac40,     4, zx_burst_6414_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6414 */
 	{   0x18ac58, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18ac5c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18ac80,     7, zx_burst_6848_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6848 */
+	{   0x18ac80,     7, zx_burst_6416_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6416 */
 	{   0x18aca8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18acb0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18acb4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14383,11 +13135,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x18b004, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b008, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b010, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18b028,     4, zx_burst_6855_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6855 */
-	{   0x18b040,     4, zx_burst_6856_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6856 */
+	{   0x18b028,     4, zx_burst_6423_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6423 */
+	{   0x18b040,     4, zx_burst_6424_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6424 */
 	{   0x18b058, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b05c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18b080,     7, zx_burst_6858_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6858 */
+	{   0x18b080,     7, zx_burst_6426_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6426 */
 	{   0x18b0a8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b0b0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b0b4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14401,11 +13153,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x18b404, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b408, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b410, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18b428,     4, zx_burst_6865_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6865 */
-	{   0x18b440,     4, zx_burst_6866_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6866 */
+	{   0x18b428,     4, zx_burst_6433_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6433 */
+	{   0x18b440,     4, zx_burst_6434_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6434 */
 	{   0x18b458, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b45c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18b480,     7, zx_burst_6868_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6868 */
+	{   0x18b480,     7, zx_burst_6436_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6436 */
 	{   0x18b4a8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b4b0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b4b4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14419,11 +13171,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x18b804, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b808, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b810, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18b828,     4, zx_burst_6875_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6875 */
-	{   0x18b840,     4, zx_burst_6876_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6876 */
+	{   0x18b828,     4, zx_burst_6443_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6443 */
+	{   0x18b840,     4, zx_burst_6444_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6444 */
 	{   0x18b858, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b85c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18b880,     7, zx_burst_6878_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6878 */
+	{   0x18b880,     7, zx_burst_6446_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6446 */
 	{   0x18b8a8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b8b0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18b8b4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14437,11 +13189,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x18bc04, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18bc08, 0x0104c040, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18bc10, 0x00000025, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18bc28,     4, zx_burst_6885_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6885 */
-	{   0x18bc40,     4, zx_burst_6886_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6886 */
+	{   0x18bc28,     4, zx_burst_6453_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6453 */
+	{   0x18bc40,     4, zx_burst_6454_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6454 */
 	{   0x18bc58, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18bc5c, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x18bc80,     7, zx_burst_6888_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6888 */
+	{   0x18bc80,     7, zx_burst_6456_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6456 */
 	{   0x18bca8, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18bcb0, 0x0000052f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x18bcb4, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14658,22 +13410,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x190158, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190160, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190170, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x190180,     4, zx_burst_7065_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7065 */
+	{   0x190180,     4, zx_burst_6633_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6633 */
 	{   0x190194, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190198, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19019c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1901a4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1901a8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1901b0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1901c0,     4, zx_burst_7069_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7069 */
-	{   0x19038c,    12, zx_burst_7070_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7070 */
-	{   0x1903d0,     4, zx_burst_7071_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7071 */
+	{   0x1901c0,     4, zx_burst_6637_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6637 */
+	{   0x19038c,    12, zx_burst_6638_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6638 */
+	{   0x1903d0,     4, zx_burst_6639_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6639 */
 	{   0x190400, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190404, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190408, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190410, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190418, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x190420,     8, zx_burst_7075_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7075 */
+	{   0x190420,     8, zx_burst_6643_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6643 */
 	{   0x190450, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190460, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190464, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14686,22 +13438,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x190558, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190560, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190570, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x190580,     4, zx_burst_7085_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7085 */
+	{   0x190580,     4, zx_burst_6653_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6653 */
 	{   0x190594, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190598, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19059c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1905a4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1905a8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1905b0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1905c0,     4, zx_burst_7089_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7089 */
-	{   0x190788,    13, zx_burst_7090_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7090 */
-	{   0x1907d0,     4, zx_burst_7091_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7091 */
+	{   0x1905c0,     4, zx_burst_6657_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6657 */
+	{   0x190788,    13, zx_burst_6658_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6658 */
+	{   0x1907d0,     4, zx_burst_6659_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6659 */
 	{   0x190800, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190804, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190808, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190810, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190818, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x190820,     8, zx_burst_7095_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7095 */
+	{   0x190820,     8, zx_burst_6663_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6663 */
 	{   0x190850, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190860, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190864, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14714,22 +13466,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x190958, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190960, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190970, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x190980,     4, zx_burst_7105_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7105 */
+	{   0x190980,     4, zx_burst_6673_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6673 */
 	{   0x190994, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190998, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19099c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1909a4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1909a8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1909b0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1909c0,     4, zx_burst_7109_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7109 */
-	{   0x190b88,    13, zx_burst_7110_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7110 */
-	{   0x190bd0,     4, zx_burst_7111_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7111 */
+	{   0x1909c0,     4, zx_burst_6677_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6677 */
+	{   0x190b88,    13, zx_burst_6678_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6678 */
+	{   0x190bd0,     4, zx_burst_6679_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6679 */
 	{   0x190c00, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190c04, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190c08, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190c10, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190c18, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x190c20,     8, zx_burst_7115_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7115 */
+	{   0x190c20,     8, zx_burst_6683_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6683 */
 	{   0x190c50, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190c60, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190c64, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14742,22 +13494,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x190d58, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190d60, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190d70, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x190d80,     4, zx_burst_7125_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7125 */
+	{   0x190d80,     4, zx_burst_6693_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6693 */
 	{   0x190d94, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190d98, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190d9c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190da4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190da8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x190db0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x190dc0,     4, zx_burst_7129_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7129 */
-	{   0x190f88,    13, zx_burst_7130_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7130 */
-	{   0x190fd0,     4, zx_burst_7131_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7131 */
+	{   0x190dc0,     4, zx_burst_6697_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6697 */
+	{   0x190f88,    13, zx_burst_6698_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6698 */
+	{   0x190fd0,     4, zx_burst_6699_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6699 */
 	{   0x191000, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191004, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191008, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191010, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191018, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x191020,     8, zx_burst_7135_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7135 */
+	{   0x191020,     8, zx_burst_6703_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6703 */
 	{   0x191050, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191060, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191064, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14770,22 +13522,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x191158, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191160, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191170, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x191180,     4, zx_burst_7145_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7145 */
+	{   0x191180,     4, zx_burst_6713_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6713 */
 	{   0x191194, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191198, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19119c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1911a4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1911a8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1911b0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1911c0,     4, zx_burst_7149_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7149 */
-	{   0x191388,    13, zx_burst_7150_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7150 */
-	{   0x1913d0,     4, zx_burst_7151_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7151 */
+	{   0x1911c0,     4, zx_burst_6717_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6717 */
+	{   0x191388,    13, zx_burst_6718_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6718 */
+	{   0x1913d0,     4, zx_burst_6719_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6719 */
 	{   0x191400, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191404, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191408, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191410, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191418, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x191420,     8, zx_burst_7155_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7155 */
+	{   0x191420,     8, zx_burst_6723_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6723 */
 	{   0x191450, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191460, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191464, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14798,22 +13550,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x191558, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191560, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191570, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x191580,     4, zx_burst_7165_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7165 */
+	{   0x191580,     4, zx_burst_6733_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6733 */
 	{   0x191594, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191598, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19159c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1915a4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1915a8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1915b0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1915c0,     4, zx_burst_7169_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7169 */
-	{   0x191788,    13, zx_burst_7170_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7170 */
-	{   0x1917d0,     4, zx_burst_7171_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7171 */
+	{   0x1915c0,     4, zx_burst_6737_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6737 */
+	{   0x191788,    13, zx_burst_6738_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6738 */
+	{   0x1917d0,     4, zx_burst_6739_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6739 */
 	{   0x191800, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191804, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191808, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191810, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191818, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x191820,     8, zx_burst_7175_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7175 */
+	{   0x191820,     8, zx_burst_6743_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6743 */
 	{   0x191850, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191860, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191864, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14826,22 +13578,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x191958, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191960, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191970, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x191980,     4, zx_burst_7185_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7185 */
+	{   0x191980,     4, zx_burst_6753_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6753 */
 	{   0x191994, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191998, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19199c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1919a4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1919a8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1919b0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1919c0,     4, zx_burst_7189_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7189 */
-	{   0x191b88,    13, zx_burst_7190_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7190 */
-	{   0x191bd0,     4, zx_burst_7191_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7191 */
+	{   0x1919c0,     4, zx_burst_6757_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6757 */
+	{   0x191b88,    13, zx_burst_6758_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6758 */
+	{   0x191bd0,     4, zx_burst_6759_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6759 */
 	{   0x191c00, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191c04, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191c08, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191c10, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191c18, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x191c20,     8, zx_burst_7195_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7195 */
+	{   0x191c20,     8, zx_burst_6763_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6763 */
 	{   0x191c50, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191c60, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191c64, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14854,22 +13606,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x191d58, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191d60, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191d70, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x191d80,     4, zx_burst_7205_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7205 */
+	{   0x191d80,     4, zx_burst_6773_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6773 */
 	{   0x191d94, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191d98, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191d9c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191da4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191da8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x191db0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x191dc0,     4, zx_burst_7209_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7209 */
-	{   0x191f88,    13, zx_burst_7210_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7210 */
-	{   0x191fd0,     4, zx_burst_7211_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7211 */
+	{   0x191dc0,     4, zx_burst_6777_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6777 */
+	{   0x191f88,    13, zx_burst_6778_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6778 */
+	{   0x191fd0,     4, zx_burst_6779_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6779 */
 	{   0x192000, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192004, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192008, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192010, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192018, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x192020,     8, zx_burst_7215_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7215 */
+	{   0x192020,     8, zx_burst_6783_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6783 */
 	{   0x192050, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192060, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192064, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14882,22 +13634,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x192158, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192160, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192170, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x192180,     4, zx_burst_7225_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7225 */
+	{   0x192180,     4, zx_burst_6793_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6793 */
 	{   0x192194, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192198, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19219c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1921a4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1921a8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1921b0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1921c0,     4, zx_burst_7229_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7229 */
-	{   0x192388,    13, zx_burst_7230_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7230 */
-	{   0x1923d0,     4, zx_burst_7231_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7231 */
+	{   0x1921c0,     4, zx_burst_6797_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6797 */
+	{   0x192388,    13, zx_burst_6798_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6798 */
+	{   0x1923d0,     4, zx_burst_6799_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6799 */
 	{   0x192400, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192404, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192408, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192410, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192418, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x192420,     8, zx_burst_7235_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7235 */
+	{   0x192420,     8, zx_burst_6803_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6803 */
 	{   0x192450, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192460, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192464, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14910,22 +13662,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x192558, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192560, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192570, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x192580,     4, zx_burst_7245_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7245 */
+	{   0x192580,     4, zx_burst_6813_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6813 */
 	{   0x192594, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192598, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19259c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1925a4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1925a8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1925b0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1925c0,     4, zx_burst_7249_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7249 */
-	{   0x192788,    13, zx_burst_7250_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7250 */
-	{   0x1927d0,     4, zx_burst_7251_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7251 */
+	{   0x1925c0,     4, zx_burst_6817_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6817 */
+	{   0x192788,    13, zx_burst_6818_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6818 */
+	{   0x1927d0,     4, zx_burst_6819_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6819 */
 	{   0x192800, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192804, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192808, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192810, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192818, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x192820,     8, zx_burst_7255_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7255 */
+	{   0x192820,     8, zx_burst_6823_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6823 */
 	{   0x192850, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192860, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192864, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14938,22 +13690,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x192958, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192960, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192970, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x192980,     4, zx_burst_7265_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7265 */
+	{   0x192980,     4, zx_burst_6833_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6833 */
 	{   0x192994, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192998, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19299c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1929a4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1929a8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1929b0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1929c0,     4, zx_burst_7269_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7269 */
-	{   0x192b88,    13, zx_burst_7270_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7270 */
-	{   0x192bd0,     4, zx_burst_7271_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7271 */
+	{   0x1929c0,     4, zx_burst_6837_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6837 */
+	{   0x192b88,    13, zx_burst_6838_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6838 */
+	{   0x192bd0,     4, zx_burst_6839_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6839 */
 	{   0x192c00, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192c04, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192c08, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192c10, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192c18, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x192c20,     8, zx_burst_7275_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7275 */
+	{   0x192c20,     8, zx_burst_6843_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6843 */
 	{   0x192c50, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192c60, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192c64, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14966,22 +13718,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x192d58, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192d60, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192d70, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x192d80,     4, zx_burst_7285_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7285 */
+	{   0x192d80,     4, zx_burst_6853_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6853 */
 	{   0x192d94, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192d98, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192d9c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192da4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192da8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x192db0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x192dc0,     4, zx_burst_7289_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7289 */
-	{   0x192f88,    13, zx_burst_7290_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7290 */
-	{   0x192fd0,     4, zx_burst_7291_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7291 */
+	{   0x192dc0,     4, zx_burst_6857_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6857 */
+	{   0x192f88,    13, zx_burst_6858_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6858 */
+	{   0x192fd0,     4, zx_burst_6859_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6859 */
 	{   0x193000, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193004, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193008, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193010, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193018, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x193020,     8, zx_burst_7295_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7295 */
+	{   0x193020,     8, zx_burst_6863_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6863 */
 	{   0x193050, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193060, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193064, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14994,22 +13746,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x193158, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193160, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193170, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x193180,     4, zx_burst_7305_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7305 */
+	{   0x193180,     4, zx_burst_6873_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6873 */
 	{   0x193194, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193198, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19319c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1931a4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1931a8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1931b0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1931c0,     4, zx_burst_7309_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7309 */
-	{   0x193388,    13, zx_burst_7310_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7310 */
-	{   0x1933d0,     4, zx_burst_7311_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7311 */
+	{   0x1931c0,     4, zx_burst_6877_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6877 */
+	{   0x193388,    13, zx_burst_6878_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6878 */
+	{   0x1933d0,     4, zx_burst_6879_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6879 */
 	{   0x193400, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193404, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193408, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193410, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193418, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x193420,     8, zx_burst_7315_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7315 */
+	{   0x193420,     8, zx_burst_6883_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6883 */
 	{   0x193450, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193460, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193464, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15022,22 +13774,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x193558, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193560, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193570, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x193580,     4, zx_burst_7325_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7325 */
+	{   0x193580,     4, zx_burst_6893_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6893 */
 	{   0x193594, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193598, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19359c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1935a4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1935a8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1935b0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1935c0,     4, zx_burst_7329_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7329 */
-	{   0x193788,    13, zx_burst_7330_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7330 */
-	{   0x1937d0,     4, zx_burst_7331_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7331 */
+	{   0x1935c0,     4, zx_burst_6897_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6897 */
+	{   0x193788,    13, zx_burst_6898_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6898 */
+	{   0x1937d0,     4, zx_burst_6899_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6899 */
 	{   0x193800, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193804, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193808, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193810, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193818, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x193820,     8, zx_burst_7335_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7335 */
+	{   0x193820,     8, zx_burst_6903_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6903 */
 	{   0x193850, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193860, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193864, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15050,22 +13802,22 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x193958, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193960, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193970, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x193980,     4, zx_burst_7345_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7345 */
+	{   0x193980,     4, zx_burst_6913_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6913 */
 	{   0x193994, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193998, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19399c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1939a4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1939a8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1939b0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1939c0,     4, zx_burst_7349_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7349 */
-	{   0x193b88,    13, zx_burst_7350_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7350 */
-	{   0x193bd0,     4, zx_burst_7351_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7351 */
+	{   0x1939c0,     4, zx_burst_6917_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6917 */
+	{   0x193b88,    13, zx_burst_6918_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6918 */
+	{   0x193bd0,     4, zx_burst_6919_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6919 */
 	{   0x193c00, 0x003f6564, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193c04, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193c08, 0x00002001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193c10, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193c18, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x193c20,     8, zx_burst_7355_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7355 */
+	{   0x193c20,     8, zx_burst_6923_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6923 */
 	{   0x193c50, 0x4ffdf000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193c60, 0x4ffef000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193c64, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15078,16 +13830,16 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x193d58, 0x00001c84, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193d60, 0x2e002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193d70, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x193d80,     4, zx_burst_7365_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7365 */
+	{   0x193d80,     4, zx_burst_6933_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6933 */
 	{   0x193d94, 0x00100c00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193d98, 0x32222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193d9c, 0x00020002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193da4, 0x04000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193da8, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x193db0, 0x40000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x193dc0,     4, zx_burst_7369_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7369 */
-	{   0x193f88,    13, zx_burst_7370_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7370 */
-	{   0x193fd0,     4, zx_burst_7371_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7371 */
+	{   0x193dc0,     4, zx_burst_6937_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6937 */
+	{   0x193f88,    13, zx_burst_6938_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6938 */
+	{   0x193fd0,     4, zx_burst_6939_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6939 */
 	{   0x194000, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194004, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194014, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15099,13 +13851,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1941e8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1941ec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1941f0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1941f8,     6, zx_burst_7377_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7377 */
+	{   0x1941f8,     6, zx_burst_6945_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6945 */
 	{   0x194214, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194218, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19422c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194238, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19423c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x194340,    40, zx_burst_7381_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7381 */
+	{   0x194340,    40, zx_burst_6949_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6949 */
 	{   0x194400, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194404, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194414, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15117,13 +13869,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1945e8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1945ec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1945f0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1945f8,     6, zx_burst_7387_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7387 */
+	{   0x1945f8,     6, zx_burst_6955_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6955 */
 	{   0x194614, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194618, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19462c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194638, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19463c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x194740,    40, zx_burst_7391_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7391 */
+	{   0x194740,    40, zx_burst_6959_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6959 */
 	{   0x194800, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194804, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194814, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15135,13 +13887,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1949e8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1949ec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1949f0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1949f8,     6, zx_burst_7397_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7397 */
+	{   0x1949f8,     6, zx_burst_6965_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6965 */
 	{   0x194a14, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194a18, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194a2c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194a38, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194a3c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x194b40,    40, zx_burst_7401_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7401 */
+	{   0x194b40,    40, zx_burst_6969_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6969 */
 	{   0x194c00, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194c04, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194c14, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15153,13 +13905,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x194de8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194dec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194df0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x194df8,     6, zx_burst_7407_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7407 */
+	{   0x194df8,     6, zx_burst_6975_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6975 */
 	{   0x194e14, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194e18, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194e2c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194e38, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x194e3c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x194f40,    40, zx_burst_7411_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7411 */
+	{   0x194f40,    40, zx_burst_6979_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6979 */
 	{   0x195000, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195004, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195014, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15171,13 +13923,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1951e8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1951ec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1951f0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1951f8,     6, zx_burst_7417_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7417 */
+	{   0x1951f8,     6, zx_burst_6985_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6985 */
 	{   0x195214, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195218, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19522c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195238, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19523c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x195340,    40, zx_burst_7421_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7421 */
+	{   0x195340,    40, zx_burst_6989_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6989 */
 	{   0x195400, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195404, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195414, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15189,13 +13941,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1955e8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1955ec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1955f0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1955f8,     6, zx_burst_7427_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7427 */
+	{   0x1955f8,     6, zx_burst_6995_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6995 */
 	{   0x195614, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195618, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19562c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195638, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19563c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x195740,    40, zx_burst_7431_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7431 */
+	{   0x195740,    40, zx_burst_6999_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6999 */
 	{   0x195800, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195804, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195814, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15207,13 +13959,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1959e8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1959ec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1959f0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1959f8,     6, zx_burst_7437_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7437 */
+	{   0x1959f8,     6, zx_burst_7005_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7005 */
 	{   0x195a14, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195a18, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195a2c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195a38, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195a3c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x195b40,    40, zx_burst_7441_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7441 */
+	{   0x195b40,    40, zx_burst_7009_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7009 */
 	{   0x195c00, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195c04, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195c14, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15225,13 +13977,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x195de8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195dec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195df0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x195df8,     6, zx_burst_7447_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7447 */
+	{   0x195df8,     6, zx_burst_7015_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7015 */
 	{   0x195e14, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195e18, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195e2c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195e38, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x195e3c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x195f40,    40, zx_burst_7451_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7451 */
+	{   0x195f40,    40, zx_burst_7019_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7019 */
 	{   0x196000, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196004, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196014, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15243,13 +13995,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1961e8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1961ec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1961f0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1961f8,     6, zx_burst_7457_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7457 */
+	{   0x1961f8,     6, zx_burst_7025_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7025 */
 	{   0x196214, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196218, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19622c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196238, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19623c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x196340,    40, zx_burst_7461_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7461 */
+	{   0x196340,    40, zx_burst_7029_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7029 */
 	{   0x196400, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196404, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196414, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15261,13 +14013,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1965e8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1965ec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1965f0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1965f8,     6, zx_burst_7467_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7467 */
+	{   0x1965f8,     6, zx_burst_7035_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7035 */
 	{   0x196614, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196618, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19662c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196638, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19663c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x196740,    40, zx_burst_7471_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7471 */
+	{   0x196740,    40, zx_burst_7039_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7039 */
 	{   0x196800, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196804, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196814, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15279,13 +14031,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1969e8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1969ec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1969f0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1969f8,     6, zx_burst_7477_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7477 */
+	{   0x1969f8,     6, zx_burst_7045_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7045 */
 	{   0x196a14, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196a18, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196a2c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196a38, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196a3c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x196b40,    40, zx_burst_7481_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7481 */
+	{   0x196b40,    40, zx_burst_7049_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7049 */
 	{   0x196c00, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196c04, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196c14, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15297,13 +14049,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x196de8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196dec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196df0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x196df8,     6, zx_burst_7487_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7487 */
+	{   0x196df8,     6, zx_burst_7055_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7055 */
 	{   0x196e14, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196e18, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196e2c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196e38, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x196e3c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x196f40,    40, zx_burst_7491_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7491 */
+	{   0x196f40,    40, zx_burst_7059_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7059 */
 	{   0x197000, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197004, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197014, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15315,13 +14067,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1971e8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1971ec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1971f0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1971f8,     6, zx_burst_7497_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7497 */
+	{   0x1971f8,     6, zx_burst_7065_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7065 */
 	{   0x197214, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197218, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19722c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197238, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19723c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x197340,    40, zx_burst_7501_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7501 */
+	{   0x197340,    40, zx_burst_7069_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7069 */
 	{   0x197400, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197404, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197414, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15333,13 +14085,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1975e8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1975ec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1975f0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1975f8,     6, zx_burst_7507_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7507 */
+	{   0x1975f8,     6, zx_burst_7075_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7075 */
 	{   0x197614, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197618, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19762c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197638, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x19763c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x197740,    40, zx_burst_7511_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7511 */
+	{   0x197740,    40, zx_burst_7079_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7079 */
 	{   0x197800, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197804, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197814, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15351,13 +14103,13 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1979e8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1979ec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1979f0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1979f8,     6, zx_burst_7517_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7517 */
+	{   0x1979f8,     6, zx_burst_7085_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7085 */
 	{   0x197a14, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197a18, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197a2c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197a38, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197a3c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x197b40,    40, zx_burst_7521_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7521 */
+	{   0x197b40,    40, zx_burst_7089_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7089 */
 	{   0x197c00, 0x000003d7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197c04, 0x0d1cef00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197c14, 0x03c00006, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15369,210 +14121,210 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x197de8, 0x280001c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197dec, 0x500b0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197df0, 0x180c6034, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x197df8,     6, zx_burst_7527_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7527 */
+	{   0x197df8,     6, zx_burst_7095_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7095 */
 	{   0x197e14, 0xffffff00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197e18, 0x00000100, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197e2c, 0x00ff00f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197e38, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197e3c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x197f40,    40, zx_burst_7531_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7531 */
-	/* ──── PP_FUC (ops 10371..) ──── */
-	{   0x1c0004,     4, zx_burst_7532_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7532 */
+	{   0x197f40,    40, zx_burst_7099_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7099 */
+	/* ──── PP_FUC (ops 9811..) ──── */
+	{   0x1c0004,     4, zx_burst_7100_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7100 */
 	{   0x1c0020, 0x00000fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0024, 0x00000106, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0030, 0x00000101, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0034, 0x00010001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c003c,     4, zx_burst_7535_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7535 */
+	{   0x1c003c,     4, zx_burst_7103_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7103 */
 	{   0x1c0054, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0090, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0094, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c009c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c00a0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c00a4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c00ac,     4, zx_burst_7539_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7539 */
-	{   0x1c00c0,     9, zx_burst_7540_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7540 */
-	{   0x1c0100,     7, zx_burst_7541_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7541 */
-	{   0x1c0400,     5, zx_burst_7542_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7542 */
-	{   0x1c0420,     6, zx_burst_7543_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7543 */
-	{   0x1c043c,     4, zx_burst_7544_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7544 */
+	{   0x1c00ac,     4, zx_burst_7107_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7107 */
+	{   0x1c00c0,     9, zx_burst_7108_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7108 */
+	{   0x1c0100,     7, zx_burst_7109_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7109 */
+	{   0x1c0400,     5, zx_burst_7110_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7110 */
+	{   0x1c0420,     6, zx_burst_7111_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7111 */
+	{   0x1c043c,     4, zx_burst_7112_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7112 */
 	{   0x1c0454, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0490, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0494, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c049c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c04a0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c04a4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c04ac,     4, zx_burst_7548_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7548 */
-	{   0x1c04c0,     9, zx_burst_7549_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7549 */
-	{   0x1c0500,     7, zx_burst_7550_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7550 */
-	{   0x1c0800,     5, zx_burst_7551_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7551 */
-	{   0x1c0820,     6, zx_burst_7552_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7552 */
-	{   0x1c083c,     4, zx_burst_7553_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7553 */
+	{   0x1c04ac,     4, zx_burst_7116_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7116 */
+	{   0x1c04c0,     9, zx_burst_7117_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7117 */
+	{   0x1c0500,     7, zx_burst_7118_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7118 */
+	{   0x1c0800,     5, zx_burst_7119_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7119 */
+	{   0x1c0820,     6, zx_burst_7120_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7120 */
+	{   0x1c083c,     4, zx_burst_7121_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7121 */
 	{   0x1c0854, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0890, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0894, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c089c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c08a0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c08a4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c08ac,     4, zx_burst_7557_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7557 */
-	{   0x1c08c0,     9, zx_burst_7558_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7558 */
-	{   0x1c0900,     7, zx_burst_7559_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7559 */
-	{   0x1c0c00,     5, zx_burst_7560_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7560 */
-	{   0x1c0c20,     6, zx_burst_7561_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7561 */
-	{   0x1c0c3c,     4, zx_burst_7562_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7562 */
+	{   0x1c08ac,     4, zx_burst_7125_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7125 */
+	{   0x1c08c0,     9, zx_burst_7126_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7126 */
+	{   0x1c0900,     7, zx_burst_7127_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7127 */
+	{   0x1c0c00,     5, zx_burst_7128_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7128 */
+	{   0x1c0c20,     6, zx_burst_7129_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7129 */
+	{   0x1c0c3c,     4, zx_burst_7130_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7130 */
 	{   0x1c0c54, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0c90, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0c94, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0c9c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0ca0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0ca4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c0cac,     4, zx_burst_7566_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7566 */
-	{   0x1c0cc0,     9, zx_burst_7567_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7567 */
-	{   0x1c0d00,     7, zx_burst_7568_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7568 */
-	{   0x1c1000,     5, zx_burst_7569_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7569 */
-	{   0x1c1020,     6, zx_burst_7570_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7570 */
-	{   0x1c103c,     4, zx_burst_7571_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7571 */
+	{   0x1c0cac,     4, zx_burst_7134_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7134 */
+	{   0x1c0cc0,     9, zx_burst_7135_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7135 */
+	{   0x1c0d00,     7, zx_burst_7136_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7136 */
+	{   0x1c1000,     5, zx_burst_7137_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7137 */
+	{   0x1c1020,     6, zx_burst_7138_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7138 */
+	{   0x1c103c,     4, zx_burst_7139_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7139 */
 	{   0x1c1054, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c1090, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c1094, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c109c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c10a0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c10a4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c10ac,     4, zx_burst_7575_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7575 */
-	{   0x1c10c0,     9, zx_burst_7576_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7576 */
-	{   0x1c1100,     7, zx_burst_7577_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7577 */
-	{   0x1c1400,     5, zx_burst_7578_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7578 */
-	{   0x1c1420,     6, zx_burst_7579_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7579 */
-	{   0x1c143c,     4, zx_burst_7580_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7580 */
+	{   0x1c10ac,     4, zx_burst_7143_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7143 */
+	{   0x1c10c0,     9, zx_burst_7144_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7144 */
+	{   0x1c1100,     7, zx_burst_7145_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7145 */
+	{   0x1c1400,     5, zx_burst_7146_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7146 */
+	{   0x1c1420,     6, zx_burst_7147_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7147 */
+	{   0x1c143c,     4, zx_burst_7148_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7148 */
 	{   0x1c1454, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c1490, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c1494, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c149c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c14a0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c14a4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c14ac,     4, zx_burst_7584_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7584 */
-	{   0x1c14c0,     9, zx_burst_7585_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7585 */
-	{   0x1c1500,     7, zx_burst_7586_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7586 */
-	{   0x1c1800,     5, zx_burst_7587_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7587 */
-	{   0x1c1820,     6, zx_burst_7588_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7588 */
-	{   0x1c183c,     4, zx_burst_7589_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7589 */
+	{   0x1c14ac,     4, zx_burst_7152_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7152 */
+	{   0x1c14c0,     9, zx_burst_7153_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7153 */
+	{   0x1c1500,     7, zx_burst_7154_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7154 */
+	{   0x1c1800,     5, zx_burst_7155_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7155 */
+	{   0x1c1820,     6, zx_burst_7156_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7156 */
+	{   0x1c183c,     4, zx_burst_7157_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7157 */
 	{   0x1c1854, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c1890, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c1894, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c189c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c18a0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c18a4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c18ac,     4, zx_burst_7593_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7593 */
-	{   0x1c18c0,     9, zx_burst_7594_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7594 */
-	{   0x1c1900,     7, zx_burst_7595_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7595 */
-	{   0x1c1c00,     5, zx_burst_7596_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7596 */
-	{   0x1c1c20,     6, zx_burst_7597_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7597 */
-	{   0x1c1c3c,     4, zx_burst_7598_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7598 */
+	{   0x1c18ac,     4, zx_burst_7161_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7161 */
+	{   0x1c18c0,     9, zx_burst_7162_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7162 */
+	{   0x1c1900,     7, zx_burst_7163_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7163 */
+	{   0x1c1c00,     5, zx_burst_7164_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7164 */
+	{   0x1c1c20,     6, zx_burst_7165_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7165 */
+	{   0x1c1c3c,     4, zx_burst_7166_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7166 */
 	{   0x1c1c54, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c1c90, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c1c94, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c1c9c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c1ca0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c1ca4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c1cac,     4, zx_burst_7602_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7602 */
-	{   0x1c1cc0,     9, zx_burst_7603_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7603 */
-	{   0x1c1d00,     7, zx_burst_7604_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7604 */
-	{   0x1c2000,     5, zx_burst_7605_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7605 */
-	{   0x1c2020,     6, zx_burst_7606_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7606 */
-	{   0x1c203c,     4, zx_burst_7607_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7607 */
+	{   0x1c1cac,     4, zx_burst_7170_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7170 */
+	{   0x1c1cc0,     9, zx_burst_7171_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7171 */
+	{   0x1c1d00,     7, zx_burst_7172_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7172 */
+	{   0x1c2000,     5, zx_burst_7173_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7173 */
+	{   0x1c2020,     6, zx_burst_7174_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7174 */
+	{   0x1c203c,     4, zx_burst_7175_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7175 */
 	{   0x1c2054, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c2090, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c2094, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c209c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c20a0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c20a4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c20ac,     4, zx_burst_7611_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7611 */
-	{   0x1c20c0,     9, zx_burst_7612_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7612 */
-	{   0x1c2100,     7, zx_burst_7613_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7613 */
-	{   0x1c2400,     5, zx_burst_7614_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7614 */
-	{   0x1c2420,     6, zx_burst_7615_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7615 */
-	{   0x1c243c,     4, zx_burst_7616_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7616 */
+	{   0x1c20ac,     4, zx_burst_7179_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7179 */
+	{   0x1c20c0,     9, zx_burst_7180_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7180 */
+	{   0x1c2100,     7, zx_burst_7181_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7181 */
+	{   0x1c2400,     5, zx_burst_7182_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7182 */
+	{   0x1c2420,     6, zx_burst_7183_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7183 */
+	{   0x1c243c,     4, zx_burst_7184_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7184 */
 	{   0x1c2454, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c2490, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c2494, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c249c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c24a0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c24a4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c24ac,     4, zx_burst_7620_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7620 */
-	{   0x1c24c0,     9, zx_burst_7621_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7621 */
-	{   0x1c2500,     7, zx_burst_7622_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7622 */
-	{   0x1c2800,     5, zx_burst_7623_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7623 */
-	{   0x1c2820,     6, zx_burst_7624_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7624 */
-	{   0x1c283c,     4, zx_burst_7625_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7625 */
+	{   0x1c24ac,     4, zx_burst_7188_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7188 */
+	{   0x1c24c0,     9, zx_burst_7189_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7189 */
+	{   0x1c2500,     7, zx_burst_7190_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7190 */
+	{   0x1c2800,     5, zx_burst_7191_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7191 */
+	{   0x1c2820,     6, zx_burst_7192_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7192 */
+	{   0x1c283c,     4, zx_burst_7193_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7193 */
 	{   0x1c2854, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c2890, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c2894, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c289c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c28a0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c28a4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c28ac,     4, zx_burst_7629_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7629 */
-	{   0x1c28c0,     9, zx_burst_7630_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7630 */
-	{   0x1c2900,     7, zx_burst_7631_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7631 */
-	{   0x1c2c00,     5, zx_burst_7632_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7632 */
-	{   0x1c2c20,     6, zx_burst_7633_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7633 */
-	{   0x1c2c3c,     4, zx_burst_7634_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7634 */
+	{   0x1c28ac,     4, zx_burst_7197_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7197 */
+	{   0x1c28c0,     9, zx_burst_7198_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7198 */
+	{   0x1c2900,     7, zx_burst_7199_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7199 */
+	{   0x1c2c00,     5, zx_burst_7200_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7200 */
+	{   0x1c2c20,     6, zx_burst_7201_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7201 */
+	{   0x1c2c3c,     4, zx_burst_7202_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7202 */
 	{   0x1c2c54, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c2c90, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c2c94, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c2c9c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c2ca0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c2ca4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c2cac,     4, zx_burst_7638_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7638 */
-	{   0x1c2cc0,     9, zx_burst_7639_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7639 */
-	{   0x1c2d00,     7, zx_burst_7640_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7640 */
-	{   0x1c3000,     5, zx_burst_7641_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7641 */
-	{   0x1c3020,     6, zx_burst_7642_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7642 */
-	{   0x1c303c,     4, zx_burst_7643_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7643 */
+	{   0x1c2cac,     4, zx_burst_7206_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7206 */
+	{   0x1c2cc0,     9, zx_burst_7207_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7207 */
+	{   0x1c2d00,     7, zx_burst_7208_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7208 */
+	{   0x1c3000,     5, zx_burst_7209_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7209 */
+	{   0x1c3020,     6, zx_burst_7210_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7210 */
+	{   0x1c303c,     4, zx_burst_7211_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7211 */
 	{   0x1c3054, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c3090, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c3094, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c309c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c30a0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c30a4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c30ac,     4, zx_burst_7647_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7647 */
-	{   0x1c30c0,     9, zx_burst_7648_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7648 */
-	{   0x1c3100,     7, zx_burst_7649_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7649 */
-	{   0x1c3400,     5, zx_burst_7650_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7650 */
-	{   0x1c3420,     6, zx_burst_7651_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7651 */
-	{   0x1c343c,     4, zx_burst_7652_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7652 */
+	{   0x1c30ac,     4, zx_burst_7215_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7215 */
+	{   0x1c30c0,     9, zx_burst_7216_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7216 */
+	{   0x1c3100,     7, zx_burst_7217_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7217 */
+	{   0x1c3400,     5, zx_burst_7218_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7218 */
+	{   0x1c3420,     6, zx_burst_7219_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7219 */
+	{   0x1c343c,     4, zx_burst_7220_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7220 */
 	{   0x1c3454, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c3490, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c3494, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c349c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c34a0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c34a4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c34ac,     4, zx_burst_7656_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7656 */
-	{   0x1c34c0,     9, zx_burst_7657_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7657 */
-	{   0x1c3500,     7, zx_burst_7658_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7658 */
-	{   0x1c3800,     5, zx_burst_7659_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7659 */
-	{   0x1c3820,     6, zx_burst_7660_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7660 */
-	{   0x1c383c,     4, zx_burst_7661_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7661 */
+	{   0x1c34ac,     4, zx_burst_7224_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7224 */
+	{   0x1c34c0,     9, zx_burst_7225_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7225 */
+	{   0x1c3500,     7, zx_burst_7226_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7226 */
+	{   0x1c3800,     5, zx_burst_7227_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7227 */
+	{   0x1c3820,     6, zx_burst_7228_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7228 */
+	{   0x1c383c,     4, zx_burst_7229_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7229 */
 	{   0x1c3854, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c3890, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c3894, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c389c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c38a0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c38a4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c38ac,     4, zx_burst_7665_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7665 */
-	{   0x1c38c0,     9, zx_burst_7666_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7666 */
-	{   0x1c3900,     7, zx_burst_7667_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7667 */
-	{   0x1c3c00,     5, zx_burst_7668_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7668 */
-	{   0x1c3c20,     6, zx_burst_7669_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7669 */
-	{   0x1c3c3c,     4, zx_burst_7670_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7670 */
+	{   0x1c38ac,     4, zx_burst_7233_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7233 */
+	{   0x1c38c0,     9, zx_burst_7234_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7234 */
+	{   0x1c3900,     7, zx_burst_7235_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7235 */
+	{   0x1c3c00,     5, zx_burst_7236_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7236 */
+	{   0x1c3c20,     6, zx_burst_7237_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7237 */
+	{   0x1c3c3c,     4, zx_burst_7238_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7238 */
 	{   0x1c3c54, 0x00000490, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c3c90, 0x000003aa, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c3c94, 0x0000007f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c3c9c, 0x00002e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c3ca0, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c3ca4, 0x00f42e00, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c3cac,     4, zx_burst_7674_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7674 */
-	{   0x1c3cc0,     9, zx_burst_7675_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7675 */
-	{   0x1c3d00,     7, zx_burst_7676_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7676 */
-	{   0x1c4000,     7, zx_burst_7677_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7677 */
+	{   0x1c3cac,     4, zx_burst_7242_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7242 */
+	{   0x1c3cc0,     9, zx_burst_7243_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7243 */
+	{   0x1c3d00,     7, zx_burst_7244_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7244 */
+	{   0x1c4000,     7, zx_burst_7245_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7245 */
 	{   0x1c4020, 0x0007d000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c4028, 0x00001388, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c4030, 0x00000018, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15582,7 +14334,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1c4268, 0xb8000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c426c, 0x22222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c4284, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c5000,     7, zx_burst_7684_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7684 */
+	{   0x1c5000,     7, zx_burst_7252_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7252 */
 	{   0x1c5020, 0x0007d000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c5028, 0x00001388, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c5030, 0x00000018, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15592,7 +14344,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1c5268, 0xb8000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c526c, 0x22222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c5284, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c6000,     7, zx_burst_7691_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7691 */
+	{   0x1c6000,     7, zx_burst_7259_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7259 */
 	{   0x1c6020, 0x0007d000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c6028, 0x00001388, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c6030, 0x00000018, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15602,7 +14354,7 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1c6268, 0xb8000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c626c, 0x22222222, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c6284, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c7000,     7, zx_burst_7698_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7698 */
+	{   0x1c7000,     7, zx_burst_7266_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7266 */
 	{   0x1c7020, 0x0007d000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c7028, 0x00001388, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c7030, 0x00000018, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15623,21 +14375,21 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1c8184, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c8204, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c82d4, 0x00005555, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c83c0,     8, zx_burst_7711_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7711 */
+	{   0x1c83c0,     8, zx_burst_7279_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7279 */
 	{   0x1c8630, 0x00000080, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c8638, 0x000000c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c8c00,    10, zx_burst_7714_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7714 */
+	{   0x1c8c00,    10, zx_burst_7282_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7282 */
 	{   0x1c8c40, 0x2e2d172e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c8c48, 0xd10306f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c8c4c, 0xe6f40022, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c8c54, 0x00f40000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c8c5c, 0x00f40000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c8c64, 0x00f40000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1c8e00,     6, zx_burst_7720_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7720 */
+	{   0x1c8e00,     6, zx_burst_7288_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7288 */
 	{   0x1c8e1c, 0x62e95900, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c8e20, 0x0000c8a3, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c8e24, 0x42015400, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cc014,     8, zx_burst_7722_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7722 */
+	{   0x1cc014,     8, zx_burst_7290_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7290 */
 	{   0x1cc054, 0x00202000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cc058, 0x00000012, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cc088, 0x00007fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15649,16 +14401,16 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1cc0d4, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cc1cc, 0x000004e6, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cc1d0, 0x00000048, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cc1e0,    17, zx_burst_7729_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7729 */
-	{   0x1cc260,    10, zx_burst_7730_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7730 */
-	{   0x1cc290,     4, zx_burst_7731_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7731 */
+	{   0x1cc1e0,    17, zx_burst_7297_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7297 */
+	{   0x1cc260,    10, zx_burst_7298_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7298 */
+	{   0x1cc290,     4, zx_burst_7299_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7299 */
 	{   0x1cc300, 0x24904111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cc304, 0x01004851, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cc394,     8, zx_burst_7733_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7733 */
+	{   0x1cc394,     8, zx_burst_7301_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7301 */
 	{   0x1cc3b8, 0x04d504d5, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cc3c4, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cc3e0,     7, zx_burst_7736_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7736 */
-	{   0x1cc814,     8, zx_burst_7737_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7737 */
+	{   0x1cc3e0,     7, zx_burst_7304_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7304 */
+	{   0x1cc814,     8, zx_burst_7305_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7305 */
 	{   0x1cc854, 0x00202000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cc858, 0x00000012, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cc880, 0x00000600, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15671,16 +14423,16 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1cc8d4, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cc9cc, 0x000004e6, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cc9d0, 0x00000048, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cc9e0,    17, zx_burst_7745_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7745 */
-	{   0x1cca60,    10, zx_burst_7746_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7746 */
-	{   0x1cca90,     4, zx_burst_7747_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7747 */
+	{   0x1cc9e0,    17, zx_burst_7313_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7313 */
+	{   0x1cca60,    10, zx_burst_7314_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7314 */
+	{   0x1cca90,     4, zx_burst_7315_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7315 */
 	{   0x1ccb00, 0x24904111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ccb04, 0x01004851, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1ccb94,     8, zx_burst_7749_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7749 */
+	{   0x1ccb94,     8, zx_burst_7317_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7317 */
 	{   0x1ccbb8, 0x04d504d5, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ccbc4, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1ccbe0,     7, zx_burst_7752_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7752 */
-	{   0x1cd014,     8, zx_burst_7753_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7753 */
+	{   0x1ccbe0,     7, zx_burst_7320_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7320 */
+	{   0x1cd014,     8, zx_burst_7321_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7321 */
 	{   0x1cd054, 0x00202000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cd058, 0x00000012, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cd080, 0x00000600, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15693,16 +14445,16 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1cd0d4, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cd1cc, 0x000004e6, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cd1d0, 0x00000048, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cd1e0,    17, zx_burst_7761_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7761 */
-	{   0x1cd260,    10, zx_burst_7762_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7762 */
-	{   0x1cd290,     4, zx_burst_7763_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7763 */
+	{   0x1cd1e0,    17, zx_burst_7329_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7329 */
+	{   0x1cd260,    10, zx_burst_7330_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7330 */
+	{   0x1cd290,     4, zx_burst_7331_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7331 */
 	{   0x1cd300, 0x24904111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cd304, 0x01004851, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cd394,     8, zx_burst_7765_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7765 */
+	{   0x1cd394,     8, zx_burst_7333_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7333 */
 	{   0x1cd3b8, 0x04d504d5, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cd3c4, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cd3e0,     7, zx_burst_7768_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7768 */
-	{   0x1cd814,     8, zx_burst_7769_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7769 */
+	{   0x1cd3e0,     7, zx_burst_7336_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7336 */
+	{   0x1cd814,     8, zx_burst_7337_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7337 */
 	{   0x1cd854, 0x00202000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cd858, 0x00000012, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cd880, 0x00000600, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15715,16 +14467,16 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1cd8d4, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cd9cc, 0x000004e6, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cd9d0, 0x00000048, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cd9e0,    17, zx_burst_7777_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7777 */
-	{   0x1cda60,    10, zx_burst_7778_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7778 */
-	{   0x1cda90,     4, zx_burst_7779_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7779 */
+	{   0x1cd9e0,    17, zx_burst_7345_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7345 */
+	{   0x1cda60,    10, zx_burst_7346_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7346 */
+	{   0x1cda90,     4, zx_burst_7347_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7347 */
 	{   0x1cdb00, 0x24904111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cdb04, 0x01004851, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cdb94,     8, zx_burst_7781_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7781 */
+	{   0x1cdb94,     8, zx_burst_7349_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7349 */
 	{   0x1cdbb8, 0x04d504d5, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cdbc4, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cdbe0,     7, zx_burst_7784_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7784 */
-	{   0x1ce014,     8, zx_burst_7785_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7785 */
+	{   0x1cdbe0,     7, zx_burst_7352_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7352 */
+	{   0x1ce014,     8, zx_burst_7353_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7353 */
 	{   0x1ce054, 0x00202000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ce058, 0x00000012, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ce080, 0x00000600, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15737,16 +14489,16 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1ce0d4, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ce1cc, 0x000004e6, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ce1d0, 0x00000048, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1ce1e0,    17, zx_burst_7793_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7793 */
-	{   0x1ce260,    10, zx_burst_7794_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7794 */
-	{   0x1ce290,     4, zx_burst_7795_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7795 */
+	{   0x1ce1e0,    17, zx_burst_7361_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7361 */
+	{   0x1ce260,    10, zx_burst_7362_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7362 */
+	{   0x1ce290,     4, zx_burst_7363_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7363 */
 	{   0x1ce300, 0x24904111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ce304, 0x01004851, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1ce394,     8, zx_burst_7797_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7797 */
+	{   0x1ce394,     8, zx_burst_7365_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7365 */
 	{   0x1ce3b8, 0x04d504d5, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ce3c4, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1ce3e0,     7, zx_burst_7800_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7800 */
-	{   0x1ce814,     8, zx_burst_7801_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7801 */
+	{   0x1ce3e0,     7, zx_burst_7368_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7368 */
+	{   0x1ce814,     8, zx_burst_7369_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7369 */
 	{   0x1ce854, 0x00202000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ce858, 0x00000012, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ce880, 0x00000600, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15759,16 +14511,16 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1ce8d4, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ce9cc, 0x000004e6, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ce9d0, 0x00000048, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1ce9e0,    17, zx_burst_7809_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7809 */
-	{   0x1cea60,    10, zx_burst_7810_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7810 */
-	{   0x1cea90,     4, zx_burst_7811_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7811 */
+	{   0x1ce9e0,    17, zx_burst_7377_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7377 */
+	{   0x1cea60,    10, zx_burst_7378_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7378 */
+	{   0x1cea90,     4, zx_burst_7379_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7379 */
 	{   0x1ceb00, 0x24904111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ceb04, 0x01004851, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1ceb94,     8, zx_burst_7813_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7813 */
+	{   0x1ceb94,     8, zx_burst_7381_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7381 */
 	{   0x1cebb8, 0x04d504d5, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cebc4, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cebe0,     7, zx_burst_7816_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7816 */
-	{   0x1cf014,     8, zx_burst_7817_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7817 */
+	{   0x1cebe0,     7, zx_burst_7384_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7384 */
+	{   0x1cf014,     8, zx_burst_7385_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7385 */
 	{   0x1cf054, 0x00202000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cf058, 0x00000012, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cf080, 0x00000600, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15781,16 +14533,16 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1cf0d4, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cf1cc, 0x000004e6, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cf1d0, 0x00000048, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cf1e0,    17, zx_burst_7825_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7825 */
-	{   0x1cf260,    10, zx_burst_7826_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7826 */
-	{   0x1cf290,     4, zx_burst_7827_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7827 */
+	{   0x1cf1e0,    17, zx_burst_7393_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7393 */
+	{   0x1cf260,    10, zx_burst_7394_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7394 */
+	{   0x1cf290,     4, zx_burst_7395_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7395 */
 	{   0x1cf300, 0x24904111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cf304, 0x01004851, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cf394,     8, zx_burst_7829_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7829 */
+	{   0x1cf394,     8, zx_burst_7397_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7397 */
 	{   0x1cf3b8, 0x04d504d5, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cf3c4, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cf3e0,     7, zx_burst_7832_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7832 */
-	{   0x1cf814,     8, zx_burst_7833_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7833 */
+	{   0x1cf3e0,     7, zx_burst_7400_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7400 */
+	{   0x1cf814,     8, zx_burst_7401_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7401 */
 	{   0x1cf854, 0x00202000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cf858, 0x00000012, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cf880, 0x00000600, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15803,15 +14555,15 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1cf8d4, 0x00000007, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cf9cc, 0x000004e6, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cf9d0, 0x00000048, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cf9e0,    17, zx_burst_7841_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7841 */
-	{   0x1cfa60,    10, zx_burst_7842_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7842 */
-	{   0x1cfa90,     4, zx_burst_7843_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7843 */
+	{   0x1cf9e0,    17, zx_burst_7409_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7409 */
+	{   0x1cfa60,    10, zx_burst_7410_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7410 */
+	{   0x1cfa90,     4, zx_burst_7411_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7411 */
 	{   0x1cfb00, 0x24904111, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cfb04, 0x01004851, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cfb94,     8, zx_burst_7845_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7845 */
+	{   0x1cfb94,     8, zx_burst_7413_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7413 */
 	{   0x1cfbb8, 0x04d504d5, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1cfbc4, 0x0000052e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1cfbe0,     7, zx_burst_7848_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7848 */
+	{   0x1cfbe0,     7, zx_burst_7416_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7416 */
 	{   0x1d4000, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4004, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4008, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15821,11 +14573,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d4080, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d40c0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4140, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d4148,     4, zx_burst_7856_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7856 */
+	{   0x1d4148,     4, zx_burst_7424_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7424 */
 	{   0x1d4218, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4224, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4228, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d4240,     8, zx_burst_7859_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7859 */
+	{   0x1d4240,     8, zx_burst_7427_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7427 */
 	{   0x1d4400, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4404, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4408, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15835,11 +14587,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d4480, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d44c0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4540, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d4548,     4, zx_burst_7867_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7867 */
+	{   0x1d4548,     4, zx_burst_7435_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7435 */
 	{   0x1d4618, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4624, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4628, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d4640,     8, zx_burst_7870_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7870 */
+	{   0x1d4640,     8, zx_burst_7438_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7438 */
 	{   0x1d4800, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4804, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4808, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15849,11 +14601,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d4880, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d48c0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4940, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d4948,     4, zx_burst_7878_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7878 */
+	{   0x1d4948,     4, zx_burst_7446_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7446 */
 	{   0x1d4a18, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4a24, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4a28, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d4a40,     8, zx_burst_7881_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7881 */
+	{   0x1d4a40,     8, zx_burst_7449_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7449 */
 	{   0x1d4c00, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4c04, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4c08, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15863,11 +14615,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d4c80, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4cc0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4d40, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d4d48,     4, zx_burst_7889_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7889 */
+	{   0x1d4d48,     4, zx_burst_7457_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7457 */
 	{   0x1d4e18, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4e24, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d4e28, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d4e40,     8, zx_burst_7892_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7892 */
+	{   0x1d4e40,     8, zx_burst_7460_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7460 */
 	{   0x1d5000, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5004, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5008, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15877,11 +14629,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d5080, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d50c0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5140, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d5148,     4, zx_burst_7900_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7900 */
+	{   0x1d5148,     4, zx_burst_7468_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7468 */
 	{   0x1d5218, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5224, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5228, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d5240,     8, zx_burst_7903_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7903 */
+	{   0x1d5240,     8, zx_burst_7471_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7471 */
 	{   0x1d5400, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5404, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5408, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15891,11 +14643,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d5480, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d54c0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5540, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d5548,     4, zx_burst_7911_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7911 */
+	{   0x1d5548,     4, zx_burst_7479_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7479 */
 	{   0x1d5618, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5624, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5628, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d5640,     8, zx_burst_7914_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7914 */
+	{   0x1d5640,     8, zx_burst_7482_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7482 */
 	{   0x1d5800, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5804, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5808, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15905,11 +14657,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d5880, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d58c0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5940, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d5948,     4, zx_burst_7922_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7922 */
+	{   0x1d5948,     4, zx_burst_7490_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7490 */
 	{   0x1d5a18, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5a24, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5a28, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d5a40,     8, zx_burst_7925_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7925 */
+	{   0x1d5a40,     8, zx_burst_7493_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7493 */
 	{   0x1d5c00, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5c04, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5c08, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15919,11 +14671,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d5c80, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5cc0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5d40, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d5d48,     4, zx_burst_7933_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7933 */
+	{   0x1d5d48,     4, zx_burst_7501_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7501 */
 	{   0x1d5e18, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5e24, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d5e28, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d5e40,     8, zx_burst_7936_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7936 */
+	{   0x1d5e40,     8, zx_burst_7504_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7504 */
 	{   0x1d6000, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6004, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6008, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15933,11 +14685,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d6080, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d60c0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6140, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d6148,     4, zx_burst_7944_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7944 */
+	{   0x1d6148,     4, zx_burst_7512_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7512 */
 	{   0x1d6218, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6224, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6228, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d6240,     8, zx_burst_7947_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7947 */
+	{   0x1d6240,     8, zx_burst_7515_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7515 */
 	{   0x1d6400, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6404, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6408, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15947,11 +14699,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d6480, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d64c0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6540, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d6548,     4, zx_burst_7955_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7955 */
+	{   0x1d6548,     4, zx_burst_7523_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7523 */
 	{   0x1d6618, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6624, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6628, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d6640,     8, zx_burst_7958_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7958 */
+	{   0x1d6640,     8, zx_burst_7526_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7526 */
 	{   0x1d6800, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6804, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6808, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15961,11 +14713,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d6880, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d68c0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6940, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d6948,     4, zx_burst_7966_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7966 */
+	{   0x1d6948,     4, zx_burst_7534_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7534 */
 	{   0x1d6a18, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6a24, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6a28, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d6a40,     8, zx_burst_7969_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7969 */
+	{   0x1d6a40,     8, zx_burst_7537_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7537 */
 	{   0x1d6c00, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6c04, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6c08, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15975,11 +14727,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d6c80, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6cc0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6d40, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d6d48,     4, zx_burst_7977_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7977 */
+	{   0x1d6d48,     4, zx_burst_7545_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7545 */
 	{   0x1d6e18, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6e24, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d6e28, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d6e40,     8, zx_burst_7980_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7980 */
+	{   0x1d6e40,     8, zx_burst_7548_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7548 */
 	{   0x1d7000, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7004, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7008, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -15989,11 +14741,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d7080, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d70c0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7140, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d7148,     4, zx_burst_7988_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7988 */
+	{   0x1d7148,     4, zx_burst_7556_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7556 */
 	{   0x1d7218, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7224, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7228, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d7240,     8, zx_burst_7991_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7991 */
+	{   0x1d7240,     8, zx_burst_7559_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7559 */
 	{   0x1d7400, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7404, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7408, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -16003,11 +14755,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d7480, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d74c0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7540, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d7548,     4, zx_burst_7999_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7999 */
+	{   0x1d7548,     4, zx_burst_7567_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7567 */
 	{   0x1d7618, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7624, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7628, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d7640,     8, zx_burst_8002_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8002 */
+	{   0x1d7640,     8, zx_burst_7570_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7570 */
 	{   0x1d7800, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7804, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7808, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -16017,11 +14769,11 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d7880, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d78c0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7940, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d7948,     4, zx_burst_8010_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8010 */
+	{   0x1d7948,     4, zx_burst_7578_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7578 */
 	{   0x1d7a18, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7a24, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7a28, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d7a40,     8, zx_burst_8013_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8013 */
+	{   0x1d7a40,     8, zx_burst_7581_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7581 */
 	{   0x1d7c00, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7c04, 0x000003e7, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7c08, 0x00000834, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -16031,21 +14783,21 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d7c80, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7cc0, 0x00201f40, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7d40, 0x00000009, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d7d48,     4, zx_burst_8021_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8021 */
+	{   0x1d7d48,     4, zx_burst_7589_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7589 */
 	{   0x1d7e18, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7e24, 0x0000002e, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d7e28, 0x00000003, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d7e40,     8, zx_burst_8024_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8024 */
+	{   0x1d7e40,     8, zx_burst_7592_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7592 */
 	{   0x1d8000, 0x000010c0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d8014, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d8024, 0x000005dc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d8050, 0x00c04077, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d8080,    18, zx_burst_8029_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8029 */
+	{   0x1d8080,    18, zx_burst_7597_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7597 */
 	{   0x1d8100, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d8110, 0xf4f410a0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d8114, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d8124,     5, zx_burst_8032_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8032 */
-	{   0x1d8140,     4, zx_burst_8033_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8033 */
+	{   0x1d8124,     5, zx_burst_7600_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7600 */
+	{   0x1d8140,     4, zx_burst_7601_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7601 */
 	{   0x1d815c, 0x60540099, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d8168, 0x80000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d816c, 0xc00040c6, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -16054,12 +14806,12 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1d9014, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d9024, 0x000005dc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d9050, 0x00c04077, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d9080,    18, zx_burst_8040_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8040 */
+	{   0x1d9080,    18, zx_burst_7608_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7608 */
 	{   0x1d9100, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d9110, 0xf4f410a0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d9114, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1d9124,     5, zx_burst_8043_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8043 */
-	{   0x1d9140,     4, zx_burst_8044_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8044 */
+	{   0x1d9124,     5, zx_burst_7611_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7611 */
+	{   0x1d9140,     4, zx_burst_7612_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7612 */
 	{   0x1d915c, 0x60540099, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d9168, 0x80000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1d916c, 0xc00040c6, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -16068,12 +14820,12 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1da014, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1da024, 0x000005dc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1da050, 0x00c04077, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1da080,    18, zx_burst_8051_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8051 */
+	{   0x1da080,    18, zx_burst_7619_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7619 */
 	{   0x1da100, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1da110, 0xf4f410a0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1da114, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1da124,     5, zx_burst_8054_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8054 */
-	{   0x1da140,     4, zx_burst_8055_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8055 */
+	{   0x1da124,     5, zx_burst_7622_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7622 */
+	{   0x1da140,     4, zx_burst_7623_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7623 */
 	{   0x1da15c, 0x60540099, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1da168, 0x80000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1da16c, 0xc00040c6, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -16082,211 +14834,211 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 	{   0x1db014, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1db024, 0x000005dc, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1db050, 0x00c04077, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1db080,    18, zx_burst_8062_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8062 */
+	{   0x1db080,    18, zx_burst_7630_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7630 */
 	{   0x1db100, 0x000000f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1db110, 0xf4f410a0, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1db114, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1db124,     5, zx_burst_8065_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8065 */
-	{   0x1db140,     4, zx_burst_8066_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8066 */
+	{   0x1db124,     5, zx_burst_7633_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7633 */
+	{   0x1db140,     4, zx_burst_7634_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7634 */
 	{   0x1db15c, 0x60540099, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1db168, 0x80000000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1db16c, 0xc00040c6, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1db170, 0x019a0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dc014,     4, zx_burst_8069_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8069 */
+	{   0x1dc014,     4, zx_burst_7637_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7637 */
 	{   0x1dc034, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dc038, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dc03c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dc080,     7, zx_burst_8071_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8071 */
+	{   0x1dc080,     7, zx_burst_7639_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7639 */
 	{   0x1dc0a0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dc0b8,     8, zx_burst_8073_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8073 */
+	{   0x1dc0b8,     8, zx_burst_7641_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7641 */
 	{   0x1dc108, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dc140, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dc414,     4, zx_burst_8076_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8076 */
+	{   0x1dc414,     4, zx_burst_7644_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7644 */
 	{   0x1dc434, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dc438, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dc43c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dc480,     7, zx_burst_8078_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8078 */
+	{   0x1dc480,     7, zx_burst_7646_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7646 */
 	{   0x1dc4a0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dc4b8,     8, zx_burst_8080_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8080 */
+	{   0x1dc4b8,     8, zx_burst_7648_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7648 */
 	{   0x1dc508, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dc540, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dc814,     4, zx_burst_8083_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8083 */
+	{   0x1dc814,     4, zx_burst_7651_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7651 */
 	{   0x1dc834, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dc838, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dc83c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dc880,     7, zx_burst_8085_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8085 */
+	{   0x1dc880,     7, zx_burst_7653_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7653 */
 	{   0x1dc8a0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dc8b8,     8, zx_burst_8087_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8087 */
+	{   0x1dc8b8,     8, zx_burst_7655_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7655 */
 	{   0x1dc908, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dc940, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dcc14,     4, zx_burst_8090_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8090 */
+	{   0x1dcc14,     4, zx_burst_7658_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7658 */
 	{   0x1dcc34, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dcc38, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dcc3c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dcc80,     7, zx_burst_8092_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8092 */
+	{   0x1dcc80,     7, zx_burst_7660_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7660 */
 	{   0x1dcca0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dccb8,     8, zx_burst_8094_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8094 */
+	{   0x1dccb8,     8, zx_burst_7662_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7662 */
 	{   0x1dcd08, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dcd40, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dd014,     4, zx_burst_8097_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8097 */
+	{   0x1dd014,     4, zx_burst_7665_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7665 */
 	{   0x1dd034, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dd038, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dd03c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dd080,     7, zx_burst_8099_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8099 */
+	{   0x1dd080,     7, zx_burst_7667_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7667 */
 	{   0x1dd0a0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dd0b8,     8, zx_burst_8101_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8101 */
+	{   0x1dd0b8,     8, zx_burst_7669_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7669 */
 	{   0x1dd108, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dd140, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dd414,     4, zx_burst_8104_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8104 */
+	{   0x1dd414,     4, zx_burst_7672_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7672 */
 	{   0x1dd434, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dd438, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dd43c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dd480,     7, zx_burst_8106_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8106 */
+	{   0x1dd480,     7, zx_burst_7674_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7674 */
 	{   0x1dd4a0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dd4b8,     8, zx_burst_8108_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8108 */
+	{   0x1dd4b8,     8, zx_burst_7676_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7676 */
 	{   0x1dd508, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dd540, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dd814,     4, zx_burst_8111_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8111 */
+	{   0x1dd814,     4, zx_burst_7679_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7679 */
 	{   0x1dd834, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dd838, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dd83c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dd880,     7, zx_burst_8113_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8113 */
+	{   0x1dd880,     7, zx_burst_7681_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7681 */
 	{   0x1dd8a0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dd8b8,     8, zx_burst_8115_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8115 */
+	{   0x1dd8b8,     8, zx_burst_7683_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7683 */
 	{   0x1dd908, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dd940, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1ddc14,     4, zx_burst_8118_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8118 */
+	{   0x1ddc14,     4, zx_burst_7686_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7686 */
 	{   0x1ddc34, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ddc38, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ddc3c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1ddc80,     7, zx_burst_8120_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8120 */
+	{   0x1ddc80,     7, zx_burst_7688_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7688 */
 	{   0x1ddca0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1ddcb8,     8, zx_burst_8122_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8122 */
+	{   0x1ddcb8,     8, zx_burst_7690_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7690 */
 	{   0x1ddd08, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ddd40, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1de014,     4, zx_burst_8125_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8125 */
+	{   0x1de014,     4, zx_burst_7693_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7693 */
 	{   0x1de034, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1de038, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1de03c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1de080,     7, zx_burst_8127_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8127 */
+	{   0x1de080,     7, zx_burst_7695_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7695 */
 	{   0x1de0a0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1de0b8,     8, zx_burst_8129_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8129 */
+	{   0x1de0b8,     8, zx_burst_7697_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7697 */
 	{   0x1de108, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1de140, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1de414,     4, zx_burst_8132_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8132 */
+	{   0x1de414,     4, zx_burst_7700_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7700 */
 	{   0x1de434, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1de438, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1de43c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1de480,     7, zx_burst_8134_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8134 */
+	{   0x1de480,     7, zx_burst_7702_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7702 */
 	{   0x1de4a0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1de4b8,     8, zx_burst_8136_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8136 */
+	{   0x1de4b8,     8, zx_burst_7704_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7704 */
 	{   0x1de508, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1de540, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1de814,     4, zx_burst_8139_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8139 */
+	{   0x1de814,     4, zx_burst_7707_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7707 */
 	{   0x1de834, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1de838, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1de83c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1de880,     7, zx_burst_8141_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8141 */
+	{   0x1de880,     7, zx_burst_7709_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7709 */
 	{   0x1de8a0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1de8b8,     8, zx_burst_8143_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8143 */
+	{   0x1de8b8,     8, zx_burst_7711_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7711 */
 	{   0x1de908, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1de940, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dec14,     4, zx_burst_8146_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8146 */
+	{   0x1dec14,     4, zx_burst_7714_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7714 */
 	{   0x1dec34, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dec38, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dec3c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dec80,     7, zx_burst_8148_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8148 */
+	{   0x1dec80,     7, zx_burst_7716_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7716 */
 	{   0x1deca0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1decb8,     8, zx_burst_8150_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8150 */
+	{   0x1decb8,     8, zx_burst_7718_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7718 */
 	{   0x1ded08, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1ded40, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1df014,     4, zx_burst_8153_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8153 */
+	{   0x1df014,     4, zx_burst_7721_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7721 */
 	{   0x1df034, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1df038, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1df03c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1df080,     7, zx_burst_8155_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8155 */
+	{   0x1df080,     7, zx_burst_7723_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7723 */
 	{   0x1df0a0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1df0b8,     8, zx_burst_8157_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8157 */
+	{   0x1df0b8,     8, zx_burst_7725_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7725 */
 	{   0x1df108, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1df140, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1df414,     4, zx_burst_8160_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8160 */
+	{   0x1df414,     4, zx_burst_7728_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7728 */
 	{   0x1df434, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1df438, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1df43c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1df480,     7, zx_burst_8162_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8162 */
+	{   0x1df480,     7, zx_burst_7730_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7730 */
 	{   0x1df4a0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1df4b8,     8, zx_burst_8164_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8164 */
+	{   0x1df4b8,     8, zx_burst_7732_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7732 */
 	{   0x1df508, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1df540, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1df814,     4, zx_burst_8167_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8167 */
+	{   0x1df814,     4, zx_burst_7735_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7735 */
 	{   0x1df834, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1df838, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1df83c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1df880,     7, zx_burst_8169_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8169 */
+	{   0x1df880,     7, zx_burst_7737_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7737 */
 	{   0x1df8a0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1df8b8,     8, zx_burst_8171_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8171 */
+	{   0x1df8b8,     8, zx_burst_7739_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7739 */
 	{   0x1df908, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1df940, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dfc14,     4, zx_burst_8174_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8174 */
+	{   0x1dfc14,     4, zx_burst_7742_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7742 */
 	{   0x1dfc34, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dfc38, 0x000086dd, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dfc3c, 0x00000800, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dfc80,     7, zx_burst_8176_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8176 */
+	{   0x1dfc80,     7, zx_burst_7744_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7744 */
 	{   0x1dfca0, 0x000004f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1dfcb8,     8, zx_burst_8178_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8178 */
+	{   0x1dfcb8,     8, zx_burst_7746_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7746 */
 	{   0x1dfd08, 0x0000003d, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1dfd40, 0x00030001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1e0004, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e001c,     5, zx_burst_8182_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8182 */
-	{   0x1e0118,     8, zx_burst_8183_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8183 */
+	{   0x1e001c,     5, zx_burst_7750_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7750 */
+	{   0x1e0118,     8, zx_burst_7751_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7751 */
 	{   0x1e0194, 0x00ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1e019c, 0x007fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e03e0,     8, zx_burst_8186_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8186 */
+	{   0x1e03e0,     8, zx_burst_7754_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7754 */
 	{   0x1e0804, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e081c,     5, zx_burst_8188_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8188 */
-	{   0x1e0918,     8, zx_burst_8189_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8189 */
+	{   0x1e081c,     5, zx_burst_7756_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7756 */
+	{   0x1e0918,     8, zx_burst_7757_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7757 */
 	{   0x1e0994, 0x00ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1e099c, 0x007fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e0be0,     8, zx_burst_8192_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8192 */
+	{   0x1e0be0,     8, zx_burst_7760_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7760 */
 	{   0x1e1004, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e101c,     5, zx_burst_8194_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8194 */
-	{   0x1e1118,     8, zx_burst_8195_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8195 */
+	{   0x1e101c,     5, zx_burst_7762_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7762 */
+	{   0x1e1118,     8, zx_burst_7763_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7763 */
 	{   0x1e1194, 0x00ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1e119c, 0x007fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e13e0,     8, zx_burst_8198_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8198 */
+	{   0x1e13e0,     8, zx_burst_7766_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7766 */
 	{   0x1e1804, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e181c,     5, zx_burst_8200_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8200 */
-	{   0x1e1918,     8, zx_burst_8201_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8201 */
+	{   0x1e181c,     5, zx_burst_7768_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7768 */
+	{   0x1e1918,     8, zx_burst_7769_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7769 */
 	{   0x1e1994, 0x00ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1e199c, 0x007fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e1be0,     8, zx_burst_8204_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8204 */
+	{   0x1e1be0,     8, zx_burst_7772_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7772 */
 	{   0x1e2004, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e201c,     5, zx_burst_8206_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8206 */
-	{   0x1e2118,     8, zx_burst_8207_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8207 */
+	{   0x1e201c,     5, zx_burst_7774_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7774 */
+	{   0x1e2118,     8, zx_burst_7775_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7775 */
 	{   0x1e2194, 0x00ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1e219c, 0x007fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e23e0,     8, zx_burst_8210_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8210 */
+	{   0x1e23e0,     8, zx_burst_7778_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7778 */
 	{   0x1e2804, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e281c,     5, zx_burst_8212_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8212 */
-	{   0x1e2918,     8, zx_burst_8213_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8213 */
+	{   0x1e281c,     5, zx_burst_7780_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7780 */
+	{   0x1e2918,     8, zx_burst_7781_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7781 */
 	{   0x1e2994, 0x00ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1e299c, 0x007fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e2be0,     8, zx_burst_8216_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8216 */
+	{   0x1e2be0,     8, zx_burst_7784_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7784 */
 	{   0x1e3004, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e301c,     5, zx_burst_8218_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8218 */
-	{   0x1e3118,     8, zx_burst_8219_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8219 */
+	{   0x1e301c,     5, zx_burst_7786_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7786 */
+	{   0x1e3118,     8, zx_burst_7787_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7787 */
 	{   0x1e3194, 0x00ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1e319c, 0x007fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e33e0,     8, zx_burst_8222_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8222 */
+	{   0x1e33e0,     8, zx_burst_7790_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7790 */
 	{   0x1e3804, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e381c,     5, zx_burst_8224_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8224 */
-	{   0x1e3918,     8, zx_burst_8225_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8225 */
+	{   0x1e381c,     5, zx_burst_7792_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7792 */
+	{   0x1e3918,     8, zx_burst_7793_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7793 */
 	{   0x1e3994, 0x00ffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1e399c, 0x007fffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	{   0x1e3be0,     8, zx_burst_8228_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #8228 */
+	{   0x1e3be0,     8, zx_burst_7796_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7796 */
 };
 
-#define ZX_STOCK_OPS_LEN 11278
+#define ZX_STOCK_OPS_LEN 10718
 
 /* Per-block slice indices into zx_stock_ops[]. Drivers walk one
  * block at a time so explicit zx_<block>_init() calls (Phase 9+)
@@ -16299,19 +15051,19 @@ static const struct zx_stock_op zx_stock_ops[11278] = {
 #define ZX_STOCK_OPS_PON_TAIL_END   8035
 #define ZX_STOCK_OPS_PON_TAIL_LEN   6243
 #define ZX_STOCK_OPS_NPP_START 8035
-#define ZX_STOCK_OPS_NPP_END   8618
-#define ZX_STOCK_OPS_NPP_LEN   583
+#define ZX_STOCK_OPS_NPP_END   8058
+#define ZX_STOCK_OPS_NPP_LEN   23
 /* NPP_AUX: handled by explicit zx_<block>_init() — no ops emitted */
-#define ZX_STOCK_OPS_TM_START 8618
-#define ZX_STOCK_OPS_TM_END   10371
+#define ZX_STOCK_OPS_TM_START 8058
+#define ZX_STOCK_OPS_TM_END   9811
 #define ZX_STOCK_OPS_TM_LEN   1753
-#define ZX_STOCK_OPS_PP_FUC_START 10371
-#define ZX_STOCK_OPS_PP_FUC_END   11278
+#define ZX_STOCK_OPS_PP_FUC_START 9811
+#define ZX_STOCK_OPS_PP_FUC_END   10718
 #define ZX_STOCK_OPS_PP_FUC_LEN   907
 
 /* Sanity: total individual register writes when replayed must equal
- * the original 22363 entries minus the 5278 entries in
+ * the original 22363 entries minus the 6782 entries in
  * blocks handled by explicit zx_<block>_init() functions. */
-#define ZX_STOCK_OPS_WRITES_EXPECTED 17085
+#define ZX_STOCK_OPS_WRITES_EXPECTED 15581
 
 #endif /* ZX_STOCK_BURSTS_H */

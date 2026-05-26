@@ -64,6 +64,7 @@
  * __iowrite32_copy(), short runs stay as singletons. ~2× fewer ops,
  * but more importantly: each burst can be named in the source. */
 #include "zx_stock_bursts.h"
+#include "zx_npp_twin_data.h"  /* Phase 9f: NPP twin-pair arrays */
 /* zx_replay_cla removed — cla.bin replaced by embedded zx_cla_init_table[]
  * in zx_cla_table.h (refactor #38 Phase 1.a, commit 8a57adac2). The
  * embedded version uses struct zx_cla_entry from that header. */
@@ -735,6 +736,43 @@ static void zx_pon_low_init(struct zx_eth *e)
 		writel(0xffffffff, blk + 0x8);  /* clear/enable bank C */
 		writel(0x00044bef, blk + 0xc);  /* PON sub-block cfg */
 	}
+}
+
+/* ============================================================
+ *   NPP twin-pair init (refactor #38 Phase 9f)
+ *
+ * NPP has three pairs of sub-blocks at stride 0x2000 that receive
+ * BIT-IDENTICAL writes in stock — instances (0,1), (2,3), (6,7).
+ * Rather than store the data twice, we keep one copy per pair (in
+ * zx_npp_twin_data.h) and apply each set to both instance bases.
+ *
+ * The pair 6/7 payload at +0x280..+0x2bc holds an embedded Ethernet
+ * frame template (dst MAC + IPv4/TCP) used by the HW classifier
+ * autoreply path. It is environment-specific in the stock capture
+ * (encodes the unit's connected-host MAC); preserved bit-for-bit
+ * pending dynamic-construction RE.
+ *
+ * Instance 10 (96 writes at +0x14000) is NOT a twin pair and stays
+ * in the generic zx_stock_apply_block("NPP") path.
+ * ============================================================ */
+static void zx_npp_apply_pair(struct zx_eth *e, u32 base_off,
+			      const struct zx_off_val *ops, size_t n)
+{
+	void __iomem *p = e->base + base_off;
+	size_t i;
+
+	for (i = 0; i < n; i++)
+		writel(ops[i].val, p + ops[i].off);
+}
+
+static void zx_npp_twin_init(struct zx_eth *e)
+{
+	zx_npp_apply_pair(e, 0x0000, zx_npp_pair_01, ARRAY_SIZE(zx_npp_pair_01));
+	zx_npp_apply_pair(e, 0x2000, zx_npp_pair_01, ARRAY_SIZE(zx_npp_pair_01));
+	zx_npp_apply_pair(e, 0x4000, zx_npp_pair_23, ARRAY_SIZE(zx_npp_pair_23));
+	zx_npp_apply_pair(e, 0x6000, zx_npp_pair_23, ARRAY_SIZE(zx_npp_pair_23));
+	zx_npp_apply_pair(e, 0xc000, zx_npp_pair_67, ARRAY_SIZE(zx_npp_pair_67));
+	zx_npp_apply_pair(e, 0xe000, zx_npp_pair_67, ARRAY_SIZE(zx_npp_pair_67));
 }
 
 /* ============================================================
@@ -3252,6 +3290,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 	zx_pon_tail_lookup_init(eth);  /* PON_TAIL 16 KB lookup RAM — Phase 9e (extracted) */
 	zx_stock_apply_block(eth, "PON_TAIL",
 		ZX_STOCK_OPS_PON_TAIL_START, ZX_STOCK_OPS_PON_TAIL_END);
+	zx_npp_twin_init(eth);  /* NPP twin pairs 0/1, 2/3, 6/7 — Phase 9f (extracted) */
 	zx_stock_apply_block(eth, "NPP",
 		ZX_STOCK_OPS_NPP_START,      ZX_STOCK_OPS_NPP_END);
 	zx_npp_aux_init(eth);  /* NPP_AUX — Phase 9c (extracted) */
