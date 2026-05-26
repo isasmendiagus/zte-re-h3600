@@ -1535,20 +1535,22 @@ static int zx_cla_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 	return zx_cla_wait_done(e);
 }
 
-/* Replay all CLA entries we dumped from stock */
+/* Refactor #38 Phase 1 (2026-05-26): use embedded static table instead of
+ * firmware_request("zx-replay/cla.bin"). Bit-identical writes — verified
+ * by comparing the generated zx_cla_table.h against the in-tree partial
+ * zx279128-eth-cla-regs.h. The firmware_request for cla.bin can be made
+ * optional in a follow-up commit once this is proven not to regress. */
+#include "zx_cla_table.h"
+
 static void zx_cla_apply_replay(struct zx_eth *e)
 {
 	u32 i, ok = 0, fail = 0;
 	u32 ram7_data[17] = {7, 0,};
 
-	if (!e->r_cla) {
-		dev_warn(e->dev, "CLA replay: no firmware loaded\n");
-		return;
-	}
-	for (i = 0; i < e->r_n_cla; i++) {
-		if (zx_cla_write_entry(e, e->r_cla[i].ram_id,
-				       e->r_cla[i].ram_addr,
-				       e->r_cla[i].data) == 0)
+	for (i = 0; i < ZX_CLA_INIT_TABLE_LEN; i++) {
+		if (zx_cla_write_entry(e, zx_cla_init_table[i].ram_id,
+				       zx_cla_init_table[i].ram_addr,
+				       zx_cla_init_table[i].data) == 0)
 			ok++;
 		else
 			fail++;
@@ -1560,8 +1562,8 @@ static void zx_cla_apply_replay(struct zx_eth *e)
 		else
 			fail++;
 	}
-	dev_info(e->dev, "CLA replay: %u ok, %u fail (%u snapshot + ram=7 0..%d)\n",
-		 ok, fail, e->r_n_cla, ZX_CLA_RAM7_LAST);
+	dev_info(e->dev, "CLA init: %u ok, %u fail (%u embedded + ram=7 0..%d)\n",
+		 ok, fail, ZX_CLA_INIT_TABLE_LEN, ZX_CLA_RAM7_LAST);
 }
 
 /* chip_tm_init's trap_queue setup — replays def_ptl_pkt_map via cla_set_cpu_queue_id.

@@ -146,8 +146,10 @@ def main():
           f"kernel_crc=0x{kernel_crc:08x} rootfs_crc=0x{rootfs_crc:08x}")
 
     print("\nReady to flash:")
-    print(f"  cd {H3600}")
-    print(f"  python3 flash_mainline.py")
+    print(f"  cd {ZXIC}")
+    print(f"  python3 tasks/00.01.eth-driver/scripts/flash_mainline.py")
+    print(f"\nReady to TFTP-boot (no NAND write):")
+    print(f"  python3 tasks/00.01.eth-driver/scripts/tftp_boot_mainline.py")
 
 
 if __name__ == "__main__":
