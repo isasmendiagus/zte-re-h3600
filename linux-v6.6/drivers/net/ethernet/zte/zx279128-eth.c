@@ -2598,46 +2598,6 @@ static int zx_sw_stop(struct net_device *ndev)
 	return 0;
 }
 
-/* Raw UART debug — bypass kernel console (which hangs after ~30s of init noise).
- * Direct PL011 DR write at 0x94404004 (ZTE shifted +4 offset). One byte at a time.
- * Use sparingly — only key markers, NOT for every packet. */
-static void __iomem *zx_dbg_uart;
-static inline void zx_dbg_uart_init(void)
-{
-	if (!zx_dbg_uart)
-		zx_dbg_uart = ioremap(0x94404000, 0x40);
-}
-static inline void zx_dbg_putc(char c)
-{
-	/* Wait for PL011 TX FIFO not full (ZTE FR @ +0x1C, TXFF bit 5).
-	 * Blocking write — reliable even when kernel printk is hammering UART. */
-	if (!zx_dbg_uart) return;
-	while (__raw_readl(zx_dbg_uart + 0x1C) & (1 << 5))
-		cpu_relax();
-	__raw_writeb(c, zx_dbg_uart + 4);
-}
-static inline void zx_dbg_putn(u32 n)
-{
-	char buf[16];
-	int i = 0;
-	if (n == 0) { zx_dbg_putc('0'); return; }
-	while (n > 0) { buf[i++] = '0' + (n % 10); n /= 10; }
-	while (i--) zx_dbg_putc(buf[i]);
-}
-static inline void zx_dbg_puts(const char *s)
-{
-	while (*s) zx_dbg_putc(*s++);
-}
-static inline void zx_dbg_puthex(u32 n)
-{
-	int i;
-	const char *hx = "0123456789abcdef";
-	for (i = 28; i >= 0; i -= 4) zx_dbg_putc(hx[(n >> i) & 0xf]);
-}
-
-/* (legacy stubs — no longer used but keep API for now) */
-static inline void zx_dbg_write(u32 off, u32 val) {}
-static inline void zx_dbg_inc(u32 off) {}
 
 /* BMU alloc — mirror of pon_tm_bmu_alloc_bp.
  *  Returns bp index (0..N-1) on success, 0xFFFF on failure.
@@ -3619,12 +3579,6 @@ static int zx_eth_probe(struct platform_device *pdev)
 	err = zx_eth_init_extra_mmio(eth);
 	if (err)
 		return err;
-
-	/* Init raw UART debug (bypass console — survives console hang) */
-	zx_dbg_uart_init();
-	if (zx_dbg_uart) {
-		zx_dbg_puts("\n[zxdbg] probe OK\n");
-	}
 
 	zx_eth_apply_stock_init(eth);
 
