@@ -1,0 +1,337 @@
+Stock-table register name mapping
+=================================
+
+Each entry of zx_stock_init_table[] (zx_stock_table.h) is
+written by the driver during probe. This file maps each entry
+index → its underlying HW register, where derivable from the
+descriptor tables in zx-fpga-reg-tables.h.
+
+Mapping rule:
+  fpga_byte = off + 0x1c0000  (whether off is negative pon_early
+                                or non-negative base — same math)
+  fpga_word = fpga_byte >> 2
+
+Match against descriptor entries: base_off + stride*sub_idx == fpga_word.
+Multiple regs can share the same word (packed bit-fields); shown as alts.
+
+  /*    0*/ off=  -0x1c0000 val=0xffffffff  → zx_redregtable[reg_id=0, sub=0] ? mask=0x0 shift=0 + 27 bitfield alts
+  /*    1*/ off=  -0x1bfffc val=0xffffffff  → UNKNOWN (fpga word 0x1)
+  /*  501*/ off=  -0x16ebe0 val=0x00000300  → UNKNOWN (fpga word 0x14508)
+  /* 1001*/ off=  -0x15cf98 val=0x61a88158  → UNKNOWN (fpga word 0x18c1a)
+  /* 1501*/ off=  -0x14afe8 val=0x00000002  → UNKNOWN (fpga word 0x1d406)
+  /* 2001*/ off=   -0xfff0c val=0x00004bef  → UNKNOWN (fpga word 0x3003d)
+  /* 2501*/ off=   -0xff73c val=0x00004bef  → UNKNOWN (fpga word 0x30231)
+  /* 3001*/ off=   -0xfef6c val=0x00004bef  → UNKNOWN (fpga word 0x30425)
+  /* 3501*/ off=   -0xfe79c val=0x00004bef  → UNKNOWN (fpga word 0x30619)
+  /* 4001*/ off=   -0xfdfcc val=0x00004bef  → UNKNOWN (fpga word 0x3080d)
+  /* 4501*/ off=   -0xfd7fc val=0x00004bef  → UNKNOWN (fpga word 0x30a01)
+  /* 5001*/ off=   -0xfd02c val=0x00004bef  → UNKNOWN (fpga word 0x30bf5)
+  /* 5501*/ off=   -0xfc85c val=0x00004bef  → UNKNOWN (fpga word 0x30de9)
+  /* 6001*/ off=   -0xfc08c val=0x00004bef  → UNKNOWN (fpga word 0x30fdd)
+  /* 6501*/ off=   -0xe87d8 val=0x00204081  → UNKNOWN (fpga word 0x35e0a)
+  /* 7001*/ off=   -0xbf3e8 val=0x00001f40  → UNKNOWN (fpga word 0x40306)
+  /* 7501*/ off=   -0xb9b24 val=0x00000002  → UNKNOWN (fpga word 0x41937)
+  /* 8001*/ off=   -0xb3fac val=0x00989680  → UNKNOWN (fpga word 0x43015)
+  /* 8501*/ off=   -0xae3d0 val=0x00000010  → UNKNOWN (fpga word 0x4470c)
+  /* 9001*/ off=   -0xa87f8 val=0x00001f40  → UNKNOWN (fpga word 0x45e02)
+  /* 9501*/ off=   -0xa2f48 val=0x00000080  → UNKNOWN (fpga word 0x4742e)
+  /*10001*/ off=   -0x9d3b4 val=0x00000096  → UNKNOWN (fpga word 0x48b13)
+  /*10501*/ off=   -0x977dc val=0x0000000a  → UNKNOWN (fpga word 0x4a209)
+  /*11001*/ off=   -0x91f18 val=0x00020000  → UNKNOWN (fpga word 0x4b83a)
+  /*11501*/ off=   -0x8c368 val=0x01c00830  → UNKNOWN (fpga word 0x4cf26)
+  /*12001*/ off=   -0x867bc val=0x000000c8  → UNKNOWN (fpga word 0x4e611)
+  /*12501*/ off=   -0x80be8 val=0x00001f40  → UNKNOWN (fpga word 0x4fd06)
+  /*13001*/ off=   -0x6a3c8 val=0x00000010  → UNKNOWN (fpga word 0x5570e)
+  /*13501*/ off=   -0x513c8 val=0x00000010  → UNKNOWN (fpga word 0x5bb0e)
+  /*13844*/ off=        0x4 val=0xffffffff  → zx_gregregtable[reg_id=12, sub=0] RW mask=0x1 shift=18 + 11 bitfield alts
+  /*13845*/ off=        0xc val=0x0003ffff  → zx_gregregtable[reg_id=28, sub=0] RW mask=0x1f shift=0
+  /*13851*/ off=      0x114 val=0x00000004  → zx_gregregtable[reg_id=68, sub=0] RW mask=0xf shift=0
+  /*14004*/ off=     0x1d98 val=0x000186a0  → UNKNOWN (fpga word 0x70766)
+  /*14180*/ off=     0x4000 val=0x07cc000c  → zx_sdetgregtable[reg_id=0, sub=0] RW mask=0x3fff shift=16 + 1 bitfield alts
+  /*14182*/ off=     0x40f0 val=0x00008100  → zx_sdetgregtable[reg_id=14, sub=0] RW mask=0xffff shift=0
+  /*14192*/ off=     0x4220 val=0x30000000  → zx_sdetgregtable[reg_id=16, sub=0] RW mask=0x3fff shift=16
+  /*14193*/ off=     0x4224 val=0x00000001  → zx_sdetgregtable[reg_id=17, sub=0] RW mask=0x3f shift=0
+  /*14195*/ off=     0x4250 val=0x07cc07cc  → zx_sdetgregtable[reg_id=1, sub=0] RW mask=0x3fff shift=0 + 1 bitfield alts
+  /*14196*/ off=     0x4254 val=0x07cc07cc  → zx_sdetgregtable[reg_id=3, sub=0] RW mask=0x3fff shift=0 + 1 bitfield alts
+  /*14510*/ off=     0x7918 val=0x2d2d2d00  → UNKNOWN (fpga word 0x71e46)
+  /*14548*/ off=     0xc000 val=0x00000011  → zx_sipcregtable[reg_id=0, sub=0] RW mask=0x1 shift=0 + 1 bitfield alts
+  /*15011*/ off=     0xe4d4 val=0x00110011  → UNKNOWN (fpga word 0x73935)
+  /*15348*/ off=    0x14000 val=0xffffffff  → zx_sparegtable[reg_id=0, sub=0] RW mask=0xffffffff shift=0
+  /*15349*/ off=    0x14004 val=0xffffffff  → zx_sparegtable[reg_id=0, sub=1] RW mask=0xffffffff shift=0
+  /*15350*/ off=    0x14008 val=0x00003fff  → zx_sparegtable[reg_id=0, sub=2] RW mask=0xffffffff shift=0
+  /*15351*/ off=    0x1400c val=0xffffffff  → zx_sparegtable[reg_id=0, sub=3] RW mask=0xffffffff shift=0 + 1 bitfield alts
+  /*15352*/ off=    0x14010 val=0x3fffffff  → zx_sparegtable[reg_id=2, sub=1] RW mask=0xffffffff shift=0
+  /*15353*/ off=    0x14014 val=0x01400007  → zx_sparegtable[reg_id=2, sub=2] RW mask=0xffffffff shift=0 + 1 bitfield alts
+  /*15354*/ off=    0x14018 val=0x00000001  → zx_sparegtable[reg_id=5, sub=0] R mask=0x1 shift=0
+  /*15355*/ off=    0x14040 val=0xffffffff  → zx_sparegtable[reg_id=1, sub=0] RW mask=0xffffffff shift=0
+  /*15356*/ off=    0x14044 val=0xffffffff  → zx_sparegtable[reg_id=1, sub=1] RW mask=0xffffffff shift=0
+  /*15357*/ off=    0x14048 val=0x0007ffff  → zx_sparegtable[reg_id=1, sub=2] RW mask=0xffffffff shift=0
+  /*15358*/ off=    0x1404c val=0xffffffff  → zx_sparegtable[reg_id=1, sub=3] RW mask=0xffffffff shift=0 + 1 bitfield alts
+  /*15359*/ off=    0x14050 val=0xffffffff  → zx_sparegtable[reg_id=3, sub=1] RW mask=0xffffffff shift=0
+  /*15360*/ off=    0x14054 val=0x03ff05dc  → zx_sparegtable[reg_id=3, sub=2] RW mask=0xffffffff shift=0
+  /*15362*/ off=    0x14064 val=0x0000007f  → zx_sparegtable[reg_id=9, sub=0] RW mask=0x7f shift=0
+  /*15363*/ off=    0x1407c val=0x00000001  → zx_sparegtable[reg_id=18, sub=0] RW mask=0x3 shift=0 + 1 bitfield alts
+  /*15367*/ off=    0x14120 val=0x470f4264  → zx_sparegtable[reg_id=22, sub=0] RW mask=0xffffffff shift=0
+  /*15368*/ off=    0x14124 val=0x0000f4f6  → zx_sparegtable[reg_id=23, sub=0] RW mask=0xffff shift=0
+  /*15369*/ off=    0x14128 val=0x470f4265  → zx_sparegtable[reg_id=22, sub=1] RW mask=0xffffffff shift=0
+  /*15370*/ off=    0x1412c val=0x0000f4f6  → zx_sparegtable[reg_id=23, sub=1] RW mask=0xffff shift=0
+  /*15371*/ off=    0x14130 val=0x470f4266  → zx_sparegtable[reg_id=22, sub=2] RW mask=0xffffffff shift=0
+  /*15372*/ off=    0x14134 val=0x0000f4f6  → zx_sparegtable[reg_id=23, sub=2] RW mask=0xffff shift=0
+  /*15373*/ off=    0x14138 val=0x470f4267  → zx_sparegtable[reg_id=22, sub=3] RW mask=0xffffffff shift=0
+  /*15374*/ off=    0x1413c val=0x0000f4f6  → zx_sparegtable[reg_id=23, sub=3] RW mask=0xffff shift=0
+  /*15375*/ off=    0x14240 val=0x00650650  → zx_sparegtable[reg_id=34, sub=0] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15376*/ off=    0x14244 val=0x00650650  → zx_sparegtable[reg_id=42, sub=0] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15377*/ off=    0x14248 val=0x00650650  → zx_sparegtable[reg_id=34, sub=1] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15378*/ off=    0x1424c val=0x00650650  → zx_sparegtable[reg_id=42, sub=1] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15379*/ off=    0x14250 val=0x00650650  → zx_sparegtable[reg_id=34, sub=2] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15380*/ off=    0x14254 val=0x00650650  → zx_sparegtable[reg_id=42, sub=2] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15381*/ off=    0x14258 val=0x00650650  → zx_sparegtable[reg_id=34, sub=3] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15382*/ off=    0x1425c val=0x00650650  → zx_sparegtable[reg_id=42, sub=3] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15383*/ off=    0x14260 val=0x00650650  → zx_sparegtable[reg_id=34, sub=4] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15384*/ off=    0x14264 val=0x00650650  → zx_sparegtable[reg_id=42, sub=4] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15385*/ off=    0x14268 val=0x00650650  → zx_sparegtable[reg_id=34, sub=5] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15386*/ off=    0x1426c val=0x00650650  → zx_sparegtable[reg_id=42, sub=5] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15387*/ off=    0x14270 val=0x00650650  → zx_sparegtable[reg_id=34, sub=6] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15388*/ off=    0x14274 val=0x00650650  → zx_sparegtable[reg_id=42, sub=6] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15389*/ off=    0x14278 val=0x00650650  → zx_sparegtable[reg_id=34, sub=7] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15390*/ off=    0x1427c val=0x00650650  → zx_sparegtable[reg_id=42, sub=7] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15391*/ off=    0x14280 val=0x00650650  → zx_sparegtable[reg_id=34, sub=8] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15392*/ off=    0x14284 val=0x00650650  → zx_sparegtable[reg_id=42, sub=8] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*15393*/ off=    0x14300 val=0x50555555  → zx_sparegtable[reg_id=67, sub=0] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15394*/ off=    0x14304 val=0x95541555  → zx_sparegtable[reg_id=83, sub=0] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15395*/ off=    0x14308 val=0x10554155  → zx_sparegtable[reg_id=99, sub=0] RW mask=0x3 shift=0 + 12 bitfield alts
+  /*15396*/ off=    0x1430c val=0x55555555  → zx_sparegtable[reg_id=112, sub=0] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15397*/ off=    0x14310 val=0x000005aa  → zx_sparegtable[reg_id=128, sub=0] RW mask=0x3 shift=0 + 5 bitfield alts
+  /*15398*/ off=    0x14314 val=0x50555555  → zx_sparegtable[reg_id=67, sub=1] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15399*/ off=    0x14318 val=0x15551555  → zx_sparegtable[reg_id=83, sub=1] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15400*/ off=    0x1431c val=0x10554045  → zx_sparegtable[reg_id=99, sub=1] RW mask=0x3 shift=0 + 12 bitfield alts
+  /*15401*/ off=    0x14320 val=0x55555555  → zx_sparegtable[reg_id=112, sub=1] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15402*/ off=    0x14328 val=0x50555555  → zx_sparegtable[reg_id=67, sub=2] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15403*/ off=    0x1432c val=0x15551555  → zx_sparegtable[reg_id=83, sub=2] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15404*/ off=    0x14330 val=0x10554045  → zx_sparegtable[reg_id=99, sub=2] RW mask=0x3 shift=0 + 12 bitfield alts
+  /*15405*/ off=    0x14334 val=0x55555555  → zx_sparegtable[reg_id=112, sub=2] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15406*/ off=    0x1433c val=0x50555555  → zx_sparegtable[reg_id=67, sub=3] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15407*/ off=    0x14340 val=0x15551555  → zx_sparegtable[reg_id=83, sub=3] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15408*/ off=    0x14344 val=0x10554045  → zx_sparegtable[reg_id=99, sub=3] RW mask=0x3 shift=0 + 12 bitfield alts
+  /*15409*/ off=    0x14348 val=0x55555555  → zx_sparegtable[reg_id=112, sub=3] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15410*/ off=    0x14350 val=0x50555555  → zx_sparegtable[reg_id=67, sub=4] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15411*/ off=    0x14354 val=0x15551555  → zx_sparegtable[reg_id=83, sub=4] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15412*/ off=    0x14358 val=0x10554045  → zx_sparegtable[reg_id=99, sub=4] RW mask=0x3 shift=0 + 12 bitfield alts
+  /*15413*/ off=    0x1435c val=0x55555555  → zx_sparegtable[reg_id=112, sub=4] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15414*/ off=    0x14364 val=0x50555555  → zx_sparegtable[reg_id=67, sub=5] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15415*/ off=    0x14368 val=0x15541555  → zx_sparegtable[reg_id=83, sub=5] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15416*/ off=    0x1436c val=0x10554045  → zx_sparegtable[reg_id=99, sub=5] RW mask=0x3 shift=0 + 12 bitfield alts
+  /*15417*/ off=    0x14370 val=0x55555555  → zx_sparegtable[reg_id=112, sub=5] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15418*/ off=    0x14378 val=0x50555555  → zx_sparegtable[reg_id=67, sub=6] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15419*/ off=    0x1437c val=0x15551555  → zx_sparegtable[reg_id=83, sub=6] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15420*/ off=    0x14380 val=0x10554045  → zx_sparegtable[reg_id=99, sub=6] RW mask=0x3 shift=0 + 12 bitfield alts
+  /*15421*/ off=    0x14384 val=0x55555555  → zx_sparegtable[reg_id=112, sub=6] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15422*/ off=    0x1438c val=0x50555555  → zx_sparegtable[reg_id=67, sub=7] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15423*/ off=    0x14390 val=0x15551555  → zx_sparegtable[reg_id=83, sub=7] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15424*/ off=    0x14394 val=0x10554045  → zx_sparegtable[reg_id=99, sub=7] RW mask=0x3 shift=0 + 12 bitfield alts
+  /*15425*/ off=    0x14398 val=0x55555555  → zx_sparegtable[reg_id=112, sub=7] RW mask=0x3 shift=0 + 15 bitfield alts
+  /*15585*/ off=    0xf8300 val=0x8000ffff  → UNKNOWN (fpga word 0xae0c0)
+  /*15600*/ off=   0x180000 val=0x00000140  → zx_pontmregtable[reg_id=0, sub=0] RW mask=0x1 shift=10 + 3 bitfield alts
+  /*15602*/ off=   0x1800f0 val=0x4ff1f000  → zx_pontmregtable[reg_id=4, sub=0] RW mask=0xffffffff shift=0
+  /*15603*/ off=   0x180104 val=0xfffffffc  → zx_pontmregtable[reg_id=11, sub=0] RW mask=0x7 shift=0 + 2 bitfield alts
+  /*15787*/ off=   0x184004 val=0x000000de  → zx_redregtable[reg_id=0, sub=0] RW mask=0x3 shift=0 + 3 bitfield alts
+  /*15788*/ off=   0x184014 val=0x0100017f  → zx_redregtable[reg_id=4, sub=0] RW mask=0xfc0ffff shift=0
+  /*15789*/ off=   0x184018 val=0x00000001  → zx_redregtable[reg_id=5, sub=0] R mask=0x1 shift=0
+  /*15790*/ off=   0x18401c val=0xff803fff  → zx_redregtable[reg_id=6, sub=0] RW mask=0xffffffff shift=0
+  /*15791*/ off=   0x184020 val=0x0100ff80  → zx_redregtable[reg_id=6, sub=1] RW mask=0xffffffff shift=0
+  /*15792*/ off=   0x184024 val=0x00100200  → zx_redregtable[reg_id=6, sub=2] RW mask=0xffffffff shift=0
+  /*15793*/ off=   0x184028 val=0x00000020  → zx_redregtable[reg_id=6, sub=3] RW mask=0xffffffff shift=0
+  /*15794*/ off=   0x184040 val=0x000003ff  → zx_redregtable[reg_id=7, sub=0] RW mask=0x1fff shift=0
+  /*15796*/ off=   0x184074 val=0x00003fff  → zx_redregtable[reg_id=12, sub=0] RW mask=0x7fff shift=0
+  /*16097*/ off=   0x186224 val=0x000005c8  → UNKNOWN (fpga word 0xd1889)
+  /*16597*/ off=   0x18a08c val=0x0000004f  → UNKNOWN (fpga word 0xd2823)
+  /*16820*/ off=   0x18c000 val=0x01f40fa0  → zx_qmgregtable[reg_id=0, sub=0] RW mask=0x1fff shift=0 + 1 bitfield alts
+  /*16821*/ off=   0x18c004 val=0x00000002  → zx_qmgregtable[reg_id=2, sub=0] RW mask=0x1 shift=0 + 1 bitfield alts
+  /*16822*/ off=   0x18c00c val=0x000003ff  → zx_qmgregtable[reg_id=5, sub=0] RW mask=0x7ff shift=0
+  /*16825*/ off=   0x18c044 val=0x000004f4  → zx_qmgregtable[reg_id=6, sub=0] R mask=0xffffffff shift=0
+  /*16826*/ off=   0x18c060 val=0x0000052e  → zx_qmgregtable[reg_id=11, sub=0] R mask=0xffffffff shift=0
+  /*17102*/ off=   0x190334 val=0x00000021  → UNKNOWN (fpga word 0xd40cd)
+  /*17602*/ off=   0x191404 val=0x0000007f  → UNKNOWN (fpga word 0xd4501)
+  /*18102*/ off=   0x192550 val=0x0000c8c8  → UNKNOWN (fpga word 0xd4954)
+  /*18602*/ off=   0x193648 val=0x4ec33b90  → UNKNOWN (fpga word 0xd4d92)
+  /*18921*/ off=   0x194000 val=0x000003d7  → zx_schregtable[reg_id=0, sub=0] RW mask=0x1 shift=0 + 9 bitfield alts
+  /*18922*/ off=   0x194004 val=0x0d1cef00  → zx_schregtable[reg_id=10, sub=0] RW mask=0xffffffff shift=0
+  /*18923*/ off=   0x194014 val=0x03c00006  → zx_schregtable[reg_id=13, sub=0] RW mask=0x8fcfffff shift=0
+  /*18924*/ off=   0x194018 val=0x00000001  → zx_schregtable[reg_id=14, sub=0] R mask=0x1 shift=0
+  /*18925*/ off=   0x19401c val=0x0003e800  → zx_schregtable[reg_id=15, sub=0] RW mask=0xffffffff shift=0
+  /*18926*/ off=   0x194024 val=0x00000014  → zx_schregtable[reg_id=15, sub=2] RW mask=0xffffffff shift=0 + 1 bitfield alts
+  /*18927*/ off=   0x194028 val=0x00001869  → zx_schregtable[reg_id=17, sub=0] RW mask=0x3ffff shift=0
+  /*18943*/ off=   0x194340 val=0x000000ff  → zx_schregtable[reg_id=18, sub=0] RW mask=0xffffffff shift=0
+  /*18944*/ off=   0x194344 val=0x000000ff  → zx_schregtable[reg_id=18, sub=1] RW mask=0xffffffff shift=0
+  /*18945*/ off=   0x194348 val=0x000000ff  → zx_schregtable[reg_id=18, sub=2] RW mask=0xffffffff shift=0
+  /*18946*/ off=   0x19434c val=0x000000ff  → zx_schregtable[reg_id=18, sub=3] RW mask=0xffffffff shift=0
+  /*18947*/ off=   0x194350 val=0x000000ff  → zx_schregtable[reg_id=18, sub=4] RW mask=0xffffffff shift=0
+  /*18948*/ off=   0x194354 val=0x000000ff  → zx_schregtable[reg_id=18, sub=5] RW mask=0xffffffff shift=0
+  /*18949*/ off=   0x194358 val=0x000000ff  → zx_schregtable[reg_id=18, sub=6] RW mask=0xffffffff shift=0
+  /*18950*/ off=   0x19435c val=0x000000ff  → zx_schregtable[reg_id=18, sub=7] RW mask=0xffffffff shift=0
+  /*18951*/ off=   0x194360 val=0x000000ff  → zx_schregtable[reg_id=18, sub=8] RW mask=0xffffffff shift=0
+  /*18952*/ off=   0x194364 val=0x000000ff  → zx_schregtable[reg_id=18, sub=9] RW mask=0xffffffff shift=0
+  /*18953*/ off=   0x194368 val=0x000000ff  → zx_schregtable[reg_id=18, sub=10] RW mask=0xffffffff shift=0
+  /*18954*/ off=   0x19436c val=0x000000ff  → zx_schregtable[reg_id=18, sub=11] RW mask=0xffffffff shift=0
+  /*18955*/ off=   0x194370 val=0x000000ff  → zx_schregtable[reg_id=18, sub=12] RW mask=0xffffffff shift=0
+  /*18956*/ off=   0x194374 val=0x000000ff  → zx_schregtable[reg_id=18, sub=13] RW mask=0xffffffff shift=0
+  /*18957*/ off=   0x194378 val=0x000000ff  → zx_schregtable[reg_id=18, sub=14] RW mask=0xffffffff shift=0
+  /*18958*/ off=   0x19437c val=0x000000ff  → zx_schregtable[reg_id=18, sub=15] RW mask=0xffffffff shift=0
+  /*18959*/ off=   0x194380 val=0x000000ff  → zx_schregtable[reg_id=18, sub=16] RW mask=0xffffffff shift=0
+  /*18960*/ off=   0x194384 val=0x000000ff  → zx_schregtable[reg_id=18, sub=17] RW mask=0xffffffff shift=0
+  /*18961*/ off=   0x194388 val=0x000000ff  → zx_schregtable[reg_id=18, sub=18] RW mask=0xffffffff shift=0
+  /*18962*/ off=   0x19438c val=0x000000ff  → zx_schregtable[reg_id=18, sub=19] RW mask=0xffffffff shift=0
+  /*18963*/ off=   0x194390 val=0x000000ff  → zx_schregtable[reg_id=18, sub=20] RW mask=0xffffffff shift=0
+  /*18964*/ off=   0x194394 val=0x000000ff  → zx_schregtable[reg_id=18, sub=21] RW mask=0xffffffff shift=0
+  /*18965*/ off=   0x194398 val=0x000000ff  → zx_schregtable[reg_id=18, sub=22] RW mask=0xffffffff shift=0
+  /*18966*/ off=   0x19439c val=0x000000ff  → zx_schregtable[reg_id=18, sub=23] RW mask=0xffffffff shift=0
+  /*18967*/ off=   0x1943a0 val=0x000000ff  → zx_schregtable[reg_id=18, sub=24] RW mask=0xffffffff shift=0
+  /*18968*/ off=   0x1943a4 val=0x000000ff  → zx_schregtable[reg_id=18, sub=25] RW mask=0xffffffff shift=0
+  /*18969*/ off=   0x1943a8 val=0x000000ff  → zx_schregtable[reg_id=18, sub=26] RW mask=0xffffffff shift=0
+  /*18970*/ off=   0x1943ac val=0x000000ff  → zx_schregtable[reg_id=18, sub=27] RW mask=0xffffffff shift=0
+  /*18971*/ off=   0x1943b0 val=0x000000ff  → zx_schregtable[reg_id=18, sub=28] RW mask=0xffffffff shift=0
+  /*18972*/ off=   0x1943b4 val=0x000000ff  → zx_schregtable[reg_id=18, sub=29] RW mask=0xffffffff shift=0
+  /*18973*/ off=   0x1943b8 val=0x000000ff  → zx_schregtable[reg_id=18, sub=30] RW mask=0xffffffff shift=0
+  /*18974*/ off=   0x1943bc val=0x000000ff  → zx_schregtable[reg_id=18, sub=31] RW mask=0xffffffff shift=0
+  /*18975*/ off=   0x1943c0 val=0x000000ff  → zx_schregtable[reg_id=18, sub=32] RW mask=0xffffffff shift=0
+  /*18976*/ off=   0x1943c4 val=0x000000ff  → zx_schregtable[reg_id=18, sub=33] RW mask=0xffffffff shift=0
+  /*18977*/ off=   0x1943c8 val=0x000000ff  → zx_schregtable[reg_id=18, sub=34] RW mask=0xffffffff shift=0
+  /*18978*/ off=   0x1943cc val=0x000000ff  → zx_schregtable[reg_id=18, sub=35] RW mask=0xffffffff shift=0
+  /*18979*/ off=   0x1943d0 val=0x000000ff  → zx_schregtable[reg_id=18, sub=36] RW mask=0xffffffff shift=0
+  /*18980*/ off=   0x1943d4 val=0x000000ff  → zx_schregtable[reg_id=18, sub=37] RW mask=0xffffffff shift=0
+  /*18981*/ off=   0x1943d8 val=0x000000ff  → zx_schregtable[reg_id=18, sub=38] RW mask=0xffffffff shift=0
+  /*18982*/ off=   0x1943dc val=0x000000ff  → zx_schregtable[reg_id=18, sub=39] RW mask=0xffffffff shift=0
+  /*19149*/ off=   0x194f90 val=0x000000ff  → UNKNOWN (fpga word 0xd53e4)
+  /*19649*/ off=   0x196fa0 val=0x000000ff  → UNKNOWN (fpga word 0xd5be8)
+  /*20149*/ off=   0x1c1500 val=0x0000000f  → UNKNOWN (fpga word 0xe0540)
+  /*20566*/ off=   0x1c4000 val=0x00000021  → zx_sadmregtable[reg_id=0, sub=0] RW mask=0x1 shift=0 + 3 bitfield alts
+  /*20567*/ off=   0x1c4004 val=0x00002008  → zx_sadmregtable[reg_id=4, sub=0] RW mask=0x1fffff shift=0
+  /*20569*/ off=   0x1c400c val=0x0bebc200  → zx_sadmregtable[reg_id=5, sub=0] RW mask=0xfffffff shift=0
+  /*20571*/ off=   0x1c4014 val=0x00000004  → zx_sadmregtable[reg_id=6, sub=0] RW mask=0xffffffff shift=0
+  /*20572*/ off=   0x1c4018 val=0x00000001  → zx_sadmregtable[reg_id=7, sub=0] R mask=0x1 shift=0
+  /*20573*/ off=   0x1c4020 val=0x0007d000  → zx_sadmregtable[reg_id=8, sub=1] RW mask=0xffffffff shift=0
+  /*20574*/ off=   0x1c4028 val=0x00001388  → zx_sadmregtable[reg_id=8, sub=3] RW mask=0xffffffff shift=0 + 1 bitfield alts
+  /*20575*/ off=   0x1c4030 val=0x00000018  → zx_sadmregtable[reg_id=11, sub=0] RW mask=0x3f shift=0
+  /*20576*/ off=   0x1c4034 val=0x00001869  → zx_sadmregtable[reg_id=12, sub=0] RW mask=0x3ffff shift=0
+  /*20581*/ off=   0x1c4284 val=0x00000001  → zx_sadmregtable[reg_id=19, sub=0] RW mask=0x7 shift=0 + 1 bitfield alts
+  /*20630*/ off=   0x1c8014 val=0x01000fff  → zx_sbragregtable[reg_id=15, sub=0] RW mask=0xfff shift=0 + 4 bitfield alts
+  /*20631*/ off=   0x1c8018 val=0x00000001  → zx_sbragregtable[reg_id=20, sub=0] R mask=0x1 shift=0 + 1 bitfield alts
+  /*20632*/ off=   0x1c801c val=0x0001ffff  → zx_sbragregtable[reg_id=22, sub=0] RW mask=0xffffffff shift=0 + 1 bitfield alts
+  /*20637*/ off=   0x1c8180 val=0x00000004  → zx_sbragregtable[reg_id=23, sub=0] RW mask=0x1 shift=0 + 5 bitfield alts
+  /*20638*/ off=   0x1c8184 val=0x00000001  → zx_sbragregtable[reg_id=29, sub=0] RW mask=0x3 shift=0
+  /*20639*/ off=   0x1c8204 val=0x00000001  → zx_sbragregtable[reg_id=43, sub=1] R mask=0x1fff shift=0
+  /*20640*/ off=   0x1c82d4 val=0x00005555  → zx_sbragregtable[reg_id=45, sub=0] RW mask=0xffff shift=0 + 2 bitfield alts
+  /*20641*/ off=   0x1c83c0 val=0x000000fe  → zx_sbragregtable[reg_id=57, sub=0] RW mask=0xff shift=0
+  /*20642*/ off=   0x1c83c4 val=0x000000fd  → zx_sbragregtable[reg_id=57, sub=1] RW mask=0xff shift=0
+  /*20643*/ off=   0x1c83c8 val=0x000000fb  → zx_sbragregtable[reg_id=57, sub=2] RW mask=0xff shift=0
+  /*20644*/ off=   0x1c83cc val=0x000000f7  → zx_sbragregtable[reg_id=57, sub=3] RW mask=0xff shift=0
+  /*20645*/ off=   0x1c83d0 val=0x000000ef  → zx_sbragregtable[reg_id=57, sub=4] RW mask=0xff shift=0
+  /*20646*/ off=   0x1c83d4 val=0x000000df  → zx_sbragregtable[reg_id=57, sub=5] RW mask=0xff shift=0
+  /*20647*/ off=   0x1c83d8 val=0x000000ff  → zx_sbragregtable[reg_id=57, sub=6] RW mask=0xff shift=0
+  /*20648*/ off=   0x1c83dc val=0x000000ff  → zx_sbragregtable[reg_id=57, sub=7] RW mask=0xff shift=0
+  /*20649*/ off=   0x1c8630 val=0x00000080  → zx_sbragregtable[reg_id=58, sub=0] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*20650*/ off=   0x1c8638 val=0x000000c0  → zx_sbragregtable[reg_id=67, sub=0] RW mask=0xff shift=0
+  /*20676*/ off=   0x1cc014 val=0x00000004  → zx_claregtable[reg_id=0, sub=0] RW mask=0xfffffff shift=0
+  /*20677*/ off=   0x1cc018 val=0x00000001  → zx_claregtable[reg_id=1, sub=0] R mask=0x1 shift=0
+  /*20678*/ off=   0x1cc01c val=0x43424140  → zx_claregtable[reg_id=2, sub=0] RW mask=0xffffffff shift=0
+  /*20679*/ off=   0x1cc020 val=0x47464544  → zx_claregtable[reg_id=2, sub=1] RW mask=0xffffffff shift=0
+  /*20680*/ off=   0x1cc024 val=0x4b4a4948  → zx_claregtable[reg_id=2, sub=2] RW mask=0xffffffff shift=0
+  /*20681*/ off=   0x1cc028 val=0x4f4e4d4c  → zx_claregtable[reg_id=2, sub=3] RW mask=0xffffffff shift=0
+  /*20682*/ off=   0x1cc02c val=0x00150355  → zx_claregtable[reg_id=2, sub=4] RW mask=0xffffffff shift=0
+  /*20683*/ off=   0x1cc030 val=0x00000ff0  → zx_claregtable[reg_id=2, sub=5] RW mask=0xffffffff shift=0
+  /*20684*/ off=   0x1cc054 val=0x00202000  → zx_claregtable[reg_id=2, sub=14] RW mask=0xffffffff shift=0
+  /*20685*/ off=   0x1cc058 val=0x00000012  → zx_claregtable[reg_id=2, sub=15] RW mask=0xffffffff shift=0
+  /*20686*/ off=   0x1cc088 val=0x00007fff  → zx_claregtable[reg_id=6, sub=0] RW mask=0x3fff shift=0 + 1 bitfield alts
+  /*20687*/ off=   0x1cc090 val=0x00e400e4  → zx_claregtable[reg_id=12, sub=0] RW mask=0xff00ff shift=0
+  /*20688*/ off=   0x1cc094 val=0x00000004  → zx_claregtable[reg_id=13, sub=0] RW mask=0xf shift=0
+  /*20689*/ off=   0x1cc098 val=0x7fff7fff  → zx_claregtable[reg_id=14, sub=0] RW mask=0x3fff shift=16 + 3 bitfield alts
+  /*20690*/ off=   0x1cc0c8 val=0x00000001  → zx_claregtable[reg_id=20, sub=0] RW mask=0x3 shift=0
+  /*20691*/ off=   0x1cc0d0 val=0x00000001  → zx_claregtable[reg_id=22, sub=0] RW mask=0x3 shift=0
+  /*20692*/ off=   0x1cc0d4 val=0x00000007  → UNKNOWN (fpga word 0xe3035)
+  /*21192*/ off=   0x1cf9fc val=0x0132c0a8  → UNKNOWN (fpga word 0xe3e7f)
+  /*21235*/ off=   0x1d4000 val=0x00000001  → zx_admregtable[reg_id=0, sub=0] RW mask=0x1 shift=0 + 2 bitfield alts
+  /*21236*/ off=   0x1d4004 val=0x000003e7  → zx_admregtable[reg_id=4, sub=0] RW mask=0x3ffff shift=0
+  /*21237*/ off=   0x1d4008 val=0x00000834  → zx_admregtable[reg_id=3, sub=0] RW mask=0x1fffff shift=0
+  /*21238*/ off=   0x1d4018 val=0x00000001  → zx_admregtable[reg_id=6, sub=0] R mask=0x1 shift=0
+  /*21239*/ off=   0x1d402c val=0x00000018  → zx_admregtable[reg_id=8, sub=0] RW mask=0x3f shift=0
+  /*21240*/ off=   0x1d4048 val=0x0bebc200  → zx_admregtable[reg_id=11, sub=0] RW mask=0xfffffff shift=0
+  /*21241*/ off=   0x1d4080 val=0x00201f40  → zx_admregtable[reg_id=12, sub=0] RW mask=0x1 shift=21 + 1 bitfield alts
+  /*21242*/ off=   0x1d40c0 val=0x00201f40  → zx_admregtable[reg_id=13, sub=0] RW mask=0x1 shift=21 + 1 bitfield alts
+  /*21243*/ off=   0x1d4140 val=0x00000009  → zx_admregtable[reg_id=17, sub=0] R mask=0xffffffff shift=0
+  /*21244*/ off=   0x1d4148 val=0x00000022  → zx_admregtable[reg_id=17, sub=2] R mask=0xffffffff shift=0
+  /*21245*/ off=   0x1d414c val=0x000004d5  → zx_admregtable[reg_id=17, sub=3] R mask=0xffffffff shift=0
+  /*21246*/ off=   0x1d4150 val=0x0000001c  → zx_admregtable[reg_id=17, sub=4] R mask=0xffffffff shift=0
+  /*21247*/ off=   0x1d4154 val=0x00000012  → zx_admregtable[reg_id=17, sub=5] R mask=0xffffffff shift=0
+  /*21619*/ off=   0x1d8000 val=0x000010c0  → zx_dparegtable[reg_id=0, sub=0] RW mask=0x1 shift=6 + 6 bitfield alts
+  /*21620*/ off=   0x1d8014 val=0x0000001f  → zx_dparegtable[reg_id=7, sub=0] RW mask=0x1 shift=0
+  /*21623*/ off=   0x1d8080 val=0x00688688  → zx_dparegtable[reg_id=9, sub=0] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21624*/ off=   0x1d8084 val=0x00688688  → zx_dparegtable[reg_id=17, sub=0] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21625*/ off=   0x1d8088 val=0x00688688  → zx_dparegtable[reg_id=9, sub=1] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21626*/ off=   0x1d808c val=0x00688688  → zx_dparegtable[reg_id=17, sub=1] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21627*/ off=   0x1d8090 val=0x00688688  → zx_dparegtable[reg_id=9, sub=2] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21628*/ off=   0x1d8094 val=0x00688688  → zx_dparegtable[reg_id=17, sub=2] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21629*/ off=   0x1d8098 val=0x00688688  → zx_dparegtable[reg_id=9, sub=3] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21630*/ off=   0x1d809c val=0x00688688  → zx_dparegtable[reg_id=17, sub=3] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21631*/ off=   0x1d80a0 val=0x00688688  → zx_dparegtable[reg_id=9, sub=4] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21632*/ off=   0x1d80a4 val=0x00688688  → zx_dparegtable[reg_id=17, sub=4] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21633*/ off=   0x1d80a8 val=0x00688688  → zx_dparegtable[reg_id=9, sub=5] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21634*/ off=   0x1d80ac val=0x00688688  → zx_dparegtable[reg_id=17, sub=5] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21635*/ off=   0x1d80b0 val=0x00688688  → zx_dparegtable[reg_id=9, sub=6] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21636*/ off=   0x1d80b4 val=0x00688688  → zx_dparegtable[reg_id=17, sub=6] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21637*/ off=   0x1d80b8 val=0x00688688  → zx_dparegtable[reg_id=9, sub=7] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21638*/ off=   0x1d80bc val=0x00688688  → zx_dparegtable[reg_id=17, sub=7] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21639*/ off=   0x1d80c0 val=0x00688688  → zx_dparegtable[reg_id=9, sub=8] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21640*/ off=   0x1d80c4 val=0x00688688  → zx_dparegtable[reg_id=17, sub=8] RW mask=0x7 shift=0 + 7 bitfield alts
+  /*21725*/ off=   0x1da140 val=0x2387a132  → UNKNOWN (fpga word 0xe6850)
+  /*21771*/ off=   0x1dc014 val=0x03000003  → zx_pppmregtable[reg_id=0, sub=0] RW mask=0xfcfffff shift=0
+  /*21772*/ off=   0x1dc018 val=0x00000001  → zx_pppmregtable[reg_id=1, sub=0] RW mask=0x1 shift=0
+  /*21773*/ off=   0x1dc01c val=0x470f4267  → zx_pppmregtable[reg_id=2, sub=0] RW mask=0xffffffff shift=0
+  /*21774*/ off=   0x1dc020 val=0x0000f4f6  → zx_pppmregtable[reg_id=2, sub=1] RW mask=0xffffffff shift=0
+  /*21775*/ off=   0x1dc034 val=0x0000003d  → zx_pppmregtable[reg_id=4, sub=0] RW mask=0x3f shift=1 + 1 bitfield alts
+  /*21794*/ off=   0x1dc108 val=0x0000003d  → zx_pppmregtable[reg_id=3, sub=2] RW mask=0xffffffff shift=0
+  /*22171*/ off=   0x1e0004 val=0x00000001  → zx_ponppregtable[reg_id=1, sub=0] RW mask=0x1 shift=0
+  /*22172*/ off=   0x1e001c val=0x21200000  → zx_ponppregtable[reg_id=8, sub=0] RW mask=0x3 shift=4 + 5 bitfield alts
+  /*22173*/ off=   0x1e0020 val=0x4eb20000  → zx_ponppregtable[reg_id=14, sub=0] RW mask=0xffffffff shift=0
+  /*22174*/ off=   0x1e0024 val=0x4e720000  → zx_ponppregtable[reg_id=15, sub=0] RW mask=0xffffffff shift=0
+  /*22175*/ off=   0x1e0028 val=0x00000640  → zx_ponppregtable[reg_id=16, sub=0] RW mask=0x3fff shift=0
+  /*22177*/ off=   0x1e0118 val=0x00008100  → zx_ponppregtable[reg_id=17, sub=0] RW mask=0xffff shift=0
+  /*22178*/ off=   0x1e011c val=0x00009100  → zx_ponppregtable[reg_id=17, sub=1] RW mask=0xffff shift=0
+  /*22179*/ off=   0x1e0120 val=0x000088a8  → zx_ponppregtable[reg_id=17, sub=2] RW mask=0xffff shift=0
+  /*22180*/ off=   0x1e0124 val=0x00009200  → zx_ponppregtable[reg_id=17, sub=3] RW mask=0xffff shift=0
+  /*22181*/ off=   0x1e0128 val=0x00008100  → zx_ponppregtable[reg_id=17, sub=4] RW mask=0xffff shift=0
+  /*22182*/ off=   0x1e012c val=0x00008100  → zx_ponppregtable[reg_id=17, sub=5] RW mask=0xffff shift=0
+  /*22183*/ off=   0x1e0130 val=0x00008100  → zx_ponppregtable[reg_id=17, sub=6] RW mask=0xffff shift=0
+  /*22184*/ off=   0x1e0134 val=0x00008100  → zx_ponppregtable[reg_id=17, sub=7] RW mask=0xffff shift=0
+  /*22187*/ off=   0x1e03e0 val=0x00000040  → zx_ponppregtable[reg_id=18, sub=8] RW mask=0xfffff shift=0 + 1 bitfield alts
+  /*22188*/ off=   0x1e03e4 val=0x00000040  → zx_ponppregtable[reg_id=19, sub=1] RW mask=0xffff shift=0
+  /*22189*/ off=   0x1e03e8 val=0x00000040  → zx_ponppregtable[reg_id=19, sub=2] RW mask=0xffff shift=0
+  /*22190*/ off=   0x1e03ec val=0x00000040  → zx_ponppregtable[reg_id=19, sub=3] RW mask=0xffff shift=0
+  /*22191*/ off=   0x1e03f0 val=0x00000040  → zx_ponppregtable[reg_id=19, sub=4] RW mask=0xffff shift=0
+  /*22192*/ off=   0x1e03f4 val=0x00000040  → zx_ponppregtable[reg_id=19, sub=5] RW mask=0xffff shift=0
+  /*22193*/ off=   0x1e03f8 val=0x00000040  → zx_ponppregtable[reg_id=19, sub=6] RW mask=0xffff shift=0
+  /*22194*/ off=   0x1e03fc val=0x00000040  → zx_ponppregtable[reg_id=19, sub=7] RW mask=0xffff shift=0
+  /*22252*/ off=   0x1e1924 val=0x00009200  → UNKNOWN (fpga word 0xe8649)
+
+==================================================
+Summary:
+  total entries:    22363
+  matched:          252 (1.1%)
+  unmatched:        22111 (98.9%)
+
+Hits per descriptor table:
+  zx_sparegtable               665
+  zx_dparegtable               152
+  zx_schregtable                57
+  zx_claregtable                42
+  zx_sbragregtable              38
+  zx_ponppregtable              27
+  zx_admregtable                17
+  zx_redregtable                15
+  zx_gregregtable               15
+  zx_sadmregtable               15
+  zx_sdetgregtable               9
+  zx_qmgregtable                 7
+  zx_pppmregtable                7
+  zx_pontmregtable               6
+  zx_smacregtable                3
+  zx_sipcregtable                2
