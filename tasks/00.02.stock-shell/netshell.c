@@ -29,14 +29,33 @@
 #define MAX_ARGS  64
 
 static int run_line(char *line) {
+    /* Tokenize into argv with single + double quote support.
+     * Output buffer is separate from input so we don't trash the input
+     * with our in-place NUL terminators. Examples:
+     *   echo hello                  -> ["echo", "hello"]
+     *   echo "hello world"          -> ["echo", "hello world"]
+     *   sh -c 'echo > /proc/x'      -> ["sh", "-c", "echo > /proc/x"]
+     */
+    static char buf[MAX_LINE];
     char *argv[MAX_ARGS];
     int argc = 0;
     char *p = line;
-    while (*p && argc < MAX_ARGS - 1) {
-        while (*p == ' ' || *p == '\t') *p++ = 0;
+    char *w = buf;
+    char *end = buf + sizeof(buf) - 1;
+    while (*p && argc < MAX_ARGS - 1 && w < end) {
+        while (*p == ' ' || *p == '\t') p++;
         if (!*p) break;
-        argv[argc++] = p;
-        while (*p && *p != ' ' && *p != '\t') p++;
+        argv[argc++] = w;
+        while (*p && *p != ' ' && *p != '\t' && w < end) {
+            if (*p == '\'' || *p == '"') {
+                char q = *p++;
+                while (*p && *p != q && w < end) *w++ = *p++;
+                if (*p == q) p++;
+            } else {
+                *w++ = *p++;
+            }
+        }
+        *w++ = 0;
     }
     argv[argc] = NULL;
     if (argc == 0) return 0;
@@ -53,6 +72,16 @@ static int run_line(char *line) {
     if (!strcmp(argv[0], "pwd")) {
         char cwd[PATH_MAX];
         if (getcwd(cwd, sizeof(cwd))) dprintf(STDOUT_FILENO, "%s\n", cwd);
+        return 0;
+    }
+    if (!strcmp(argv[0], "reset")) {
+        /* open(O_WRONLY|O_TRUNC) + write(0) → triggers kotrace's
+         * write() handler which resets the ring buffer. */
+        if (!argv[1]) { dprintf(2, "usage: reset <path>\n"); return 0; }
+        int rfd = open(argv[1], O_WRONLY | O_TRUNC);
+        if (rfd < 0) { dprintf(2, "reset: %s: %s\n", argv[1], strerror(errno)); return 0; }
+        write(rfd, "", 0);
+        close(rfd);
         return 0;
     }
     if (!strcmp(argv[0], "echo")) {

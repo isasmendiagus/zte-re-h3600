@@ -147,11 +147,35 @@ static unsigned int          n_patches;
  * Set to 1 only when actively diagnosing the bake-in crash; default 0. */
 #define KOTRACE_MINIMAL_BOOT 1
 
-/* patch_limit module parameter: cap on the total number of successful
- * patches applied across all modules. 0 = no limit (original behavior).
- * Used for the binary-search bisect of which patch crashes plat init.
- * insmod kotrace.ko patch_limit=N   (no recompile needed) */
+/* Module-load-time filters (all settable via insmod params, no recompile).
+ *   patch_limit   = cap on total successful patches (0 = no limit)
+ *   patch_modules = comma-separated whitelist of module names to patch
+ *                   (empty = patch all in kt_modules[])
+ *   patch_skip    = comma-separated function names to skip (across modules)
+ * Examples:
+ *   insmod kotrace.ko patch_modules=switch,tm
+ *   insmod kotrace.ko patch_skip=pon_tm_timer_func,extphy_timer_func
+ */
 static unsigned int patch_limit = 0;
+static char patch_modules[256] = "";
+static char patch_skip[512]    = "";
+
+/* Returns 1 if `name` is mentioned in `list` (comma-separated) OR if
+ * list is empty (when default_yes=1) / never (default_yes=0). */
+static int name_in_list(const char *name, const char *list, int default_when_empty)
+{
+	const char *p = list;
+	size_t nlen = strlen(name);
+	if (!*p) return default_when_empty;
+	while (*p) {
+		const char *q = p;
+		while (*q && *q != ',') q++;
+		if ((size_t)(q - p) == nlen && memcmp(p, name, nlen) == 0)
+			return 1;
+		p = (*q == ',') ? q + 1 : q;
+	}
+	return 0;
+}
 
 /* Legacy v1 struct kept for the hardcoded arrays below — only .name and
  * .marker are actually used by patch_module(). v2 struct (from header) is
@@ -549,6 +573,14 @@ static void patch_module(struct module *mod,
 	size_t total = n_targets * THUNK_BYTES;
 	unsigned int i;
 
+	/* patch_modules whitelist: if non-empty, only patch listed modules. */
+	if (!name_in_list(mod->name, patch_modules, 1)) {
+		uart_puts("[ko: skip (patch_modules whitelist): ");
+		uart_puts(mod->name);
+		uart_puts("]\n");
+		return;
+	}
+
 	uart_puts("[ko: '");
 	uart_puts(mod->name);
 	uart_puts("' found, allocating thunks: ");
@@ -570,6 +602,12 @@ static void patch_module(struct module *mod,
 		if (patch_limit > 0 && n_patches >= patch_limit) {
 			uart_puts("[ko: patch_limit reached, skipping rest]\n");
 			break;
+		}
+		if (name_in_list(targets[i].name, patch_skip, 0)) {
+			uart_puts("[ko: skip (patch_skip): ");
+			uart_puts(targets[i].name);
+			uart_puts("]\n");
+			continue;
 		}
 		uart_puts("[ko: target ");
 		uart_puts(targets[i].name);
@@ -990,6 +1028,10 @@ module_exit(kotrace_exit);
 
 module_param(patch_limit, uint, 0644);
 MODULE_PARM_DESC(patch_limit, "Max patches applied (bisect aid); 0 = no limit");
+module_param_string(patch_modules, patch_modules, sizeof(patch_modules), 0644);
+MODULE_PARM_DESC(patch_modules, "CSV whitelist of modules to patch; empty = all");
+module_param_string(patch_skip, patch_skip, sizeof(patch_skip), 0644);
+MODULE_PARM_DESC(patch_skip, "CSV blacklist of function names to skip");
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("ZTE H3600 RE — agus@quecomere");
