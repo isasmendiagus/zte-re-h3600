@@ -55,7 +55,9 @@ struct zx_replay_stock { s32 off; u32 val; } __packed;
 /* zx_replay_cla removed — cla.bin replaced by embedded zx_cla_init_table[]
  * in zx_cla_table.h (refactor #38 Phase 1.a, commit 8a57adac2). The
  * embedded version uses struct zx_cla_entry from that header. */
-struct zx_replay_pm    { u32 ram_id; u32 ram_addr; u32 data[8];  } __packed;
+/* zx_replay_pm removed — pm.bin replaced by embedded zx_pm_init_table[]
+ * in zx_pm_table.h (refactor #38 Phase 2). Uses struct zx_pm_entry from
+ * that header. */
 
 /* These bounds match what's actually in the snapshots; used by zx_cla_apply_replay
  * to generate the ram=7 CPU-queue entries (constant payload, address range only). */
@@ -308,13 +310,12 @@ struct zx_eth {
 
 	bool started;
 
-	/* Replay snapshots loaded via request_firmware. cla.bin used to be
-	 * here but is now embedded as zx_cla_init_table[] in zx_cla_table.h
-	 * (refactor #38 Phase 1, commits 8a57adac2 + this). */
+	/* Replay snapshot loaded via request_firmware. cla.bin + pm.bin used
+	 * to be here but are now embedded as zx_{cla,pm}_init_table[] in
+	 * zx_{cla,pm}_table.h (refactor #38 Phase 1+2). Only stock.bin
+	 * remains as a runtime firmware blob. */
 	const struct firmware *fw_stock;
-	const struct firmware *fw_pm;
 	const struct zx_replay_stock *r_stock; u32 r_n_stock;
-	const struct zx_replay_pm    *r_pm;    u32 r_n_pm;
 };
 
 /* ============================================================
@@ -1467,23 +1468,24 @@ static int zx_pp_pm_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 }
 
 /* Replay all pp_pm entries dumped from stock (ram=3 default flow_info + ram=6 global). */
+/* Refactor #38 Phase 2 (2026-05-26): pm.bin → embedded zx_pm_init_table.
+ * Bit-identical writes, no semantic change. See gen_pm_table.py. */
+#include "zx_pm_table.h"
+
 static void zx_pp_pm_apply_replay(struct zx_eth *e)
 {
 	u32 i, ok = 0, fail = 0;
-	if (!e->r_pm) {
-		dev_warn(e->dev, "pp_pm replay: no firmware loaded\n");
-		return;
-	}
-	for (i = 0; i < e->r_n_pm; i++) {
-		if (zx_pp_pm_write_entry(e, e->r_pm[i].ram_id,
-					 e->r_pm[i].ram_addr,
-					 e->r_pm[i].data) == 0)
+
+	for (i = 0; i < ZX_PM_INIT_TABLE_LEN; i++) {
+		if (zx_pp_pm_write_entry(e, zx_pm_init_table[i].ram_id,
+					 zx_pm_init_table[i].ram_addr,
+					 zx_pm_init_table[i].data) == 0)
 			ok++;
 		else
 			fail++;
 	}
-	dev_info(e->dev, "pp_pm replay: %u ok, %u fail (%u total)\n",
-		 ok, fail, e->r_n_pm);
+	dev_info(e->dev, "pp_pm init: %u ok, %u fail (%u embedded)\n",
+		 ok, fail, ZX_PM_INIT_TABLE_LEN);
 }
 
 static int zx_pp_pm_set_cpu_mac(struct zx_eth *e, u8 slot, const u8 *mac)
@@ -3007,11 +3009,8 @@ static int zx_eth_probe(struct platform_device *pdev)
 			{ "zx-replay/stock.bin", &eth->fw_stock,
 			  (const void **)&eth->r_stock, &eth->r_n_stock,
 			  sizeof(struct zx_replay_stock) },
-			/* cla.bin: embedded as zx_cla_init_table in zx_cla_table.h
-			 * since refactor #38 Phase 1.a (commit 8a57adac2).  */
-			{ "zx-replay/pm.bin", &eth->fw_pm,
-			  (const void **)&eth->r_pm, &eth->r_n_pm,
-			  sizeof(struct zx_replay_pm) },
+			/* cla.bin, pm.bin: now embedded as zx_{cla,pm}_init_table
+			 * in zx_{cla,pm}_table.h (refactor #38 Phase 1+2). */
 		};
 		int fi;
 		for (fi = 0; fi < ARRAY_SIZE(fws); fi++) {
@@ -3458,9 +3457,8 @@ static int zx_eth_remove(struct platform_device *pdev)
 
 	zx_debugfs_exit();
 
-	/* 8. Release replay firmware images (cla.bin is now embedded — Phase 1.a) */
+	/* 8. Release replay firmware images (cla.bin + pm.bin now embedded — Phase 1+2) */
 	if (eth->fw_stock) release_firmware(eth->fw_stock);
-	if (eth->fw_pm)    release_firmware(eth->fw_pm);
 	return 0;
 }
 
