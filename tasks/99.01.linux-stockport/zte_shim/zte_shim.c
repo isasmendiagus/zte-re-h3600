@@ -49,16 +49,66 @@ EXPORT_SYMBOL(u32_JUMBO_BPPE_POOL_SIZE);
 unsigned int ZX_RESERVE_MEM_SIZE = 64;	/* MB */
 EXPORT_SYMBOL(ZX_RESERVE_MEM_SIZE);
 
-unsigned int g_sw_cap = 0;
+/* g_sw_cap: stock declares this as a 92-byte BSS variable
+ * (c06adebc..c06adf18 in stock vmlinux) that's populated at runtime —
+ * most likely a struct/table of function pointers. switch.ko emits
+ * relocs at g_sw_cap+0x6c that, when our shim has only a 4-byte u32,
+ * land in adjacent BSS and the CPU executes garbage → bad-syscall oops.
+ * Defensive workaround: declare g_sw_cap as a 256-byte naked function
+ * where every 4-byte slot is `bx lr`. Any direct branch to any offset
+ * inside returns cleanly. Indirect callers that load a function pointer
+ * from this region will still fault — when that happens we'll have to
+ * populate real callbacks. Discovered 2026-05-26 stockport revival. */
+asm(
+    "    .global g_sw_cap\n"
+    "    .type   g_sw_cap, %function\n"
+    "    .align  2\n"
+    "g_sw_cap:\n"
+    "    .rept 64\n"
+    "        bx lr\n"
+    "    .endr\n"
+    "    .size   g_sw_cap, . - g_sw_cap\n"
+);
+extern void g_sw_cap(void);
 EXPORT_SYMBOL(g_sw_cap);
 
-int g_switch_debug_level = 0;
+/* g_switch_debug_level: stock has this as T (text) at c06915dc — just a
+ * u32 (=1) but located in the .text section, immediately followed by
+ * SW_ops table at +4. switch.ko likely emits `bl g_switch_debug_level+0x1c`
+ * style relocations to invoke functions in the following table. Same
+ * defensive naked-function fix as g_sw_cap. */
+asm(
+    "    .global g_switch_debug_level\n"
+    "    .type   g_switch_debug_level, %function\n"
+    "    .align  2\n"
+    "g_switch_debug_level:\n"
+    "    .rept 64\n"
+    "        bx lr\n"
+    "    .endr\n"
+    "    .size   g_switch_debug_level, . - g_switch_debug_level\n"
+);
+extern void g_switch_debug_level(void);
 EXPORT_SYMBOL(g_switch_debug_level);
 
-unsigned char WlanIndex2WlanIdmMap[16] = {0};
+/* WlanIndex2WlanIdmMap: stock exports this as a FUNCTION at
+ * c02ca5a0 (T). Disasm shows real prologue `str lr, [sp, #-4]!` then
+ * MDIO/idm-lookup logic. We had it as a 16-byte array → callers branch
+ * into BSS → bad syscall oops. Use a naked stub that returns -1 (no
+ * mapping) so callers proceed via the "no wlan attached" path. */
+int WlanIndex2WlanIdmMap(int wlan_idx)
+{
+    (void)wlan_idx;
+    return -1;
+}
 EXPORT_SYMBOL(WlanIndex2WlanIdmMap);
 
-unsigned char IfName2WlanIdmMap[16] = {0};
+/* IfName2WlanIdmMap: stock exports as T (function) at c02ca720.
+ * Same pattern as WlanIndex2WlanIdmMap — must be a function, not array. */
+int IfName2WlanIdmMap(const char *ifname)
+{
+    (void)ifname;
+    return -1;
+}
 EXPORT_SYMBOL(IfName2WlanIdmMap);
 
 /* ============================================================
@@ -116,12 +166,31 @@ int zx_mdio_write(int port, int reg, int val)
 }
 EXPORT_SYMBOL(zx_mdio_write);
 
-/* CSP — Customer Service Platform stubs */
-int CspGetSwInfo(void *info) { if (info) memset(info, 0, 64); return 0; }
+/* CSP — board-info accessors. Stock kernel exports these from vmlinux
+ * (CspGetBoardDesInfo @0xc0421c9c, CspGetPortInfo @0xc0421c74,
+ * CspGetSwInfo @0xc0421cc4, CspGetSlicInfo @0xc0421cec). All take a
+ * single (void **out) argument and write a sub-pointer into a global
+ * board_info struct at fixed offsets. Recovered 2026-05-26 via
+ * vmlinux-to-elf + objdump.
+ *
+ * We allocate a 1 KiB zeroed fake_board_info; switch.ko reads fields
+ * like sw_info[+8] (num_ports) and port_info[+2] (port count). Both
+ * being 0 takes the "no-op, no ports" code path which is harmless for
+ * bring-up — we can populate sensible defaults once we reach that
+ * stage. */
+static u8 fake_board_info[1024] __aligned(8);
+
+int CspGetBoardDesInfo(void **out) { if (out) *out = &fake_board_info[0x20]; return 0; }
+EXPORT_SYMBOL(CspGetBoardDesInfo);
+
+int CspGetPortInfo(void **out)    { if (out) *out = &fake_board_info[0x68]; return 0; }
+EXPORT_SYMBOL(CspGetPortInfo);
+
+int CspGetSwInfo(void **out)      { if (out) *out = &fake_board_info[0x80]; return 0; }
 EXPORT_SYMBOL(CspGetSwInfo);
 
-int CspGetPortInfo(int port, void *info) { if (info) memset(info, 0, 64); return 0; }
-EXPORT_SYMBOL(CspGetPortInfo);
+int CspGetSlicInfo(void **out)    { if (out) *out = &fake_board_info[0xec]; return 0; }
+EXPORT_SYMBOL(CspGetSlicInfo);
 
 int CSPKernel_skb_SelectQueue(struct net_device *dev, struct sk_buff *skb) { return 0; }
 EXPORT_SYMBOL(CSPKernel_skb_SelectQueue);

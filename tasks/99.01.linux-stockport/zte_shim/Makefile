@@ -1,6 +1,6 @@
 obj-m := zte_shim.o
 
-KDIR := /home/ubuntu/Projects/MYSELF/ZTE/H3600/linux-stockport/linux-4.1.25
+KDIR := /home/ubuntu/Projects/MYSELF/ZTE/tasks/99.01.linux-stockport/linux-4.1.25
 PWD  := $(shell pwd)
 
 all:
