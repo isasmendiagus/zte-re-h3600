@@ -41,6 +41,14 @@ BLOCKS = [
     ("PP_FUC",    0x1c0000,  0x1e4000, "base"),
 ]
 
+# Blocks that have been moved out into explicit C init functions in the
+# driver. Their writes are SKIPPED here so we don't double-apply them.
+# The driver must call zx_<block>_init() in the same relative position
+# in probe to preserve original write order.
+SKIP_BLOCKS = {
+    "PON_LOW",  # zx_pon_low_init() — refactor #38 Phase 9a
+}
+
 
 def window(off):
     return "pon_early" if off < 0 else "base"
@@ -93,6 +101,20 @@ def detect_runs(entries):
 def main():
     entries = parse_entries()
     runs = detect_runs(entries)
+
+    # Filter out runs that belong to SKIP_BLOCKS (handled by explicit C init)
+    skipped_runs = 0
+    skipped_entries = 0
+    kept_runs = []
+    for s, e, kind in runs:
+        block = classify_block(entries[s][0])
+        if block in SKIP_BLOCKS:
+            skipped_runs += 1
+            skipped_entries += (e - s)
+            continue
+        kept_runs.append((s, e, kind))
+    runs = kept_runs
+
     n_burst = sum(1 for *_, k in runs if k == "burst")
     n_short = sum(1 for *_, k in runs if k == "short")
     entries_in_burst = sum(e - s for s, e, k in runs if k == "burst")
@@ -108,9 +130,12 @@ def main():
     out.append(" * (off, val) singletons. Same writes, dramatically fewer operations.")
     out.append(" *")
     out.append(f" * Source entries : {len(entries)}")
+    if SKIP_BLOCKS:
+        out.append(f" * Skipped blocks : {sorted(SKIP_BLOCKS)} ({skipped_entries} entries via {skipped_runs} runs)")
+        out.append(f" *                  → handled by explicit zx_<block>_init() in the driver")
     out.append(f" * Bursts (≥{MIN_BURST_LEN} entries): {n_burst}, covering {entries_in_burst} entries")
     out.append(f" * Short runs    : {n_short}, covering {entries_in_short} entries")
-    out.append(f" * Total ops     : {n_burst + entries_in_short} (vs {len(entries)} writes)")
+    out.append(f" * Total ops     : {n_burst + entries_in_short} (vs {len(entries) - skipped_entries} replayed)")
     out.append(" */")
     out.append("#ifndef ZX_STOCK_BURSTS_H")
     out.append("#define ZX_STOCK_BURSTS_H")
@@ -197,8 +222,9 @@ def main():
     out.append(f"#define ZX_STOCK_OPS_LEN {total_ops}")
     out.append("")
     out.append("/* Sanity: total individual register writes when replayed must equal")
-    out.append(f" * the original {len(entries)} entries in zx_stock_init_table[]. */")
-    out.append(f"#define ZX_STOCK_OPS_WRITES_EXPECTED {len(entries)}")
+    out.append(f" * the original {len(entries)} entries minus the {skipped_entries} entries in")
+    out.append(f" * blocks handled by explicit zx_<block>_init() functions. */")
+    out.append(f"#define ZX_STOCK_OPS_WRITES_EXPECTED {len(entries) - skipped_entries}")
     out.append("")
     out.append("#endif /* ZX_STOCK_BURSTS_H */")
 

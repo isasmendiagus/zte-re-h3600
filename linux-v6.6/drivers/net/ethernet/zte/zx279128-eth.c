@@ -712,6 +712,32 @@ static int zx_vlan_add_port(struct zx_eth *e, u16 vid, u8 port, u8 mode)
 }
 
 /* ============================================================
+ *   PON low-bank init (refactor #38 Phase 9a)
+ *
+ * Replaces the first 16 entries of the old zx_stock_init_table[] (the
+ * PON_LOW block). Stock hits four identical PON sub-blocks at pon_early
+ * offsets 0x00000, 0x10000, 0x20000, 0x30000 with the same 4-word
+ * pattern. Capturing it as a loop here makes the intent obvious to a
+ * netdev reviewer; the wires are bit-for-bit identical to stock.
+ *
+ * The fourth word per block (0x44bef) is the only non-trivial value —
+ * we leave it unnamed until the matching .ko-side RE catches up.
+ * ============================================================ */
+static void zx_pon_low_init(struct zx_eth *e)
+{
+	int i;
+
+	for (i = 0; i < 4; i++) {
+		void __iomem *blk = e->pon_early + i * 0x10000;
+
+		writel(0xffffffff, blk + 0x0);  /* clear/enable bank A */
+		writel(0xffffffff, blk + 0x4);  /* clear/enable bank B */
+		writel(0xffffffff, blk + 0x8);  /* clear/enable bank C */
+		writel(0x00044bef, blk + 0xc);  /* PON sub-block cfg */
+	}
+}
+
+/* ============================================================
  *   Stock-init replay (refactor #38 Phase 8)
  *
  * zx_stock_ops[] (zx_stock_bursts.h) is the same set of writes as
@@ -3096,10 +3122,15 @@ static int zx_eth_probe(struct platform_device *pdev)
 		zx_dbg_puts("\n[zxdbg] probe OK\n");
 	}
 
-	/* Refactor #38 Phase 8: replay stock-init via the burst-collapsed op
-	 * stream in zx_stock_bursts.h. Same writes as before in the same
-	 * order; contiguous +4 runs become single __iowrite32_copy calls so
-	 * the 22363 raw entries cost ~11455 ops. */
+	/* Refactor #38 Phase 9a: PON_LOW (4 sub-blocks × 4 writes) is now
+	 * an explicit C init. Must run BEFORE zx_stock_apply() to preserve
+	 * the original write order (PON_LOW was at the head of the table). */
+	zx_pon_low_init(eth);
+
+	/* Refactor #38 Phase 8: replay the rest of stock-init via the
+	 * burst-collapsed op stream in zx_stock_bursts.h. PON_LOW is
+	 * skipped at generation time (see SKIP_BLOCKS in gen_stock_bursts.py)
+	 * so we don't double-write. */
 	zx_stock_apply(eth);
 
 	dev_info(dev, "PP[0x2c] (CPU_FWD) = %#x, IDM[0x8000] CTRL = %#x\n",
