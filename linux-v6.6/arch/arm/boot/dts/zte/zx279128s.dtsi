@@ -196,6 +196,11 @@
 				     <GIC_SPI 0x24 IRQ_TYPE_LEVEL_HIGH>;	/* tm */
 			interrupt-names = "idm", "npp", "tm";
 			zte,topcrm = <&topcrm>;
+			/* Phase 14: phylink-style PHY handles. We list all four
+			 * GePHYs so the driver can call phy_init_hw() on each
+			 * during probe — that runs the vendor LDO + TX DAC
+			 * power-up sequence in drivers/net/phy/phy-zte-gephy.c. */
+			zte,gephys = <&gephy0>, <&gephy1>, <&gephy2>, <&gephy3>;
 			status = "disabled";
 		};
 

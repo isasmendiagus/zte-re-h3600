@@ -32,6 +32,8 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_mdio.h>
+#include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/skbuff.h>
 #include <linux/spinlock.h>
@@ -3212,6 +3214,51 @@ static int zx_eth_probe_port(struct zx_eth *eth, int idx)
 	return 0;
 }
 
+/*
+ * Phase 14: run drv->config_init on each PHY referenced from the DT.
+ *
+ * The monolithic eth driver doesn't have per-port netdevs to attach
+ * via phylink_connect_phy() yet (that's the DSA refactor), but the
+ * PHY analog blocks still need their LDO + TX DAC powered up via the
+ * phy-zte-gephy config_init callback. phy_init_hw() is the documented
+ * way to fire config_init without a netdev attach.
+ *
+ * Looks up "zte,gephys = <&gephy0>, ..." in DT, resolves each handle
+ * to a struct phy_device, and inits it.
+ */
+static void zx_eth_init_phys(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	int n = of_count_phandle_with_args(np, "zte,gephys", NULL);
+	int i;
+
+	if (n <= 0) {
+		dev_info(dev, "no zte,gephys phandles in DT (n=%d)\n", n);
+		return;
+	}
+	dev_info(dev, "PHY init: %d phandles in zte,gephys\n", n);
+
+	for (i = 0; i < n; i++) {
+		struct device_node *phy_np;
+		struct phy_device *phydev;
+		int ret;
+
+		phy_np = of_parse_phandle(np, "zte,gephys", i);
+		if (!phy_np)
+			continue;
+		phydev = of_phy_find_device(phy_np);
+		of_node_put(phy_np);
+		if (!phydev) {
+			dev_warn(dev, "  [%d] phy_device not found\n", i);
+			continue;
+		}
+		ret = phy_init_hw(phydev);
+		dev_info(dev, "  [%d] phy_init_hw(%s) = %d\n",
+			 i, phydev_name(phydev), ret);
+		put_device(&phydev->mdio.dev);
+	}
+}
+
 static int zx_eth_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -3312,6 +3359,9 @@ static int zx_eth_probe(struct platform_device *pdev)
 		ZX_STOCK_OPS_TM_START,       ZX_STOCK_OPS_TM_END);
 	zx_stock_apply_block(eth, "PP_FUC",
 		ZX_STOCK_OPS_PP_FUC_START,   ZX_STOCK_OPS_PP_FUC_END);
+
+	/* Phase 14: kick PHY power-up (LDO + TX DAC) on all GePHYs. */
+	zx_eth_init_phys(dev);
 
 	dev_info(dev, "PP[0x2c] (CPU_FWD) = %#x, IDM[0x8000] CTRL = %#x\n",
 		 readl(eth->base + PP_OFF + PP_REG_CPU_FWD),
