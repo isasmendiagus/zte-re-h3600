@@ -10,19 +10,34 @@
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 
-/* Per stock /etc/autokernelconf: CONFIG_DEBUG_UART_VIRT=0xf0704000
- * (NOT 0xf0404000 — we had this wrong, the wrong iomap meant kernel hit
- * unmapped memory when writing to "uart") */
-#define ZX_UART0_PHYS		0x94404000
-#define ZX_UART0_VIRT		0xf0704000
+/* Full stock iotable_init() table recovered from vmlinux.bin by anchoring
+ * on the known UART entry (virt=0xf0700000 phys=0x94400000) and reading
+ * surrounding 16-byte map_desc structs. 13 entries, all MT_DEVICE.
+ *
+ * Stock plat.ko hardcodes virtual addresses in this range:
+ *   gephy_ldo_init  → 0xf0807000  (covered by 0xf0800000 chunk)
+ *   phy_process     → 0xf0101100  (GIC ICDICPR — covered by 0xf0100000 chunk)
+ *   ...others likely in 0xf0400000..0xf0c00000 too
+ * Without these entries plat.ko page-faults on its first MMIO access in
+ * each function — exactly what zx_pon_init was hitting in iter 1 (gephy)
+ * and iter 2 (phy_process). */
+#define MAP_1M(V, P) { .virtual = (V), .pfn = __phys_to_pfn(P), .length = SZ_1M, .type = MT_DEVICE }
 
 static struct map_desc zx_io_desc[] __initdata = {
-	{
-		.virtual	= ZX_UART0_VIRT,
-		.pfn		= __phys_to_pfn(ZX_UART0_PHYS),
-		.length		= SZ_4K,
-		.type		= MT_DEVICE,
-	},
+	MAP_1M(0xf0000000, 0x00400000),	/* cortex-A9 PERIPHBASE/SCU area */
+	MAP_1M(0xf0100000, 0x00800000),	/* cortex-A9 GIC dist/CPU iface */
+	MAP_1M(0xf0200000, 0x00a20000),	/* ? */
+	MAP_1M(0xf0400000, 0x94000000),	/* top_crm */
+	MAP_1M(0xf0500000, 0x94100000),	/* pcie crm */
+	MAP_1M(0xf0600000, 0x94200000),	/* pcie crm2 */
+	MAP_1M(0xf0700000, 0x94400000),	/* UART/serial block (DEBUG_LL) */
+	MAP_1M(0xf0800000, 0x9a100000),	/* gephy block */
+	MAP_1M(0xf0900000, 0x00d00000),	/* ? */
+	MAP_1M(0xf0a00000, 0x00200000),	/* ? */
+	MAP_1M(0xf0b00000, 0x09100000),	/* USB dwc3 */
+	MAP_1M(0xf0c00000, 0x09400000),	/* ? */
+	{ .virtual = 0xf0f00000, .pfn = __phys_to_pfn(0x9fe00000),
+	  .length = 0x20000, .type = MT_DEVICE },
 };
 
 static void __init zx_map_io(void)

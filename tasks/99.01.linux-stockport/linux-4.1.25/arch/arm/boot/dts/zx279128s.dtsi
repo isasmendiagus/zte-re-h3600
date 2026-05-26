@@ -191,11 +191,18 @@
 
 		stock_npp: npp@921c0000 {
 			compatible = "zte,zx279128s-npp";
-			/* Stock DTS has two reg ranges (0x8000 + 0x34000) but
-			 * plat accesses past 0x8000 via npp_base in pon_npp_idm_init
-			 * (e.g. 0x8024). Enlarge first range to cover the whole NPP
-			 * sub-block (40000 = 256 KiB, up to before tm@92340000). */
-			reg = <0x921c0000 0x40000>;
+			/* pon_npp_smac_init calls smac_init(0..3) for 4 ext-PHY SMAC
+			 * banks; extphy_timer_func ALSO calls smac_init(4) for the
+			 * 5th (internal) MAC. Banks stride 0x40000 starting at
+			 * npp_base+0x40000. Max offset accessed = (4+1)*0x40000+0xd34
+			 * = 0x180d34, but NPP must end at most at 0x180000 (where
+			 * tm@92340000 begins). 0x180000 covers exactly through smac4
+			 * (last reg at +0x180d34 would overlap TM, but timer-fired
+			 * smac4 init only writes the FIRST 3 regs at +0x40000/4/8,
+			 * not the trailing +0xd00/+0xd30 — those are only init-time).
+			 * If we hit a fault past 0x180000, smac4 needs TM-region
+			 * remap or an iomap union. */
+			reg = <0x921c0000 0x180000>;
 			interrupts = <GIC_SPI 0x23 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 0x26 IRQ_TYPE_LEVEL_HIGH>;
 			status = "okay";

@@ -31,7 +31,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 KERNEL_DIR="$ROOT/linux-4.1.25"
 SHIM_DIR="$ROOT/zte_shim"
-TFTP_DIR="$HOME/Projects/MYSELF/ZTE/zxic/tftp"
+TFTP_DIR="$HOME/Projects/MYSELF/ZTE/tftp"
 INITRAMFS_DIR="/tmp/initramfs_stockport"
 
 TOOLCHAIN_PREFIX="$HOME/toolchains/armv7-eabihf--glibc--stable-2018.11-1"
