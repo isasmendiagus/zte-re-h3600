@@ -3614,14 +3614,18 @@ static int zx_eth_probe(struct platform_device *pdev)
 			 eth->irq_tm);
 	}
 
-	/* Program FDB so switch knows which port the CPU netdevs live on.
-	 * Without this, frames addressed to our MAC would be dropped/flooded
-	 * by the switch. Also add broadcast to CPU so ARP works. */
-	/* NO FDB adds: stock helpSpa shows port mapping 0-4=UNI, 5=PON, 6-7=WiFi.
-	 * CPU is NOT a numbered port — it's a side channel via cpu_qid + da_known_cpu.
-	 * Previous code added FDB → port=5 (PON), which routed CPU MAC traffic OUT
-	 * THE FIBER. Stock relies on: flooding for broadcasts, da_known_cpu (via
-	 * pp_pm RAM[12]) for unicasts to CPU MAC. */
+	/* Intentionally no FDB seeding here.
+	 *
+	 * Stock helpSpa shows the switch port mapping as 0-4=UNI / 5=PON /
+	 * 6-7=WiFi — i.e. there is NO "CPU" port number. CPU-bound traffic
+	 * reaches the host via a side channel: cpu_qid + da_known_cpu,
+	 * which we already programmed through the pp_pm RAM[12] CPU MAC
+	 * slots in zx_eth_register_cpu_mac_slots().
+	 *
+	 * An earlier revision added an FDB entry pointing at port 5 (PON)
+	 * for the host MAC, which silently routed CPU egress out the
+	 * fiber. For broadcasts we rely on the switch's flood; for unicast
+	 * we rely on the da_known_cpu lookup. */
 
 	dev_info(dev, "ZX279128S ethernet ready (IRQ=%d, base=%pR, CPU_PORT=%d)\n",
 		 eth->irq_idm, platform_get_resource(pdev, IORESOURCE_MEM, 0),
