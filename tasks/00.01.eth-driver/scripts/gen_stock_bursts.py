@@ -50,6 +50,20 @@ SKIP_BLOCKS = {
     "NPP_AUX",  # zx_npp_aux_init() — refactor #38 Phase 9c
 }
 
+# Sub-block ranges to filter (start_off, byte_len). Used when an
+# explicit init handles a slice of a block without owning the whole
+# thing. Same effect as SKIP_BLOCKS but at offset granularity.
+# Driver invokes the explicit init around the still-present block.
+SKIP_RANGES = [
+    # Phase 9d: TM per-instance 64-entry table replicated 16 times at
+    # base 0x190240 + i*0x400 (i in 0..15), 0x100 bytes each.
+    *[(0x190240 + i * 0x400, 64 * 4) for i in range(16)],
+    # Phase 9e: PON_TAIL big lookup RAM init — 4082 entries at
+    # pon_early off=-0xfffc0..-0xfbff8 (16 KB). 4080× 0x4bef + 2 footer
+    # words. Becomes zx_pon_tail_lookup_init().
+    (-0xfffc0, 4082 * 4),
+]
+
 
 def window(off):
     return "pon_early" if off < 0 else "base"
@@ -74,6 +88,14 @@ def parse_entries():
         val = int(m.group(3), 16)
         entries.append((off, val))
     return entries
+
+
+def in_skip_range(off):
+    """True if off falls in any (start, len) range in SKIP_RANGES."""
+    for start, length in SKIP_RANGES:
+        if start <= off < start + length:
+            return True
+    return False
 
 
 def detect_runs(entries):
@@ -103,13 +125,22 @@ def main():
     entries = parse_entries()
     runs = detect_runs(entries)
 
-    # Filter out runs that belong to SKIP_BLOCKS (handled by explicit C init)
+    # Filter out runs that belong to SKIP_BLOCKS or fall in SKIP_RANGES
+    # (both handled by explicit C init in the driver).
     skipped_runs = 0
     skipped_entries = 0
     kept_runs = []
     for s, e, kind in runs:
-        block = classify_block(entries[s][0])
+        first_off = entries[s][0]
+        block = classify_block(first_off)
         if block in SKIP_BLOCKS:
+            skipped_runs += 1
+            skipped_entries += (e - s)
+            continue
+        # SKIP_RANGES filtering: a contiguous run either entirely falls
+        # inside one skip-range or doesn't intersect any. Bursts are
+        # uniform stride so a single-point check is enough.
+        if in_skip_range(first_off):
             skipped_runs += 1
             skipped_entries += (e - s)
             continue

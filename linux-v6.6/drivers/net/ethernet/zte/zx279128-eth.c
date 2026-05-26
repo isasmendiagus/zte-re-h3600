@@ -738,6 +738,86 @@ static void zx_pon_low_init(struct zx_eth *e)
 }
 
 /* ============================================================
+ *   PON_TAIL lookup RAM init (refactor #38 Phase 9e)
+ *
+ * The single biggest run in stock.bin: 4082 contiguous writes at
+ * pon_early fpga byte 0xc0040..0xc4004 (16 KB), filling a HW lookup
+ * RAM with the default value 0x00004bef, then setting 2 control
+ * words immediately after.
+ *
+ *   slots 0..4079  →  0x00004bef    (default: drop/no-match action)
+ *   slot  4080     →  0x07d0000c    (threshold/credit — 0x7d0 = 2000)
+ *   slot  4081     →  0x0000002a    (count/flags     — 42)
+ *
+ * The 4080-of-same-value pattern is the classic signature of a HW
+ * lookup table (FDB / ACL TCAM / VLAN map) being initialized to a
+ * default "miss" action, followed by a 2-word footer holding the
+ * table's runtime parameters.
+ *
+ * Replaces a 16 KB rodata burst array + 1 __iowrite32_copy with a
+ * tiny loop. Reader can see at a glance what's happening.
+ * ============================================================ */
+static void zx_pon_tail_lookup_init(struct zx_eth *e)
+{
+	void __iomem *rom = e->pon_early + 0xc0040;
+	int i;
+
+	for (i = 0; i < 4080; i++)
+		writel(0x00004bef, rom + i * 4);
+
+	writel(0x07d0000c, rom + 4080 * 4);
+	writel(0x0000002a, rom + 4081 * 4);
+}
+
+/* ============================================================
+ *   TM per-instance table init (refactor #38 Phase 9d)
+ *
+ * Each of the 16 TM instances (0x180000 + i * 0x400) carries a
+ * 64-word config table at +0x10240. The stock blob writes the
+ * SAME 256-byte image into all 16 instances — verified
+ * bit-identical (see findings/stock_table_structural_patterns.md
+ * pattern B).
+ *
+ * High half of the first 16 words is DDR-backed (0x4ec____, 0x4ff____):
+ * very likely default queue/buffer descriptor base pointers. The
+ * later words look like small queue control / threshold bytes.
+ * Exact semantics still un-RE'd; the bit pattern is preserved.
+ *
+ * Replaces 1024 individual writel() calls with 16 __iowrite32_copy
+ * calls of a shared source array.
+ * ============================================================ */
+static const u32 zx_tm_per_instance_init_data[64] = {
+	/*  0..*/ 0x4ffeff10, 0x4ec33b10, 0x4ec33b90, 0x4ffeff20,
+	          0x4ec30e10, 0x4ec30e90, 0x4ffeff30, 0x4ec31710,
+	/*  8..*/ 0x4ec31790, 0x4ec2bd10, 0x4ffefee0, 0x4ec2d810,
+	          0x4ffefef0, 0x4ec2fc10, 0x4ffeff00, 0x4ec2f310,
+	/* 16..*/ 0x00008010, 0x00020080, 0x00020036, 0x00008010,
+	          0x00020080, 0x00020016, 0x00008010, 0x00020080,
+	/* 24..*/ 0x00020046, 0x0002002e, 0x00008010, 0x0002002e,
+	          0x00008010, 0x0002002e, 0x00008010, 0x0002002e,
+	/* 32..*/ 0x4ec2c610, 0x4ec2c690, 0x4ff2bd40, 0x4ec34d10,
+	          0x4ec29a10, 0x4ec29a90, 0x4ec29b10, 0x4ff2bd00,
+	/* 40..*/ 0x4ec2e110, 0x4ec2e190, 0x4ec2e210, 0x4ff2bd10,
+	          0x4ec2ea10, 0x4ff2bd20, 0x4ec30510, 0x4ff2bd30,
+	/* 48..*/ 0x0000002f, 0x0000002a, 0x00000021, 0x00000028,
+	          0x0000002f, 0x0000002f, 0x00000025, 0x00000021,
+	/* 56..*/ 0x0000002f, 0x0000002f, 0x00000023, 0x00000021,
+	          0x00000028, 0x00000021, 0x00000028, 0x00000021,
+};
+
+static void zx_tm_per_instance_init(struct zx_eth *e)
+{
+	int i;
+
+	for (i = 0; i < 16; i++) {
+		void __iomem *tm_i = e->base + 0x180000 + i * 0x400;
+
+		__iowrite32_copy(tm_i + 0x10240,
+				 zx_tm_per_instance_init_data, 64);
+	}
+}
+
+/* ============================================================
  *   NPP_AUX init (refactor #38 Phase 9c)
  *
  * 13 NPP_AUX sub-blocks at base offsets 0xcc000, 0xd0000, 0xd4000, …,
@@ -3169,11 +3249,13 @@ static int zx_eth_probe(struct platform_device *pdev)
 	zx_pon_low_init(eth);  /* PON_LOW — Phase 9a (extracted) */
 	zx_stock_apply_block(eth, "PON_B",
 		ZX_STOCK_OPS_PON_B_START,    ZX_STOCK_OPS_PON_B_END);
+	zx_pon_tail_lookup_init(eth);  /* PON_TAIL 16 KB lookup RAM — Phase 9e (extracted) */
 	zx_stock_apply_block(eth, "PON_TAIL",
 		ZX_STOCK_OPS_PON_TAIL_START, ZX_STOCK_OPS_PON_TAIL_END);
 	zx_stock_apply_block(eth, "NPP",
 		ZX_STOCK_OPS_NPP_START,      ZX_STOCK_OPS_NPP_END);
 	zx_npp_aux_init(eth);  /* NPP_AUX — Phase 9c (extracted) */
+	zx_tm_per_instance_init(eth);  /* TM 16x64-word tables — Phase 9d (extracted) */
 	zx_stock_apply_block(eth, "TM",
 		ZX_STOCK_OPS_TM_START,       ZX_STOCK_OPS_TM_END);
 	zx_stock_apply_block(eth, "PP_FUC",
