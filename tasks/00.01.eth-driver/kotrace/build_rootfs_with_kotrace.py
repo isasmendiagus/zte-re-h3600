@@ -84,6 +84,9 @@ INJECT_BLOCK = (
     "# stop_machine=1 (default in this kotrace build) which pauses cpu1\n"
     "# during each patch's instruction-write+flush_icache so cpu1 can't\n"
     "# read a half-written insn. If iter A2 reset was a race, this boots.\n"
+    "# Iter D: dump displaced insn for every patched target so we can spot\n"
+    "# PC-as-Rm or Thumb addresses that we'd be relocating incorrectly.\n"
+    "# Use normal thunk + idmfdb 100% (will reset, but we get the bytes first).\n"
     "/sbin/kinsmod /kmodule/kotrace.ko patch_pct=0 patch_pct_per=idmfdb:100 patch_skip=zx_mdio_read,zx_mdio_write\n"
 )
 

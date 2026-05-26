@@ -532,6 +532,18 @@ static u32 arm_encode_strb_at(int rS, int rN)
  * collide (e.g. 166 different 'p' functions in our v2 set). On dump,
  * userspace can resolve func_addr → symbol via the patching log.
  */
+/* EXPERIMENT: thunk_mode=1 builds a PASSTHROUGH thunk: just the displaced
+ * insn followed by a branch back to func+4. No ring write. If this still
+ * crashes at boot-time bake-in with N patches, the crash is NOT caused by
+ * our ring-buffer write logic — it's the branch redirection itself, or
+ * caller-side register expectations we're upsetting somehow.
+ *
+ * Layout: 2 insns × 4 bytes = 8 bytes (but THUNK_BYTES stays 96 for
+ * alignment with non-passthrough). */
+static unsigned int thunk_mode = 0;
+module_param(thunk_mode, uint, 0644);
+MODULE_PARM_DESC(thunk_mode, "0=normal (ring write), 1=passthrough (no ring write)");
+
 static int build_thunk(void *thunk_mem, u32 displaced, unsigned long func_addr,
 		       char marker)
 {
@@ -540,6 +552,19 @@ static int build_thunk(void *thunk_mem, u32 displaced, unsigned long func_addr,
 	unsigned long idx_ptr    = (unsigned long)&ring_idx;
 	unsigned long buf_ptr    = (unsigned long)ring_buf;
 	u32 back_b;
+
+	if (thunk_mode == 1) {
+		/* PASSTHROUGH: just displaced + branch back. No state changes. */
+		p[0] = displaced;
+		back_b = arm_encode_b(thunk_addr + 4, func_addr + 4);
+		if (back_b == 0xffffffff) {
+			uart_puts("[ko: back-jump out of range (passthrough)]\n");
+			return -ERANGE;
+		}
+		p[1] = back_b;
+		flush_icache_range(thunk_addr, thunk_addr + 8);
+		return 0;
+	}
 
 	p[0]  = INSN_PUSH_R4_R7;
 	p[1]  = arm_encode_movw(4, (u16)(idx_ptr & 0xffff));
@@ -738,6 +763,20 @@ static void patch_module(struct module *mod,
 			uart_puts(")\n");
 			continue;
 		}
+
+		uart_puts("  displaced=");
+		uart_puthex(displaced);
+		/* Quick PC-as-Rm sniff: data-processing reg form (bit 25 = 0,
+		 * bits 27..26 = 0) AND Rm (bits 3..0) = 0xF. */
+		if (((displaced >> 25) & 1) == 0 &&
+		    ((displaced >> 26) & 3) == 0 &&
+		    (displaced & 0xf) == 0xf) {
+			uart_puts(" !!PC-AS-RM!!");
+		}
+		if (func & 1) {
+			uart_puts(" !!THUMB-ADDR!!");
+		}
+		uart_puts("\n");
 
 		if (build_thunk(thunk, displaced, func, targets[i].marker) < 0) {
 			uart_puts("  (skip: thunk build failed)\n");
