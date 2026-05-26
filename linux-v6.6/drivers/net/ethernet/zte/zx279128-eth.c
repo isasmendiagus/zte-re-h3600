@@ -51,7 +51,9 @@
  */
 #define ZX_REPLAY_MAGIC 0x5A584752u
 
-struct zx_replay_stock { s32 off; u32 val; } __packed;
+/* zx_replay_stock removed — stock.bin replaced by embedded
+ * zx_stock_init_table[] in zx_stock_table.h (refactor #38 Phase 3). */
+#include "zx_stock_table.h"
 /* zx_replay_cla removed — cla.bin replaced by embedded zx_cla_init_table[]
  * in zx_cla_table.h (refactor #38 Phase 1.a, commit 8a57adac2). The
  * embedded version uses struct zx_cla_entry from that header. */
@@ -310,12 +312,10 @@ struct zx_eth {
 
 	bool started;
 
-	/* Replay snapshot loaded via request_firmware. cla.bin + pm.bin used
-	 * to be here but are now embedded as zx_{cla,pm}_init_table[] in
-	 * zx_{cla,pm}_table.h (refactor #38 Phase 1+2). Only stock.bin
-	 * remains as a runtime firmware blob. */
-	const struct firmware *fw_stock;
-	const struct zx_replay_stock *r_stock; u32 r_n_stock;
+	/* All 3 replay snapshots that used to be runtime firmware blobs are
+	 * now embedded as zx_{cla,pm,stock}_init_table[] in their respective
+	 * headers (refactor #38 Phase 1+2+3). No more firmware_request at
+	 * driver probe. */
 };
 
 /* ============================================================
@@ -2996,54 +2996,11 @@ static int zx_eth_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, eth);
 
-	/* Load replay snapshots from /lib/firmware/zx-replay/*.bin (initramfs).
-	 * Soft-fail: warn but continue — useful for bring-up without all snapshots. */
-	{
-		const struct {
-			const char *name;
-			const struct firmware **fwp;
-			const void **datap;
-			u32 *countp;
-			size_t rsize;
-		} fws[] = {
-			{ "zx-replay/stock.bin", &eth->fw_stock,
-			  (const void **)&eth->r_stock, &eth->r_n_stock,
-			  sizeof(struct zx_replay_stock) },
-			/* cla.bin, pm.bin: now embedded as zx_{cla,pm}_init_table
-			 * in zx_{cla,pm}_table.h (refactor #38 Phase 1+2). */
-		};
-		int fi;
-		for (fi = 0; fi < ARRAY_SIZE(fws); fi++) {
-			int rc = request_firmware(fws[fi].fwp, fws[fi].name, dev);
-			if (rc) {
-				dev_warn(dev, "replay %s: request_firmware=%d\n",
-					 fws[fi].name, rc);
-				continue;
-			}
-			if ((*fws[fi].fwp)->size < 8) {
-				dev_warn(dev, "replay %s: too small\n", fws[fi].name);
-				release_firmware(*fws[fi].fwp); *fws[fi].fwp = NULL;
-				continue;
-			}
-			{
-				const u32 *hdr = (const u32 *)(*fws[fi].fwp)->data;
-				u32 magic = hdr[0], cnt = hdr[1];
-				size_t expect = 8 + (size_t)cnt * fws[fi].rsize;
-				if (magic != ZX_REPLAY_MAGIC ||
-				    (*fws[fi].fwp)->size != expect) {
-					dev_warn(dev, "replay %s: bad header (magic=%#x cnt=%u size=%zu vs %zu)\n",
-						 fws[fi].name, magic, cnt,
-						 (*fws[fi].fwp)->size, expect);
-					release_firmware(*fws[fi].fwp); *fws[fi].fwp = NULL;
-					continue;
-				}
-				*fws[fi].datap = (const void *)((*fws[fi].fwp)->data + 8);
-				*fws[fi].countp = cnt;
-				dev_info(dev, "replay %s: %u entries (%zu bytes)\n",
-					 fws[fi].name, cnt, (*fws[fi].fwp)->size);
-			}
-		}
-	}
+	/* All 3 register-replay snapshots (stock, cla, pm) are now embedded
+	 * as static C tables in zx_{cla,pm,stock}_table.h (refactor #38
+	 * Phase 1+2+3). No more firmware_request() at probe — the driver
+	 * is self-contained. fpga.bin is the only remaining runtime
+	 * firmware load (Phase 4 will embed it too). */
 
 	/* Set the DMA mask before allocating coherent buffers */
 	err = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(32));
@@ -3091,13 +3048,16 @@ static int zx_eth_probe(struct platform_device *pdev)
 		zx_dbg_puts("\n[zxdbg] probe OK\n");
 	}
 
-	/* Replay stock NPP/TM register state (TM/QoS/queue config + CLA tables
-	 * we don't generate via init code). Empirical snapshot from running stock. */
-	if (eth->r_stock) {
+	/* Replay stock NPP/TM register state (TM/QoS/queue config + tables we
+	 * don't generate via explicit init yet). Refactor #38 Phase 3:
+	 * embedded as zx_stock_init_table[] in zx_stock_table.h instead of
+	 * runtime firmware_request. Future phases will split this 22k-entry
+	 * blob into per-block explicit init functions (chip_tm_init, etc.). */
+	{
 		u32 i, neg = 0, pos = 0;
-		for (i = 0; i < eth->r_n_stock; i++) {
-			s32 off = eth->r_stock[i].off;
-			u32 val = eth->r_stock[i].val;
+		for (i = 0; i < ZX_STOCK_INIT_TABLE_LEN; i++) {
+			s32 off = zx_stock_init_table[i].off;
+			u32 val = zx_stock_init_table[i].val;
 			if (off < 0) {
 				writel(val, eth->pon_early + (off + 0x1C0000));
 				neg++;
@@ -3106,10 +3066,8 @@ static int zx_eth_probe(struct platform_device *pdev)
 				pos++;
 			}
 		}
-		dev_info(dev, "replayed %u stock regs (%u PON-early + %u NPP+)\n",
-			 eth->r_n_stock, neg, pos);
-	} else {
-		dev_warn(dev, "stock replay skipped: firmware not loaded\n");
+		dev_info(dev, "stock-init replay: %u regs (%u PON-early + %u NPP+)\n",
+			 ZX_STOCK_INIT_TABLE_LEN, neg, pos);
 	}
 
 	dev_info(dev, "PP[0x2c] (CPU_FWD) = %#x, IDM[0x8000] CTRL = %#x\n",
@@ -3457,8 +3415,8 @@ static int zx_eth_remove(struct platform_device *pdev)
 
 	zx_debugfs_exit();
 
-	/* 8. Release replay firmware images (cla.bin + pm.bin now embedded — Phase 1+2) */
-	if (eth->fw_stock) release_firmware(eth->fw_stock);
+	/* 8. All replay images (cla/pm/stock) are now embedded — Phase 1+2+3.
+	 *    No firmware images to release. */
 	return 0;
 }
 
