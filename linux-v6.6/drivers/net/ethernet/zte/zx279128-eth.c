@@ -3269,6 +3269,40 @@ static void zx_eth_repoint_tm_descriptors(struct zx_eth *eth);
 static void zx_eth_register_cpu_mac_slots(struct zx_eth *eth);
 
 /*
+ * Replay the captured stock init sequence per HW block, in the same
+ * order stock's boot does it.
+ *
+ * For each block we call either:
+ *   - an explicit zx_<block>_init() helper (the "extracted" blocks
+ *     where we have decoded the writes into readable C), or
+ *   - zx_stock_apply_block() which streams the still-generic
+ *     (off,val) ops from zx_stock_bursts.h.
+ *
+ * As Phase-9X chips away at the still-generic blocks, the matching
+ * stock_apply_block call here gets replaced by the new helper, and
+ * the SKIP_BLOCKS entry in tasks/00.01.eth-driver/scripts/
+ * gen_stock_bursts.py drops the entries from the generated ops table.
+ */
+static void zx_eth_apply_stock_init(struct zx_eth *eth)
+{
+	zx_pon_low_init(eth);                 /* Phase 9a — 4 sub-blocks × 4 writes */
+	zx_stock_apply_block(eth, "PON_B",
+			     ZX_STOCK_OPS_PON_B_START,    ZX_STOCK_OPS_PON_B_END);
+	zx_pon_tail_lookup_init(eth);         /* Phase 9e — 16 KB lookup RAM */
+	zx_stock_apply_block(eth, "PON_TAIL",
+			     ZX_STOCK_OPS_PON_TAIL_START, ZX_STOCK_OPS_PON_TAIL_END);
+	zx_npp_twin_init(eth);                /* Phase 9f — 3 twin-pair sub-blocks */
+	zx_stock_apply_block(eth, "NPP",
+			     ZX_STOCK_OPS_NPP_START,      ZX_STOCK_OPS_NPP_END);
+	zx_npp_aux_init(eth);                 /* Phase 9c — 13 × 12 identical writes */
+	zx_tm_per_instance_init(eth);         /* Phase 9d + 9g — 16 instance tables */
+	zx_stock_apply_block(eth, "TM",
+			     ZX_STOCK_OPS_TM_START,       ZX_STOCK_OPS_TM_END);
+	zx_stock_apply_block(eth, "PP_FUC",
+			     ZX_STOCK_OPS_PP_FUC_START,   ZX_STOCK_OPS_PP_FUC_END);
+}
+
+/*
  * TM subsystem bring-up — the path that carries CPU↔switch traffic.
  *
  * Returns 0 if either (a) we initialised the TM/sw netdev successfully
@@ -3592,28 +3626,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 		zx_dbg_puts("\n[zxdbg] probe OK\n");
 	}
 
-	/* Refactor #38 Phase 9b: per-block init in original stock order.
-	 * Each block is either an explicit zx_<block>_init() (extracted)
-	 * or a zx_stock_apply_block() call into the still-generic ops
-	 * table. As blocks get extracted in later phases, the corresponding
-	 * SKIP_BLOCKS entry in gen_stock_bursts.py drops them from the
-	 * generated ops; the per-block call here is replaced by the new
-	 * zx_<block>_init(). */
-	zx_pon_low_init(eth);  /* PON_LOW — Phase 9a (extracted) */
-	zx_stock_apply_block(eth, "PON_B",
-		ZX_STOCK_OPS_PON_B_START,    ZX_STOCK_OPS_PON_B_END);
-	zx_pon_tail_lookup_init(eth);  /* PON_TAIL 16 KB lookup RAM — Phase 9e (extracted) */
-	zx_stock_apply_block(eth, "PON_TAIL",
-		ZX_STOCK_OPS_PON_TAIL_START, ZX_STOCK_OPS_PON_TAIL_END);
-	zx_npp_twin_init(eth);  /* NPP twin pairs 0/1, 2/3, 6/7 — Phase 9f (extracted) */
-	zx_stock_apply_block(eth, "NPP",
-		ZX_STOCK_OPS_NPP_START,      ZX_STOCK_OPS_NPP_END);
-	zx_npp_aux_init(eth);  /* NPP_AUX — Phase 9c (extracted) */
-	zx_tm_per_instance_init(eth);  /* TM 16x64-word tables — Phase 9d (extracted) */
-	zx_stock_apply_block(eth, "TM",
-		ZX_STOCK_OPS_TM_START,       ZX_STOCK_OPS_TM_END);
-	zx_stock_apply_block(eth, "PP_FUC",
-		ZX_STOCK_OPS_PP_FUC_START,   ZX_STOCK_OPS_PP_FUC_END);
+	zx_eth_apply_stock_init(eth);
 
 	/* Phase 14: kick PHY power-up (LDO + TX DAC) on all GePHYs. */
 	zx_eth_init_phys(dev);
