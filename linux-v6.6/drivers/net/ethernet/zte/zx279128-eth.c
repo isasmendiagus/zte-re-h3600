@@ -2999,8 +2999,8 @@ static int zx_eth_probe(struct platform_device *pdev)
 	/* All 3 register-replay snapshots (stock, cla, pm) are now embedded
 	 * as static C tables in zx_{cla,pm,stock}_table.h (refactor #38
 	 * Phase 1+2+3). No more firmware_request() at probe — the driver
-	 * is self-contained. fpga.bin is the only remaining runtime
-	 * firmware load (Phase 4 will embed it too). */
+	 * is self-contained. All 4 runtime
+	 * firmware loads (cla, pm, stock, fpga) are now gone. */
 
 	/* Set the DMA mask before allocating coherent buffers */
 	err = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(32));
@@ -3211,90 +3211,14 @@ static int zx_eth_probe(struct platform_device *pdev)
 		writel(0xa, eth->fpga_base + 0);
 		dev_info(dev, "FPGA IRQ enable: wrote 0xa to fpga+0 (sbrg_set_irq_en_mask equiv)\n");
 
-		/* Phase 5g experiment 2026-05-24: bulk fpga.bin replay DISABLED
-		 * per round-2 reviewer (independent_review_round2_2026-05-24.md).
-		 * Replays 11456 entries from another unit's running state, may be
-		 * clobbering our seeded FDB + critical config. Test if RX still
-		 * works without it. If yes, we've removed 11456 unknowns.
-		 *
-		 * Set ZX_BULK_REPLAY=1 to re-enable for comparison. */
-#define ZX_BULK_REPLAY 0
-#if ZX_BULK_REPLAY
-		{
-			const struct firmware *fw = NULL;
-			int rfw_ret;
-			dev_info(dev, "CKPT1: before request_firmware(fpga.bin)\n");
-			rfw_ret = request_firmware(&fw, "zx-replay/fpga.bin", dev);
-			dev_info(dev, "CKPT2: request_firmware ret=%d fw=%p size=%zu\n",
-				 rfw_ret, fw, fw ? fw->size : 0);
-			if (rfw_ret == 0 && fw && fw->size >= 8) {
-				const u8 *p = fw->data;
-				const u32 *hdr = (const u32 *)p;
-				u32 cnt = hdr[1];
-				size_t i, applied = 0, skipped = 0;
-				if (hdr[0] != 0x5046585au /* 'ZXFP' little-endian */) {
-					dev_warn(dev, "zx-replay/fpga.bin: bad magic %#x\n", hdr[0]);
-				} else {
-					dev_info(dev, "CKPT3: starting replay loop cnt=%u\n", cnt);
-					for (i = 0; i < cnt; i++) {
-						u32 off = *(const u32 *)(p + 8 + i*8);
-						u32 val = *(const u32 *)(p + 12 + i*8);
-						bool allow = false;
-						if ((val & 0xff000000u) == 0x4e000000u) {
-							skipped++;
-							continue;
-						}
-						/* Skip TM[0x10050]=TX_UP_BASE and TM[0x10060]=TX_DN_BASE
-						 * — stock values are 0x4ffdf000/0x4ffef000 (DDR), our
-						 * dma_init has set them to txdesc_dma which the bulk
-						 * replay would otherwise overwrite. Also skip 0x10064
-						 * (TX DN KICK = 1) — spurious kick on stale stock base. */
-						if (off == 0x350050 || off == 0x350060 || off == 0x350064) {
-							skipped++;
-							continue;
-						}
-						/* Skip TM[+0xF0] across 4 instances — RX desc base.
-						 * Stock val 0x4ff1f000 is DDR; we set to rxdesc_dma. */
-						if (off == 0x3400f0 || off == 0x3404f0 ||
-						    off == 0x3408f0 || off == 0x340cf0) {
-							skipped++;
-							continue;
-						}
-						/* WHITELIST of FPGA sub-blocks known to be safe to write.
-						 * Other ranges (PON, IDM, etc.) hang the AHB bus when
-						 * written without prior topcrm clock-enable.  We don't
-						 * need them — mainline H3600 is a router not an ONT. */
-						/* 0x000000-0x040000: pon_low control regs (4 entries) */
-						/* 0x040000-0x080000: secondary pon block (worked in prior tests) */
-						if (off < 0x80000) allow = true;
-						/* 0x1c0000-0x200000: NPP block */
-						else if (off >= 0x1c0000 && off < 0x200000) allow = true;
-						/* 0x340000-0x360000: TM block */
-						else if (off >= 0x340000 && off < 0x360000) allow = true;
-						/* 0x380000-0x3b0000: PP block */
-						else if (off >= 0x380000 && off < 0x3b0000) allow = true;
-
-						if (!allow) {
-							skipped++;
-							continue;
-						}
-						if ((i & 0xff) == 0)
-							dev_info(dev, "CKPT_PRE: i=%zu off=%#x val=%#x\n", i, off, val);
-						writel(val, eth->fpga_base + off);
-						applied++;
-					}
-					dev_info(dev, "fpga.bin replay: %zu applied, %zu skipped (DDR ptrs), %u total\n",
-						 applied, skipped, cnt);
-				}
-				release_firmware(fw);
-			} else {
-				dev_warn(dev, "zx-replay/fpga.bin missing/bad; bulk replay skipped (ret=%d)\n", rfw_ret);
-			}
-			dev_info(dev, "CKPT4: after bulk replay block\n");
-		}
-#else
-		dev_info(dev, "CKPT4: bulk replay DISABLED (ZX_BULK_REPLAY=0) — Phase 5g experiment\n");
-#endif /* ZX_BULK_REPLAY */
+		/* fpga.bin bulk replay was disabled in Phase 5g (2026-05-24) and
+		 * removed entirely in refactor #38 Phase 4 (2026-05-26). The dead
+		 * #if ZX_BULK_REPLAY 0 path was ~80 lines of code behind a
+		 * compile-time gate — never compiled in. Driver works fine
+		 * without it (PING BIDI achieved without bulk replay). The
+		 * fpga.bin blob is also deleted from the initramfs. See:
+		 *   tasks/00.10.02.re-stock-kmods/findings/eth_init_flow_2026_05_26.md
+		 * for the explicit init sequence we use instead. */
 
 		/* Replay pp_pm flow_info/sub_ram from stock snapshot */
 		zx_pp_pm_apply_replay(eth);
