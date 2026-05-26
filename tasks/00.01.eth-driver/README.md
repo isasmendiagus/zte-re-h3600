@@ -18,6 +18,36 @@ NAPI was implemented (task #55) but `rx_packets=0` in practice — see
 
 For driver internals, see `ETHERNET_DRIVER_DESIGN.md` (141 KB, ground truth).
 
+## Tracing the stock driver — current state (2026-05-26)
+
+kotrace (`kotrace/`) is the live RAM-patch tracer we use to capture
+stock-driver behavior. **Post-boot loading works fully** (insmod
+`/tmp/kotrace.ko` from netshell → 2157 functions patched across plat /
+tm / switch / mt7915 / idmfdb → 32 k+ entries captured during a single
+ping). **Boot-time bake-in init capture is parked** — silent SoC reset
+when too many functions are patched at module-load time; root cause
+likely cortex-A9 icache prefetch errata or init-context call-site
+assumptions our naive 4-byte branch can't honor. The exhaustive
+experiment log + lessons-learned are in
+[findings/kotrace_init_capture.md](findings/kotrace_init_capture.md).
+
+Workflow docs to read in order if you're picking this up fresh:
+
+- `findings/kotrace_workflow.md` — fast post-boot iter loop (the path that works)
+- `findings/kotrace_bake_in.md` — the bake-in pipeline + the rabbit hole
+- `findings/kotrace_init_capture.md` — option B plan + everything tried + why each failed
+- `findings/idea_a_kotrace.md` — original kotrace design (Phase A3)
+
+Practical shell access on the bake-in rootfs: `nc 192.168.1.1 9001`
+(raw-TCP netshell, source at `tasks/00.02.stock-shell/netshell.c`).
+Avoids ZTE's patched dropbear entirely — see CLAUDE.md "SSH gotchas".
+
+If init-time capture becomes truly blocking later, the unparked path
+is `tasks/99.01.linux-stockport/`: vanilla 4.1.25 + ZTE board file +
+turning on `CONFIG_KPROBES=y` / `CONFIG_FUNCTION_TRACER=y` then using
+mainline kprobes (~4400 hardened lines) instead of our 10-line
+`insn_is_displaceable()`. Estimated 1–2 days incl. kernel flash risk.
+
 ## Layout
 
 ```

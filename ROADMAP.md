@@ -12,8 +12,10 @@ carries traffic, the OpenWrt port is the smaller (but still real) lift.
 ```
 [stage 0] Get SSH on stock firmware (✅ DONE — via orca.pet writeup + AES key)
 [stage 1] RE the proprietary stock drivers (✅ partial — TM/switch/PP/IDM)
-[stage 2] Build mainline 6.6 zx279128-eth driver (🚧 IN PROGRESS — TX partial, RX dead)
-[stage 3] Sustained ping LAN↔device under mainline (⛔ blocked by RX)
+[stage 2] Build mainline 6.6 zx279128-eth driver (🚧 PING BIDI ✅ 2026-05-24, refactor pending)
+[stage 3] Sustained ping LAN↔device under mainline (✅ DONE — task #50)
+[stage 3b] iperf baseline + throughput (📋 task #37)
+[stage 3c] WiFi MT7915 over internal PCIe (✅ DONE — tasks/00.07.wifi/, 2026-05-04)
 [stage 4] Persist mainline kernel in NAND slot A (📋 planned)
 [stage 5] Port to OpenWrt as a target (🎯 the actual goal)
 [stage 6] Submit driver upstream to netdev (🎯 stretch)
@@ -41,63 +43,27 @@ carries traffic, the OpenWrt port is the smaller (but still real) lift.
    device, and watching output flow through `kmsg2uart` → UART. That is the
    next concrete RE methodology.
 
-## Now (2026-05-22 onward)
+## Now (2026-05-26 onward)
 
-### 1. Soft-float busybox  — *unblocks fast iteration*
-Rebuild busybox 1.36 with `arm-linux-gnueabi-gcc` (no `-hf`) +
-`CONFIG_STATIC=y`. Replace `tasks/00.01.eth-driver/initramfs/bin/busybox`.
-Verify: `arm-linux-gnueabi-readelf -A` shows no VFP tags.
+PING BIDI landed 2026-05-24 (task #50). RX/TX both alive on mainline.
+Manual printk-injection was superseded by **kotrace** (loader-notifier
+RAM patcher, `tasks/00.01.eth-driver/kotrace/`) — see LEARNED.md
+"How to observe what stock kernel modules do at runtime".
 
-**Why first**: unlocks `live_load_mod` cycle (~30s per driver iter vs
-~3 min full reboot). Saves enormous time on the RX work below.
+### 1. iperf baseline + throughput (task #37)
+Measure what the mainline driver actually achieves now that ping is
+bidi. Compare to stock. Set the bar for the refactor below.
 
-### 2. **Manual `printk`-injection into stock `.ko` files** — *the unblock for #3*
-Since kprobes is unavailable, the only way to observe what stock's
-`switch.ko` / `tm.ko` / `plat-zxylzb_9128S.ko` do at runtime is to
-**binary-patch the .ko files** to insert `printk` calls at chosen
-addresses, load them on the stock device, and watch the output via
-`kmsg2uart` → UART.
+### 2. Mainline-quality refactor (task #38)
+Replace the bulk register replay (22,363 stock regs + cla + pm) with
+explicit per-block init derived from the kotrace captures. Goal:
+upstream-clean code, no opaque firmware blobs.
 
-Concretely:
-- Pick target functions in Ghidra (e.g. `chip_tm_init`,
-  `zte_api_pp_global_init`, `def_ptl_pkt_action`-touching code).
-- For each, identify a safe insertion offset (between two
-  push-prologue or pre-call boundary).
-- Inject `BL printk` + a fmt string in `.rodata`:
-  - Save regs (`push {r0-r3, lr}`)
-  - Load fmt addr (`ldr r0, =fmt_string`)
-  - Load arg (`mov r1, <reg-of-interest>`)
-  - `bl printk`
-  - Restore (`pop {r0-r3, lr}`)
-- Add a relocation entry for the printk symbol (resolved at insmod time).
-- `tasks/00.02.stock-shell/prepare_slot_a.sh --write` to flash patched .ko
-  in the slot-A rootfs (or just SSH+scp+insmod for fast iter).
-- Capture UART log → analyze what stock writes / reads.
-- Port findings to our mainline driver.
-
-Tooling needed: a small Python ELF splicer (built on `pyelftools` or similar).
-A working pattern exists informally in `auto_patch_plat.py`
-(in `tasks/99.01.linux-stockport/`) — recycle that as the basis.
-
-### 3. Driver RX path — the real eth-driver blocker
-Current state: `tm_irq_count = 0`, `tm_rx_count = 0`,
-`rx_packets = 0`. Per-queue RX desc rings empty
-(`TM[0x10100..1011c] = 0`). TM hardware never fires RX IRQ.
-
-Specifically:
-- Task #91 — decode `SchRegTable` / `QmgRegTable` → find TM→PP forwarding gate
-- Task #92 — `pp[0x2c]` `CPU_FWD` bit 25 auto-clear
-- Task #93 — `def_ptl_pkt_action` table replay (we replay other tables but not this one)
-- Re-verify task #55 (RX path + NAPI) — marked done but rx_packets=0 in practice
-
-**This is what step 2 unblocks** — manual printk injection in stock
-switch.ko / tm.ko will reveal what registers/RAM stock writes during
-RX init that we're missing.
-
-### 3. Driver TX path — close the intermittent gate
-TX works sometimes (22 packets reached host wire in one window),
-mostly doesn't. Open RE tasks #87, #89 cover the TM init knobs
-that determine the gate.
+### 3. Remaining init/state knobs (tasks #40, #41, #42)
+- #40 — dpa HW responder + spa CPU port
+- #41 — sdet frame-length + greg port state validation
+- #42 — missing IRQs (PP/IDM/NPP/PON) + MMIO regions
+       (sys_ctrl_base, pin_mux_base)
 
 ## Later (after RX/TX work)
 

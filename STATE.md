@@ -11,13 +11,24 @@
    Stock kernel has standard pl011 driver hard-coded to DR+0x00 (silent).
 4. **Verified kprobes/ftrace are NOT compiled** in stock kernel
    (`# CONFIG_KPROBES is not set`, no `/sys/kernel/debug/tracing/`).
-5. **Now**: we can modify stock `.ko` files (binary-patch printk in), load
-   them on stock device, see printk via UART. This is our RE methodology.
-   See `LEARNED.md` "How to observe what stock kernel modules do at runtime".
+5. **Built kotrace** (loader-notifier + RAM patcher,
+   `tasks/00.01.eth-driver/kotrace/`) — replaces target fn prologues with
+   `b thunk` after the kernel loader resolves all symbols. Post-boot
+   loading works for 2157 functions across plat/tm/switch/mt7915/idmfdb
+   and routinely captures 32 k+ entries during a ping. Bake-in init
+   capture (insmod via `/etc/init.norm`) is **parked** with a silent SoC
+   reset — see `tasks/00.01.eth-driver/findings/kotrace_init_capture.md`.
+6. **PING BIDI on mainline** (2026-05-24, task #50) — `pon_tm_net_tx` +
+   `bp_idx 10-bit decode` + frame-at-`bp_buf+16` fixes landed; RX/TX
+   both alive. Refactor + iperf still pending (tasks #37, #38, #47).
+7. **WiFi works** (2026-05-04, `tasks/00.07.wifi/`) — MT7915 over the
+   internal PCIe link → wlan0 + internet.
+8. **Now**: post-boot kotrace captures + Ghidra are the live RE loop.
+   Shell access on the bake-in slot-A rootfs is via netshell
+   (`nc 192.168.1.1 9001`) since the ZTE-patched dropbear wedges on
+   exec — see CLAUDE.md "SSH gotchas".
 
-
-
-**Last updated**: 2026-05-22 (manually maintained; update when you
+**Last updated**: 2026-05-26 (manually maintained; update when you
 change slot A or boot a different kernel).
 
 ## Slot A NAND (kernel + rootfs)
@@ -43,8 +54,8 @@ change slot A or boot a different kernel).
   - `/bin/busybox` — **HARD-FLOAT** (will be replaced; see ROADMAP step 1)
 - **Driver loaded**: yes (per `cat /proc/modules` = `zx279128_eth Live`)
 - **sw netdev**: up, IP `192.168.1.99/24`, MAC `f4:f6:47:0f:42:64`
-- **TX counter**: 20 packets (per `cat /sys/class/net/sw/statistics/tx_packets`)
-- **RX counter**: 0 (broken — see ROADMAP step 2)
+- **TX / RX**: bidi ping works since 2026-05-24 (task #50). Throughput
+  not measured yet (#37 iperf pending).
 
 ## Last-known-good for fallback recovery
 

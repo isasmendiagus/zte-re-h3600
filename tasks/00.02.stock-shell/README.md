@@ -37,6 +37,12 @@ printk on UART — without ever touching slot B or the bootloader.
 | `devtable.txt` | 329 device nodes dumped from a live device — fed to `mkfs.jffs2 --devtable=` (mandatory!) |
 | `out/cspd-uart-alive` | Patched cspd binary (3 bytes at 0x1cdeda/0x1cdf21/0x1ce161 → `0x33`) |
 | `out/cspd-uart-alive.PATCHED` | Backup of patched cspd |
+| `netshell.c` | **Raw-TCP shell on port 9001 — the practical workaround for ZTE's patched dropbear that wedges busybox-ash. Source for `/sbin/netshell` in staging. See ../00.01.eth-driver/findings/kotrace_init_capture.md.** |
+| `minishell.c` | Earlier wrapper attempt (stdin-based REPL). Kept for posterity; netshell supersedes it. |
+| `cliagent_wrap.c` | Earlier wrapper that unblocked SIGALRM before exec /bin/ash — did not solve the ash-wedge problem; preserved as a historical artifact. |
+| `dumpkring.c` | Static-ARM helper that reads any file and streams it to PL011 UART. Used by the bake-in's iptables-flush loop to relay `/tmp/cliagent.log` and `/tmp/fwiter.txt` snapshots over the UART bridge. |
+| `kinsmod.c` | Static-ARM `insmod` wrapper that writes errno to PL011 — exists because busybox-insmod's stderr is invisible in init.norm context. |
+| `printok.c` | One-shot static-ARM "echo to PL011" used as a bisect probe in `/etc/rc` and `/etc/init.norm` patches. |
 | `ITERATIONS.md` | Iteration history (iter 0 → iter 7) — what was tried, what failed, why |
 | `staging/` | Working rootfs tree (disposable; regenerated each `--write`) |
 | `out/` | Built artifacts: `rootfs_a_patched.jffs2`, `..._enc.jffs2`, `header_a_patched.bin` |

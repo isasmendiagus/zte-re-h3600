@@ -284,6 +284,56 @@ in English.
 
 ---
 
+## Symptom: bake-in kotrace silently SoC-resets with N patches at module-load (insmod via init.norm)
+**Cause**: when kotrace patches its targets at MODULE_STATE_COMING for
+modules that are insmod'd during early init (zx_ponreg, idmfdb, plat,
+switch, tm — all chained from `/etc/init.norm`), enabling more than a
+small fraction of patches in those modules causes a silent reset with
+no panic and no UART output past `[ko: starting]`. Reset happens on the
+PL011 mid-line, ruling out a clean kernel oops path. Empirically
+**disproven** causes: HW watchdog timing (boot-delay wait_secs), softlockup,
+cumulative overhead, patch-write race, ring write corruption, PC-relative
+displaced instructions, Thumb-address handling, stop_machine atomicity.
+Most-likely-remaining causes: Cortex-A9 icache prefetch errata around our
+4-byte `b thunk` patch, or init-context call-site assumptions our naive
+thunk can't honor (e.g. caller expected condition flags / scratch regs
+preserved across the call).
+**Fix (workaround)**: load kotrace AFTER boot via netshell — patch the
+fully-running stock, then trigger the operation you want to trace (ping
+for RX/TX, etc.). 32 k+ entry captures across 2157 functions work fine
+this way. See `tasks/00.01.eth-driver/findings/kotrace_workflow.md`.
+**Fix (real)**: parked — would need either Cortex-A9-erratum-aware patch
+sequence or unparking `tasks/99.01.linux-stockport/` with `CONFIG_KPROBES=y`
+(~4400 lines of mainline kprobes vs. our 10-line `insn_is_displaceable`).
+**Reference**: `tasks/00.01.eth-driver/findings/kotrace_init_capture.md`
+(exhaustive experiment log + all disproven hypotheses).
+**Cost when not known**: ~2 days of bisecting per-module patch counts,
+boot-delay tests, thunk-mode variants, atomic-patch experiments.
+
+---
+
+## Symptom: SSH to bake-in slot-A rootfs hangs after auth, no shell prompt
+**Cause**: ZTE-patched dropbear (`/sbin/dropbear` in the stock rootfs)
+hardcodes a branch on `SSH_ProcType` to `/bin/cliagent` and rejects the
+`exec` / `sftp` subsystems entirely. Even after replacing `/bin/cliagent`
+with a busybox-ash wrapper, the spawned `ash` wedges (SIGALRM handling
+or controlling-tty quirks — `cliagent_wrap.c` with `sigprocmask` did
+not help). `/etc/passwd` shell field is ignored.
+**Fix**: skip dropbear entirely. Bake `/sbin/netshell` (a 140-line raw
+TCP shell, `tasks/00.02.stock-shell/netshell.c`) into the slot-A rootfs
+and start it in a supervisor loop from `/etc/rc`. Open the firewall
+once iptables-srvcntrl is up: `(while :; do iptables -F srvcntrl
+2>/dev/null; iptables -I INPUT -p tcp --dport 9001 -j ACCEPT 2>/dev/null;
+sleep 5; done) &`. Connect: `nc 192.168.1.1 9001` — supports quoted
+args, cd/pwd built-ins, no PTY required.
+**Reference**: `tasks/00.02.stock-shell/netshell.c`,
+`tasks/00.01.eth-driver/kotrace/build_rootfs_with_kotrace.py` (supervisor
+wiring), CLAUDE.md "SSH gotchas" section.
+**Cost when not known**: ~1 day chasing dropbear configs + ash wrappers
+before pivoting to a side-channel.
+
+---
+
 ## Anti-patterns to avoid
 
 1. **Don't rewrite working scripts inline in shell when one already exists in `lib/`.**

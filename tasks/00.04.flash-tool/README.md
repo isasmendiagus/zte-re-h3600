@@ -274,8 +274,25 @@ tasks/00.04.flash-tool/
 ├── flash.py           CLI: argparse, subcommands, stages files into tftp/
 ├── nand_layout.py     constants: slot layouts, header field offsets, NAND geometry
 ├── bootpara.py        pure-function header patching (no I/O): read/patch/CRC
+├── build_rootfs.py    generic mkfs.jffs2 + AES-128-ECB wrapper with LOUD size-overflow
+│                      check (mkfs.jffs2 will silently truncate when --pad is exceeded —
+│                      this script refuses to build past 100 % and warns under 5 %)
 └── uboot_flash.py     U-Boot driving over UART; safety guards; WriteStep dataclass
 ```
+
+`build_rootfs.py` is the canonical builder. Run standalone:
+
+```
+python3 tasks/00.04.flash-tool/build_rootfs.py \
+    --staging tasks/00.02.stock-shell/staging \
+    --devtable tasks/00.02.stock-shell/devtable.txt \
+    --out my_rootfs_enc.jffs2
+```
+
+The per-task wrapper `tasks/00.01.eth-driver/kotrace/build_rootfs_with_kotrace.py`
+prepares the staging (drops kotrace.ko + netshell + patches init.norm) and
+then runs the same mkfs+AES sequence inline. Either path produces an
+identical bit-for-bit image (verified 2026-05-26).
 
 `bootpara.py` has no UART dependency and is unit-testable on a NAND dump
 alone. `uboot_flash.py` imports `uart` from the shared `lib/` directory
