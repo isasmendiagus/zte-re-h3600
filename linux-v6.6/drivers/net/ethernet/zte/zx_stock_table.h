@@ -22409,4 +22409,28 @@ static const struct zx_stock_entry zx_stock_init_table[22363] = {
 
 #define ZX_STOCK_INIT_TABLE_LEN 22363
 
+/* Phase 6: per-block slice indices into zx_stock_init_table[]. */
+/* A block's writes are entries [START, END) — pass to zx_replay_stock_block(). */
+#define ZX_STOCK_PON_LOW_START 0
+#define ZX_STOCK_PON_LOW_END   16
+#define ZX_STOCK_PON_LOW_LEN   16  /* target: pon_early */
+#define ZX_STOCK_PON_B_START 16
+#define ZX_STOCK_PON_B_END   1808
+#define ZX_STOCK_PON_B_LEN   1792  /* target: pon_early */
+#define ZX_STOCK_PON_TAIL_START 1808
+#define ZX_STOCK_PON_TAIL_END   13844
+#define ZX_STOCK_PON_TAIL_LEN   12036  /* target: pon_early */
+#define ZX_STOCK_NPP_START 13844
+#define ZX_STOCK_NPP_END   15444
+#define ZX_STOCK_NPP_LEN   1600  /* target: base */
+#define ZX_STOCK_NPP_AUX_START 15444
+#define ZX_STOCK_NPP_AUX_END   15600
+#define ZX_STOCK_NPP_AUX_LEN   156  /* target: base */
+#define ZX_STOCK_TM_START 15600
+#define ZX_STOCK_TM_END   19913
+#define ZX_STOCK_TM_LEN   4313  /* target: base */
+#define ZX_STOCK_PP_FUC_START 19913
+#define ZX_STOCK_PP_FUC_END   22363
+#define ZX_STOCK_PP_FUC_LEN   2450  /* target: base */
+
 #endif /* ZX_STOCK_TABLE_H */

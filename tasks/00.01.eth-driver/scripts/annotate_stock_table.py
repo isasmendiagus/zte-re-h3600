@@ -122,25 +122,40 @@ def main():
 
     cur_section = None
     section_counts = {}
+    section_starts = {}    # name -> first index in zx_stock_init_table
+    section_ends = {}      # name -> first index AFTER section (exclusive)
     for i, (off, val) in enumerate(entries):
         name, target = classify(off)
         if name != cur_section:
             if cur_section is not None:
+                section_ends[cur_section] = i
                 out.append(f"\t/* end {cur_section} ({section_counts[cur_section]} regs) */")
             block_info = next((b for b in BLOCKS if b[0] == name), None)
             note = block_info[4] if block_info else "out-of-known-range"
             out.append("")
             out.append(f"\t/* ──── {name} ({target}, {note}) ──── */")
             cur_section = name
+            section_starts[name] = i
         section_counts[name] = section_counts.get(name, 0) + 1
         out.append(f"\t/*{i:5d}*/ {{{off:#11x}, {val:#010x}}},")
 
     if cur_section:
+        section_ends[cur_section] = n
         out.append(f"\t/* end {cur_section} ({section_counts[cur_section]} regs) */")
 
     out.append("};")
     out.append("")
     out.append(f"#define ZX_STOCK_INIT_TABLE_LEN {n}")
+    out.append("")
+    out.append("/* Phase 6: per-block slice indices into zx_stock_init_table[]. */")
+    out.append("/* A block's writes are entries [START, END) — pass to zx_replay_stock_block(). */")
+    for name, lo, hi, target, _ in BLOCKS:
+        if name in section_starts:
+            s = section_starts[name]
+            e = section_ends[name]
+            out.append(f"#define ZX_STOCK_{name}_START {s}")
+            out.append(f"#define ZX_STOCK_{name}_END   {e}")
+            out.append(f"#define ZX_STOCK_{name}_LEN   {e - s}  /* target: {target} */")
     out.append("")
     out.append("#endif /* ZX_STOCK_TABLE_H */")
 
