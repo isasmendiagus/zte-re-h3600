@@ -3272,6 +3272,32 @@ static void zx_eth_init_phys(struct device *dev)
  * TODO Phase 10b: consume the `zte,topcrm = <&topcrm>` syscon phandle
  * from DT instead of devm_ioremap'ing a hardcoded address.
  */
+/*
+ * Map the two extra MMIO windows the driver needs beyond the DT-listed
+ * "npp" resource: fpga_base (a 4 MiB unified window starting at the PON
+ * base, used by zx_fpga_table_write descriptor-driven access) and
+ * pon_early (the first 1.75 MiB of that, used by negative-offset stock
+ * writes). Both overlap the DT-listed regions but ioremap is happy to
+ * provide overlapping mappings here.
+ *
+ * TODO Phase 10b: take pon_early from the DT "pon" reg-name entry and
+ * derive fpga_base = pon_early ∪ npp via the platform_resource API.
+ */
+static int zx_eth_init_extra_mmio(struct zx_eth *eth)
+{
+	struct device *dev = eth->dev;
+
+	eth->fpga_base = devm_ioremap(dev, 0x92000000, 0x400000);
+	if (!eth->fpga_base)
+		return dev_err_probe(dev, -ENOMEM, "ioremap fpga_base failed\n");
+
+	eth->pon_early = devm_ioremap(dev, 0x92000000, 0x1C0000);
+	if (!eth->pon_early)
+		return dev_err_probe(dev, -ENOMEM, "ioremap PON early\n");
+
+	return 0;
+}
+
 static int zx_eth_init_topcrm(struct zx_eth *eth)
 {
 	struct device *dev = eth->dev;
@@ -3337,20 +3363,9 @@ static int zx_eth_probe(struct platform_device *pdev)
 	zx_pp_init(eth);
 	zx_npp_init(eth);
 
-	/* Map PON early region (0x92000000-0x921bffff = 1.5MB) — contains CLA
-	 * tables, FWD configuration, etc. that switch.ko populates. */
-	/* fpga_base: unified 4 MiB window covering pon + npp + idm + tm + pp,
-	 * matching stock zx_ponreg.ko's `fpga_base` (virt 0xf4000000 →
-	 * phys 0x92000000). Used by descriptor-table writes
-	 * (zx-fpga-reg-tables.h). Overlaps with `pon_early` (first 1.75 MiB)
-	 * and `base` (next 2 MiB); fine, the regions read consistently. */
-	eth->fpga_base = devm_ioremap(dev, 0x92000000, 0x400000);
-	if (!eth->fpga_base)
-		return dev_err_probe(dev, -ENOMEM, "ioremap fpga_base failed\n");
-
-	eth->pon_early = devm_ioremap(dev, 0x92000000, 0x1C0000);
-	if (!eth->pon_early)
-		return dev_err_probe(dev, -ENOMEM, "ioremap PON early\n");
+	err = zx_eth_init_extra_mmio(eth);
+	if (err)
+		return err;
 
 	/* Init raw UART debug (bypass console — survives console hang) */
 	zx_dbg_uart_init();
