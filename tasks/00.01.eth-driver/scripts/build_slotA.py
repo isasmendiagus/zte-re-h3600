@@ -55,35 +55,32 @@ def run(cmd, cwd=None):
 def main():
     TFTP.mkdir(parents=True, exist_ok=True)
 
-    # 0) CRITICAL: refresh the driver module into the initramfs source the
-    #    kernel embeds, then rebuild zImage. CONFIG_ZX279128_ETH=m means
-    #    the .ko ships inside the initramfs (path from .config
-    #    CONFIG_INITRAMFS_SOURCE), NOT linked into vmlinux. Without this
-    #    step, edits to zx279128-eth.c never reach the device — the
-    #    kernel boots the .ko snapshot from the last manual copy. We lost
-    #    several hours of testing to this 2026-05-25; never again.
+    # 0) FULL kernel rebuild — always. Previously we tried to gate this on
+    #    'is zx279128-eth.c newer than the .ko?' but that missed changes to
+    #    any other in-tree driver we author (mdio-zte.c, future phy-zte.c,
+    #    dsa/zte/*.c, …) and silently shipped a stale image. With kbuild's
+    #    incremental build, doing `make all` here costs ~5 seconds when
+    #    nothing changed — well worth the never-stale guarantee.
+    print("  $ make all (kernel + modules + dtbs + zImage)")
+    run(["make", "-C", str(ZXIC / "linux-v6.6"),
+         "ARCH=arm", "CROSS_COMPILE=arm-linux-gnueabi-",
+         f"O={BUILD}", "-j8", "all"])
+
+    # 0b) Copy our task-local module into the initramfs source (it ships
+    #     inside the kernel image via CONFIG_INITRAMFS_SOURCE).
     initramfs_ko_dst = Path("/tmp/initramfs_extract/lib/modules/zx279128-eth.ko")
     ko_src = BUILD / "drivers/net/ethernet/zte/zx279128-eth.ko"
-    if not ko_src.exists() or ko_src.stat().st_mtime < \
-            (ZXIC / "linux-v6.6/drivers/net/ethernet/zte/zx279128-eth.c").stat().st_mtime:
-        print("  $ make zx279128-eth.ko (driver .c changed since last build)")
-        run(["make", "-C", str(ZXIC / "linux-v6.6"),
-             "ARCH=arm", "CROSS_COMPILE=arm-linux-gnueabi-",
-             f"O={BUILD}", "-j8",
-             "drivers/net/ethernet/zte/zx279128-eth.ko"])
-    if initramfs_ko_dst.exists() and \
-            initramfs_ko_dst.stat().st_mtime >= ko_src.stat().st_mtime:
-        print(f"  ✓ initramfs .ko already up to date")
-    else:
-        initramfs_ko_dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil = __import__("shutil")
-        shutil.copy2(str(ko_src), str(initramfs_ko_dst))
-        print(f"  ✓ copied {ko_src.name} → {initramfs_ko_dst}")
-        # 0b) Rebuild zImage to re-embed the updated initramfs.
-        print("  $ make zImage (re-embed updated initramfs)")
-        run(["make", "-C", str(ZXIC / "linux-v6.6"),
-             "ARCH=arm", "CROSS_COMPILE=arm-linux-gnueabi-",
-             f"O={BUILD}", "-j8", "zImage"])
+    initramfs_ko_dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil = __import__("shutil")
+    shutil.copy2(str(ko_src), str(initramfs_ko_dst))
+    print(f"  ✓ copied {ko_src.name} → {initramfs_ko_dst}")
+
+    # 0c) Re-embed the (possibly updated) initramfs by rebuilding zImage.
+    #     Cheap when initramfs hash didn't change.
+    print("  $ make zImage (re-embed initramfs)")
+    run(["make", "-C", str(ZXIC / "linux-v6.6"),
+         "ARCH=arm", "CROSS_COMPILE=arm-linux-gnueabi-",
+         f"O={BUILD}", "-j8", "zImage"])
 
     # 1) Concat zImage + DTB
     zimage = BUILD / "arch/arm/boot/zImage"
