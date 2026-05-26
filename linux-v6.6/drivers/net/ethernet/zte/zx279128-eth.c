@@ -2340,10 +2340,12 @@ static void zx_tm_release_rx_desc(struct zx_eth *e, u8 q, u16 count)
 }
 
 /* NAPI poll — based on pon_tm_net_poll RE, simplified for first iteration */
-/* RX checkpoint logging — only first N polls and only when pending found */
+/* RX checkpoint logging — kept under pr_debug so it compiles out unless
+ * the file/dyn-debug is enabled. The first-N-polls gate is preserved so
+ * even with debug on the log stays bounded during bring-up. */
 #define RXCP(e, stage, fmt, ...) do { \
 	if ((e)->tm_napi_count < 20) \
-		pr_emerg("[ZXETH/RX poll#%u CP%d] " fmt "\n", \
+		pr_debug("[ZXETH/RX poll#%u CP%d] " fmt "\n", \
 			 (e)->tm_napi_count, stage, ##__VA_ARGS__); \
 } while (0)
 
@@ -2502,7 +2504,7 @@ static irqreturn_t zx_tm_irq(int irq, void *dev_id)
 
 	e->tm_irq_count++;
 	if (e->tm_irq_count < 5)
-		pr_emerg("[ZXETH/TM_IRQ#%u] status=%#x mask=%#x pending=%#x — scheduling NAPI\n",
+		pr_debug("[ZXETH/TM_IRQ#%u] status=%#x mask=%#x pending=%#x — scheduling NAPI\n",
 		         e->tm_irq_count, status, mask, pending);
 	/* Mask our bits during NAPI (stock: mask |= 7) */
 	tm_or(e, TM_REG_IRQ_MASK, TM_IRQ_ARM_BITS);
@@ -2746,10 +2748,10 @@ static int zx_bmu_free_bp(struct zx_eth *e, u16 bp_idx, u8 is_pon)
  *    5. kick HW: tm[0x10054] = 1  (upstream queue 0)
  */
 /* TX checkpoint logging — gated to first N packets so we don't flood the log.
- * Use pr_emerg so it always reaches console regardless of loglevel. */
+ * pr_debug so it compiles out unless the file/dyn-debug is enabled. */
 #define TXCP(e, stage, fmt, ...) do { \
 	if ((e)->tm_tx_count < 5) \
-		pr_emerg("[ZXETH/TX#%u CP%d:%s] " fmt "\n", \
+		pr_debug("[ZXETH/TX#%u CP%d:%s] " fmt "\n", \
 			 (e)->tm_tx_count, stage, __func__, ##__VA_ARGS__); \
 } while (0)
 
@@ -2790,7 +2792,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 		spin_unlock_irqrestore(&e->tm_tx_lock, flags);
 		/* First failure: emit ONE clean diagnostic via kernel printk */
 		if (e->tm_tx_dropped == 0) {
-			pr_emerg("[ZXETH] BMU alloc FAIL #1: 8000=%#x 8014=%#x "
+			pr_debug("[ZXETH] BMU alloc FAIL #1: 8000=%#x 8014=%#x "
 				 "800c=%#x 8048=%#x 8058=%#x 8080=%#x 8090=%#x\n",
 				 tm_read(e, 0x8000), tm_read(e, 0x8014),
 				 tm_read(e, 0x800c), tm_read(e, 0x8048),
@@ -2802,7 +2804,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	}
 	/* First success: also emit clean line */
 	if (e->tm_tx_count == 0)
-		pr_emerg("[ZXETH] BMU alloc OK #1: bp=%u len=%u (8090=%#x)\n",
+		pr_debug("[ZXETH] BMU alloc OK #1: bp=%u len=%u (8090=%#x)\n",
 			 bp, len, tm_read(e, 0x8090));
 
 	bp_buf = (u8 *)e->bp_cpu + (u32)bp * TM_BP_SIZE;
@@ -2906,11 +2908,11 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 		u32 pp_cnt780 = readl(pp + 0x780);
 		/* Tiny delay then re-read MAC counter to see if HW processed */
 		udelay(200);
-		pr_emerg("[ZXETH] TX#%u bp=%u len=%u  TM_UP=%#x DN=%#x  MAC0[ctrl=%#x ena=%#x 714=%#x 718=%#x]  PP[714=%#x 780=%#x]\n",
+		pr_debug("[ZXETH] TX#%u bp=%u len=%u  TM_UP=%#x DN=%#x  MAC0[ctrl=%#x ena=%#x 714=%#x 718=%#x]  PP[714=%#x 780=%#x]\n",
 			 e->tm_tx_count, bp, len, cnt_up, cnt_dn,
 			 mac0_ctrl, mac0_ena, mac0_cnt714, mac0_cnt718,
 			 pp_cnt714, pp_cnt780);
-		pr_emerg("[ZXETH] TX#%u +200us: MAC0[714=%#x 718=%#x]  PP[714=%#x 780=%#x]\n",
+		pr_debug("[ZXETH] TX#%u +200us: MAC0[714=%#x 718=%#x]  PP[714=%#x 780=%#x]\n",
 			 e->tm_tx_count,
 			 readl(mac0 + 0x714), readl(mac0 + 0x718),
 			 readl(pp + 0x714), readl(pp + 0x780));
