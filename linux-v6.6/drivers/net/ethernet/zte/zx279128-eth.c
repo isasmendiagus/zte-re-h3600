@@ -632,7 +632,7 @@ static int zx_sbrag_add_mac(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 	writel(d2, e->fpga_base + ZX_SBRAG_D2);
 	writel(d1, e->fpga_base + ZX_SBRAG_D1);
 	writel(d0, e->fpga_base + ZX_SBRAG_D0);
-	dev_info(e->dev, "SBRAG add: %pM vlan=%u port=%u → mem_id=%u ram_addr=%u\n",
+	dev_dbg(e->dev, "SBRAG add: %pM vlan=%u port=%u → mem_id=%u ram_addr=%u\n",
 		 mac, vlan, port, mem_id, ram_addr);
 	return 0;
 }
@@ -3365,7 +3365,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 	/* Phase 14: kick PHY power-up (LDO + TX DAC) on all GePHYs. */
 	zx_eth_init_phys(dev);
 
-	dev_info(dev, "PP[0x2c] (CPU_FWD) = %#x, IDM[0x8000] CTRL = %#x\n",
+	dev_dbg(dev, "PP[0x2c] (CPU_FWD) = %#x, IDM[0x8000] CTRL = %#x\n",
 		 readl(eth->base + PP_OFF + PP_REG_CPU_FWD),
 		 readl(eth->base + IDM_REG_CONTROL));
 
@@ -3529,7 +3529,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 				u32 base = inst * TM_INSTANCE_STRIDE;
 				tm_write(eth, base + 0xF0, eth->rxdesc_dma);
 			}
-			dev_info(dev, "Re-wrote TM[+0xF0] x%d instances to rxdesc_dma=%pad (was overwritten by bulk replay)\n",
+			dev_dbg(dev, "Re-wrote TM[+0xF0] x%d instances to rxdesc_dma=%pad (was overwritten by bulk replay)\n",
 				 TM_NUM_INSTANCES, &eth->rxdesc_dma);
 		}
 		/* CRITICAL fix 2026-05-24: bulk replay also overwrites
@@ -3539,7 +3539,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 		 * Re-write to our txdesc_dma so HW reads our actual ring. */
 		tm_write(eth, TM_REG_DMA_TX_UP_BASE, eth->txdesc_dma);
 		tm_write(eth, TM_REG_DMA_TX_DN_BASE, eth->txdesc_dma);
-		dev_info(dev, "Re-wrote TM[0x10050/0x10060] TX_UP/DN_BASE = txdesc_dma=%pad (was overwritten by bulk replay)\n",
+		dev_dbg(dev, "Re-wrote TM[0x10050/0x10060] TX_UP/DN_BASE = txdesc_dma=%pad (was overwritten by bulk replay)\n",
 			 &eth->txdesc_dma);
 
 		dev_info(dev, "TM ready: IRQ=%d, sw netdev up, CPU MAC + CLA + pp_pm replay done\n",
