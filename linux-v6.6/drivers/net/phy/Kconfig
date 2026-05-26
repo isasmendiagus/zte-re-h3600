@@ -402,6 +402,13 @@ config VITESSE_PHY
 	help
 	  Currently supports the vsc8244
 
+config ZTE_GEPHY
+	tristate "ZTE ZX279128S internal GePHY"
+	help
+	  Support for the gigabit Ethernet PHY integrated in the ZTE ZXIC
+	  ZX279128S SoC (PHY ID 0x84b95031). Four instances of this PHY
+	  sit on the SoC's private MDIO bus driven by mdio-zte.
+
 config XILINX_GMII2RGMII
 	tristate "Xilinx GMII2RGMII converter driver"
 	help
