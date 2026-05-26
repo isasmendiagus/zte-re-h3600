@@ -53,6 +53,21 @@ tooling) operate on **this** project for the kmod-related dumps:
 The `run_decompile_ko.sh` hardcodes this project's path; if you ever
 re-locate the project you must update that script.
 
+### External tools surveyed (not yet adopted)
+
+Discovered 2026-05-26 during stockport revival prior-art research
+(see `../99.01.linux-stockport/findings/external_tooling_prior_art_2026_05_26.md`):
+
+- **FirmSolo** (USENIX Security 2023, github.com/BUseclab/FirmSolo) —
+  scans `.ko`s for ksymtab/versions/vermagic, runs Kernel Config
+  Reverse Engineering to infer a `.config` whose built `vmlinux`
+  exports a superset of every symbol the binary modules need.
+  Covers ARM 32-bit Cortex-A9. Highest-EV automation we've found.
+- **abidiff / libabigail** (sourceware.org/libabigail) — diffs the
+  KMI surface of a stock `.ko` against a self-built `vmlinux`. One
+  command lists every struct/function divergence — directly replaces
+  the hand-rolled `netdev_probe.ko` struct-offset prober.
+
 ## Rules of engagement
 
 See [`../00.10.explore/README.md`](../00.10.explore/) "Rules of engagement"

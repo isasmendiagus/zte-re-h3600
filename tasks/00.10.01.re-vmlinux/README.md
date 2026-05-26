@@ -61,6 +61,16 @@ See `findings/README.md` for the template.
 (populated as discoveries land here; today this is empty — pre-existing
 findings still live in consumer tasks' `research/` notes)
 
+## Open tooling improvement
+
+**`vmlinux-to-elf` (marin-m)** — github.com/marin-m/vmlinux-to-elf —
+scans a raw `vmlinux.bin` for the compressed kallsyms table, recovers
+function/variable symbols, and emits a Ghidra-loadable ELF. If applied
+to `ext/extracted/vmlinux.bin`, would import the full kallsyms map
+into this project for free (~10 min). Discovered 2026-05-26 during
+stockport revival research; see
+`../99.01.linux-stockport/findings/external_tooling_prior_art_2026_05_26.md`.
+
 ## See also
 
 - `docs/KERNELS.md` "kernel #2 — Stock kernel" — full binary context
