@@ -1740,7 +1740,7 @@ static int zx_pp_pm_set_cpu_mac(struct zx_eth *e, u8 slot, const u8 *mac)
 	zx_pp_pm_set_cmd(e, 0, 0xc, slot);
 	writel(hi, e->base + PP_PM_REG_DATA0 + 1 * 4);	/* data slot 1 */
 	writel(lo, e->base + PP_PM_REG_DATA0 + 0 * 4);	/* data slot 0 */
-	dev_info(e->dev, "pp_pm CPU MAC ram[%u] = %pM (data1=%#x data0=%#x)\n",
+	dev_dbg(e->dev, "pp_pm CPU MAC ram[%u] = %pM (data1=%#x data0=%#x)\n",
 		 slot, mac, hi, lo);
 	return 0;
 }
@@ -1973,7 +1973,7 @@ static void zx_register_cpu_mac(struct zx_eth *e, u8 slot, const u8 *mac)
 	writel(low,  spa + 0);
 	writel(high, spa + 4);
 	zx_pp_pm_set_cpu_mac(e, slot, mac);
-	dev_info(e->dev, "CPU MAC slot[%u] = %pM (spa+pp_pm registered)\n",
+	dev_dbg(e->dev, "CPU MAC slot[%u] = %pM (spa+pp_pm registered)\n",
 		 slot, mac);
 }
 
@@ -2539,7 +2539,7 @@ static void zx_bmu_dump_fn(struct work_struct *w)
 	bp_stat    = tm_read(e, 0x80dc);
 	tx_kick    = tm_read(e, 0x10054);
 	tx_done    = tm_read(e, 0x10058);
-	dev_info(e->dev,
+	dev_dbg(e->dev,
 		 "STATS uptime_jiff=%lu drv:rx=%u rxlb=%u tx=%u txdrop=%u napi=%u irq=%u "
 		 "hw:alloc=%u rls=%u(diff=%d) bppe_avail=%u bppi=%u bp_stat=%08x "
 		 "tx_kick=%u tx_done=%u\n",
@@ -2555,7 +2555,7 @@ static void zx_bmu_dump_fn(struct work_struct *w)
 	 * loopback source. Drop frames from it to break the amplification
 	 * loop. Slots [0..31] = ingress_port+1 (so slot 0 = ingress -1 "invalid",
 	 * slot 1 = port 0, slot 8 = port 7, etc.). */
-	dev_info(e->dev, "STATS rx_per_ingress[]: "
+	dev_dbg(e->dev, "STATS rx_per_ingress[]: "
 		 "[ing-1]=%u [0]=%u [1]=%u [2]=%u [3]=%u [4]=%u [5]=%u [6]=%u "
 		 "[7]=%u [8]=%u [9]=%u [10]=%u [11]=%u [12]=%u [13]=%u\n",
 		 e->tm_rx_per_ingress[0],
