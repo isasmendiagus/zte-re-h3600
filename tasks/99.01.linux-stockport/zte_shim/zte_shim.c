@@ -102,19 +102,27 @@ EXPORT_SYMBOL(g_switch_debug_level);
  * MDIO/idm-lookup logic. We had it as a 16-byte array → callers branch
  * into BSS → bad syscall oops. Use a naked stub that returns -1 (no
  * mapping) so callers proceed via the "no wlan attached" path. */
-int WlanIndex2WlanIdmMap(int wlan_idx)
+/* Stock returns a POINTER to a wlan-idm-map struct, NOT an int status.
+ * Callers (e.g. idm_netdev_event in idmfdb) deref the result:
+ *     iVar1 = IfName2WlanIdmMap(ifname);
+ *     if (iVar1 != 0 && ...) {
+ *         if (*(char *)(iVar1 + 0x25) == 0) ...   <- deref!
+ *     }
+ * Our previous `return -1` was interpreted as "found a mapping at addr
+ * 0xffffffff", deref crashed. Returning NULL (0) is the correct "no
+ * mapping" sentinel — caller's `if (iVar1 != 0)` then short-circuits.
+ * Discovered 2026-05-26 from wall #14 disasm. */
+void *WlanIndex2WlanIdmMap(int wlan_idx)
 {
     SHIM_TRACE("wlan_idx=%d", wlan_idx);
-    return -1;
+    return NULL;
 }
 EXPORT_SYMBOL(WlanIndex2WlanIdmMap);
 
-/* IfName2WlanIdmMap: stock exports as T (function) at c02ca720.
- * Same pattern as WlanIndex2WlanIdmMap — must be a function, not array. */
-int IfName2WlanIdmMap(const char *ifname)
+void *IfName2WlanIdmMap(const char *ifname)
 {
     SHIM_TRACE("ifname=%s", ifname ? ifname : "(null)");
-    return -1;
+    return NULL;
 }
 EXPORT_SYMBOL(IfName2WlanIdmMap);
 
