@@ -24,6 +24,13 @@
 #define SHIM_LOG(fmt, ...) \
 	printk(KERN_NOTICE "[zte_shim] " fmt, ##__VA_ARGS__)
 
+/* Trace each stub call: function name + caller (resolved via kallsyms %pS).
+ * Rate-limited to avoid flooding kmsg when called from a hot path. The
+ * primary value is the FIRST call (proves wiring) and the caller name. */
+#define SHIM_TRACE(fmt, ...) \
+	printk_ratelimited(KERN_INFO "[shim] %s(" fmt ") <- %pS\n", \
+		__func__, ##__VA_ARGS__, __builtin_return_address(0))
+
 /* ============================================================
  * SECTION 1 — GLOBALS (built into ZTE kernel, not in any .ko)
  * ============================================================ */
@@ -97,7 +104,7 @@ EXPORT_SYMBOL(g_switch_debug_level);
  * mapping) so callers proceed via the "no wlan attached" path. */
 int WlanIndex2WlanIdmMap(int wlan_idx)
 {
-    (void)wlan_idx;
+    SHIM_TRACE("wlan_idx=%d", wlan_idx);
     return -1;
 }
 EXPORT_SYMBOL(WlanIndex2WlanIdmMap);
@@ -106,7 +113,7 @@ EXPORT_SYMBOL(WlanIndex2WlanIdmMap);
  * Same pattern as WlanIndex2WlanIdmMap — must be a function, not array. */
 int IfName2WlanIdmMap(const char *ifname)
 {
-    (void)ifname;
+    SHIM_TRACE("ifname=%s", ifname ? ifname : "(null)");
     return -1;
 }
 EXPORT_SYMBOL(IfName2WlanIdmMap);
@@ -120,7 +127,8 @@ EXPORT_SYMBOL(IfName2WlanIdmMap);
  * plat takes its error path (plat checks `subs r4, r0, #0; beq error`). */
 struct sk_buff *__alloc_skbuff(unsigned int size, gfp_t priority, int fclone, int node)
 {
-	(void)size; (void)priority; (void)fclone; (void)node;
+	SHIM_TRACE("size=%u prio=%x fclone=%d node=%d",
+		size, priority, fclone, node);
 	return NULL;
 }
 EXPORT_SYMBOL(__alloc_skbuff);
@@ -128,6 +136,7 @@ EXPORT_SYMBOL(__alloc_skbuff);
 /* skb_recycle: removed from kernel post-3.9; stub returns NULL. */
 struct sk_buff *skb_recycle(struct sk_buff *skb)
 {
+	SHIM_TRACE("skb=%p", skb);
 	return NULL;
 }
 EXPORT_SYMBOL(skb_recycle);
@@ -135,33 +144,36 @@ EXPORT_SYMBOL(skb_recycle);
 /* dma_cache_maint: old DMA API. 1=TO_DEVICE 2=FROM_DEVICE. wmb is safe. */
 void dma_cache_maint(const void *start, size_t size, int direction)
 {
-	(void)start; (void)size; (void)direction;
+	/* called per-packet potentially — trace is ratelimited */
+	SHIM_TRACE("addr=%p size=%zu dir=%d", start, size, direction);
 	wmb();
 }
 EXPORT_SYMBOL(dma_cache_maint);
 
 /* FFE — ZTE Fast Forwarding Engine, disabled */
-int ffe_learn_skb(struct sk_buff *skb) { return 0; }
+int ffe_learn_skb(struct sk_buff *skb)   { SHIM_TRACE("skb=%p", skb); return 0; }
 EXPORT_SYMBOL(ffe_learn_skb);
-int ffe_receive_skb(struct sk_buff *skb) { return 0; }
+int ffe_receive_skb(struct sk_buff *skb) { SHIM_TRACE("skb=%p", skb); return 0; }
 EXPORT_SYMBOL(ffe_receive_skb);
-int ffe_get_npu_enable(void) { return 0; }
+int ffe_get_npu_enable(void)             { SHIM_TRACE(""); return 0; }
 EXPORT_SYMBOL(ffe_get_npu_enable);
 
-int temp_ctrl_read(void) { return 45; }	/* fake 45°C */
+int temp_ctrl_read(void) { SHIM_TRACE(""); return 45; }	/* fake 45°C */
 EXPORT_SYMBOL(temp_ctrl_read);
 
-int zte_get_pon_mode(void) { return 0x10; }	/* LAN-only */
+int zte_get_pon_mode(void) { SHIM_TRACE(""); return 0x10; }	/* LAN-only */
 EXPORT_SYMBOL(zte_get_pon_mode);
 
 int zx_mdio_read(int port, int reg)
 {
+	SHIM_TRACE("port=%d reg=%d", port, reg);
 	return 0xffff;
 }
 EXPORT_SYMBOL(zx_mdio_read);
 
 int zx_mdio_write(int port, int reg, int val)
 {
+	SHIM_TRACE("port=%d reg=%d val=%#x", port, reg, val);
 	return 0;
 }
 EXPORT_SYMBOL(zx_mdio_write);
@@ -180,61 +192,110 @@ EXPORT_SYMBOL(zx_mdio_write);
  * stage. */
 static u8 fake_board_info[1024] __aligned(8);
 
-int CspGetBoardDesInfo(void **out) { if (out) *out = &fake_board_info[0x20]; return 0; }
+int CspGetBoardDesInfo(void **out)
+{
+	SHIM_TRACE("out=%p", out);
+	if (out) *out = &fake_board_info[0x20];
+	return 0;
+}
 EXPORT_SYMBOL(CspGetBoardDesInfo);
 
-int CspGetPortInfo(void **out)    { if (out) *out = &fake_board_info[0x68]; return 0; }
+int CspGetPortInfo(void **out)
+{
+	SHIM_TRACE("out=%p", out);
+	if (out) *out = &fake_board_info[0x68];
+	return 0;
+}
 EXPORT_SYMBOL(CspGetPortInfo);
 
-int CspGetSwInfo(void **out)      { if (out) *out = &fake_board_info[0x80]; return 0; }
+int CspGetSwInfo(void **out)
+{
+	SHIM_TRACE("out=%p", out);
+	if (out) *out = &fake_board_info[0x80];
+	return 0;
+}
 EXPORT_SYMBOL(CspGetSwInfo);
 
-int CspGetSlicInfo(void **out)    { if (out) *out = &fake_board_info[0xec]; return 0; }
+int CspGetSlicInfo(void **out)
+{
+	SHIM_TRACE("out=%p", out);
+	if (out) *out = &fake_board_info[0xec];
+	return 0;
+}
 EXPORT_SYMBOL(CspGetSlicInfo);
 
-int CSPKernel_skb_SelectQueue(struct net_device *dev, struct sk_buff *skb) { return 0; }
+int CSPKernel_skb_SelectQueue(struct net_device *dev, struct sk_buff *skb)
+{
+	SHIM_TRACE("dev=%s skb=%p",
+		dev ? dev->name : "(null)", skb);
+	return 0;
+}
 EXPORT_SYMBOL(CSPKernel_skb_SelectQueue);
 
-int Kernel_ASEND(int a, int b, int c, int d) { return 0; }
+int Kernel_ASEND(int a, int b, int c, int d)
+{
+	SHIM_TRACE("%#x %#x %#x %#x", a, b, c, d);
+	return 0;
+}
 EXPORT_SYMBOL(Kernel_ASEND);
 
-int LedActionSet(int led, int action) { return 0; }
+int LedActionSet(int led, int action)
+{
+	SHIM_TRACE("led=%d action=%d", led, action);
+	return 0;
+}
 EXPORT_SYMBOL(LedActionSet);
 
-int npu_register_driver(void *drv) { return 0; }
+int npu_register_driver(void *drv)
+{
+	SHIM_TRACE("drv=%p", drv);
+	return 0;
+}
 EXPORT_SYMBOL(npu_register_driver);
 
-int wlan_to_idm_map(int x) { return -1; }
+int wlan_to_idm_map(int x)
+{
+	SHIM_TRACE("x=%d", x);
+	return -1;
+}
 EXPORT_SYMBOL(wlan_to_idm_map);
 
 /* sw_public_*_func_reg — callback registration tables, accept any */
-int sw_public_port_cfg_func_reg(void *p) { return 0; }
+int sw_public_port_cfg_func_reg(void *p)        { SHIM_TRACE("p=%p", p); return 0; }
 EXPORT_SYMBOL(sw_public_port_cfg_func_reg);
-int sw_public_port_vlan_func_reg(void *p) { return 0; }
+int sw_public_port_vlan_func_reg(void *p)       { SHIM_TRACE("p=%p", p); return 0; }
 EXPORT_SYMBOL(sw_public_port_vlan_func_reg);
-int sw_public_port_ratelimit_func_reg(void *p) { return 0; }
+int sw_public_port_ratelimit_func_reg(void *p)  { SHIM_TRACE("p=%p", p); return 0; }
 EXPORT_SYMBOL(sw_public_port_ratelimit_func_reg);
-int sw_public_onu_other_func_reg(void *p) { return 0; }
+int sw_public_onu_other_func_reg(void *p)       { SHIM_TRACE("p=%p", p); return 0; }
 EXPORT_SYMBOL(sw_public_onu_other_func_reg);
-int sw_public_onu_qos_func_reg(void *p) { return 0; }
+int sw_public_onu_qos_func_reg(void *p)         { SHIM_TRACE("p=%p", p); return 0; }
 EXPORT_SYMBOL(sw_public_onu_qos_func_reg);
-int sw_public_onu_mactable_func_reg(void *p) { return 0; }
+int sw_public_onu_mactable_func_reg(void *p)    { SHIM_TRACE("p=%p", p); return 0; }
 EXPORT_SYMBOL(sw_public_onu_mactable_func_reg);
-int sw_public_onu_statistics_func_reg(void *p) { return 0; }
+int sw_public_onu_statistics_func_reg(void *p)  { SHIM_TRACE("p=%p", p); return 0; }
 EXPORT_SYMBOL(sw_public_onu_statistics_func_reg);
 
-int fuc_table_node_clear(int x) { return 0; }
+int fuc_table_node_clear(int x)  { SHIM_TRACE("x=%d", x); return 0; }
 EXPORT_SYMBOL(fuc_table_node_clear);
-int fuc_table_node_create(int x) { return 0; }
+int fuc_table_node_create(int x) { SHIM_TRACE("x=%d", x); return 0; }
 EXPORT_SYMBOL(fuc_table_node_create);
 
-void hw_watchdog_reset(void) { /* silent */ }
+void hw_watchdog_reset(void) { /* silent — too noisy, may be called per-tick */ }
 EXPORT_SYMBOL(hw_watchdog_reset);
 
-void *br_lookup_mfd(void *p1, void *p2) { return NULL; }
+void *br_lookup_mfd(void *p1, void *p2)
+{
+	SHIM_TRACE("p1=%p p2=%p", p1, p2);
+	return NULL;
+}
 EXPORT_SYMBOL(br_lookup_mfd);
 
-int register_bridge_notifier(struct notifier_block *nb) { return 0; }
+int register_bridge_notifier(struct notifier_block *nb)
+{
+	SHIM_TRACE("nb=%p", nb);
+	return 0;
+}
 EXPORT_SYMBOL(register_bridge_notifier);
 
 static int __init zte_shim_init(void)
