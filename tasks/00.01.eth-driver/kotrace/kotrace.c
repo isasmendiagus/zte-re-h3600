@@ -145,7 +145,7 @@ static unsigned int          n_patches;
  * walks / patches) or in module load itself.
  *
  * Set to 1 only when actively diagnosing the bake-in crash; default 0. */
-#define KOTRACE_MINIMAL_BOOT 1
+#define KOTRACE_MINIMAL_BOOT 0
 
 /* Module-load-time filters (all settable via insmod params, no recompile).
  *   patch_limit   = cap on total successful patches (0 = no limit)

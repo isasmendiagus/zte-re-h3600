@@ -64,12 +64,18 @@ INSERT_AFTER_MARKER = "/sbin/insmod /kmodule/zx_ponreg.ko"
 # hangs when they're really just unreported errors.
 INJECT_BLOCK = (
     "\n"
-    "# kotrace bake-in — uses /sbin/kinsmod (NOT /sbin/insmod) to load.\n"
-    "# kinsmod writes status to PL011 UART DIRECTLY (mmap /dev/mem), bypassing\n"
-    "# /dev/console (which is broken when cspstart fails to expand $(console)\n"
-    "# in bootargs). This way, even if insmod fails silently, we see the\n"
-    "# exact errno on UART.\n"
-    "/sbin/kinsmod /kmodule/kotrace.ko\n"
+    "# HW watchdog petter — cspd normally feeds /dev/FeedDog every few seconds,\n"
+    "# but cspd doesn't start until pc& late in init.norm. With our thunks\n"
+    "# adding overhead to every patched fn call, the gap before pc& exceeds\n"
+    "# the watchdog timeout and the SoC resets silently. We pet it ourselves\n"
+    "# in the background from BEFORE the kotrace insmod until cspd takes over.\n"
+    "( while : ; do echo > /dev/FeedDog 2>/dev/null || echo > /dev/watchdog 2>/dev/null ; sleep 2 ; done ) &\n"
+    "\n"
+    "# kotrace bake-in — patch_modules whitelist EXCLUDES plat_zxylzb_9128S\n"
+    "# and tm because patching their init paths trips cpu1 softlockup. With\n"
+    "# only switch+idmfdb+mt7915 patched, init makes it through; once cspd is\n"
+    "# up we can rmmod kotrace + reinsert with full patches via netshell.\n"
+    "/sbin/kinsmod /kmodule/kotrace.ko patch_limit=1 patch_modules=switch patch_skip=zx_mdio_read,zx_mdio_write\n"
 )
 
 
