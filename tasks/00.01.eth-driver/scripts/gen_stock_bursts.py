@@ -66,6 +66,12 @@ SKIP_RANGES = [
     # instances 0..7; pairs (0,1), (2,3), (6,7) are bit-identical;
     # instances 4 and 5 have no writes. Safe to skip the whole range.
     (0, 0x10000),
+    # Phase 9g: TM per-instance common control regs at +0x0/+0x4/+0xf0/
+    # +0x104/+0x124/+0x12c/+0x134 — identical across all 16 instances.
+    # Folded into zx_tm_per_instance_init().
+    *[(0x180000 + i * 0x400 + off, 4)
+      for i in range(16)
+      for off in (0x0, 0x4, 0xf0, 0x104, 0x124, 0x12c, 0x134)],
 ]
 
 

@@ -850,6 +850,16 @@ static void zx_tm_per_instance_init(struct zx_eth *e)
 	for (i = 0; i < 16; i++) {
 		void __iomem *tm_i = e->base + 0x180000 + i * 0x400;
 
+		/* Phase 9g: 7 control regs identical across all 16 TM instances. */
+		writel(0x00000140, tm_i + 0x000);  /* instance enable / mode? */
+		writel(0x00000010, tm_i + 0x004);
+		writel(0x4ff1f000, tm_i + 0x0f0);  /* DDR base pointer */
+		writel(0xfffffffc, tm_i + 0x104);
+		writel(0x03ffffff, tm_i + 0x124);
+		writel(0x00001fff, tm_i + 0x12c);
+		writel(0x001fffff, tm_i + 0x134);
+
+		/* Phase 9d: 64-word per-instance config table. */
 		__iowrite32_copy(tm_i + 0x10240,
 				 zx_tm_per_instance_init_data, 64);
 	}
