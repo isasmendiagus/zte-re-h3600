@@ -300,7 +300,24 @@ EXPORT_SYMBOL(register_bridge_notifier);
 
 static int __init zte_shim_init(void)
 {
+	/* Populate fake_board_info so switch.ko enters its netdev-creation
+	 * loop. From sw_reg_set_onu_swcap disasm (switch.ko@0x3d3c-0x3d58):
+	 *   r3 = CspGetSwInfo() = &fake_board_info[0x80]
+	 *   r2 = *(u32 *)(r3 + 8)              ; offset 0x88 = num_ports
+	 *   cmp r2, #8 ; bgt error             ; must be ≤8
+	 *   r1 = CspGetPortInfo() = &fake_board_info[0x68]
+	 *   r1 = *(u16 *)(r1 + 2)              ; offset 0x6a = port_count
+	 *   cmp r1, #8 ; bls ok                ; must be ≤8
+	 * Start with 1 of each (1 port total). switch.ko's loop will then
+	 * dereference more fields per-port — those will surface via
+	 * SHIM_TRACE as crashes or zeros we'll fill in next iteration. */
+	*(u32 *)(fake_board_info + 0x88) = 1;	/* sw_info.num_ports */
+	*(u16 *)(fake_board_info + 0x6a) = 1;	/* port_info.port_count */
+
 	SHIM_LOG("loaded — 40 truly-missing symbols (stripped from 50+, no duplicates)\n");
+	SHIM_LOG("board: num_ports=%u port_count=%u\n",
+		 *(u32 *)(fake_board_info + 0x88),
+		 *(u16 *)(fake_board_info + 0x6a));
 	SHIM_LOG("globals: u32_BP_SIZE=%u pdt_mem_size=%lu ZX_RESERVE_MEM_SIZE=%u\n",
 		 u32_BP_SIZE, pdt_mem_size, ZX_RESERVE_MEM_SIZE);
 	return 0;
