@@ -75,7 +75,11 @@ INJECT_BLOCK = (
     "# and tm because patching their init paths trips cpu1 softlockup. With\n"
     "# only switch+idmfdb+mt7915 patched, init makes it through; once cspd is\n"
     "# up we can rmmod kotrace + reinsert with full patches via netshell.\n"
-    "/sbin/kinsmod /kmodule/kotrace.ko patch_limit=1 patch_modules=switch patch_skip=zx_mdio_read,zx_mdio_write\n"
+    "# EXPERIMENT 2026-05-26: full patching enabled + wdt_pet=1 (default) so\n"
+    "# kotrace's kernel timer touches softlockup every 50ms while thunks run.\n"
+    "# If this boots through, the silent reboot was softlockup. If still resets,\n"
+    "# it's the HW watchdog and we need a different feeder.\n"
+    "/sbin/kinsmod /kmodule/kotrace.ko patch_skip=zx_mdio_read,zx_mdio_write\n"
 )
 
 

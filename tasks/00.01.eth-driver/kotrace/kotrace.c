@@ -160,6 +160,31 @@ static unsigned int patch_limit = 0;
 static char patch_modules[256] = "";
 static char patch_skip[512]    = "";
 
+/* EXPERIMENT (2026-05-26): kernel-timer watchdog feeder. Heavy thunk
+ * activity during plat/tm/switch init wedges cpu1 long enough to
+ * trip the soft-lockup detector (or possibly the HW watchdog, but
+ * see findings/kotrace_init_capture.md — we observed silent SoC
+ * resets between [ko:L switch] and U-Boot). This timer runs every
+ * 50 ms and touches the per-cpu softlockup watchdog (resolved via
+ * kallsyms because it's not EXPORT_SYMBOL'd here). Only helps with
+ * the SOFTWARE detector; HW WDT (/dev/FeedDog) is fed by cspd from
+ * userspace and isn't reachable cleanly from a kernel module. */
+#include <linux/timer.h>
+#include <linux/jiffies.h>
+static void (*p_touch_all_softlockup_watchdogs)(void);
+static void (*p_touch_softlockup_watchdog)(void);
+static struct timer_list kotrace_wdt_timer;
+static int  kotrace_wdt_enabled = 1;
+
+static void kotrace_wdt_pet(unsigned long _)
+{
+	if (p_touch_all_softlockup_watchdogs)
+		p_touch_all_softlockup_watchdogs();
+	else if (p_touch_softlockup_watchdog)
+		p_touch_softlockup_watchdog();
+	mod_timer(&kotrace_wdt_timer, jiffies + msecs_to_jiffies(50));
+}
+
 /* Returns 1 if `name` is mentioned in `list` (comma-separated) OR if
  * list is empty (when default_yes=1) / never (default_yes=0). */
 static int name_in_list(const char *name, const char *list, int default_when_empty)
@@ -912,6 +937,23 @@ static int __init kotrace_init(void)
 	}
 	uart_puts("[koINIT:E kallsyms_ok]\n");
 
+	/* EXPERIMENT 2026-05-26: try to keep softlockup detector happy during
+	 * heavy thunk activity. These two are best-effort (NULL is OK; we
+	 * fall back from "all" to single-cpu, and if both are missing the
+	 * timer just no-ops). */
+	p_touch_all_softlockup_watchdogs =
+		(void *)kallsyms_lookup_name("touch_all_softlockup_watchdogs");
+	p_touch_softlockup_watchdog =
+		(void *)kallsyms_lookup_name("touch_softlockup_watchdog");
+	if (kotrace_wdt_enabled &&
+	    (p_touch_all_softlockup_watchdogs || p_touch_softlockup_watchdog)) {
+		setup_timer(&kotrace_wdt_timer, kotrace_wdt_pet, 0);
+		mod_timer(&kotrace_wdt_timer, jiffies + msecs_to_jiffies(50));
+		uart_puts("[ko: wdt-pet timer armed]\n");
+	} else {
+		uart_puts("[ko: wdt-pet skipped (disabled or symbols missing)]\n");
+	}
+
 	uart_puts("[ko: kotrace loaded]\n");
 	register_module_notifier(&kotrace_nb);
 	uart_puts("[koINIT:F notifier_registered]\n");
@@ -985,6 +1027,11 @@ static void __exit kotrace_exit(void)
 {
 	unsigned int i;
 
+	/* Stop wdt-pet timer first so it can't fire while we're tearing down. */
+	if (kotrace_wdt_enabled &&
+	    (p_touch_all_softlockup_watchdogs || p_touch_softlockup_watchdog))
+		del_timer_sync(&kotrace_wdt_timer);
+
 	/* Stop receiving new module-load events FIRST so no new patches can
 	 * sneak in mid-unpatch. */
 	unregister_module_notifier(&kotrace_nb);
@@ -1032,6 +1079,8 @@ module_param_string(patch_modules, patch_modules, sizeof(patch_modules), 0644);
 MODULE_PARM_DESC(patch_modules, "CSV whitelist of modules to patch; empty = all");
 module_param_string(patch_skip, patch_skip, sizeof(patch_skip), 0644);
 MODULE_PARM_DESC(patch_skip, "CSV blacklist of function names to skip");
+module_param_named(wdt_pet, kotrace_wdt_enabled, int, 0644);
+MODULE_PARM_DESC(wdt_pet, "EXPERIMENT: periodic softlockup-watchdog touch from kernel timer (1=on)");
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("ZTE H3600 RE — agus@quecomere");

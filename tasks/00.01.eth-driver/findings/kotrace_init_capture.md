@@ -136,15 +136,60 @@ if it exists, otherwise insmod in load order.
   the post-boot insmod-of-kotrace itself hangs, lower the scope
   with `patch_modules` and re-try.
 
+## Failed experiments (so we don't redo them)
+
+### Kernel-timer softlockup feeder (2026-05-26)
+
+Added a 50 ms `timer_list` in kotrace_init that resolves
+`touch_all_softlockup_watchdogs` / `touch_softlockup_watchdog` via
+kallsyms and calls them periodically. Boot result: `[ko: wdt-pet
+skipped (disabled or symbols missing)]` — **both symbols are absent
+from this kernel.** Confirmed via `.config`:
+`CONFIG_LOCKUP_DETECTOR` / `CONFIG_SOFTLOCKUP_DETECTOR` are NOT set,
+only `CONFIG_WATCHDOG=y` (HW watchdog framework).
+
+→ The silent SoC reset is NOT a kernel softlockup. The kernel doesn't
+have a software lockup detector compiled in. The reset must be the
+HW watchdog firing.
+
+The wdt-pet timer code stays in kotrace.c (no-ops when symbols are
+absent; harmless) as a marker for future work, in case a kernel
+build with softlockup ever gets used.
+
+### Post-boot rmmod for init-replay (2026-05-26)
+
+`rmmod mt7915` from netshell (after `ifconfig wlan0/wlan5g0 down`)
+triggered `!!!!!!!!!! nfbi hardware reset !!!!!!!!!!` in the kernel
+log followed by full SoC reset. The eth path modules have HW state
+that doesn't survive rmmod. **Module reload to replay init is not
+viable for plat/tm/switch/idmfdb/mt7915.**
+
+→ Either we capture init at boot time (back to the HW watchdog
+problem) OR we replicate init paths from static RE (Ghidra projects
+in `tasks/00.10.02.re-stock-kmods/ghidra/`).
+
 ## Open work
 
-- `touch_softlockup_watchdog()` periodic call from the thunk (or
-  from a kotrace timer/kthread). The kernel exports it. Would let
-  us run the bake-in safely with all patches.
-- A small ARM-asm extension to the thunk that calls a C helper for
-  smart-deref of pointer args (see prior commit 606cec092 for the
-  table; runtime use is pending).
-- Regenerate `kotrace_targets.h` excluding kernel-text symbols.
+- **HW watchdog feeder from kernel space** — the actual blocker now.
+  "feeddog" string exists in `ext/extracted/vmlinux.bin` (built-in,
+  not a module). /dev/FeedDog is major 123. Tasks:
+  1. Locate the WDT driver in vmlinux (Ghidra).
+  2. Find the keepalive function (or just the register address).
+  3. Add to kotrace_init: resolve via kallsyms or call directly
+     (HW register write). Pet from a kernel timer at faster cadence
+     than the WDT timeout (probably 30 s; pet every 5 s).
+  4. With HW WDT alive from kernel space, bake-in can run with full
+     patches and init capture becomes feasible.
+- Alternative: kernel cmdline `nowatchdog` may disable the driver
+  entirely (if it respects the param). Bootargs override would
+  require U-Boot env modification or DTS patching.
+- `touch_softlockup_watchdog()` ARM-asm thunk extension — moot now
+  (no softlockup detector in this kernel).
+- Smart-deref ARM-asm thunk extension (per commit 606cec092 table) —
+  still pending. Adds copy_from_kernel_nofault per pointer arg.
+- Regenerate `kotrace_targets.h` excluding kernel-text symbols
+  (`zx_mdio_*` addresses in `c00xxxxx` are kernel base, not module
+  text; patcher correctly skips but they shouldn't be in the table).
 - Optionally: cross-compile a static `socat` for ARM so we can
   replace netshell with a real PTY-fronted shell.
 
