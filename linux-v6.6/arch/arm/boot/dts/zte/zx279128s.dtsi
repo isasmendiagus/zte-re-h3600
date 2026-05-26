@@ -200,14 +200,52 @@
 		};
 
 		/* MDIO bus to the four built-in GePHYs. Cross-checked with
-		 * the ZX279128R sibling DTS in refs/. Phylib will see PHYs
-		 * here once the per-port nodes get populated. */
+		 * the ZX279128R sibling DTS in refs/. */
 		mdio: mdio@9a101000 {
 			compatible = "zte,zx279128s-mdio";
 			reg = <0x9a101000 0x18>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 			status = "okay";
+
+			/* Phase 12 broad scan: addresses 0..3 reported "missing"
+			 * in the first attempt — bus is alive but PHYs live
+			 * elsewhere. Declaring all 32 addresses so phylib
+			 * tries every one; the ones that respond will print
+			 * their PHY ID. Once we know the real addresses,
+			 * collapse this down to just the right ones. */
+			ethernet-phy@0  { reg = < 0>; };
+			ethernet-phy@1  { reg = < 1>; };
+			ethernet-phy@2  { reg = < 2>; };
+			ethernet-phy@3  { reg = < 3>; };
+			ethernet-phy@4  { reg = < 4>; };
+			ethernet-phy@5  { reg = < 5>; };
+			ethernet-phy@6  { reg = < 6>; };
+			ethernet-phy@7  { reg = < 7>; };
+			ethernet-phy@8  { reg = < 8>; };
+			ethernet-phy@9  { reg = < 9>; };
+			ethernet-phy@a  { reg = <10>; };
+			ethernet-phy@b  { reg = <11>; };
+			ethernet-phy@c  { reg = <12>; };
+			ethernet-phy@d  { reg = <13>; };
+			ethernet-phy@e  { reg = <14>; };
+			ethernet-phy@f  { reg = <15>; };
+			ethernet-phy@10 { reg = <16>; };
+			ethernet-phy@11 { reg = <17>; };
+			ethernet-phy@12 { reg = <18>; };
+			ethernet-phy@13 { reg = <19>; };
+			ethernet-phy@14 { reg = <20>; };
+			ethernet-phy@15 { reg = <21>; };
+			ethernet-phy@16 { reg = <22>; };
+			ethernet-phy@17 { reg = <23>; };
+			ethernet-phy@18 { reg = <24>; };
+			ethernet-phy@19 { reg = <25>; };
+			ethernet-phy@1a { reg = <26>; };
+			ethernet-phy@1b { reg = <27>; };
+			ethernet-phy@1c { reg = <28>; };
+			ethernet-phy@1d { reg = <29>; };
+			ethernet-phy@1e { reg = <30>; };
+			ethernet-phy@1f { reg = <31>; };
 		};
 
 		pcie1: pcie@f100000 {

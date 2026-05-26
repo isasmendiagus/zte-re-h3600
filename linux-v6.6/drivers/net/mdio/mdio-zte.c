@@ -129,6 +129,27 @@ static int zte_mdio_probe(struct platform_device *pdev)
 	}
 
 	dev_info(&pdev->dev, "ZTE MDIO bus registered\n");
+
+	/* DEBUG (Phase 12): one-shot PHY ID probe across all 32 addresses.
+	 * Bypasses phylib so we see the raw bus response without needing a
+	 * netdev or phy_attach to be wired up yet. */
+	{
+		int addr;
+
+		for (addr = 0; addr < 32; addr++) {
+			int id1 = zte_mdio_read(bus, addr, 2);  /* MII_PHYSID1 */
+			int id2 = zte_mdio_read(bus, addr, 3);  /* MII_PHYSID2 */
+
+			if (id1 == 0xffff && id2 == 0xffff)
+				continue;  /* no PHY here */
+			if (id1 < 0 || id2 < 0)
+				continue;  /* read error */
+			dev_info(&pdev->dev,
+				 "scan addr %2d: PHY_ID1=%#06x PHY_ID2=%#06x (full=%#010x)\n",
+				 addr, id1, id2, (id1 << 16) | id2);
+		}
+	}
+
 	platform_set_drvdata(pdev, bus);
 	return 0;
 }
