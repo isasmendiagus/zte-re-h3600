@@ -199,6 +199,17 @@
 			status = "disabled";
 		};
 
+		/* MDIO bus to the four built-in GePHYs. Cross-checked with
+		 * the ZX279128R sibling DTS in refs/. Phylib will see PHYs
+		 * here once the per-port nodes get populated. */
+		mdio: mdio@9a101000 {
+			compatible = "zte,zx279128s-mdio";
+			reg = <0x9a101000 0x18>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+		};
+
 		pcie1: pcie@f100000 {
 			compatible = "zte,zx279128s-pcie";
 			reg = <0x0f100000 0x4000>,

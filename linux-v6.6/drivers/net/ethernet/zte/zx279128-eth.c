@@ -3224,7 +3224,10 @@ static int zx_eth_probe(struct platform_device *pdev)
 	eth->dev = dev;
 	spin_lock_init(&eth->tx_lock);
 
-	eth->base = devm_platform_ioremap_resource(pdev, 0);
+	/* DTS exposes two reg entries — "pon" and "npp". Map the npp one
+	 * by name so the driver is robust to reg-entry reordering (the
+	 * pon hardcoded ioremap a few lines below is the Phase 10b TODO). */
+	eth->base = devm_platform_ioremap_resource_byname(pdev, "npp");
 	if (IS_ERR(eth->base))
 		return dev_err_probe(dev, PTR_ERR(eth->base), "ioremap NPP\n");
 

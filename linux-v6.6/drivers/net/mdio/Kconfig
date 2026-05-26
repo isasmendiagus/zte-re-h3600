@@ -75,6 +75,15 @@ config MDIO_ASPEED
 	  continues to drive the embedded MDIO controller for the AST2400 and
 	  AST2500 SoCs, so say N if AST2600 support is not required.
 
+config MDIO_ZTE
+	tristate "ZTE ZX279128S MDIO bus controller"
+	depends on OF_MDIO && HAS_IOMEM
+	depends on MDIO_DEVRES
+	help
+	  This module provides a driver for the small MDIO controller
+	  embedded in the ZTE ZXIC ZX279128S SoC. Required by phy-zte
+	  to talk to the four built-in GePHYs.
+
 config MDIO_BITBANG
 	tristate "Bitbanged MDIO buses"
 	help

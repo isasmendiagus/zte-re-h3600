@@ -20,7 +20,7 @@ Outputs (in H3600/tftp/):
   - zImage_dtb.uimg         (kept for reference)
   - header_A_modified.bin   (BootPara with kernel CRC matching slotA.bin)
 """
-import os, sys, subprocess, struct, zlib
+import os, sys, subprocess
 from pathlib import Path
 
 ZXIC = Path(__file__).resolve().parents[3]  # zxic/ root
@@ -28,33 +28,23 @@ BUILD = ZXIC / "build"
 TFTP  = ZXIC / "tftp"
 NAND  = ZXIC / "ext" / "h3600_nand_full.bin"
 
-# NAND layout (per docs/NAND_LAYOUT_AND_BOOT.md)
-SLOT_A_KERNEL_OFFSET = 0x700000
-NAND_ERASE_SIZE      = 0x1980000   # full kernel-side erase region for slot A
-NAND_WRITE_SIZE      = 0xc00000    # how much flash_mainline.py copies to NAND (bumped 0xb→0xc on 2026-05-24 — kernel + initramfs grew past 11 MiB)
-# IMPORTANT: header[0x34] tells cspstart how many bytes to CRC. Setting it to
-# our exact padded slotA size means cspstart CRCs ONLY what we wrote, never the
-# erased-but-untouched region beyond. Removes ambiguity from bad-block skip /
-# unknown padding in the gap. 0xb00000 = 11 MiB matches NAND_WRITE_SIZE.
-KERNEL_SIZE_HDR      = NAND_WRITE_SIZE
-SLOT_A_ROOTFS_SIZE   = 0x1620000
-SLOT_A_HEADER_OFFSET = 0x2080000
+# Canonical NAND layout + header/CRC helpers live in tasks/00.04.flash-tool/.
+# Import them rather than duplicating: anything we change there propagates
+# here automatically.
+sys.path.insert(0, str(ZXIC / "tasks" / "00.04.flash-tool"))
+import nand_layout as nl  # noqa: E402
+import bootpara as bp     # noqa: E402
 
-# 32-byte ZTE wrapper (magic that cspstart recognizes).
-# 2026-05-24 CRITICAL BUG FIX: adjacent string literals concatenate at parse
-# time BEFORE the `*` operator, so the original
-#   b"...dd" b"\xff" * 16
-# was equivalent to (b"...dd\xff") * 16 = 17*16 = 272 bytes, NOT 32.
-# Result: uImage shifted to offset 272 → cspstart CRC check always failed
-# → every flash silently fell back to slot B (stock).
-# Add explicit `+` between the magic and the FF padding.
-ZTE_WRAPPER = (b"\x33\x33\x33\x33\xcc\xcc\xcc\xcc"
-               b"\x88\x88\x88\x88\xdd\xdd\xdd\xdd"
-               + b"\xff" * 16)
-assert len(ZTE_WRAPPER) == 32, f"ZTE_WRAPPER must be 32 bytes, got {len(ZTE_WRAPPER)}"
+SLOT = nl.SLOT_A
 
-LOAD_ADDR  = 0x42000000
-ENTRY_ADDR = 0x42000040
+# How many bytes we actually flash into the kernel region (≤ slot kernel_max_size).
+# Bumped 0xb→0xc on 2026-05-24 when kernel + initramfs grew past 11 MiB.
+# header[0x34] is set to this exact value so cspstart CRCs ONLY what we wrote,
+# never the erased-but-untouched region beyond.
+NAND_WRITE_SIZE = 0xc00000
+
+LOAD_ADDR  = nl.RAM_LOAD_ADDR
+ENTRY_ADDR = nl.RAM_LOAD_ADDR + 0x40
 
 
 def run(cmd, cwd=None):
@@ -112,37 +102,34 @@ def main():
 
     # 3) Build slotA.bin = 32B wrapper + uImage, PADDED with 0xff to NAND_WRITE_SIZE
     uimg_bytes = uimg.read_bytes()
-    body = ZTE_WRAPPER + uimg_bytes
+    body = nl.ZTE_KERNEL_WRAPPER + uimg_bytes
     if len(body) > NAND_WRITE_SIZE:
         sys.exit(f"slotA body ({len(body):#x}) exceeds NAND write size ({NAND_WRITE_SIZE:#x})")
-    padded = body + b"\xff" * (NAND_WRITE_SIZE - len(body))
+    padded = bp.pad_with_ff(body, NAND_WRITE_SIZE)
     slotA = TFTP / "slotA.bin"
     slotA.write_bytes(padded)
     print(f"  ✓ slotA.bin: {len(body):,} body + {NAND_WRITE_SIZE - len(body):,} 0xff pad "
           f"= {len(padded):,} bytes (0x{NAND_WRITE_SIZE:x})")
 
     # 4) Patch BootPara header for the new kernel
-    #    cspstart reads NAND[0x700000 + 0 .. KERNEL_SIZE_HDR] and CRCs it. We
-    #    intentionally include the 32-byte ZTE wrapper in the CRC region because
-    #    that's the byte stream cspstart actually reads — verified by boot log
-    #    "verify_kernel readflash @0x700000 size:..." which starts at 0x700000
-    #    (the wrapper), NOT 0x700020.
-    #    With KERNEL_SIZE_HDR = NAND_WRITE_SIZE, all CRCed bytes are our padded
+    #    cspstart reads NAND[kernel_offset .. kernel_offset+kernel_size_hdr]
+    #    and CRCs it. We include the 32-byte ZTE wrapper in the CRC region
+    #    because that's the byte stream cspstart actually reads — verified
+    #    by boot log "verify_kernel readflash @0x700000 size:...". With
+    #    kernel_size_hdr == NAND_WRITE_SIZE, every CRCed byte is our padded
     #    slotA.bin (no unknown beyond-write region).
-    assert KERNEL_SIZE_HDR == NAND_WRITE_SIZE == len(padded)
-    crc_region = padded
-    kernel_crc = zlib.crc32(crc_region) & 0xffffffff
-    rootfs_crc = zlib.crc32(b"\xff" * SLOT_A_ROOTFS_SIZE) & 0xffffffff  # rootfs erased
+    kernel_crc = bp.csp_crc(padded)
+    rootfs_crc = bp.csp_crc(b"\xff" * SLOT.rootfs_size)  # rootfs erased
 
     nand_bytes = NAND.read_bytes()
-    hdr = bytearray(nand_bytes[SLOT_A_HEADER_OFFSET:SLOT_A_HEADER_OFFSET + 0x20000])
-    hdr[0x34:0x38] = struct.pack("<I", KERNEL_SIZE_HDR)
-    hdr[0x3c:0x40] = struct.pack("<I", kernel_crc)
-    hdr[0x48:0x4c] = struct.pack("<I", rootfs_crc)
-    hdr[0xa4:0xa8] = struct.pack("<I", zlib.crc32(bytes(hdr[:0xa4])) & 0xffffffff)
+    hdr_old = nand_bytes[SLOT.header_offset:SLOT.header_offset + SLOT.header_size]
+    hdr_new = bp.patch_both(hdr_old,
+                            kernel_size=len(padded),
+                            kernel_crc=kernel_crc,
+                            rootfs_crc=rootfs_crc)
     header_out = TFTP / "header_A_modified.bin"
-    header_out.write_bytes(bytes(hdr))
-    print(f"  ✓ header_A_modified.bin: kernel_size=0x{KERNEL_SIZE_HDR:x} "
+    header_out.write_bytes(hdr_new)
+    print(f"  ✓ header_A_modified.bin: kernel_size=0x{len(padded):x} "
           f"kernel_crc=0x{kernel_crc:08x} rootfs_crc=0x{rootfs_crc:08x}")
 
     print("\nReady to flash:")
