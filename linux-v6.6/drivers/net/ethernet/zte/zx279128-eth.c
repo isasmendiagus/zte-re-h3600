@@ -52,7 +52,9 @@
 #define ZX_REPLAY_MAGIC 0x5A584752u
 
 struct zx_replay_stock { s32 off; u32 val; } __packed;
-struct zx_replay_cla   { u32 ram_id; u32 ram_addr; u32 data[17]; } __packed;
+/* zx_replay_cla removed — cla.bin replaced by embedded zx_cla_init_table[]
+ * in zx_cla_table.h (refactor #38 Phase 1.a, commit 8a57adac2). The
+ * embedded version uses struct zx_cla_entry from that header. */
 struct zx_replay_pm    { u32 ram_id; u32 ram_addr; u32 data[8];  } __packed;
 
 /* These bounds match what's actually in the snapshots; used by zx_cla_apply_replay
@@ -306,12 +308,12 @@ struct zx_eth {
 
 	bool started;
 
-	/* Replay snapshots loaded via request_firmware */
+	/* Replay snapshots loaded via request_firmware. cla.bin used to be
+	 * here but is now embedded as zx_cla_init_table[] in zx_cla_table.h
+	 * (refactor #38 Phase 1, commits 8a57adac2 + this). */
 	const struct firmware *fw_stock;
-	const struct firmware *fw_cla;
 	const struct firmware *fw_pm;
 	const struct zx_replay_stock *r_stock; u32 r_n_stock;
-	const struct zx_replay_cla   *r_cla;   u32 r_n_cla;
 	const struct zx_replay_pm    *r_pm;    u32 r_n_pm;
 };
 
@@ -3005,9 +3007,8 @@ static int zx_eth_probe(struct platform_device *pdev)
 			{ "zx-replay/stock.bin", &eth->fw_stock,
 			  (const void **)&eth->r_stock, &eth->r_n_stock,
 			  sizeof(struct zx_replay_stock) },
-			{ "zx-replay/cla.bin", &eth->fw_cla,
-			  (const void **)&eth->r_cla, &eth->r_n_cla,
-			  sizeof(struct zx_replay_cla) },
+			/* cla.bin: embedded as zx_cla_init_table in zx_cla_table.h
+			 * since refactor #38 Phase 1.a (commit 8a57adac2).  */
 			{ "zx-replay/pm.bin", &eth->fw_pm,
 			  (const void **)&eth->r_pm, &eth->r_n_pm,
 			  sizeof(struct zx_replay_pm) },
@@ -3457,9 +3458,8 @@ static int zx_eth_remove(struct platform_device *pdev)
 
 	zx_debugfs_exit();
 
-	/* 8. Release replay firmware images */
+	/* 8. Release replay firmware images (cla.bin is now embedded — Phase 1.a) */
 	if (eth->fw_stock) release_firmware(eth->fw_stock);
-	if (eth->fw_cla)   release_firmware(eth->fw_cla);
 	if (eth->fw_pm)    release_firmware(eth->fw_pm);
 	return 0;
 }
