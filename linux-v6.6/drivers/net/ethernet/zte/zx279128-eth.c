@@ -3273,6 +3273,44 @@ static void zx_eth_init_phys(struct device *dev)
  * from DT instead of devm_ioremap'ing a hardcoded address.
  */
 /*
+ * "chip_tm_init" tail — the four trap/classifier table replays and the
+ * one-shot FPGA IRQ enable. Mirrors what stock's chip_tm_init() does
+ * after the TM DMA/BMU are up:
+ *
+ *  1. CLA ACL hash replay  — programs the "trap-to-CPU" rules that
+ *                            stock has at boot.
+ *  2. trap_queue setup     — per-protocol CPU queue routing. Overrides
+ *                            the blanket "qid=7" from cla_apply_replay
+ *                            with the stock def_ptl_pkt_map (82 entries
+ *                            × 7 ports).
+ *  3. per-port isolate     — chip_tm_init calls tm_port_isolate_set 8×.
+ *                            This is the TM-side per-port mask, separate
+ *                            from the PP_BRG_ISOLATE writes done earlier
+ *                            in zx_eth_init_vlan_and_isolation().
+ *  4. pro_action replay    — def_ptl_pkt_action: which protocols get
+ *                            trapped to CPU. Without this, broadcasts
+ *                            (ARP) never reach the netdev.
+ *  5. FPGA IRQ enable      — stock's sbrg_set_irq_en_mask(0xa). Maps
+ *                            to a single writel at fpga_base + 0 (the
+ *                            raw IRQ enable mask via sbragRegTable[0]).
+ *                            Without this the TM IRQ count stays 0.
+ *
+ * The dead fpga.bin bulk replay that used to live here behind
+ * #if ZX_BULK_REPLAY 0 was removed in Phase 4; the driver does not
+ * need it (PING BIDI was achieved without it).
+ */
+static void zx_eth_init_chip_tm(struct zx_eth *eth)
+{
+	zx_cla_apply_replay(eth);
+	zx_chip_tm_init_trap_queues(eth);
+	zx_chip_tm_init_isolate(eth);
+	zx_chip_tm_init_pro_action(eth);
+
+	writel(0xa, eth->fpga_base + 0);
+	dev_info(eth->dev, "FPGA IRQ enable: wrote 0xa to fpga+0 (sbrg_set_irq_en_mask equiv)\n");
+}
+
+/*
  * The bulk stock_init replay we run during probe legitimately programs
  * the four stock DDR pointers it captured at boot time (TM rxdesc base
  * = 0x4ff1f000, TX_UP_BASE = 0x4ffdf000, TX_DN_BASE = 0x4ffef000).
@@ -3574,42 +3612,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 
 		zx_eth_register_cpu_mac_slots(eth);
 
-		/* Replay CLA ACL hash table from stock snapshot — this programs
-		 * the actual "trap-to-CPU" rules that stock has at boot. */
-		zx_cla_apply_replay(eth);
-
-		/* chip_tm_init's trap_queue setup: per-protocol CPU queue routing.
-		 * Overrides the blanket "qid=7" from cla_apply_replay with the
-		 * stock def_ptl_pkt_map (82 entries × 7 ports). */
-		zx_chip_tm_init_trap_queues(eth);
-
-		/* Phase 4 port (2026-05-24): per-port isolate masks. Stock
-		 * chip_tm_init calls tm_port_isolate_set 8 times. */
-		zx_chip_tm_init_isolate(eth);
-
-		/* Phase 4 cont: pro_action replay — the def_ptl_pkt_action
-		 * table that decides which protocols get trapped to CPU.
-		 * Without this, broadcasts (ARP) don't reach the netdev. */
-		zx_chip_tm_init_pro_action(eth);
-
-		/* Phase 4 IRQ enable — stock chip_tm_init calls
-		 * sbrg_set_irq_en_mask(0xa) once. Per kotrace runtime capture:
-		 * marker '$' fires with r0=0x0000000a during boot init (after
-		 * tm_vlan_check_ena, before sbrg_set_table_sel et al).
-		 * sbrg_set_irq_en_mask writes via sbragRegTable[0] which is a
-		 * raw FPGA offset 0 register (the IRQ enable mask).
-		 * Mainline's tm IRQ stayed at count=0 until we add this. */
-		writel(0xa, eth->fpga_base + 0);
-		dev_info(dev, "FPGA IRQ enable: wrote 0xa to fpga+0 (sbrg_set_irq_en_mask equiv)\n");
-
-		/* fpga.bin bulk replay was disabled in Phase 5g (2026-05-24) and
-		 * removed entirely in refactor #38 Phase 4 (2026-05-26). The dead
-		 * #if ZX_BULK_REPLAY 0 path was ~80 lines of code behind a
-		 * compile-time gate — never compiled in. Driver works fine
-		 * without it (PING BIDI achieved without bulk replay). The
-		 * fpga.bin blob is also deleted from the initramfs. See:
-		 *   tasks/00.10.02.re-stock-kmods/findings/eth_init_flow_2026_05_26.md
-		 * for the explicit init sequence we use instead. */
+		zx_eth_init_chip_tm(eth);
 
 		/* Replay pp_pm flow_info/sub_ram from stock snapshot */
 		zx_pp_pm_apply_replay(eth);
