@@ -738,6 +738,40 @@ static void zx_pon_low_init(struct zx_eth *e)
 }
 
 /* ============================================================
+ *   NPP_AUX init (refactor #38 Phase 9c)
+ *
+ * 13 NPP_AUX sub-blocks at base offsets 0xcc000, 0xd0000, 0xd4000, …,
+ * 0xfc000 (stride 0x4000). Each gets the SAME 12-word init —
+ * verified bit-identical across all 13 instances. Replaces 156 entries
+ * of the stock table with a single 13-iteration loop.
+ *
+ * What these registers are exactly is still un-RE'd; the values are
+ * preserved bit-for-bit. The pattern alone tells us NPP has at least
+ * 13 sub-units that need identical configuration.
+ * ============================================================ */
+static void zx_npp_aux_init(struct zx_eth *e)
+{
+	int i;
+
+	for (i = 0; i < 13; i++) {
+		void __iomem *aux = e->base + 0xcc000 + i * 0x4000;
+
+		writel(0x00bae000, aux + 0x000);
+		writel(0x00003fff, aux + 0x004);
+		writel(0x80000001, aux + 0x008);
+		writel(0xffff0000, aux + 0x070);
+		writel(0x03e80000, aux + 0x0d4);
+		writel(0x00000063, aux + 0x0dc);
+		writel(0x00001142, aux + 0x110);
+		writel(0x0401710f, aux + 0x11c);
+		writel(0x00800800, aux + 0x120);
+		writel(0x8000ffff, aux + 0x300);
+		writel(0xffffffff, aux + 0x304);
+		writel(0x00002000, aux + 0xb00);
+	}
+}
+
+/* ============================================================
  *   Stock-init replay (refactor #38 Phase 8 + 9b per-block)
  *
  * zx_stock_ops[] (zx_stock_bursts.h) is the same set of writes as
@@ -3139,8 +3173,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 		ZX_STOCK_OPS_PON_TAIL_START, ZX_STOCK_OPS_PON_TAIL_END);
 	zx_stock_apply_block(eth, "NPP",
 		ZX_STOCK_OPS_NPP_START,      ZX_STOCK_OPS_NPP_END);
-	zx_stock_apply_block(eth, "NPP_AUX",
-		ZX_STOCK_OPS_NPP_AUX_START,  ZX_STOCK_OPS_NPP_AUX_END);
+	zx_npp_aux_init(eth);  /* NPP_AUX — Phase 9c (extracted) */
 	zx_stock_apply_block(eth, "TM",
 		ZX_STOCK_OPS_TM_START,       ZX_STOCK_OPS_TM_END);
 	zx_stock_apply_block(eth, "PP_FUC",

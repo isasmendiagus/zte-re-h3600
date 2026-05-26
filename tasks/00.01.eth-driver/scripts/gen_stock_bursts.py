@@ -47,6 +47,7 @@ BLOCKS = [
 # in probe to preserve original write order.
 SKIP_BLOCKS = {
     "PON_LOW",  # zx_pon_low_init() — refactor #38 Phase 9a
+    "NPP_AUX",  # zx_npp_aux_init() — refactor #38 Phase 9c
 }
 
 
