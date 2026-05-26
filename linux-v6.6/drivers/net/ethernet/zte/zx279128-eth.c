@@ -3263,6 +3263,90 @@ static void zx_eth_init_phys(struct device *dev)
  * TODO Phase 10b: consume the `zte,topcrm = <&topcrm>` syscon phandle
  * from DT instead of devm_ioremap'ing a hardcoded address.
  */
+/* Forward declarations — defined further below. */
+static void zx_eth_init_chip_tm(struct zx_eth *eth);
+static void zx_eth_repoint_tm_descriptors(struct zx_eth *eth);
+static void zx_eth_register_cpu_mac_slots(struct zx_eth *eth);
+
+/*
+ * TM subsystem bring-up — the path that carries CPU↔switch traffic.
+ *
+ * Returns 0 if either (a) we initialised the TM/sw netdev successfully
+ * or (b) the DT didn't declare a "tm" IRQ (in which case the sw netdev
+ * is intentionally disabled and the rest of the driver can still run
+ * for idm0/idm1 wifi conduits). Returns non-zero only on real errors
+ * — the caller should propagate that to its err_napi unwind path.
+ *
+ * Bring-up order matches stock tm_pon_tm_init:
+ *
+ *   1. alloc bppe/bp/rxdesc/txdesc coherent pools
+ *   2. pre-init / RED / PP_CTRL / PP_BRG / DMA / BMU init / BMU enable
+ *   3. create the "sw" netdev (the CPU port)
+ *   4. wire up the TM IRQ
+ *   5. seed CPU MAC slots (pp_pm RAM[12])
+ *   6. chip_tm_init tail (CLA + trap_queue + isolate + pro_action +
+ *      sbrg IRQ enable)
+ *   7. replay the pp_pm flow_info / sub_ram tables
+ *   8. RE-write the TM RX/TX desc base regs so HW points at OUR DMA
+ *      pool, not the stock-DDR addresses left by the replay (this is
+ *      the Phase 5j fix, mandatory).
+ */
+static int zx_eth_init_tm_subsystem(struct zx_eth *eth,
+				    struct platform_device *pdev)
+{
+	struct device *dev = eth->dev;
+	int err;
+
+	eth->irq_tm = platform_get_irq_byname_optional(pdev, "tm");
+	if (eth->irq_tm < 0) {
+		dev_warn(dev, "no TM IRQ in DT — sw netdev disabled\n");
+		return 0;
+	}
+
+	err = zx_tm_alloc_pools(eth);
+	if (err)
+		return dev_err_probe(dev, err, "TM pools alloc failed\n");
+
+	zx_tm_pre_init(eth);
+	zx_tm_red_init(eth);
+	zx_pp_ctrl_init(eth);
+	zx_pp_brg_init(eth);
+	zx_tm_dma_init(eth);
+	zx_tm_bmu_init(eth);
+	zx_tm_post_bmu(eth);
+	zx_tm_bmu_enable(eth);
+
+	err = zx_sw_netdev_create(eth);
+	if (err) {
+		dev_err(dev, "sw netdev create failed: %d\n", err);
+		goto err_pools;
+	}
+
+	err = devm_request_irq(dev, eth->irq_tm, zx_tm_irq, 0,
+			       DRV_NAME "-tm", eth);
+	if (err) {
+		dev_err(dev, "TM IRQ request failed: %d\n", err);
+		goto err_swdev;
+	}
+
+	zx_eth_register_cpu_mac_slots(eth);
+	zx_eth_init_chip_tm(eth);
+	zx_pp_pm_apply_replay(eth);   /* replay pp_pm flow_info / sub_ram */
+	zx_eth_repoint_tm_descriptors(eth);
+
+	dev_info(dev, "TM ready: IRQ=%d, sw netdev up, CPU MAC + CLA + pp_pm replay done\n",
+		 eth->irq_tm);
+	return 0;
+
+err_swdev:
+	unregister_netdev(eth->sw_dev);
+	free_netdev(eth->sw_dev);
+	netif_napi_del(&eth->tm_napi);
+err_pools:
+	zx_tm_free_pools(eth);
+	return err;
+}
+
 /*
  * "chip_tm_init" tail — the four trap/classifier table replays and the
  * one-shot FPGA IRQ enable. Mirrors what stock's chip_tm_init() does
@@ -3562,57 +3646,9 @@ static int zx_eth_probe(struct platform_device *pdev)
 		goto err_napi;
 	}
 
-	/* ===== TM subsystem (the REAL CPU↔switch path) ===== */
-	eth->irq_tm = platform_get_irq_byname_optional(pdev, "tm");
-	if (eth->irq_tm < 0) {
-		dev_warn(dev, "no TM IRQ in DT — sw netdev disabled\n");
-	} else {
-		err = zx_tm_alloc_pools(eth);
-		if (err) {
-			dev_err(dev, "TM pools alloc failed: %d\n", err);
-			goto err_napi;
-		}
-		/* Order: pre-init regs → DMA → BMU init → BMU enable → post BMU.
-		 * Matches stock tm_pon_tm_init sequence. */
-		zx_tm_pre_init(eth);
-		zx_tm_red_init(eth);   /* 2026-05-24: queue config — stock does this BEFORE dma/bmu */
-		zx_pp_ctrl_init(eth);  /* 2026-05-24: PP ctrl init — stock calls before brg_init */
-		zx_pp_brg_init(eth);   /* 2026-05-24: PP bridge init — enables CPU TX to UNI egress */
-		zx_tm_dma_init(eth);
-		zx_tm_bmu_init(eth);
-		zx_tm_post_bmu(eth);
-		zx_tm_bmu_enable(eth);
-
-		err = zx_sw_netdev_create(eth);
-		if (err) {
-			dev_err(dev, "sw netdev create failed: %d\n", err);
-			zx_tm_free_pools(eth);
-			goto err_napi;
-		}
-
-		err = devm_request_irq(dev, eth->irq_tm, zx_tm_irq, 0,
-				       DRV_NAME "-tm", eth);
-		if (err) {
-			dev_err(dev, "TM IRQ request failed: %d\n", err);
-			unregister_netdev(eth->sw_dev);
-			free_netdev(eth->sw_dev);
-			netif_napi_del(&eth->tm_napi);
-			zx_tm_free_pools(eth);
-			goto err_napi;
-		}
-
-		zx_eth_register_cpu_mac_slots(eth);
-
-		zx_eth_init_chip_tm(eth);
-
-		/* Replay pp_pm flow_info/sub_ram from stock snapshot */
-		zx_pp_pm_apply_replay(eth);
-
-		zx_eth_repoint_tm_descriptors(eth);
-
-		dev_info(dev, "TM ready: IRQ=%d, sw netdev up, CPU MAC + CLA + pp_pm replay done\n",
-			 eth->irq_tm);
-	}
+	err = zx_eth_init_tm_subsystem(eth, pdev);
+	if (err)
+		goto err_napi;
 
 	/* Intentionally no FDB seeding here.
 	 *
