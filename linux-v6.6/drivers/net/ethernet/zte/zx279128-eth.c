@@ -3273,6 +3273,48 @@ static void zx_eth_init_phys(struct device *dev)
  * from DT instead of devm_ioremap'ing a hardcoded address.
  */
 /*
+ * VLAN port-membership + per-port isolation masks. Mirrors the tail of
+ * stock's pon_pp_brg_init.
+ *
+ * VLAN: vid 0 and 1, every one of the 8 ports gets membership type 3
+ * (= tagged + untagged egress). 16 entries total, all should succeed.
+ *
+ * Isolation: per-port "block egress to these ports" bitmap.
+ *   port 0..5: no self-loop (mask = ~(1<<port) & 0xff)
+ *   port 6, 7 (CPU): 0xff = block ALL egress (CPU traffic exits via the
+ *                    direct CPU FWD register, not the switch fabric)
+ * Stock pon_pp_brg_init only OR'd 0xdf into ports 6/7 because the chip
+ * already has HW defaults; mainline boots leave the masks zero, so we
+ * write all eight explicitly.
+ */
+static void zx_eth_init_vlan_and_isolation(struct zx_eth *eth)
+{
+	struct device *dev = eth->dev;
+	int vid, port, n_ok = 0;
+	int i;
+
+	for (vid = 0; vid < 2; vid++)
+		for (port = 0; port < 8; port++)
+			if (zx_vlan_add_port(eth, vid, port, 3) == 0)
+				n_ok++;
+	dev_info(dev, "VLAN setup: %d/%d port-vlan entries OK\n", n_ok, 16);
+
+	for (i = 0; i < 6; i++)
+		zx_port_isolate(eth, i, (u8)(~(1u << i) & 0xff));
+	zx_port_isolate(eth, 6, 0xFF);
+	zx_port_isolate(eth, 7, 0xFF);
+	dev_info(dev, "isolate ports 0..7 = %#x %#x %#x %#x %#x %#x %#x %#x\n",
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(0)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(1)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(2)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(3)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(4)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(5)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(6)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(7)));
+}
+
+/*
  * Map the two extra MMIO windows the driver needs beyond the DT-listed
  * "npp" resource: fpga_base (a 4 MiB unified window starting at the PON
  * base, used by zx_fpga_table_write descriptor-driven access) and
@@ -3403,35 +3445,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 		 readl(eth->base + PP_OFF + PP_REG_CPU_FWD),
 		 readl(eth->base + IDM_REG_CONTROL));
 
-	/* Match stock pon_pp_brg_init tail: VLAN port membership setup +
-	 * isolate CPU/internal ports 6 & 7. */
-	{
-		int vid, port, n_ok = 0;
-		for (vid = 0; vid < 2; vid++)
-			for (port = 0; port < 8; port++)
-				if (zx_vlan_add_port(eth, vid, port, 3) == 0)
-					n_ok++;
-		dev_info(dev, "VLAN setup: %d/%d port-vlan entries OK\n", n_ok, 16);
-	}
-	/* Stock live dump 2026-05-24 shows all 8 ports have isolation masks:
-	 *   port 0..5: mask = ~(1<<port) & 0xff  (no-self-loop, e.g. port0=0xfe)
-	 *   port 6,7 (CPU): mask = 0xff (block ALL egress via this register)
-	 * Stock pon_pp_brg_init only OR's 0xdf into ports 6,7 — the rest is HW
-	 * default. Our mainline likely has HW default = 0 (no isolation), so
-	 * we must explicitly set the no-self-loop masks for 0..5 too. */
-	for (i = 0; i < 6; i++)
-		zx_port_isolate(eth, i, (u8)(~(1u << i) & 0xff));
-	zx_port_isolate(eth, 6, 0xFF);  /* CPU port: was 0xDF, but stock state shows bit 5 also set → 0xff */
-	zx_port_isolate(eth, 7, 0xFF);
-	dev_info(dev, "isolate ports 0..7 = %#x %#x %#x %#x %#x %#x %#x %#x\n",
-		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(0)),
-		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(1)),
-		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(2)),
-		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(3)),
-		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(4)),
-		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(5)),
-		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(6)),
-		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(7)));
+	zx_eth_init_vlan_and_isolation(eth);
 
 	err = zx_idm_init(eth);
 	if (err)
