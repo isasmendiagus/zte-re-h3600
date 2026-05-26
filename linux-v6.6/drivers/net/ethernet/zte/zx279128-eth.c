@@ -3273,6 +3273,33 @@ static void zx_eth_init_phys(struct device *dev)
  * from DT instead of devm_ioremap'ing a hardcoded address.
  */
 /*
+ * Register the sw netdev MAC across the CPU-port destination tables.
+ *
+ * Stock's pp_pm RAM[12] holds 4 distinct "CPU MAC" addresses (last byte
+ * = M0..M3) replicated across 64 slots: positions where (slot & 0xF)
+ * is less than 4. That spreads the four MACs across 16 groups of 16,
+ * presumably indexed by GEMPORT / T-CONT for the GPON side.
+ *
+ * Empirically the first 4 of each group of 16 are populated (slots
+ * 0..3, 16..19, 32..35, ... 240..243). We mirror exactly that pattern
+ * so the HW lookup hits a registered MAC regardless of which group
+ * index it computes.
+ */
+static void zx_eth_register_cpu_mac_slots(struct zx_eth *eth)
+{
+	u8 mac[6];
+	int sl;
+
+	for (sl = 0; sl < 256; sl++) {
+		if ((sl & 0xF) >= 4)
+			continue;  /* only first 4 of each group of 16 */
+		memcpy(mac, eth->sw_dev->dev_addr, 6);
+		mac[5] += (sl & 0x03);
+		zx_register_cpu_mac(eth, (u8)sl, mac);
+	}
+}
+
+/*
  * VLAN port-membership + per-port isolation masks. Mirrors the tail of
  * stock's pon_pp_brg_init.
  *
@@ -3508,23 +3535,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 			goto err_napi;
 		}
 
-		/* Register sw netdev MAC as CPU port destination — BOTH tables */
-		/* Stock pp_pm RAM[12]: 4 CPU MACs (last byte M0..M3) at slots where
-		 * (slot & 0xF) < 4 — i.e. 16 groups of 4 → 64 slots total.
-		 * Pattern: 0..3=M0..M3, 16..19, 32..35, 48..51, ... 240..243.
-		 * The 16-stride likely indexes GEMPORT/T-CONT. HW lookup hashes
-		 * packet attrs → group_idx * 16, then matches M0..M3.
-		 * Discovered via stock pp_pm dump (256 non-zero in 256 slots). */
-		{
-			u8 mac[6];
-			int sl;
-			for (sl = 0; sl < 256; sl++) {
-				if ((sl & 0xF) >= 4) continue;  /* only first 4 of each group of 16 */
-				memcpy(mac, eth->sw_dev->dev_addr, 6);
-				mac[5] += (sl & 0x03);
-				zx_register_cpu_mac(eth, (u8)sl, mac);
-			}
-		}
+		zx_eth_register_cpu_mac_slots(eth);
 
 		/* Replay CLA ACL hash table from stock snapshot — this programs
 		 * the actual "trap-to-CPU" rules that stock has at boot. */
