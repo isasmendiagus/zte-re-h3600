@@ -521,7 +521,7 @@ static int zx_fdb_add(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 			/* Stock status nibble at d2 bits 31..28 = 0 → empty */
 			if (((ex_d2 >> 28) & 0xf) == 0) {
 				zx_brg_ram_set(e, bucket, slot, d0, save_d1, save_d2);
-				dev_info(e->dev,
+				dev_dbg(e->dev,
 					 "FDB add: port=%u vlan=%u %pM → bucket=%u slot=%d\n",
 					 port, vlan, mac, bucket, slot);
 				return 0;
@@ -3238,8 +3238,6 @@ static void zx_eth_init_phys(struct device *dev)
 		dev_info(dev, "no zte,gephys phandles in DT (n=%d)\n", n);
 		return;
 	}
-	dev_info(dev, "PHY init: %d phandles in zte,gephys\n", n);
-
 	for (i = 0; i < n; i++) {
 		struct device_node *phy_np;
 		struct phy_device *phydev;
@@ -3255,10 +3253,12 @@ static void zx_eth_init_phys(struct device *dev)
 			continue;
 		}
 		ret = phy_init_hw(phydev);
-		dev_info(dev, "  [%d] phy_init_hw(%s) = %d\n",
-			 i, phydev_name(phydev), ret);
+		if (ret)
+			dev_warn(dev, "  [%d] phy_init_hw(%s) = %d\n",
+				 i, phydev_name(phydev), ret);
 		put_device(&phydev->mdio.dev);
 	}
+	dev_info(dev, "PHY init complete (%d GePHYs)\n", n);
 }
 
 static int zx_eth_probe(struct platform_device *pdev)
