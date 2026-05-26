@@ -5708,7 +5708,7 @@ static const u32 zx_burst_8349_data[8] = {
 /* Master operation table — replay in order. Each entry is either a
  * single writel() or a contiguous run flushed via __iowrite32_copy(). */
 static const struct zx_stock_op zx_stock_ops[11451] = {
-	/* ──── PON_B ──── */
+	/* ──── PON_B (ops 0..) ──── */
 	{    0x40000, 0x27912810, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
 	{    0x40018, 0x00000002, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
 	{    0x40020, 0x00000300, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
@@ -7501,7 +7501,7 @@ static const struct zx_stock_op zx_stock_ops[11451] = {
 	{    0x7fc44, 0xffffff7f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
 	{    0x7fc68, 0x61a88158, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
 	{    0x7fc6c, 0x00000bd8, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
-	/* ──── PON_TAIL ──── */
+	/* ──── PON_TAIL (ops 1792..) ──── */
 	{    0x80000, 0x010040cb, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
 	{    0x80004, 0x003c0001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
 	{    0x80008, 0x01900000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
@@ -13746,7 +13746,7 @@ static const struct zx_stock_op zx_stock_ops[11451] = {
 	{   0x17fc38, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
 	{   0x17fc44, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
 	{   0x17fc50, 0x00000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_PON_EARLY },
-	/* ──── NPP ──── */
+	/* ──── NPP (ops 8036..) ──── */
 	{        0x4, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{        0xc, 0x0003ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{       0x60,     5, zx_burst_5855_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #5855 */
@@ -14330,7 +14330,7 @@ static const struct zx_stock_op zx_stock_ops[11451] = {
 	{    0x145d0, 0x2d2d0000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0x145dc, 0x0000f4f4, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0x145e4,    13, zx_burst_6303_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #6303 */
-	/* ──── NPP_AUX ──── */
+	/* ──── NPP_AUX (ops 8619..) ──── */
 	{    0xcc000, 0x00bae000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0xcc004, 0x00003fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0xcc008, 0x80000001, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -14487,7 +14487,7 @@ static const struct zx_stock_op zx_stock_ops[11451] = {
 	{    0xfc300, 0x8000ffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0xfc304, 0xffffffff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{    0xfcb00, 0x00002000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
-	/* ──── TM ──── */
+	/* ──── TM (ops 8775..) ──── */
 	{   0x180000, 0x00000140, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x180004, 0x00000010, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1800f0, 0x4ff1f000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -16257,7 +16257,7 @@ static const struct zx_stock_op zx_stock_ops[11451] = {
 	{   0x197e38, 0x1107a000, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197e3c, 0x0000001f, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x197f40,    40, zx_burst_7652_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7652 */
-	/* ──── PP_FUC ──── */
+	/* ──── PP_FUC (ops 10544..) ──── */
 	{   0x1c0004,     4, zx_burst_7653_data, ZX_BURST_KIND_RUN,    ZX_BURST_WIN_BASE }, /* #7653 */
 	{   0x1c0020, 0x00000fff, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
 	{   0x1c0024, 0x00000106, NULL,        ZX_BURST_KIND_SINGLE, ZX_BURST_WIN_BASE },
@@ -17168,6 +17168,29 @@ static const struct zx_stock_op zx_stock_ops[11451] = {
 };
 
 #define ZX_STOCK_OPS_LEN 11451
+
+/* Per-block slice indices into zx_stock_ops[]. Drivers walk one
+ * block at a time so explicit zx_<block>_init() calls (Phase 9+)
+ * can be interleaved at the right point in the init sequence. */
+/* PON_LOW: handled by explicit zx_<block>_init() — no ops emitted */
+#define ZX_STOCK_OPS_PON_B_START 0
+#define ZX_STOCK_OPS_PON_B_END   1792
+#define ZX_STOCK_OPS_PON_B_LEN   1792
+#define ZX_STOCK_OPS_PON_TAIL_START 1792
+#define ZX_STOCK_OPS_PON_TAIL_END   8036
+#define ZX_STOCK_OPS_PON_TAIL_LEN   6244
+#define ZX_STOCK_OPS_NPP_START 8036
+#define ZX_STOCK_OPS_NPP_END   8619
+#define ZX_STOCK_OPS_NPP_LEN   583
+#define ZX_STOCK_OPS_NPP_AUX_START 8619
+#define ZX_STOCK_OPS_NPP_AUX_END   8775
+#define ZX_STOCK_OPS_NPP_AUX_LEN   156
+#define ZX_STOCK_OPS_TM_START 8775
+#define ZX_STOCK_OPS_TM_END   10544
+#define ZX_STOCK_OPS_TM_LEN   1769
+#define ZX_STOCK_OPS_PP_FUC_START 10544
+#define ZX_STOCK_OPS_PP_FUC_END   11451
+#define ZX_STOCK_OPS_PP_FUC_LEN   907
 
 /* Sanity: total individual register writes when replayed must equal
  * the original 22363 entries minus the 16 entries in

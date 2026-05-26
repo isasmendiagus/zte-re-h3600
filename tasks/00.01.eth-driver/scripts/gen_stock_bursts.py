@@ -193,11 +193,19 @@ def main():
     burst_lookup = {ri: (an, win, wbo, ln, blk) for ri, an, win, wbo, ln, blk in burst_arrays}
     op_idx = 0
     cur_block_label = None
+    # Track per-block op index ranges so the driver can walk per-block
+    block_op_ranges = {}  # block_name → [start, end) into zx_stock_ops[]
     for run_idx, (s, e, kind) in enumerate(runs):
         first_off = entries[s][0]
         block = classify_block(first_off)
         if block != cur_block_label:
-            out.append(f"\t/* ──── {block} ──── */")
+            # Close the previous block's range
+            if cur_block_label is not None:
+                block_op_ranges[cur_block_label] = (
+                    block_op_ranges[cur_block_label], op_idx,
+                )
+            block_op_ranges[block] = op_idx  # tentative start
+            out.append(f"\t/* ──── {block} (ops {op_idx}..) ──── */")
             cur_block_label = block
         if kind == "burst":
             arr_name, win, win_byte_off, ln, _blk = burst_lookup[run_idx]
@@ -218,8 +226,25 @@ def main():
                            f"ZX_BURST_KIND_SINGLE, {win_const} }},")
                 op_idx += 1
     out.append("};")
+    # Close the last block's range
+    if cur_block_label is not None:
+        block_op_ranges[cur_block_label] = (
+            block_op_ranges[cur_block_label], op_idx,
+        )
     out.append("")
     out.append(f"#define ZX_STOCK_OPS_LEN {total_ops}")
+    out.append("")
+    out.append("/* Per-block slice indices into zx_stock_ops[]. Drivers walk one")
+    out.append(" * block at a time so explicit zx_<block>_init() calls (Phase 9+)")
+    out.append(" * can be interleaved at the right point in the init sequence. */")
+    for name, lo, hi, target in BLOCKS:
+        if name in block_op_ranges:
+            s, e = block_op_ranges[name]
+            out.append(f"#define ZX_STOCK_OPS_{name}_START {s}")
+            out.append(f"#define ZX_STOCK_OPS_{name}_END   {e}")
+            out.append(f"#define ZX_STOCK_OPS_{name}_LEN   {e - s}")
+        elif name in SKIP_BLOCKS:
+            out.append(f"/* {name}: handled by explicit zx_<block>_init() — no ops emitted */")
     out.append("")
     out.append("/* Sanity: total individual register writes when replayed must equal")
     out.append(f" * the original {len(entries)} entries minus the {skipped_entries} entries in")

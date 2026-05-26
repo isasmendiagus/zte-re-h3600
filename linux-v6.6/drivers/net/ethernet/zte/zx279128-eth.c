@@ -738,7 +738,7 @@ static void zx_pon_low_init(struct zx_eth *e)
 }
 
 /* ============================================================
- *   Stock-init replay (refactor #38 Phase 8)
+ *   Stock-init replay (refactor #38 Phase 8 + 9b per-block)
  *
  * zx_stock_ops[] (zx_stock_bursts.h) is the same set of writes as
  * zx_stock_init_table[] but pre-classified: contiguous +4 stride runs
@@ -747,14 +747,18 @@ static void zx_pon_low_init(struct zx_eth *e)
  * (one writel()). Original order is preserved, so the chip sees an
  * identical sequence of MMIO writes.
  *
+ * Walked per-block (Phase 9b) so explicit zx_<block>_init() calls can
+ * be interleaved at the right point in the init sequence.
+ *
  * Most of the savings live in PON_TAIL where ~16 KB of contiguous
  * RAM-table init was 4082 individual writel() calls before.
  * ============================================================ */
-static void zx_stock_apply(struct zx_eth *e)
+static void zx_stock_apply_block(struct zx_eth *e, const char *name,
+				 u32 start, u32 end)
 {
 	u32 i, runs = 0, singles = 0, regs_in_runs = 0;
 
-	for (i = 0; i < ZX_STOCK_OPS_LEN; i++) {
+	for (i = start; i < end; i++) {
 		const struct zx_stock_op *op = &zx_stock_ops[i];
 		void __iomem *win = (op->window == ZX_BURST_WIN_PON_EARLY)
 				    ? e->pon_early : e->base;
@@ -770,9 +774,8 @@ static void zx_stock_apply(struct zx_eth *e)
 		}
 	}
 	dev_info(e->dev,
-		 "stock-init: %u ops (%u runs covering %u regs + %u singles = %u writes)\n",
-		 ZX_STOCK_OPS_LEN, runs, regs_in_runs, singles,
-		 regs_in_runs + singles);
+		 "stock-init %s: %u ops (%u runs/%u regs + %u singles)\n",
+		 name, end - start, runs, regs_in_runs, singles);
 }
 
 /* ============================================================
@@ -3122,16 +3125,26 @@ static int zx_eth_probe(struct platform_device *pdev)
 		zx_dbg_puts("\n[zxdbg] probe OK\n");
 	}
 
-	/* Refactor #38 Phase 9a: PON_LOW (4 sub-blocks × 4 writes) is now
-	 * an explicit C init. Must run BEFORE zx_stock_apply() to preserve
-	 * the original write order (PON_LOW was at the head of the table). */
-	zx_pon_low_init(eth);
-
-	/* Refactor #38 Phase 8: replay the rest of stock-init via the
-	 * burst-collapsed op stream in zx_stock_bursts.h. PON_LOW is
-	 * skipped at generation time (see SKIP_BLOCKS in gen_stock_bursts.py)
-	 * so we don't double-write. */
-	zx_stock_apply(eth);
+	/* Refactor #38 Phase 9b: per-block init in original stock order.
+	 * Each block is either an explicit zx_<block>_init() (extracted)
+	 * or a zx_stock_apply_block() call into the still-generic ops
+	 * table. As blocks get extracted in later phases, the corresponding
+	 * SKIP_BLOCKS entry in gen_stock_bursts.py drops them from the
+	 * generated ops; the per-block call here is replaced by the new
+	 * zx_<block>_init(). */
+	zx_pon_low_init(eth);  /* PON_LOW — Phase 9a (extracted) */
+	zx_stock_apply_block(eth, "PON_B",
+		ZX_STOCK_OPS_PON_B_START,    ZX_STOCK_OPS_PON_B_END);
+	zx_stock_apply_block(eth, "PON_TAIL",
+		ZX_STOCK_OPS_PON_TAIL_START, ZX_STOCK_OPS_PON_TAIL_END);
+	zx_stock_apply_block(eth, "NPP",
+		ZX_STOCK_OPS_NPP_START,      ZX_STOCK_OPS_NPP_END);
+	zx_stock_apply_block(eth, "NPP_AUX",
+		ZX_STOCK_OPS_NPP_AUX_START,  ZX_STOCK_OPS_NPP_AUX_END);
+	zx_stock_apply_block(eth, "TM",
+		ZX_STOCK_OPS_TM_START,       ZX_STOCK_OPS_TM_END);
+	zx_stock_apply_block(eth, "PP_FUC",
+		ZX_STOCK_OPS_PP_FUC_START,   ZX_STOCK_OPS_PP_FUC_END);
 
 	dev_info(dev, "PP[0x2c] (CPU_FWD) = %#x, IDM[0x8000] CTRL = %#x\n",
 		 readl(eth->base + PP_OFF + PP_REG_CPU_FWD),
