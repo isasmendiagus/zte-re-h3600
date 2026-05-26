@@ -159,6 +159,54 @@ static unsigned int          n_patches;
 static unsigned int patch_limit = 0;
 static char patch_modules[256] = "";
 static char patch_skip[512]    = "";
+/* patch_pct: per-module percentage cap (0-100). 100 = patch all targets
+ * in each module that gets to patch_module(). 50 = first 50% only.
+ * Combine with patch_limit (global cap) and patch_modules (whitelist)
+ * for fine bisect. */
+static unsigned int patch_pct  = 100;
+
+/* patch_pct_per: per-module percentage overrides. CSV of name:pct pairs.
+ * Modules listed override patch_pct; modules NOT listed use patch_pct.
+ * Example: patch_pct_per=tm:0,switch:50,plat_zxylzb_9128S:100
+ * (sets tm to 0, switch to 50%, plat to 100; idmfdb/mt7915/zx_ponreg get patch_pct). */
+static char patch_pct_per[256] = "";
+
+/* Look up the percentage for a given module name in patch_pct_per. Returns
+ * -1 if not found (caller should fall back to global patch_pct). */
+static int lookup_pct_for_module(const char *name)
+{
+	const char *p = patch_pct_per;
+	size_t nlen = strlen(name);
+	while (*p) {
+		const char *colon = p;
+		while (*colon && *colon != ':' && *colon != ',') colon++;
+		if (*colon == ':' && (size_t)(colon - p) == nlen &&
+		    memcmp(p, name, nlen) == 0) {
+			/* parse decimal pct after the colon */
+			int v = 0;
+			const char *q = colon + 1;
+			while (*q >= '0' && *q <= '9') v = v * 10 + (*q++ - '0');
+			return v;
+		}
+		while (*p && *p != ',') p++;
+		if (*p == ',') p++;
+	}
+	return -1;
+}
+
+/* EXPERIMENT 2026-05-26: HW watchdog timing probe. Before doing ANY
+ * patching work, sleep N seconds (500 ms ticks with a heartbeat to
+ * UART) so we can observe whether the SoC resets just from "boot ran
+ * long" (HW WDT from cspstart, fed only by cspd post-pc&) or whether
+ * the reset only happens AFTER we touch instructions in modules.
+ *
+ * insmod kotrace.ko wait_secs=20  → 20 s of [ko:wait i=NN] before patch
+ * If we see N print "wait i=" lines then a Boot SPI NAND, HW WDT is
+ * the culprit (timeout ≈ N*0.5 s).
+ * If we get through wait_secs OK then patches still crash, it's
+ * patches.  */
+static unsigned int wait_secs = 0;
+/* module_param(wait_secs,...) declared in the bottom param block */
 
 /* EXPERIMENT (2026-05-26): kernel-timer watchdog feeder. Heavy thunk
  * activity during plat/tm/switch init wedges cpu1 long enough to
@@ -171,6 +219,7 @@ static char patch_skip[512]    = "";
  * userspace and isn't reachable cleanly from a kernel module. */
 #include <linux/timer.h>
 #include <linux/jiffies.h>
+#include <linux/delay.h>
 static void (*p_touch_all_softlockup_watchdogs)(void);
 static void (*p_touch_softlockup_watchdog)(void);
 static struct timer_list kotrace_wdt_timer;
@@ -597,6 +646,18 @@ static void patch_module(struct module *mod,
 	void *thunks_mem;
 	size_t total = n_targets * THUNK_BYTES;
 	unsigned int i;
+	unsigned int patched_this_call = 0;
+	unsigned int max_for_this_module;
+
+	/* Effective pct = per-module override from patch_pct_per if present,
+	 * else global patch_pct (default 100). */
+	{
+		int per = lookup_pct_for_module(mod->name);
+		unsigned int eff_pct = (per >= 0) ? (unsigned int)per : patch_pct;
+		if (eff_pct > 100) eff_pct = 100;
+		max_for_this_module = (eff_pct >= 100) ? n_targets
+		                                       : (n_targets * eff_pct) / 100;
+	}
 
 	/* patch_modules whitelist: if non-empty, only patch listed modules. */
 	if (!name_in_list(mod->name, patch_modules, 1)) {
@@ -625,7 +686,11 @@ static void patch_module(struct module *mod,
 		u32 displaced, branch;
 
 		if (patch_limit > 0 && n_patches >= patch_limit) {
-			uart_puts("[ko: patch_limit reached, skipping rest]\n");
+			uart_puts("[ko: patch_limit (global) reached, skipping rest]\n");
+			break;
+		}
+		if (patched_this_call >= max_for_this_module) {
+			uart_puts("[ko: patch_pct cap reached for this module]\n");
 			break;
 		}
 		if (name_in_list(targets[i].name, patch_skip, 0)) {
@@ -680,7 +745,17 @@ static void patch_module(struct module *mod,
 			n_patches++;
 		}
 		uart_puts("  patched OK\n");
+		patched_this_call++;
 	}
+	uart_puts("[ko: SUMMARY '");
+	uart_puts(mod->name);
+	uart_puts("' patched=");
+	uart_puthex(patched_this_call);
+	uart_puts(" of=");
+	uart_puthex(n_targets);
+	uart_puts(" (total now=");
+	uart_puthex(n_patches);
+	uart_puts(")]\n");
 }
 
 static const struct trace_module *find_trace_module(const char *name)
@@ -937,6 +1012,24 @@ static int __init kotrace_init(void)
 	}
 	uart_puts("[koINIT:E kallsyms_ok]\n");
 
+	/* WDT timing probe (see wait_secs at top of file). */
+	if (wait_secs > 0) {
+		unsigned int ticks = wait_secs * 2;   /* 500ms each */
+		unsigned int i;
+		uart_puts("[ko: wait probe starting ");
+		uart_puthex(ticks);
+		uart_puts(" ticks @ 500ms]\n");
+		for (i = 0; i < ticks; i++) {
+			uart_puts("[ko:wait i=");
+			uart_puthex(i);
+			uart_puts("]\n");
+			msleep(500);
+		}
+		uart_puts("[ko: wait probe DONE — survived ");
+		uart_puthex(wait_secs);
+		uart_puts("s]\n");
+	}
+
 	/* EXPERIMENT 2026-05-26: try to keep softlockup detector happy during
 	 * heavy thunk activity. These two are best-effort (NULL is OK; we
 	 * fall back from "all" to single-cpu, and if both are missing the
@@ -1079,6 +1172,12 @@ module_param_string(patch_modules, patch_modules, sizeof(patch_modules), 0644);
 MODULE_PARM_DESC(patch_modules, "CSV whitelist of modules to patch; empty = all");
 module_param_string(patch_skip, patch_skip, sizeof(patch_skip), 0644);
 MODULE_PARM_DESC(patch_skip, "CSV blacklist of function names to skip");
+module_param(patch_pct, uint, 0644);
+MODULE_PARM_DESC(patch_pct, "Per-module percentage cap (0-100). Default 100.");
+module_param_string(patch_pct_per, patch_pct_per, sizeof(patch_pct_per), 0644);
+MODULE_PARM_DESC(patch_pct_per, "CSV overrides per module: name:pct,name:pct,...");
+module_param(wait_secs, uint, 0644);
+MODULE_PARM_DESC(wait_secs, "EXPERIMENT: sleep N s with 500ms UART heartbeat BEFORE patching (0=off)");
 module_param_named(wdt_pet, kotrace_wdt_enabled, int, 0644);
 MODULE_PARM_DESC(wdt_pet, "EXPERIMENT: periodic softlockup-watchdog touch from kernel timer (1=on)");
 
