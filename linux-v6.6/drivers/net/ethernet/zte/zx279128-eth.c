@@ -3261,6 +3261,38 @@ static void zx_eth_init_phys(struct device *dev)
 	dev_info(dev, "PHY init complete (%d GePHYs)\n", n);
 }
 
+/*
+ * Enable the PON-subsystem clocks via the SoC's TOPCRM block.
+ *
+ * Stock does this in zx_pon_clk_reset_init: read-modify-write bit 5-8
+ * of TOPCRM[0x0C], then poke TOPCRM[0x4c] and [0x08] to the stock-match
+ * values that turn on the FPGA → GIC IRQ routing we depend on. Linux
+ * defaults leave many of those bits cleared.
+ *
+ * TODO Phase 10b: consume the `zte,topcrm = <&topcrm>` syscon phandle
+ * from DT instead of devm_ioremap'ing a hardcoded address.
+ */
+static int zx_eth_init_topcrm(struct zx_eth *eth)
+{
+	struct device *dev = eth->dev;
+
+	eth->topcrm = devm_ioremap(dev, ZX_TOPCRM_BASE, 0x100);
+	if (!eth->topcrm)
+		return dev_err_probe(dev, -ENOMEM, "ioremap TOPCRM\n");
+
+	writel(readl(eth->topcrm + TOPCRM_REG_PON_CLK) | TOPCRM_PON_CLK_BITS,
+	       eth->topcrm + TOPCRM_REG_PON_CLK);
+	dev_dbg(dev, "TOPCRM[0x0C] = %#x (PON clocks enabled)\n",
+		readl(eth->topcrm + TOPCRM_REG_PON_CLK));
+
+	writel(0x0003cfff, eth->topcrm + 0x4c);   /* was 0x000381ff */
+	writel(0x1ff7ffff, eth->topcrm + 0x08);   /* was 0x10061fff */
+	dev_dbg(dev, "TOPCRM[0x4c]=%#x [0x08]=%#x (stock-match)\n",
+		readl(eth->topcrm + 0x4c), readl(eth->topcrm + 0x08));
+
+	return 0;
+}
+
 static int zx_eth_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -3298,22 +3330,9 @@ static int zx_eth_probe(struct platform_device *pdev)
 	if (err)
 		return dev_err_probe(dev, err, "failed to set DMA mask\n");
 
-	/* TOP_CRM clock enable for PON subsystem bits 5-8 (stock does this
-	 * in zx_pon_clk_reset_init). Small dedicated ioremap. */
-	eth->topcrm = devm_ioremap(dev, ZX_TOPCRM_BASE, 0x100);
-	if (!eth->topcrm)
-		return dev_err_probe(dev, -ENOMEM, "ioremap TOPCRM\n");
-	writel(readl(eth->topcrm + TOPCRM_REG_PON_CLK) | TOPCRM_PON_CLK_BITS,
-	       eth->topcrm + TOPCRM_REG_PON_CLK);
-	dev_dbg(dev, "TOPCRM[0x0C] = %#x (PON clocks enabled)\n",
-		 readl(eth->topcrm + TOPCRM_REG_PON_CLK));
-	/* 2026-05-24: TOPCRM stock-match writes — Linux defaults leave many
-	 * bits cleared that stock sets. Writing the exact stock values for
-	 * the differing registers should enable FPGA → GIC IRQ routing. */
-	writel(0x0003cfff, eth->topcrm + 0x4c);   /* was 0x000381ff */
-	writel(0x1ff7ffff, eth->topcrm + 0x08);   /* was 0x10061fff — many clock-enable bits */
-	dev_dbg(dev, "TOPCRM[0x4c]=%#x [0x08]=%#x (stock-match)\n",
-		 readl(eth->topcrm + 0x4c), readl(eth->topcrm + 0x08));
+	err = zx_eth_init_topcrm(eth);
+	if (err)
+		return err;
 
 	zx_pp_init(eth);
 	zx_npp_init(eth);
