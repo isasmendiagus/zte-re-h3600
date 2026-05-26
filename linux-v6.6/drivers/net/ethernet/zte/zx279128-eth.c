@@ -1061,7 +1061,7 @@ static void zx_pp_init(struct zx_eth *e)
 		cur = readl(e->base + byte_off);
 		new_v = (cur & ~(ent->mask << ent->shift)) | ((0 & ent->mask) << ent->shift);
 		writel(new_v, e->base + byte_off);
-		dev_info(e->dev, "cla_oth_l3_act_cfg: PP+0x%x %#x -> %#x\n",
+		dev_dbg(e->dev, "cla_oth_l3_act_cfg: PP+0x%x %#x -> %#x\n",
 			 byte_off + ZX_FPGA_BASE_TO_NPP_OFF, cur, new_v);
 
 		/* spa_set_enty_pktdeal_cfg(entity 0..7, slot 0x43..0x7d, val=1) — 8 × 59 = 472 writes.
@@ -2091,17 +2091,17 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	 * Lets us see what U-Boot left behind so we can spot regs where we
 	 * may be clobbering a known-good config. Diff against the writes
 	 * below tells us which writes are no-ops vs. destructive. */
-	dev_info(e->dev, "PP_BRG inherited from U-Boot (pre-init):\n");
-	dev_info(e->dev, "  PP[0x8004]=%08x  [0x8008]=%08x  [0x8050]=%08x\n",
+	dev_dbg(e->dev, "PP_BRG inherited from U-Boot (pre-init):\n");
+	dev_dbg(e->dev, "  PP[0x8004]=%08x  [0x8008]=%08x  [0x8050]=%08x\n",
 		 readl(pp + 0x8004), readl(pp + 0x8008), readl(pp + 0x8050));
-	dev_info(e->dev, "  PP[0x8188]=%08x (aging_cycle)\n", readl(pp + 0x8188));
-	dev_info(e->dev, "  PP[0x81c0]=%08x (SMAC_LOOK_EN bitmap)\n", readl(pp + 0x81c0));
-	dev_info(e->dev, "  PP[0x81c4]=%08x (LEARN_MODE per port)\n", readl(pp + 0x81c4));
-	dev_info(e->dev, "  PP[0x82c0]=%08x (DA_LOOKUP_EN bitmap)\n", readl(pp + 0x82c0));
-	dev_info(e->dev, "  PP[0x8300]=%08x  [0x8304]=%08x\n",
+	dev_dbg(e->dev, "  PP[0x8188]=%08x (aging_cycle)\n", readl(pp + 0x8188));
+	dev_dbg(e->dev, "  PP[0x81c0]=%08x (SMAC_LOOK_EN bitmap)\n", readl(pp + 0x81c0));
+	dev_dbg(e->dev, "  PP[0x81c4]=%08x (LEARN_MODE per port)\n", readl(pp + 0x81c4));
+	dev_dbg(e->dev, "  PP[0x82c0]=%08x (DA_LOOKUP_EN bitmap)\n", readl(pp + 0x82c0));
+	dev_dbg(e->dev, "  PP[0x8300]=%08x  [0x8304]=%08x\n",
 		 readl(pp + 0x8300), readl(pp + 0x8304));
-	dev_info(e->dev, "  PP[0x8340]=%08x (PKTDEAL+FWD)\n", readl(pp + 0x8340));
-	dev_info(e->dev, "  PP[0x8344]=%08x  [0x8380]=%08x  [0x863c]=%08x\n",
+	dev_dbg(e->dev, "  PP[0x8340]=%08x (PKTDEAL+FWD)\n", readl(pp + 0x8340));
+	dev_dbg(e->dev, "  PP[0x8344]=%08x  [0x8380]=%08x  [0x863c]=%08x\n",
 		 readl(pp + 0x8344), readl(pp + 0x8380), readl(pp + 0x863c));
 
 	writel(0x020000ff, pp + 0x8004);
@@ -2126,7 +2126,7 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	writel(0x020000ff, pp + 0x8304);
 	writel(0xfffffffa, pp + 0x8050);
 	writel(0x0000ff00, pp + 0x8008);
-	dev_info(e->dev, "PP_BRG post-init: SMAC_LOOK_EN=%02x (CPU port 5 disabled)\n",
+	dev_dbg(e->dev, "PP_BRG post-init: SMAC_LOOK_EN=%02x (CPU port 5 disabled)\n",
 		 readl(pp + 0x81c0));
 
 	/* pon_pp_add_port_to_vlan loop: vlan 0 + 1, port 0..7, action=3.
@@ -2204,7 +2204,7 @@ static void zx_tm_post_bmu(struct zx_eth *e)
 		for (i = 0; i < 1024; i++)
 			d[i] = 0xDEAD0000u | (u32)i;
 		dma_wmb();
-		dev_info(e->dev, "rxdesc canaries planted at %pad (TM[0xF0]=%#x, first w[0]=%#x)\n",
+		dev_dbg(e->dev, "rxdesc canaries planted at %pad (TM[0xF0]=%#x, first w[0]=%#x)\n",
 			 &e->rxdesc_dma, tm_read(e, 0xF0), d[0]);
 	}
 	tm_write(e, 0xC008, 0);
@@ -3305,14 +3305,14 @@ static int zx_eth_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, -ENOMEM, "ioremap TOPCRM\n");
 	writel(readl(eth->topcrm + TOPCRM_REG_PON_CLK) | TOPCRM_PON_CLK_BITS,
 	       eth->topcrm + TOPCRM_REG_PON_CLK);
-	dev_info(dev, "TOPCRM[0x0C] = %#x (PON clocks enabled)\n",
+	dev_dbg(dev, "TOPCRM[0x0C] = %#x (PON clocks enabled)\n",
 		 readl(eth->topcrm + TOPCRM_REG_PON_CLK));
 	/* 2026-05-24: TOPCRM stock-match writes — Linux defaults leave many
 	 * bits cleared that stock sets. Writing the exact stock values for
 	 * the differing registers should enable FPGA → GIC IRQ routing. */
 	writel(0x0003cfff, eth->topcrm + 0x4c);   /* was 0x000381ff */
 	writel(0x1ff7ffff, eth->topcrm + 0x08);   /* was 0x10061fff — many clock-enable bits */
-	dev_info(dev, "TOPCRM[0x4c]=%#x [0x08]=%#x (stock-match)\n",
+	dev_dbg(dev, "TOPCRM[0x4c]=%#x [0x08]=%#x (stock-match)\n",
 		 readl(eth->topcrm + 0x4c), readl(eth->topcrm + 0x08));
 
 	zx_pp_init(eth);
