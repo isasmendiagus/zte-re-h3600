@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/zte,zx279128s-eth.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ZTE ZXIC ZX279128S integrated Ethernet controller
+
+description: |
+  The ZX279128S SoC integrates an Ethernet block built around a packet
+  processor pipeline:
+
+      RJ45 → GePHY → MAC[0..3] → on-chip switch (SW)
+                              → packet processor (PP)
+                              → DDR via PP_AXI / IDM ring
+
+  Four MACs feed a 4-port on-chip switch. The switch hands frames to
+  the Packet Processor (PP) which elevates them to the Network Packet
+  Processor (NPP) / IDM DMA ring, where the host driver reads them out
+  via an in-RAM descriptor pool (BMU). The same path runs in reverse
+  for transmit.
+
+  The driver targets two physically separate MMIO windows:
+    * 0x92000000 .. 0x921bffff  PON-side blocks (smac/sbrg/dpa/sda/sdet)
+    * 0x921c0000 .. 0x923bffff  NPP / TM / PP / IDM register file
+
+  In addition the driver pokes the SoC top-level clock/reset manager
+  (TOPCRM at 0x94000000) to enable PON-side clocks during probe.
+
+maintainers:
+  - Agustin Isasmendi <infra@quecomere.com>
+
+allOf:
+  - $ref: ethernet-controller.yaml#
+
+properties:
+  compatible:
+    const: zte,zx279128s-eth
+
+  reg:
+    items:
+      - description: PON-side register window (smac/sbrg/dpa/sda/sdet)
+      - description: NPP / TM / PP / IDM register window
+
+  reg-names:
+    items:
+      - const: pon
+      - const: npp
+
+  interrupts:
+    minItems: 1
+    items:
+      - description: IDM DMA ring interrupt (host RX/TX completions)
+      - description: NPP main interrupt (packet processor events)
+      - description: TM interrupt (traffic manager — primary CPU↔SW path)
+
+  interrupt-names:
+    minItems: 1
+    items:
+      - const: idm
+      - const: npp
+      - const: tm
+
+  zte,topcrm:
+    description: |
+      phandle to the TOPCRM syscon node. The driver writes a small set
+      of PON-clock enable bits and reads back the "PON clocks ready"
+      status word from this region during probe.
+    $ref: /schemas/types.yaml#/definitions/phandle
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - interrupts
+  - interrupt-names
+  - zte,topcrm
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    soc {
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        topcrm: syscon@94000000 {
+            compatible = "zte,zx279128s-topcrm", "syscon";
+            reg = <0x94000000 0x1000>;
+        };
+
+        ethernet@921c0000 {
+            compatible = "zte,zx279128s-eth";
+            reg = <0x92000000 0x1c0000>,
+                  <0x921c0000 0x200000>;
+            reg-names = "pon", "npp";
+
+            interrupts = <GIC_SPI 0x26 IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 0x23 IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 0x24 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-names = "idm", "npp", "tm";
+
+            zte,topcrm = <&topcrm>;
+            local-mac-address = [00 11 22 33 44 55];
+        };
+    };
