@@ -162,17 +162,56 @@ stripped rootfs without httpd you can't take that path.
 
 ### What the bake-in does instead
 
-- Replaces `/bin/cliagent` with a symlink to `/bin/sh` in staging.
-  When dropbear takes the SSH_ProcType=1 branch and execs
-  `/bin/cliagent`, it actually runs `/bin/sh`. The CLI is bypassed
-  with zero changes to cspd's config.
-- Adds a post-`pc&` loop in init.norm that flushes `srvcntrl` every
-  10 s for the first 80 s, after cspd commits the LAN-SSH-DROP rule
-  (cspd has no watchdog that re-applies — one flush is enough, but
-  the loop guards against slow cspd init).
-- The same loop snapshots `iptables -L srvcntrl -v -n` (filter +
-  nat) to `/tmp/fwdump.log` before each flush so we can audit what
-  cspd is actually installing.
+**1. `/bin/cliagent` wrapper script** (`tasks/00.02.stock-shell/staging/bin/cliagent`):
+```sh
+#!/bin/ash
+exec /bin/ash
+```
+plus a backup of the original at `/bin/cliagent.orig`. A *symlink*
+won't work here because `/bin/sh` and `/bin/ash` are busybox-applet
+symlinks themselves, and busybox dispatches by `argv[0]` — when
+dropbear execs `/bin/cliagent`, argv[0] becomes `"cliagent"`, which
+busybox has no applet for, and exits silently. The shebang wrapper
+forces busybox to be invoked via `argv[0]="ash"` (the shebang
+interpreter line), which resolves to the sh applet, and then
+exec's an interactive `/bin/ash` over the SSH PTY.
+
+End result: `ssh admin@192.168.1.1` (password `UkuGPeyRDU`) lands
+on a `BusyBox v1.17.2 ... built-in shell (ash)` prompt as uid=0.
+
+**2. iptables `srvcntrl` flush loop** in init.norm post-`pc&`:
+
+```sh
+(for i in 1..16; do
+  sleep 10
+  { iptables -L srvcntrl -v -n; iptables -t nat -L srvcntrl -v -n; } > /tmp/fwiter.txt
+  cat /tmp/fwiter.txt >> /tmp/fwdump.log
+  /sbin/dumpkring /tmp/fwiter.txt        # relay to UART (mmap PL011)
+  iptables -F srvcntrl 2>/dev/null
+  ip6tables -F srvcntrl 2>/dev/null
+done) &
+```
+
+160 s of coverage (cspd's `fwScStart` commits around iter 10 on this
+unit). Per-iter snapshot of the chain goes to `/tmp/fwdump.log` and
+out the UART via `dumpkring` (since `/dev/kmsg` is not writable on
+this 4.1 kernel). The actual rule cspd installs is:
+
+```
+DROP  tcp  br0   *   0.0.0.0/0  0.0.0.0/0   tcp dpt:22
+```
+
+One flush after cspd settles is enough — `cspd` has no firewall
+watchdog that re-applies (verified by RE of `fwScStart` /
+`setFwAccessRule` symbols).
+
+### Debug aids stamped into the bake-in
+
+- `/tmp/fwdump.log` — running history of every `srvcntrl` snapshot
+- `/tmp/cliagent.log` — written by the cliagent wrapper on every
+  invocation (argv0, args, tty, env). Use it if SSH stops working.
+- The iptables loop also pipes `/tmp/cliagent.log` to the UART each
+  iteration when present.
 
 ### Note about uploading config_modified.bin
 
@@ -184,6 +223,61 @@ the web admin (silent failure, config keeps its prior values). The
 `ext/` reference file is therefore not directly upload-ready; build
 a flag=4 wrapper around it (AES-CBC with the H3600 hardcoded keys
 from `docs/CONFIG_EDIT.md`) if you want the web-admin path to work.
+
+## netshell — raw TCP shell that sidesteps dropbear entirely
+
+After hours fighting ZTE's patched dropbear (PTY/signal-mask issues
+that wedge busybox-ash interactive — see "SSH gotchas" above), the
+practical workaround was to **bypass dropbear and run our own daemon**.
+
+`tasks/00.02.stock-shell/netshell.c` is a ~140-line C program that
+listens on TCP port 9001, accepts connections, and dups the socket to
+stdin/stdout/stderr of a fork+exec'd shell loop. No PTY semantics, no
+signal-mask inheritance, no cspd hook. Connect:
+
+```bash
+nc 192.168.1.1 9001
+# netshell - raw TCP shell, ZTE H3600
+# built-ins: cd, pwd, echo, exit. fork+exec everything else.
+# 
+# wc -c /proc/kotrace_dump
+# 0 /proc/kotrace_dump
+```
+
+Built-ins: `cd`, `pwd`, `echo`, `exit`. Everything else: `fork+execvp`.
+For piped/redirected commands use `sh -c '...'`.
+
+The bake-in (`build_rootfs_with_kotrace.py`) installs it at
+`/sbin/netshell` and wraps the daemon in a respawn supervisor in
+`init.norm` after `pc&`:
+
+```sh
+(while :; do /sbin/netshell 9001 >>/tmp/netshell.log 2>&1; sleep 2; done) &
+```
+
+The same supervisor also inserts an idempotent
+`iptables -I INPUT 1 -p tcp --dport 9001 -j ACCEPT` rule each iteration
+(in case cspd's FWSC ever adds a blocking rule for that port).
+
+### Why we couldn't fix dropbear directly
+
+Three rabbit-hole hypotheses, each falsified:
+
+1. **`/etc/passwd` shell field**: dropbear ignores it; SSH_ProcType=1
+   branch in the patched binary hardcodes `exec /bin/cliagent`.
+2. **/bin/cliagent symlink/wrapper to /bin/sh**: works structurally
+   but `$(...)` substitution in any wrapper hangs forever under
+   dropbear's PTY (proved via UART-relay logging of every step).
+3. **SIGALRM leak from dropbear's `PtyCmdForShell.isra.5`**: a real
+   bug (RE-confirmed: one `sigprocmask(SIG_BLOCK, SIGALRM)` with no
+   matching unblock before `execv`). Wrapper that `sigprocmask`s
+   UNBLOCK before exec — same hang. Local repro (qemu-arm + same
+   busybox + same mask) does NOT reproduce. So the leak is necessary
+   but not sufficient; the actual interaction is something specific
+   to kernel 4.1.25's PTY line discipline + busybox-ash 1.17.2 that
+   we never fully isolated.
+
+netshell sidesteps all of it.
 
 ## Next: bisect MINIMAL=0 crash
 

@@ -307,6 +307,42 @@ own deletions**.
 - Device IP: `192.168.1.1`. SSH creds: `admin / UkuGPeyRDU`. U-Boot pw: `Boot4128s!`
 - See `tools/dtr-mod/README.md` for the FTDI cable's DTR→relay hardware mod
 
+### Shell access on the bake-in rootfs — netshell on port 9001
+- For iterative work on a bake-in rootfs, connect with `nc 192.168.1.1 9001`
+  to the `netshell` daemon — a raw-TCP shell we ship at `/sbin/netshell`
+  (source: `tasks/00.02.stock-shell/netshell.c`). It bypasses
+  dropbear/PTY/cliagent entirely, which is the only practical way we
+  found to get a working shell after the patched dropbear's PTY
+  semantics wedged busybox-ash. See
+  `tasks/00.01.eth-driver/findings/kotrace_bake_in.md` for the rabbit
+  hole that led there.
+
+### SSH gotchas (ZTE-patched dropbear)
+- `/bin/dropbear` is **ZTE-patched**: rejects ALL exec channel requests
+  (`ssh user@host 'cmd'` → "exec request failed on channel 0"). Only
+  PTY-interactive sessions work. From scripts use paramiko's
+  `invoke_shell` (lib/ssh_shell.py) or openssh `-tt`.
+- After auth, dropbear reads `SSHCfg.SSH_ProcType` from config.bin:
+  `=0` → `exec /bin/sh`, `=1` → `exec /bin/cliagent` (the "Welcome to
+  the world of CLI !" restricted prompt). Hardcoded in the binary.
+- FWSC firewall **drops SSH from LAN by default** (rule `lan_ssh`
+  FilterTarget=0). cspd installs it via popen(`iptables`) shortly
+  after `pc&` start; one `iptables -F srvcntrl` after cspd settles
+  restores access (cspd has no watchdog that re-applies).
+- config.bin upload via web admin (Backup/Restore) requires `flag=4`
+  (AES-CBC, the H3600 hardcoded keys from `docs/CONFIG_EDIT.md`).
+  Orca's `tools/dtr-mod/ztetool.py -e` produces `flag=0` (plain zlib)
+  which this firmware silently rejects. To regenerate a valid
+  AES-wrapped config, see `tasks/00.01.eth-driver/findings/kotrace_bake_in.md`.
+
+### GPL / SDK
+- The H3600 is GPL-licensed but ZTE/Digi/CHN have refused all SDK
+  requests, pointing at each other. Source for any kernel work has
+  to come from RE (Ghidra projects under `tasks/00.10.*`) and
+  cross-referenced siblings (`refs/stefan-zx297520/`,
+  `refs/orca-h3600p/`). Document any reverse-engineered finding in
+  the corresponding `findings/` directory so it's grep-able.
+
 ### Encryption keys (HARD-CODED for this device, per-unit)
 - AES-128-ECB rootfs key: `H36000e71071c440` (ASCII, 16 bytes)
 - config.bin AES-256-CBC: see `docs/CONFIG_EDIT.md` (uses buggy_sha256)

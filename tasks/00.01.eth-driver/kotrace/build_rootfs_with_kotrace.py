@@ -208,23 +208,39 @@ def patch_init_norm(staging: Path):
     #    Rule 8 lan_ssh DROP cuts LAN -> SSH. Periodic -D loop removes it
     #    after cspd commits, while leaving WAN-side rules intact.
     #    The loop wins because cspd never re-applies (no watchdog).
+    # netshell raw TCP shell on port 9001 — backdoor that bypasses
+    # dropbear's PTY entirely. Wrapped in a supervisor loop so if the
+    # daemon dies (segfault, OOM, kill), it respawns every 2 s.
+    # Internally netshell forks per client → multiple parallel
+    # connections OK without restart. Connect: nc 192.168.1.1 9001
     new_blob = new_blob.replace(
         pc_marker,
+        b"/sbin/printok BEFORE_NETSHELL\n"
+        b"(while :; do /sbin/netshell 9001 >>/tmp/netshell.log 2>&1; sleep 2; done) &\n"
         b"/sbin/printok BEFORE_CSPD\n"
-        b"# DUMP then strip cspd's LAN-SSH-DROP rule. Snapshot each iter to\n"
-        b"# /tmp/fwdump.log (always) and try /dev/kmsg (UART relay) if writable.\n"
-        b"(for i in 1 2 3 4 5 6 7 8; do\n"
-        b"  sleep 10\n"
+        b"# DUMP then strip cspd's LAN-SSH-DROP rule. 16 iter * 10 s = 160 s\n"
+        b"# of coverage so we catch slow cspd init. Per-iter snapshot written\n"
+        b"# to /tmp/fwiter.txt then concatenated into /tmp/fwdump.log AND\n"
+        b"# pushed out the UART via /sbin/dumpkring (mmap PL011 directly,\n"
+        b"# same path as kotrace; /dev/kmsg isn't writable on this kernel).\n"
+        b"(i=0; while :; do\n"
+        b"  i=$((i+1)); sleep 10\n"
         b"  {\n"
+        b"    echo \"\"\n"
         b"    echo \"==== fwdump iter $i ====\"\n"
-        b"    echo \"--- filter / srvcntrl ---\"\n"
         b"    /bin/iptables  -L srvcntrl -v -n 2>&1\n"
-        b"    echo \"--- nat / srvcntrl ---\"\n"
-        b"    /bin/iptables  -t nat -L srvcntrl -v -n 2>&1\n"
-        b"  } >>/tmp/fwdump.log 2>&1\n"
-        b"  [ -w /dev/kmsg ] && tail -40 /tmp/fwdump.log >/dev/kmsg 2>/dev/null\n"
+        b"  } >/tmp/fwiter.txt 2>&1\n"
+        b"  /sbin/dumpkring /tmp/fwiter.txt\n"
         b"  /bin/iptables  -F srvcntrl 2>/dev/null\n"
         b"  /bin/ip6tables -F srvcntrl 2>/dev/null\n"
+        b"  # ensure netshell port stays reachable (idempotent insert at top)\n"
+        b"  /bin/iptables -C INPUT -p tcp --dport 9001 -j ACCEPT 2>/dev/null \\\n"
+        b"    || /bin/iptables -I INPUT 1 -p tcp --dport 9001 -j ACCEPT 2>/dev/null\n"
+        b"  # dump cliagent.log if non-empty, then truncate to avoid re-dumping\n"
+        b"  if [ -s /tmp/cliagent.log ]; then\n"
+        b"    /sbin/dumpkring /tmp/cliagent.log\n"
+        b"    : >/tmp/cliagent.log\n"
+        b"  fi\n"
         b"done) &\n"
         + pc_marker,
         1,
