@@ -77,6 +77,13 @@ Fork to your consumer task's local `ghidra/` for experiments.**
 ## Currently known findings
 
 ### Index
+- **[`findings/eth_init_flow_2026_05_26.md`](findings/eth_init_flow_2026_05_26.md) —
+  ⭐ canonical stock eth init flow** captured live via SHIM_TRACE
+  (16,340 events) + kotrace (214 in-place patches) running on
+  `tasks/99.01.linux-stockport/`. Per-module call graph, register-write
+  sequences, ZTE-kernel-resident symbols catalog, struct-offset gotchas.
+  **The mainline-driver refactor (task #38) consumes this directly** —
+  see `../00.01.eth-driver/findings/stockport_to_mainline_refactor_plan.md`.
 - [`findings/HW_BLOCKS_INVENTORY.md`](findings/HW_BLOCKS_INVENTORY.md) —
   **canonical HW inventory** of every block discovered in the stock kmods.
   13 sub-blocks (sbrg, spa, cla, dpa, adm, sadm, sdet, greg, qmg, red,

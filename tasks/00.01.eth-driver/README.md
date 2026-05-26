@@ -48,6 +48,19 @@ turning on `CONFIG_KPROBES=y` / `CONFIG_FUNCTION_TRACER=y` then using
 mainline kprobes (~4400 hardened lines) instead of our 10-line
 `insn_is_displaceable()`. Estimated 1–2 days incl. kernel flash risk.
 
+## Refactor plan — replacing bulk replay with explicit C (task #38)
+
+Stockport was unparked 2026-05-26 and now boots cleanly, providing a
+live oracle for the stock eth stack. The captured init flow (SHIM_TRACE
++ kotrace + Ghidra) maps directly to the mainline-driver refactor:
+
+- **Input** (read first): [`../00.10.02.re-stock-kmods/findings/eth_init_flow_2026_05_26.md`](../00.10.02.re-stock-kmods/findings/eth_init_flow_2026_05_26.md)
+  — canonical knowledge base of what stock does at init.
+- **Plan**: [`findings/stockport_to_mainline_refactor_plan.md`](findings/stockport_to_mainline_refactor_plan.md)
+  — phased plan (6 phases, ~4–7 days total) to replace the 480 KB of
+  binary replay blobs (`fpga.bin`/`stock.bin`/`cla.bin`/`pm.bin`) with
+  explicit C code derived from the stock init flow.
+
 ## Layout
 
 ```
