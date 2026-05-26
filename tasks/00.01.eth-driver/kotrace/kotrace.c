@@ -147,6 +147,12 @@ static unsigned int          n_patches;
  * Set to 1 only when actively diagnosing the bake-in crash; default 0. */
 #define KOTRACE_MINIMAL_BOOT 1
 
+/* patch_limit module parameter: cap on the total number of successful
+ * patches applied across all modules. 0 = no limit (original behavior).
+ * Used for the binary-search bisect of which patch crashes plat init.
+ * insmod kotrace.ko patch_limit=N   (no recompile needed) */
+static unsigned int patch_limit = 0;
+
 /* Legacy v1 struct kept for the hardcoded arrays below — only .name and
  * .marker are actually used by patch_module(). v2 struct (from header) is
  * field-compatible for those two fields, so patch_module() now accepts the
@@ -561,6 +567,10 @@ static void patch_module(struct module *mod,
 		u32 *func_p = (u32 *)func;
 		u32 displaced, branch;
 
+		if (patch_limit > 0 && n_patches >= patch_limit) {
+			uart_puts("[ko: patch_limit reached, skipping rest]\n");
+			break;
+		}
 		uart_puts("[ko: target ");
 		uart_puts(targets[i].name);
 		uart_puts(" @ ");
@@ -977,6 +987,9 @@ static void __exit kotrace_exit(void)
 
 module_init(kotrace_init);
 module_exit(kotrace_exit);
+
+module_param(patch_limit, uint, 0644);
+MODULE_PARM_DESC(patch_limit, "Max patches applied (bisect aid); 0 = no limit");
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("ZTE H3600 RE — agus@quecomere");
