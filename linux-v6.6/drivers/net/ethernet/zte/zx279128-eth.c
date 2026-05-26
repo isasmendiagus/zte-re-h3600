@@ -3273,6 +3273,43 @@ static void zx_eth_init_phys(struct device *dev)
  * from DT instead of devm_ioremap'ing a hardcoded address.
  */
 /*
+ * The bulk stock_init replay we run during probe legitimately programs
+ * the four stock DDR pointers it captured at boot time (TM rxdesc base
+ * = 0x4ff1f000, TX_UP_BASE = 0x4ffdf000, TX_DN_BASE = 0x4ffef000).
+ * Those addresses are valid for the stock kernel — they point to the
+ * stock kernel's coherent DMA pool — but they're meaningless to us:
+ * mainline allocates its own DMA buffers via dma_alloc_coherent(),
+ * with phys addresses that depend on CMA placement at boot.
+ *
+ * Without re-pointing the registers, the TM ASIC writes RX descriptors
+ * to whatever happens to live at 0x4ff1f000 (some random kernel page)
+ * and reads TX descriptors from 0x4ffdf000 (garbage), so RX silently
+ * corrupts memory and TX never leaves the chip. The single most
+ * important fix in the entire bring-up — see Phase 5j commit history.
+ *
+ * This must run AFTER zx_pp_pm_apply_replay() (which is where the
+ * stock pointers get re-programmed) and BEFORE the netdev opens.
+ */
+static void zx_eth_repoint_tm_descriptors(struct zx_eth *eth)
+{
+	struct device *dev = eth->dev;
+	int inst;
+
+	for (inst = 0; inst < TM_NUM_INSTANCES; inst++) {
+		u32 base = inst * TM_INSTANCE_STRIDE;
+
+		tm_write(eth, base + 0xF0, eth->rxdesc_dma);
+	}
+	dev_dbg(dev, "Re-wrote TM[+0xF0] x%d to rxdesc_dma=%pad\n",
+		TM_NUM_INSTANCES, &eth->rxdesc_dma);
+
+	tm_write(eth, TM_REG_DMA_TX_UP_BASE, eth->txdesc_dma);
+	tm_write(eth, TM_REG_DMA_TX_DN_BASE, eth->txdesc_dma);
+	dev_dbg(dev, "Re-wrote TM TX_UP/DN_BASE to txdesc_dma=%pad\n",
+		&eth->txdesc_dma);
+}
+
+/*
  * Register the sw netdev MAC across the CPU-port destination tables.
  *
  * Stock's pp_pm RAM[12] holds 4 distinct "CPU MAC" addresses (last byte
@@ -3577,29 +3614,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 		/* Replay pp_pm flow_info/sub_ram from stock snapshot */
 		zx_pp_pm_apply_replay(eth);
 
-		/* CRITICAL fix 2026-05-24: bulk replay above overwrote TM[+0xF0]
-		 * (the RX descriptor base address) with stock's value 0x4ff1f000
-		 * which points at stock's DDR. Mainline's rxdesc_dma is in CMA at
-		 * a totally different address. Re-write our value so HW writes RX
-		 * to our buffer (not random kernel memory). */
-		{
-			int inst;
-			for (inst = 0; inst < TM_NUM_INSTANCES; inst++) {
-				u32 base = inst * TM_INSTANCE_STRIDE;
-				tm_write(eth, base + 0xF0, eth->rxdesc_dma);
-			}
-			dev_dbg(dev, "Re-wrote TM[+0xF0] x%d instances to rxdesc_dma=%pad (was overwritten by bulk replay)\n",
-				 TM_NUM_INSTANCES, &eth->rxdesc_dma);
-		}
-		/* CRITICAL fix 2026-05-24: bulk replay also overwrites
-		 * TM[0x10050] (TX_UP_BASE) = 0x4ffdf000 and TM[0x10060] (TX_DN_BASE)
-		 * = 0x4ffef000 — both stock DDR addresses. HW was reading TX desc
-		 * from random kernel memory, seeing invalid descs, dropping all TX.
-		 * Re-write to our txdesc_dma so HW reads our actual ring. */
-		tm_write(eth, TM_REG_DMA_TX_UP_BASE, eth->txdesc_dma);
-		tm_write(eth, TM_REG_DMA_TX_DN_BASE, eth->txdesc_dma);
-		dev_dbg(dev, "Re-wrote TM[0x10050/0x10060] TX_UP/DN_BASE = txdesc_dma=%pad (was overwritten by bulk replay)\n",
-			 &eth->txdesc_dma);
+		zx_eth_repoint_tm_descriptors(eth);
 
 		dev_info(dev, "TM ready: IRQ=%d, sw netdev up, CPU MAC + CLA + pp_pm replay done\n",
 			 eth->irq_tm);
