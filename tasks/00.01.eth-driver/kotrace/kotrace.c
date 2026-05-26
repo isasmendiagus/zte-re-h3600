@@ -220,6 +220,7 @@ static unsigned int wait_secs = 0;
 #include <linux/timer.h>
 #include <linux/jiffies.h>
 #include <linux/delay.h>
+#include <linux/stop_machine.h>
 static void (*p_touch_all_softlockup_watchdogs)(void);
 static void (*p_touch_softlockup_watchdog)(void);
 static struct timer_list kotrace_wdt_timer;
@@ -596,6 +597,25 @@ static unsigned long find_sym_in_mod(struct module *mod, const char *name)
 /* set_memory_rw / set_memory_ro: take a *page-aligned* virtual address
  * and a *page count*. On ARM 4.1.25 with vmalloc'd module memory.
  */
+/* Atomic per-fn patch helper. When stop_patch=1, this runs inside
+ * stop_machine() so cpu1 is paused while we mutate the first insn —
+ * eliminates the race where cpu1 reads a half-written instruction
+ * during our branch+flush_icache window. */
+struct kotrace_patch_args {
+	u32 *func_p;
+	u32  branch;
+	unsigned long func;
+};
+static int kotrace_patch_one_atomic(void *data)
+{
+	struct kotrace_patch_args *a = data;
+	*a->func_p = a->branch;
+	flush_icache_range(a->func, a->func + 4);
+	return 0;
+}
+
+static unsigned int stop_patch = 1;   /* default ON */
+
 static int make_text_writable(unsigned long addr)
 {
 	return p_set_memory_rw(addr & PAGE_MASK, 1);
@@ -734,8 +754,15 @@ static void patch_module(struct module *mod,
 			uart_puts("  (skip: set_memory_rw failed)\n");
 			continue;
 		}
-		*func_p = branch;
-		flush_icache_range(func, func + 4);
+		if (stop_patch) {
+			struct kotrace_patch_args pa = {
+				.func_p = func_p, .branch = branch, .func = func
+			};
+			stop_machine(kotrace_patch_one_atomic, &pa, NULL);
+		} else {
+			*func_p = branch;
+			flush_icache_range(func, func + 4);
+		}
 		make_text_readonly(func);
 
 		/* Record for rmmod-time restoration. Drop silently if full. */
@@ -1176,6 +1203,8 @@ module_param(patch_pct, uint, 0644);
 MODULE_PARM_DESC(patch_pct, "Per-module percentage cap (0-100). Default 100.");
 module_param_string(patch_pct_per, patch_pct_per, sizeof(patch_pct_per), 0644);
 MODULE_PARM_DESC(patch_pct_per, "CSV overrides per module: name:pct,name:pct,...");
+module_param(stop_patch, uint, 0644);
+MODULE_PARM_DESC(stop_patch, "EXPERIMENT: use stop_machine() during patch write (1=safe, default)");
 module_param(wait_secs, uint, 0644);
 MODULE_PARM_DESC(wait_secs, "EXPERIMENT: sleep N s with 500ms UART heartbeat BEFORE patching (0=off)");
 module_param_named(wdt_pet, kotrace_wdt_enabled, int, 0644);

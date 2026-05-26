@@ -80,8 +80,11 @@ INJECT_BLOCK = (
     "# If yes, escalate (next iter adds switch at 50%, then plat, etc).\n"
     "# Iter A2: only idmfdb (no zx_ponreg). zx_ponreg=100% caused reset.\n"
     "# Try idmfdb at 100% alone (81 targets, isolated module).\n"
-    "# Iter A3: 5% of idmfdb (= 4 patches). Bisect down: if reset, try 2 (1 patch).\n"
-    "/sbin/kinsmod /kmodule/kotrace.ko patch_pct=0 patch_pct_per=idmfdb:5 patch_skip=zx_mdio_read,zx_mdio_write\n"
+    "# Iter B: SAME load as iter A2 (idmfdb at 100%, ~49 patches) but with\n"
+    "# stop_machine=1 (default in this kotrace build) which pauses cpu1\n"
+    "# during each patch's instruction-write+flush_icache so cpu1 can't\n"
+    "# read a half-written insn. If iter A2 reset was a race, this boots.\n"
+    "/sbin/kinsmod /kmodule/kotrace.ko patch_pct=0 patch_pct_per=idmfdb:100 patch_skip=zx_mdio_read,zx_mdio_write\n"
 )
 
 

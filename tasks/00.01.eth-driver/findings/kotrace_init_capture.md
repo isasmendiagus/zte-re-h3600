@@ -156,6 +156,26 @@ The wdt-pet timer code stays in kotrace.c (no-ops when symbols are
 absent; harmless) as a marker for future work, in case a kernel
 build with softlockup ever gets used.
 
+### stop_machine() per-patch (2026-05-26)
+
+Hypothesis: the silent reset that hits ~9–49 patches into idmfdb/
+zx_ponreg is the well-known race "cpu1 reads instruction mid-write
+on cpu0". Fix: bracket the actual `*func_p = branch; flush_icache`
+in `stop_machine()` so cpu1 is paused.
+
+Implementation: `stop_machine(kotrace_patch_one_atomic, &args, NULL)`
+gated by `stop_patch` module param (default ON). Builds clean.
+
+Result: **device still resets at 49 patches of idmfdb**. Identical
+behavior to the race-unsafe version. So the race wasn't the cause —
+the reset is the THUNK ITSELF doing something wrong when invoked
+during init context (corrupting register, taking too long for IRQ
+deadlines, mis-restoring an insn).
+
+Conclusion: making the patch atomic isn't enough. The thunk needs
+to be made safer (smaller, faster, register-clean) for init context.
+That's a larger refactor — deferred.
+
 ### Post-boot rmmod for init-replay (2026-05-26)
 
 `rmmod mt7915` from netshell (after `ifconfig wlan0/wlan5g0 down`)
