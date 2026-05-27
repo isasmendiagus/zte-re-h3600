@@ -194,6 +194,53 @@ def wait_for_uboot_prompt(timeout=180, start_offset=0):
     Returns True on success, False on timeout."""
     return wait_for_marker("=>", timeout=timeout, start_offset=start_offset)
 
+
+# Failure markers that mean the command is hung or failing — we can
+# abort early instead of waiting the full timeout. Specifically:
+#   "Retry count exceeded" → U-Boot's TFTP gave up after N retries
+#   "TIMEOUT_ERR"           → some U-Boot builds use this
+# We also detect repeated "T " (timeout marker per packet) but only
+# treat them as failure if they exceed a threshold — a few Ts on a
+# normal transfer are tolerated.
+UBOOT_FAIL_MARKERS = ("Retry count exceeded", "TIMEOUT_ERR")
+UBOOT_T_THRESHOLD = 15  # consecutive 'T ' markers tolerated before declaring failure
+
+
+def wait_for_uboot_prompt_or_fail(timeout=180, start_offset=0):
+    """Poll bridge log for either the '=>' prompt OR a failure marker.
+
+    Returns one of:
+      'prompt'    — command completed, '=>' found
+      'tftp_fail' — TFTP retry-exceeded or excessive 'T ' markers (>15)
+      'timeout'   — neither marker within the deadline
+
+    Used by run_uboot_seq when wait_for_prompt=True + retry_on_tftp_fail=True
+    so the caller can re-send the command on transient TFTP timeouts (a
+    known intermittent on this device, especially right after a DTR
+    reset when ARP isn't fully settled)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with open(LOG, "rb") as f:
+                f.seek(start_offset)
+                data = f.read()
+            if b"=>" in data:
+                return "prompt"
+            for fm in UBOOT_FAIL_MARKERS:
+                if fm.encode() in data:
+                    return "tftp_fail"
+            # Count consecutive T-with-space patterns from the latest run.
+            # TFTP failures print "T T T T " in a row.
+            t_runs = max((len(s) // 2 for s in data.split(b"\n")
+                          if s.count(b"T ") >= UBOOT_T_THRESHOLD),
+                         default=0)
+            if t_runs >= UBOOT_T_THRESHOLD:
+                return "tftp_fail"
+        except FileNotFoundError:
+            pass
+        time.sleep(0.3)
+    return "timeout"
+
 # Common preamble: set IPs + big TFTP blocksize (default 512B → 143 KiB/s; 1468 → >1 MiB/s)
 _PREAMBLE = [
     ("",                                    1),  # newline to wake prompt
@@ -203,7 +250,8 @@ _PREAMBLE = [
 ]
 
 def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False,
-                  wait_for_prompt=False, prompt_timeout=180):
+                  wait_for_prompt=False, prompt_timeout=180,
+                  retry_on_tftp_fail=True, max_retries=3):
     """Run a list of (cmd, wait_seconds) tuples on a UART already at the
     U-Boot prompt. Caller is responsible for: opening `ser`, doing the
     DTR reset, and driving cspstart prompts to U-Boot.
@@ -218,14 +266,20 @@ def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False,
 
     If `wait_for_prompt=True`, after each non-empty command the function
     polls the bridge log for the '=>' prompt return (using
-    `wait_for_uboot_prompt`) instead of sleeping for the fixed
+    `wait_for_uboot_prompt_or_fail`) instead of sleeping for the fixed
     `wait_seconds`. The per-command tuple's second element is still
     respected — if the prompt-wait succeeds we move on immediately; if
-    the prompt-wait times out (limited by `prompt_timeout`) we fall back
-    to the fixed wait. This makes the helper safe to use for variable-
-    duration commands like `tftp` / `erase` / `nand write` without
-    racing into the next command. Note: do NOT pass wait_for_prompt=True
-    for `bootm` — that command doesn't return to a prompt."""
+    the prompt-wait times out we fall back to the fixed wait. This makes
+    the helper safe to use for variable-duration commands like `tftp` /
+    `erase` / `nand write` without racing into the next command. Note:
+    do NOT pass wait_for_prompt=True for `bootm` — that command doesn't
+    return to a prompt.
+
+    If `retry_on_tftp_fail=True` (default), commands that contain 'tftp'
+    will be auto-re-sent up to `max_retries` times if a TFTP failure
+    marker is detected (`Retry count exceeded`, excessive 'T '
+    timeouts). Common cause: ARP not yet settled right after a DTR
+    reset, or transient packet loss."""
     log_open_mode = "ab" if append else "wb"
     fout = open(LOG, log_open_mode)
     stop = threading.Event()
@@ -233,32 +287,58 @@ def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False,
     t.start()
     time.sleep(0.5)
 
-    full_cmds = (list(_PREAMBLE) if not skip_preamble else []) + list(cmds)
-    for cmd, wait in full_cmds:
+    def _send_and_wait(cmd, wait, attempt=1):
+        """Send one command and (optionally) wait for prompt return.
+        Returns 'ok' on success, 'tftp_fail' for caller-handled retry,
+        or 'timeout' on giving up."""
         label = repr(cmd) if cmd else "<empty newline wake>"
+        attempt_str = f" [attempt {attempt}]" if attempt > 1 else ""
         if wait_for_prompt and cmd:
-            print(f">>> [uboot] {label}  (wait for '=>' prompt, up to {prompt_timeout}s)",
+            print(f">>> [uboot] {label}  (wait for '=>' prompt, up to {prompt_timeout}s){attempt_str}",
                   flush=True)
         else:
-            print(f">>> [uboot] {label}  (wait {wait}s)", flush=True)
+            print(f">>> [uboot] {label}  (wait {wait}s){attempt_str}", flush=True)
 
-        # Capture log offset BEFORE sending the command so the search for
-        # the '=>' prompt doesn't match stale prompts from earlier output.
         offset_before = _log_size() if wait_for_prompt and cmd else None
         send_slow(ser, cmd)
 
         if wait_for_prompt and cmd:
-            # Let the command line echo into the log, then wait for the
-            # NEXT '=>' which is the prompt return.
             time.sleep(0.5)
-            if wait_for_uboot_prompt(timeout=prompt_timeout,
-                                     start_offset=offset_before):
-                # Prompt returned cleanly — move on without extra sleep.
-                continue
+            status = wait_for_uboot_prompt_or_fail(timeout=prompt_timeout,
+                                                   start_offset=offset_before)
+            if status == "prompt":
+                return "ok"
+            if status == "tftp_fail":
+                return "tftp_fail"
             print(f"[run_uboot_seq] timeout waiting for prompt after {cmd!r}, "
                   f"falling back to fixed sleep ({wait}s)", flush=True)
+            return "timeout"
 
         time.sleep(wait)
+        return "ok"
+
+    full_cmds = (list(_PREAMBLE) if not skip_preamble else []) + list(cmds)
+    for cmd, wait in full_cmds:
+        attempt = 1
+        while True:
+            status = _send_and_wait(cmd, wait, attempt)
+            if status == "ok" or status == "timeout":
+                break
+            if status == "tftp_fail" and retry_on_tftp_fail and "tftp" in cmd:
+                if attempt >= max_retries:
+                    print(f"[run_uboot_seq] tftp failed after {max_retries} attempts, giving up",
+                          flush=True)
+                    break
+                attempt += 1
+                print(f"[run_uboot_seq] tftp failure marker detected — retrying ({attempt}/{max_retries})",
+                      flush=True)
+                # Brief pause to let U-Boot get back to its prompt cleanly
+                # before resending. The "Retry count exceeded; starting again"
+                # message means U-Boot is already auto-retrying — we wait a
+                # beat then send a fresh tftp command.
+                time.sleep(3)
+                continue
+            break
 
     stop.set()
     t.join()
