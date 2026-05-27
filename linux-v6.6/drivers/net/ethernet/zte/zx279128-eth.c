@@ -2511,7 +2511,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 	/* Check each of 8 RX queues for pending descriptors */
 	for (q = 0; q < TM_NUM_RX_QUEUES && done < budget; q++) {
 		u32 status = tm_read(e, TM_RX_QCNT_BASE + q * 4);
-		u32 pending = status & 0xFFFF;	/* low 16 = pending */
+		u32 pending = status >> 16;	/* high 16 = pending (stock pon_tm_net_poll uses raw>>16) */
 		u32 take, n, ack = 0;
 
 		if (!pending) {
