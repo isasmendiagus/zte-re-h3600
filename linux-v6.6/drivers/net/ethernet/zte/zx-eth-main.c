@@ -2679,6 +2679,40 @@ static irqreturn_t zx_tm_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+/* [A07] PON aggregate IRQ handler — mirrors stock zx_pon_int (plat:7657).
+ *
+ * Reads pon[0x40040] & ~pon[0x40044] (status AND-NOT mask = pending+enabled
+ * bits). Stock dispatches bit 6 → lp_isr, bit 4 → rog_onu_flag. We don't
+ * have those sub-handlers wired yet, so this is a minimal stub: read +
+ * log + return IRQ_HANDLED. The READ itself is the ack — leaving status
+ * unread keeps the level-triggered GIC line asserted.
+ *
+ * Hypothesis (iter14_bit1_ack_not_in_napi_path_2026-05-27.md): the
+ * PON aggregate IRQ has a TX-related event (bit 7 in mask = unmasked)
+ * that mainline never services. Without service, the HW TX consume
+ * engine may stall waiting for a SW handshake.
+ */
+static irqreturn_t zx_pon_irq(int irq, void *dev_id)
+{
+	struct zx_eth *e = dev_id;
+	u32 status, mask, pending;
+	static u32 pon_irq_count;
+
+	if (!e->pon_early)
+		return IRQ_NONE;
+
+	status = readl(e->pon_early + 0x40040);
+	mask   = readl(e->pon_early + 0x40044);
+	pending = status & ~mask;
+
+	pon_irq_count++;
+	if (pon_irq_count < 8)
+		dev_info(e->dev, "[A07/PON_IRQ#%u] status=%#x mask=%#x pending=%#x\n",
+			 pon_irq_count, status, mask, pending);
+
+	return IRQ_HANDLED;
+}
+
 /* ============================================================
  *   "sw" netdev — what stock calls pon_tm_netdev[0]
  * ============================================================
@@ -4186,6 +4220,23 @@ static int zx_eth_probe(struct platform_device *pdev)
 	err = zx_eth_init_tm_subsystem(eth, pdev);
 	if (err)
 		goto err_napi;
+
+	/* [A07] Register PON aggregate IRQ — stock's register_pon_int
+	 * equivalent. Mainline previously fetched irq_pon from DT but
+	 * never requested it; the level-triggered GIC line would assert
+	 * for any pending bit in pon[0x40040] AND ~pon[0x40044] and stay
+	 * asserted with no service. Optional in DT (skip cleanly if absent).
+	 */
+	if (eth->irq_pon > 0) {
+		err = devm_request_irq(dev, eth->irq_pon, zx_pon_irq, 0,
+				       DRV_NAME "-pon", eth);
+		if (err)
+			dev_warn(dev, "[A07] PON IRQ %d request failed: %d (continuing)\n",
+				 eth->irq_pon, err);
+		else
+			dev_info(dev, "[A07] PON IRQ %d registered\n",
+				 eth->irq_pon);
+	}
 
 	/* PHY power-up (LDO + TX DAC) + attach to sw netdev for link-state
 	 * tracking. Must run AFTER zx_eth_init_tm_subsystem so e->sw_dev is
