@@ -131,6 +131,8 @@
 
 /* ===== TM (Traffic Manager) — CPU↔switch path (the REAL one for ethernet) ===== */
 #define TM_OFF			0x180000	/* npp_base + 0x180000 = 0x92340000 */
+#define TM_INSTANCE_STRIDE	0x400	/* TM has 4 schedulers + 5 BMU instances at this stride */
+#define TM_NUM_INSTANCES	4	/* used by zx_tm_pre_init / zx_tm_post_bmu */
 #define TM_REG_BPPE_BASE	0x00E8	/* BPPE physical addr in DDR */
 #define TM_REG_JUMBO_BPPE_BASE	0x00EC
 #define TM_REG_BP_BUFFER_BASE	0x00F4
@@ -1681,7 +1683,8 @@ static int zx_tm_alloc_pools(struct zx_eth *e)
 
 	/* Populate BPPE: stock writes byteswapped u16 indices 0..N-1.
 	 * Each entry says "BP slot index". HW pulls these one at a time when
-	 * RX needs a buffer.
+	 * RX needs a buffer. Verified vs stock pon_tm_bmu_init decomp:5694 —
+	 * loop trace: bppe[0]=0, bppe[i]=bswap16(i) for all i.
 	 */
 	bppe = (u16 *)e->bppe_cpu;
 	for (i = 0; i < TM_BPPE_POOL_SIZE; i++)
@@ -1713,53 +1716,85 @@ static void zx_tm_free_pools(struct zx_eth *e)
 	e->bppe_cpu = e->bp_cpu = e->rxdesc_cpu = e->txdesc_cpu = e->dndesc_cpu = NULL;
 }
 
+/* Five BMU instances at TM[0x8000 + N * 0x400] for N in 0..4. Stock
+ * register snapshot + stock_table.h replay shows all five enabled with
+ * identical config. The HW alloc engine routes per-port to whichever
+ * instance services that port — if any instance is unconfigured, its
+ * BPPE table is empty → "pool empty" alloc failure even when other
+ * instances have buffers. Per bmu_protocol_deep_re.md candidate #1.
+ *
+ * All instances share the SAME bppe_dma / bp_dma (one CMA region
+ * services them all). The per-instance regs are at:
+ *   base + 0x00E8 BPPE_BASE
+ *   base + 0x00EC JUMBO_BPPE_BASE
+ *   base + 0x00F4 BP_BUFFER_BASE
+ *   base + 0x00F8 JUMBO_BP_BUFFER_BASE
+ *   base + 0x00FC BP_SIZE / JUMBO_BP_SIZE
+ *   base + 0x8000 BMU_INIT (enable)
+ *   base + 0x8004 CTRL1
+ *   base + 0x8008 CTRL2
+ *   base + 0x8048 POOL_SIZE producer cursor
+ *   base + 0x804C JUMBO_POOL_SIZE
+ *   base + 0x8058 BUCKETS_M1
+ *   base + 0x805C JUMBO_BUCK
+ */
+#define TM_NUM_BMU_INSTANCES   5
+
 /* pon_tm_bmu_init equivalent — register pool addrs + sizes with BMU */
 static void zx_tm_bmu_init(struct zx_eth *e)
 {
-	/* BP/BPPE base physical addresses */
-	tm_write(e, TM_REG_BPPE_BASE,       e->bppe_dma);
-	tm_write(e, TM_REG_JUMBO_BPPE_BASE, e->bppe_dma);  /* no jumbo for now */
-	tm_write(e, TM_REG_BP_BUFFER_BASE,  e->bp_dma);
-	tm_write(e, TM_REG_BP_JUMBO_BASE,   e->bp_dma);
-	/* Stock: low16=BP_SIZE=0x900, high16=JUMBO_BP_SIZE=0x2800 */
-	tm_write(e, TM_REG_BP_SIZE,
-		 (TM_BP_SIZE & 0xFFFF) | ((TM_JUMBO_BP_SIZE & 0xFFFF) << 16));
+	int inst;
 
-	/* BMU control regs (from pon_tm_bmu_init RE) */
-	tm_write(e, TM_REG_BMU_INIT,        0);
-	tm_write(e, TM_REG_BMU_CTRL,        0x104C040);
-	tm_write(e, TM_REG_BMU_CTRL2,       0x104C040);
+	for (inst = 0; inst < TM_NUM_BMU_INSTANCES; inst++) {
+		u32 base = inst * TM_INSTANCE_STRIDE;
 
-	/* Pool sizes: high 16 = total, low 16 = (runtime) consumed */
-	tm_write(e, TM_REG_BMU_POOL_SIZE,   TM_BPPE_POOL_SIZE << 16);
-	tm_write(e, TM_REG_BMU_JUMBO_POOL,  0);  /* no jumbo */
+		/* BP/BPPE base physical addresses — all 5 instances point at
+		 * the same shared CMA region.
+		 */
+		tm_write(e, base + TM_REG_BPPE_BASE,       e->bppe_dma);
+		tm_write(e, base + TM_REG_JUMBO_BPPE_BASE, e->bppe_dma);
+		tm_write(e, base + TM_REG_BP_BUFFER_BASE,  e->bp_dma);
+		tm_write(e, base + TM_REG_BP_JUMBO_BASE,   e->bp_dma);
+		tm_write(e, base + TM_REG_BP_SIZE,
+			 (TM_BP_SIZE & 0xFFFF) |
+			 ((TM_JUMBO_BP_SIZE & 0xFFFF) << 16));
 
-	/* tm[0x8058] = BMU bucket count, stock formula (POOL_SIZE>>5)-1.
-	 * Stock LIVE = 0x100 (256). With our POOL_SIZE=1024 the formula
-	 * gives 31. Mainline previously wrote POOL_SIZE directly (1024 =
-	 * 0x400) — 13x too large. HW indexes were past actual buckets,
-	 * causing BMU state corruption. Iter 18 RE'd 2026-05-27.
-	 */
-	tm_write(e, TM_REG_BMU_BUCKETS_M1,  (TM_BPPE_POOL_SIZE >> 5) - 1);
-	tm_write(e, TM_REG_BMU_JUMBO_BUCK,  0);
+		/* BMU sub-block control regs (per-instance) */
+		tm_write(e, base + TM_REG_BMU_INIT,        0);
+		tm_write(e, base + TM_REG_BMU_CTRL,        0x104C040);
+		tm_write(e, base + TM_REG_BMU_CTRL2,       0x104C040);
 
-	/* tm[0x8040] is BMU live cursor (head/tail in high/low 16). Read-only
-	 * status — stock never writes to it (pon_tm_bmu_init does not touch
-	 * this reg per static_analysis_plat_zxylzb_init.md fn-16). Removing
-	 * the spurious zero-write here.
-	 */
+		/* Pool sizes: high 16 = total, low 16 = runtime consumed */
+		tm_write(e, base + TM_REG_BMU_POOL_SIZE,   TM_BPPE_POOL_SIZE << 16);
+		tm_write(e, base + TM_REG_BMU_JUMBO_POOL,  0);
 
-	dev_info(e->dev, "TM BMU init: pool_size=%d, bp_size=%d, bppe@%pad\n",
-		 TM_BPPE_POOL_SIZE, TM_BP_SIZE, &e->bppe_dma);
+		/* BUCKETS_M1: stock formula (POOL_SIZE>>5)-1 = 31 for POOL=1024 */
+		tm_write(e, base + TM_REG_BMU_BUCKETS_M1,  (TM_BPPE_POOL_SIZE >> 5) - 1);
+		tm_write(e, base + TM_REG_BMU_JUMBO_BUCK,  0);
+	}
+
+	dev_info(e->dev, "TM BMU init: %d instances configured, pool_size=%d, bp_size=%d, bppe@%pad\n",
+		 TM_NUM_BMU_INSTANCES, TM_BPPE_POOL_SIZE, TM_BP_SIZE,
+		 &e->bppe_dma);
 }
 
-/* pon_tm_bmu_enable — turns the BMU on. Without this it stays idle. */
+/* pon_tm_bmu_enable — turn on all 5 BMU instances. Without this they
+ * stay idle.
+ */
 static void zx_tm_bmu_enable(struct zx_eth *e)
 {
-	tm_write(e, TM_REG_BMU_INIT, 1);
-	dev_info(e->dev, "TM BMU enabled: tm[0x8000]=%#x 0x8058=%#x 0x8048=%#x 0x8090=%#x\n",
+	int inst;
+
+	for (inst = 0; inst < TM_NUM_BMU_INSTANCES; inst++) {
+		u32 base = inst * TM_INSTANCE_STRIDE;
+
+		tm_write(e, base + TM_REG_BMU_INIT, 1);
+	}
+	dev_info(e->dev, "TM BMU enabled (%d instances): tm[0x8000]=%#x tm[0x8400]=%#x tm[0x9000]=%#x\n",
+		 TM_NUM_BMU_INSTANCES,
 		 tm_read(e, TM_REG_BMU_INIT),
-		 tm_read(e, 0x8058), tm_read(e, 0x8048), tm_read(e, 0x8090));
+		 tm_read(e, 0x400 + TM_REG_BMU_INIT),
+		 tm_read(e, 0x1000 + TM_REG_BMU_INIT));
 }
 
 /* Register a MAC as a CPU port destination in the ONU MAC table.
@@ -2131,8 +2166,6 @@ static void zx_register_cpu_mac(struct zx_eth *e, u8 slot, const u8 *mac)
  * pon_tm_int_init only writes instance 0..3 explicitly; the rest is HW
  * mirroring and writing to instances 4..15 hangs the FPGA IRQ path.
  */
-#define TM_INSTANCE_STRIDE 0x400
-#define TM_NUM_INSTANCES   4
 static void zx_tm_pre_init(struct zx_eth *e)
 {
 	int inst;
