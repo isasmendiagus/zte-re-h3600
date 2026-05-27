@@ -2585,11 +2585,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 						dev_info(e->dev, "LOOPBACK drop #%u src=%pM dst=%pM ethertype=%04x len=%u ingress=%d\n",
 							 e->tm_rx_loopback_drops, src + 6, src,
 							 ntohs(*(__be16 *)(src + 12)), len, ingress_port);
-					/* BMU free on drops DISABLED — RX wedged in test
-					 * suspect still double-frees the same
-					 * way as the unconditional call. Pool leak is slow
-					 * (~30 BPs/min) so acceptable for now.
-					 */
+					zx_bmu_free_bp(e, bppe_idx, 0);
 				} else {
 					struct sk_buff *skb = netdev_alloc_skb(e->sw_dev, len + 64);
 
@@ -2617,15 +2613,15 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 						 */
 					}
 				}
-				/* DO NOT call zx_bmu_free_bp here. Empirical test
-				 * ALLOC_BPCNT=15864, RLS_BPCNT=15893 →
-				 * HW was already releasing more than allocating, so
-				 * our explicit free was DOUBLE-freeing, corrupting the
-				 * pool and killing RX entirely (100% loss). HW must
-				 * auto-recycle BPs when zx_tm_release_rx_desc is acked.
-				 * Stock pon_tm_net_poll's pp_bmu_free_bp may apply only
-				 * to a different RX path (jumbo/PON-side?). TBD.
+				/* Release BP back to BMU pool — stock NAPI calls
+				 * pp_bmu_free_bp once per descriptor (delivered OR
+				 * dropped). Without this the pool exhausts: validated
+				 * 2026-05-27 via stock-vs-mainline BMU register diff
+				 * (mainline alloc 17912 / rls 15946, pool bppe_cnt=0)
+				 * + stock BMU-disable repro of mainline syndrome.
+				 * Per Phase 53 finding doc.
 				 */
+				zx_bmu_free_bp(e, bppe_idx, 0);
 			}
 			e->rx_head[q] = (idx + 1) & (TM_RX_DESC_PER_Q - 1);
 			done++;
