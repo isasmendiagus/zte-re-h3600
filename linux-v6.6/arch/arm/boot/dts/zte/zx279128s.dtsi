@@ -69,6 +69,16 @@
 			clocks = <&osc24m>;
 		};
 
+		/* PL310 L2 cache controller. Currently DISABLED — stock kernel
+		 * runtime-patches __l2c210_op_pa_range via patch.ko to work
+		 * around a vendor-specific PL310 erratum. Until that erratum is
+		 * identified and mirrored (DT property or kernel patch), we keep
+		 * L2 off. ARM Cortex-A9 runs fine on L1-only; ~30-50% perf hit
+		 * but no correctness impact. Driver's DMA path uses
+		 * dma_alloc_coherent (uncached) so L2 state doesn't gate I/O.
+		 * Re-enable once patch.ko RE is complete.
+		 * See findings/iter18_l2_pl310_disabled_2026-05-27.md.
+		 */
 		l2cc: cache-controller@c00000 {
 			compatible = "arm,pl310-cache";
 			reg = <0x00c00000 0x1000>;
@@ -76,6 +86,7 @@
 			cache-level = <2>;
 			arm,data-latency = <2 2 2>;
 			arm,tag-latency = <2 2 2>;
+			status = "disabled";
 		};
 
 		uart0: serial@94404000 {
