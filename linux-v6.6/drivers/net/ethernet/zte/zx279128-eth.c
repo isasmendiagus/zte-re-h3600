@@ -1898,7 +1898,8 @@ static int zx_tm_port_isolate_set(struct zx_eth *e, u32 port, u32 mask)
  * shift = (proto & 7) * 2 within the same register, stride 5 per port. */
 static int zx_spa_set_enty_pktdeal_cfg(struct zx_eth *e, u8 port, u8 proto, u8 action)
 {
-	if (proto > 0x46) return -EINVAL;  /* table has 71 protos */
+	if (proto > 0x46)               /* table has 71 protos */
+		return -EINVAL;
 	return zx_table_write(e, zx_sparegtable, ZX_SPAREGTABLE_COUNT,
 			      67 + proto, action, port);
 }
@@ -3035,8 +3036,9 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 		const u32 *bp = (const u32 *)e->bp_cpu;
 		u32 nz = 0;
 
-		for (i = 0; i < (524288/4); i++)
-			if (bp[i]) nz++;
+		for (i = 0; i < (524288 / 4); i++)
+			if (bp[i])
+				nz++;
 		seq_printf(s, "bp area: %u non-zero words (size 524288B)\n", nz);
 	}
 	if (e->bp_cpu) {
@@ -3148,7 +3150,10 @@ static ssize_t zx_mem_read(struct file *file, char __user *ubuf,
 		if (!tmp)
 			return -ENOMEM;
 		memcpy_fromio(tmp, e->base + *ppos, count);
-		if (copy_to_user(ubuf, tmp, count)) { kfree(tmp); return -EFAULT; }
+		if (copy_to_user(ubuf, tmp, count)) {
+			kfree(tmp);
+			return -EFAULT;
+		}
 		kfree(tmp);
 	}
 	*ppos += count;
