@@ -4014,6 +4014,31 @@ static void zx_eth_iounmap_action(void *iomem)
 }
 
 /*
+ * [A03] zx_pon_reset(eth, mask) — mirror of stock plat:7744 pon_reset.
+ *
+ * Stock decomp:
+ *   pon_base[8] &= ~mask;
+ *   udelay (100x __delay);
+ *   pon_base[8] |= mask;
+ *
+ * Stock calls pon_reset(0xffffffff) at the start of init_module —
+ * cycles every bit of pon_base[8], triggering a transient HW reset
+ * pulse for all sub-blocks under pon_base.
+ *
+ * Previously deferred (Iter 5) because pon_reset wipes the SERDES
+ * state. Now safe to add because A06 (zx_pon_clk_reset_init) runs
+ * immediately after and re-establishes the SERDES band calibration.
+ */
+static void zx_pon_reset(struct zx_eth *e, u32 mask)
+{
+	u32 cur = readl(e->pon_early + 8);
+
+	writel(cur & ~mask, e->pon_early + 8);
+	udelay(200);                          /* stock: 100x __delay ≈ 200us */
+	writel(cur | mask,  e->pon_early + 8);
+}
+
+/*
  * [A06a] SERDES register defaults — mirror of stock plat:8231
  * `reg_def_set`. Pokes 24 default values into pon_serdes_base[0..0x17].
  * This is the "factory" SERDES register baseline that stock writes
@@ -4350,6 +4375,16 @@ static void zx_eth_init_pon_chip(struct zx_eth *eth)
 	struct device *dev = eth->dev;
 	int rc;
 
+	/* [A03] pon_reset(0xffffffff) + 10ms settle. Cycles every bit of
+	 * pon_base[8], triggering a HW reset pulse for the pon sub-blocks.
+	 * Now safe because A06 (zx_pon_clk_reset_init) runs immediately
+	 * after to re-establish the SERDES state that pon_reset wipes.
+	 */
+	zx_pon_reset(eth, 0xffffffffU);
+	msleep(10);
+	dev_info(dev, "[A03] pon_reset(0xffffffff) done. pon[8]=0x%08x\n",
+		 readl(eth->pon_early + 8));
+
 	/* [A05] pon_base + 0x4001c = 0xf (purpose unknown; stock sets it
 	 * unconditionally right before tm_pon_tm_init). Live mainline read
 	 * before this commit was 0; matches stock value of 0xf.
@@ -4359,9 +4394,9 @@ static void zx_eth_init_pon_chip(struct zx_eth *eth)
 	dev_info(dev, "PON chip pre-init: pon[0x4001c]=0x%08x (stock=0xf)\n",
 		 readl(eth->pon_early + 0x4001c));
 
-	/* [A06d] Full SERDES bring-up — replaces the previous individual
-	 * A06a + A06b calls (those are now invoked inside zx_pon_clk_reset_init
-	 * in the proper order, between TOPCRM[8] cycle steps). */
+	/* [A06d] Full SERDES bring-up — must run immediately after A03 to
+	 * re-establish the band calibration that pon_reset just wiped.
+	 */
 	rc = zx_pon_clk_reset_init(eth, 1);
 	if (rc)
 		dev_warn(dev, "[A06] zx_pon_clk_reset_init returned %d — SERDES may be uncalibrated\n",
