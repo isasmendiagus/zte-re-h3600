@@ -133,15 +133,21 @@ static irqreturn_t zte_gephy_handle_interrupt(struct phy_device *phydev)
 {
 	int status;
 
-	/* Read the status reg to clear the latch and learn the new link
-	 * state. Stock reads twice (latch clear then settled) but the
-	 * second read is only needed to capture the new state for the
-	 * tasklet — phy_trigger_machine here will queue a state-machine
-	 * run which does its own read via the standard MII_BMSR path.
+	/* Stock pattern: read 0x1a TWICE. First read returns the latched
+	 * pending state and ARMS the clear; second read returns the
+	 * settled state and actually clears the latch. A single read
+	 * leaves the latch asserted, the GIC line stays high
+	 * (level-triggered), the handler re-enters immediately → infinite
+	 * IRQ storm on any PHY whose internal status bit is asserted
+	 * (e.g. unconnected PHY[3] on LAN4 firing 14.6M times in 70s).
+	 *
+	 * Cross-ref: phy_irq_state_machine_2026-05-27.md confirms stock
+	 * runs ~3 IRQs per cable transition; we were running ~80k/sec.
 	 */
 	status = phy_read(phydev, ZTE_GEPHY_STATUS_REG);
 	if (status < 0)
 		return IRQ_NONE;
+	(void)phy_read(phydev, ZTE_GEPHY_STATUS_REG);  /* settle + clear */
 
 	phy_trigger_machine(phydev);
 	return IRQ_HANDLED;
