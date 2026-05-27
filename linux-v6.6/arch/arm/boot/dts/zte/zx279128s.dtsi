@@ -186,19 +186,25 @@
 		 */
 		eth: ethernet@921c0000 {
 			compatible = "zte,zx279128s-eth";
-			reg = <0x92000000 0x1c0000>,	/* pon */
-			      <0x921c0000 0x200000>;	/* npp+tm+pp+idm */
-			reg-names = "pon", "npp";
+			reg = <0x92000000 0x1c0000>,	/* pon (MAC[0..4]) */
+			      <0x921c0000 0x200000>,	/* npp + tm + pp + idm */
+			      <0x94100000 0x1000>,	/* sys_ctrl (gap [A02]) */
+			      <0x94200000 0x1000>,	/* pin_mux  (gap [A02]) */
+			      <0x9fe00000 0x100000>;	/* pon_serdes (gap [A02]) */
+			reg-names = "pon", "npp", "sys_ctrl", "pin_mux", "pon_serdes";
 			/* IRQs verified against stock + sibling DTS:
+			 *   PON main : GIC_SPI 0x42 (66) — pon (defensive, 0 fires on stock)
 			 *   NPP main : GIC_SPI 0x23 (35) — pon_npp
 			 *   TM       : GIC_SPI 0x24 (36) — pon_tm = CPU↔switch traffic ⭐
-			 *   PP       : GIC_SPI 0x25 (37) — pon_pp (not used)
+			 *   PP       : GIC_SPI 0x25 (37) — pon_pp (defensive)
 			 *   IDM      : GIC_SPI 0x26 (38) — WiFi forwarding only
 			 */
 			interrupts = <GIC_SPI 0x26 IRQ_TYPE_LEVEL_HIGH>,	/* idm */
 				     <GIC_SPI 0x23 IRQ_TYPE_LEVEL_HIGH>,	/* npp */
-				     <GIC_SPI 0x24 IRQ_TYPE_LEVEL_HIGH>;	/* tm */
-			interrupt-names = "idm", "npp", "tm";
+				     <GIC_SPI 0x24 IRQ_TYPE_LEVEL_HIGH>,	/* tm */
+				     <GIC_SPI 0x42 IRQ_TYPE_LEVEL_HIGH>,	/* pon  (gap [A07]) */
+				     <GIC_SPI 0x25 IRQ_TYPE_LEVEL_HIGH>;	/* pp   (gap [A08]) */
+			interrupt-names = "idm", "npp", "tm", "pon", "pp";
 			zte,topcrm = <&topcrm>;
 			/* Phase 14: phylink-style PHY handles. We list all four
 			 * GePHYs so the driver can call phy_init_hw() on each
