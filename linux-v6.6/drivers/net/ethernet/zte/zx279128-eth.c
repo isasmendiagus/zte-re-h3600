@@ -3793,6 +3793,14 @@ static int zx_eth_init_tm_subsystem(struct zx_eth *eth,
 	zx_tm_post_bmu(eth);
 	zx_tm_bmu_enable(eth);
 
+	/* [A04] TM[0xc008] = 0. Stock plat:7080 — single write inside
+	 * tm_pon_tm_init right after pon_tm_bmu_enable, purpose unknown
+	 * but consistently present. Live mainline read before this was 0
+	 * already (uninitialized HW default), so this is defensive parity
+	 * with stock.
+	 */
+	tm_write(eth, 0xc008, 0);
+
 	err = zx_sw_netdev_create(eth);
 	if (err) {
 		dev_err(dev, "sw netdev create failed: %d\n", err);
@@ -4005,6 +4013,40 @@ static void zx_eth_iounmap_action(void *iomem)
 	iounmap((void __iomem *)iomem);
 }
 
+/*
+ * [A05] Chip-level small writes — equivalent to a tiny subset of stock
+ * plat-zxylzb_9128S init_module's pre-TM writes.
+ *
+ * Called from probe AFTER ioremap of pon_early + extras, BEFORE the
+ * stock_table.h replay.
+ *
+ * DEFERRED (gap [A03] and others):
+ *   pon_reset(0xffffffff) — TESTED in iter 5, BREAKS warm-boot inheritance:
+ *     it clears SERDES band ena + band coarse + rxpll lock + PLL band
+ *     ready, all of which warm-boot inherits from stock kernel's prior
+ *     run. Adding pon_reset without the matching zx_pon_clk_reset_init
+ *     (gap [A06]) leaves the SERDES uncalibrated. Bundle A03 + A06 in
+ *     a single iter when we port the SERDES bring-up.
+ *   pon_base + 0x40018 = 2 (residue from warm boot)
+ *   pon_base + 0x40044 = 0xffffff7f (IRQ mask — same residue case)
+ *
+ * Skipped writes (low priority — deferred to later iters):
+ *   register_pon_int(), zx_pon_clk_reset_init() — full SERDES bring-up
+ */
+static void zx_eth_init_pon_chip(struct zx_eth *eth)
+{
+	struct device *dev = eth->dev;
+
+	/* [A05] pon_base + 0x4001c = 0xf (purpose unknown; stock sets it
+	 * unconditionally right before tm_pon_tm_init). Live mainline read
+	 * before this commit was 0; matches stock value of 0xf.
+	 */
+	writel(0xf, eth->pon_early + 0x4001c);
+
+	dev_info(dev, "PON chip pre-init: pon[0x4001c]=0x%08x (stock=0xf)\n",
+		 readl(eth->pon_early + 0x4001c));
+}
+
 static int zx_eth_init_topcrm(struct zx_eth *eth)
 {
 	struct device *dev = eth->dev;
@@ -4115,6 +4157,12 @@ static int zx_eth_probe(struct platform_device *pdev)
 	err = zx_eth_init_extra_mmio(eth, pdev);
 	if (err)
 		return err;
+
+	/* [A03][A05] Chip-level pon_reset + small writes, before the bulk
+	 * stock_table.h replay touches NPP/PP/TM regs. Stock init_module
+	 * does these between of_iomap and tm_pon_tm_init.
+	 */
+	zx_eth_init_pon_chip(eth);
 
 	zx_eth_apply_stock_init(eth);
 
