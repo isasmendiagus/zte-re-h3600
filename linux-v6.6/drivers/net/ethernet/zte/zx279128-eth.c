@@ -4063,6 +4063,45 @@ static void zx_serdes_apply_defaults(struct zx_eth *e)
 }
 
 /*
+ * [A06b] SERDES mode = 1 (standard GE) — mirror of stock plat:7924
+ * `serdes_mode_set(1)`. 7 read-modify-write operations on
+ * pon_serdes_base[0, 2, 5, 8, 9]. Stock decomp:
+ *
+ *   *pon_serdes_base    = (val & 0xffffff00) | 0xa5;       [0x00] byte 0 = 0xa5
+ *   pon_serdes_base[2]  = (val & 0xffffff00) | 0x20;       [0x08]
+ *   pon_serdes_base[5]  = (val & 0xffff00ff) | 0x5800;     [0x14]
+ *   pon_serdes_base[8]  = (val & 0xffffff);                [0x20] clear bits 24-31
+ *   pon_serdes_base[9]  = (val & 0xffffff00) | 0x03;       [0x24]
+ *   pon_serdes_base[9]  = (val & 0xff00ffff) | 0x570000;
+ *   pon_serdes_base[9]  = (val & 0xffffff)   | 0x07000000;
+ *
+ * Stock has a mode=3 branch too (different writes), but the kernel
+ * init only calls with mode=1 — we skip mode=3.
+ */
+static void zx_serdes_mode_set_1(struct zx_eth *e)
+{
+	void __iomem *s;
+	u32 v;
+
+	if (!e->pon_serdes) {
+		dev_dbg(e->dev, "[A06b] pon_serdes not mapped — skipping mode set\n");
+		return;
+	}
+	s = e->pon_serdes;
+
+	v = readl(s + 0x00); writel((v & 0xffffff00) | 0xa5,     s + 0x00);
+	v = readl(s + 0x08); writel((v & 0xffffff00) | 0x20,     s + 0x08);
+	v = readl(s + 0x14); writel((v & 0xffff00ff) | 0x5800,   s + 0x14);
+	v = readl(s + 0x20); writel(v & 0x00ffffff,              s + 0x20);
+	v = readl(s + 0x24); writel((v & 0xffffff00) | 0x03,     s + 0x24);
+	v = readl(s + 0x24); writel((v & 0xff00ffff) | 0x570000, s + 0x24);
+	v = readl(s + 0x24); writel((v & 0x00ffffff) | 0x07000000, s + 0x24);
+
+	dev_info(e->dev, "[A06b] SERDES mode=1 set. pon_serdes[0x00]=0x%08x [0x24]=0x%08x\n",
+		 readl(s + 0x00), readl(s + 0x24));
+}
+
+/*
  * [A05] Chip-level small writes — equivalent to a tiny subset of stock
  * plat-zxylzb_9128S init_module's pre-TM writes.
  *
@@ -4099,10 +4138,15 @@ static void zx_eth_init_pon_chip(struct zx_eth *eth)
 	 * zx_pon_clk_reset_init bring-up. Safe to call alone: it only
 	 * writes the 24 default register values stock writes via
 	 * reg_def_set; no clock toggling, no PLL state change.
-	 * Subsequent A06 sub-iters add mode-select + waits + band cal
-	 * to complete the SERDES bring-up.
 	 */
 	zx_serdes_apply_defaults(eth);
+
+	/* [A06b] SERDES mode = 1 (standard GE). Stock calls this with
+	 * arg=1 from zx_pon_clk_reset_init, AFTER reg_def_set. The
+	 * mode bits select the SERDES into GE mode rather than other
+	 * line rates the silicon also supports.
+	 */
+	zx_serdes_mode_set_1(eth);
 }
 
 static int zx_eth_init_topcrm(struct zx_eth *eth)
