@@ -1856,11 +1856,10 @@ static int zx_cla_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 	return zx_cla_wait_done(e);
 }
 
-/* Refactor #38 Phase 1: use embedded static table instead of
- * firmware_request("zx-replay/cla.bin"). Bit-identical writes — verified
- * by comparing the generated zx_cla_table.h against the in-tree partial
- * zx279128-eth-cla-regs.h. The firmware_request for cla.bin can be made
- * optional in a follow-up commit once this is proven not to regress.
+/* CLA RAM init: walk a captured (ram_id, addr, 17-word payload) array
+ * and write each one through the CLA command register sequence. Static
+ * embedded data — no firmware_request — see zx_cla_table.h header for
+ * the regeneration command.
  */
 #include "zx_cla_table.h"
 
