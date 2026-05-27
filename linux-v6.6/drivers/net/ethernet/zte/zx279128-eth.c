@@ -3723,9 +3723,9 @@ static void zx_eth_repoint_tm_descriptors(struct zx_eth *eth)
 		TM_NUM_INSTANCES, &eth->rxdesc_dma);
 
 	tm_write(eth, TM_REG_DMA_TX_UP_BASE, eth->txdesc_dma);
-	tm_write(eth, TM_REG_DMA_TX_DN_BASE, eth->txdesc_dma);
-	dev_dbg(dev, "Re-wrote TM TX_UP/DN_BASE to txdesc_dma=%pad\n",
-		&eth->txdesc_dma);
+	tm_write(eth, TM_REG_DMA_TX_DN_BASE, eth->dndesc_dma);
+	dev_dbg(dev, "Re-wrote TM TX_UP=%pad DN=%pad\n",
+		&eth->txdesc_dma, &eth->dndesc_dma);
 }
 
 /*
