@@ -174,7 +174,7 @@
  * Masking bit 1 entirely is a known-safe stop-gap pending proper TX-completion
  * reclaim. See tasks/00.01.eth-driver/findings/ping_bidi_irq_storm_2026-05-27.md.
  */
-#define TM_IRQ_ARM_BITS		0x01		/* bit 0 (RX) only */
+#define TM_IRQ_ARM_BITS		0x01		/* bit 0 (RX) only — bit 1 (TX) needs ack mechanism, see iter13_tm_bit1_storm_2026-05-27.md */
 
 /* Stock prints `BPPE_POOL_SIZE=2000` in `pon init` = 0x2000 = 8192. Match
  * stock to avoid buffer exhaustion under sustained traffic (boot UART capture, mainline_eth/captures/boot_init.log).
