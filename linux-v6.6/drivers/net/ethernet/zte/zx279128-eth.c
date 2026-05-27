@@ -1008,7 +1008,7 @@ static void zx_pp_init(struct zx_eth *e)
 	writel(0x00000fff, pp + 0x0020);	/* port mask */
 	writel(0x00000106, pp + 0x0024);
 	writel(0x01070104, pp + 0x0028);
-	writel(0x00000106, pp + 0x002c);	/* CPU FWD base; OR'd below */
+	writel(0x00000106 | PP_CPU_FWD_BIT, pp + 0x002c);	/* CPU FWD enabled (bit 25) */
 	writel(0x00000101, pp + 0x0030);
 	writel(0x00010001, pp + 0x0034);
 	writel(0x00000106, pp + 0x003c);
