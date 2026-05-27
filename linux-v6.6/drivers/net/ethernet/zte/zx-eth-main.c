@@ -1734,17 +1734,20 @@ static void zx_tm_bmu_init(struct zx_eth *e)
 	tm_write(e, TM_REG_BMU_POOL_SIZE,   TM_BPPE_POOL_SIZE << 16);
 	tm_write(e, TM_REG_BMU_JUMBO_POOL,  0);  /* no jumbo */
 
-	/* tm[0x8058] = number of BPPE slots. Stock runtime = 0x100 = 256
-	 * (captured via regtracer on running stock).
+	/* tm[0x8058] = BMU bucket count, stock formula (POOL_SIZE>>5)-1.
+	 * Stock LIVE = 0x100 (256). With our POOL_SIZE=1024 the formula
+	 * gives 31. Mainline previously wrote POOL_SIZE directly (1024 =
+	 * 0x400) — 13x too large. HW indexes were past actual buckets,
+	 * causing BMU state corruption. Iter 18 RE'd 2026-05-27.
 	 */
-	tm_write(e, TM_REG_BMU_BUCKETS_M1,  TM_BPPE_POOL_SIZE);
+	tm_write(e, TM_REG_BMU_BUCKETS_M1,  (TM_BPPE_POOL_SIZE >> 5) - 1);
 	tm_write(e, TM_REG_BMU_JUMBO_BUCK,  0);
 
-	/* tm[0x8040] = BPPI ptr. Stock value 0x00c50076 looks like a runtime
-	 * cursor (low 16 = head, high 16 = tail). Init the head to 0 so HW
-	 * starts pulling BPPE entries from slot 0.
+	/* tm[0x8040] is BMU live cursor (head/tail in high/low 16). Read-only
+	 * status — stock never writes to it (pon_tm_bmu_init does not touch
+	 * this reg per static_analysis_plat_zxylzb_init.md fn-16). Removing
+	 * the spurious zero-write here.
 	 */
-	tm_write(e, 0x8040, 0);
 
 	dev_info(e->dev, "TM BMU init: pool_size=%d, bp_size=%d, bppe@%pad\n",
 		 TM_BPPE_POOL_SIZE, TM_BP_SIZE, &e->bppe_dma);
