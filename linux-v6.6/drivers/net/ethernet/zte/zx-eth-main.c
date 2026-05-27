@@ -301,14 +301,19 @@ struct zx_eth {
 	int irq_pon;
 	int irq_pp;
 
-	/* TM subsystem (CPU↔switch via "sw" netdev) */
+	/* TM subsystem (CPU↔switch via "sw" netdev).
+	 * All TM DMA structures (BPPE, BP pool, RX desc, UP/DN TX desc) live in
+	 * the carved 64 MiB region at phys 0x4C000000 (memremap'd here). Stock
+	 * places them at fixed offsets — see iter20 finding doc.
+	 */
 	struct napi_struct tm_napi;
 	struct net_device *sw_dev;
-	void *bppe_cpu;		dma_addr_t bppe_dma;	/* u16 index array */
-	void *bp_cpu;		dma_addr_t bp_dma;	/* BP backing store */
-	void *rxdesc_cpu;	dma_addr_t rxdesc_dma;	/* 8 queues * N * 16B */
-	void *txdesc_cpu;	dma_addr_t txdesc_dma;	/* 1024 * 16B TM TX UP (RX-from-switch) desc ring */
-	void *dndesc_cpu;	dma_addr_t dndesc_dma;	/* 1024 * 16B TM TX DN (CPU-to-switch) desc ring — stock keeps UP/DN distinct */
+	void __iomem *carved_va;	/* memremap_wc(0x4C000000, 64 MiB) */
+	void *bppe_cpu;		dma_addr_t bppe_dma;	/* u16 index array (carved offset) */
+	void *bp_cpu;		dma_addr_t bp_dma;	/* BP backing store (carved offset) */
+	void *rxdesc_cpu;	dma_addr_t rxdesc_dma;	/* RX desc ring (carved offset) */
+	void *txdesc_cpu;	dma_addr_t txdesc_dma;	/* TX UP desc ring (carved offset) */
+	void *dndesc_cpu;	dma_addr_t dndesc_dma;	/* TX DN desc ring (carved offset) */
 	u32 tx_head;		/* current TX desc write index (0..1023) */
 	spinlock_t tm_tx_lock;
 	u32 rx_head[TM_NUM_RX_QUEUES];
@@ -1645,37 +1650,71 @@ static inline void tm_and(struct zx_eth *e, u32 off, u32 mask)
 	tm_write(e, off, tm_read(e, off) & mask);
 }
 
-/* Allocate DMA-coherent regions for BPPE pool, BP backing store, RX desc rings.
- * Stock uses reserved DDR (0x4E700000), we use CMA-backed coherent for now —
- * total <2MB which fits within default CMA.
+/* [Iter 20] Carved 64 MiB region at phys 0x4C000000. Stock kernel uses
+ * mem=192M to hide this from the kernel allocator; we replicate via
+ * reserved-memory DT + direct memremap_wc (bypassing dma_alloc_coherent
+ * because the kernel doesn't manage this region — it's outside `mem=192M`).
+ * Carved layout matches stock per agent 3 vmlinux RE:
+ *   +0x00020000  ACL RAM    (4 MiB, zeroed before BMU enable)
+ *   +0x00420000  Flow RAM   (1 MiB, zeroed)
+ *   +0x02700000  BPPE table (128 KiB region)
+ *   +0x02C20000  BP buffer pool
+ *   +0x03F1F000  TM RX desc ring
+ *   +0x03FDF000  TM TX UP desc ring
+ *   +0x03FEF000  TM TX DN desc ring
  */
+#define CARVED_BASE_PHYS	0x4C000000UL
+#define CARVED_SIZE		(64UL * 1024 * 1024)
+#define CARVED_ACL_OFF		0x00020000UL
+#define CARVED_ACL_SIZE		(4UL * 1024 * 1024)
+#define CARVED_FLOW_OFF		0x00420000UL
+#define CARVED_FLOW_SIZE	(1UL * 1024 * 1024)
+#define CARVED_BPPE_OFF		0x02700000UL
+#define CARVED_BP_OFF		0x02C20000UL
+#define CARVED_RXDESC_OFF	0x03F1F000UL
+#define CARVED_TXUP_OFF		0x03FDF000UL
+#define CARVED_TXDN_OFF		0x03FEF000UL
+
 static int zx_tm_alloc_pools(struct zx_eth *e)
 {
-	size_t bppe_sz = TM_BPPE_POOL_SIZE * sizeof(u16);
-	size_t bp_sz   = TM_BPPE_POOL_SIZE * TM_BP_SIZE;
-	/* RX desc area: HW expects UP ring at base+0, DN ring at base+0x10000.
-	 * With 1024 descs/queue × 8 queues × 16B = 128KB per ring; need 256KB total
-	 * but stock used 64KB offset between rings... use 0x40000 to be safe.
-	 */
-	size_t desc_sz = 0x40000;
+	void __iomem *base;
 	u16 *bppe;
 	int i;
 
-	e->bppe_cpu = dma_alloc_coherent(e->dev, bppe_sz, &e->bppe_dma, GFP_KERNEL);
-	e->bp_cpu   = dma_alloc_coherent(e->dev, bp_sz,   &e->bp_dma,   GFP_KERNEL);
-	e->rxdesc_cpu = dma_alloc_coherent(e->dev, desc_sz, &e->rxdesc_dma, GFP_KERNEL);
-	/* TM TX desc ring: 1024 × 16 B. UP and DN are TWO physically distinct
-	 * rings (stock keeps them 0x10000 apart in carved RAM at 0x4FFD/E F000).
-	 * Sharing the address between TM[0x10050] (UP) and TM[0x10060] (DN)
-	 * makes HW conclude the ring is "full" after ~24 entries and stop
-	 * asserting TM[0x100] bit 0 — IRQ never fires, NAPI never runs.
+	/* memremap_wc the entire 64 MiB carved region. WC = write-combine,
+	 * uncached. CPU writes go directly to DDR via the write buffer; HW
+	 * DMA reads see fresh data without cache flush. Same model stock uses.
 	 */
-	e->txdesc_cpu = dma_alloc_coherent(e->dev, TM_TX_RING_SIZE * TM_TX_DESC_SIZE,
-					   &e->txdesc_dma, GFP_KERNEL);
-	e->dndesc_cpu = dma_alloc_coherent(e->dev, TM_TX_RING_SIZE * TM_TX_DESC_SIZE,
-					   &e->dndesc_dma, GFP_KERNEL);
-	if (!e->bppe_cpu || !e->bp_cpu || !e->rxdesc_cpu || !e->txdesc_cpu || !e->dndesc_cpu)
+	base = memremap(CARVED_BASE_PHYS, CARVED_SIZE, MEMREMAP_WC);
+	if (!base) {
+		dev_err(e->dev, "memremap_wc(0x%lx, %lu MiB) failed\n",
+			CARVED_BASE_PHYS, CARVED_SIZE / (1024 * 1024));
 		return -ENOMEM;
+	}
+	e->carved_va = base;
+	dev_info(e->dev, "carved region: phys 0x%lx + %lu MiB → va %p\n",
+		 CARVED_BASE_PHYS, CARVED_SIZE / (1024 * 1024), base);
+
+	/* Zero ACL RAM (4 MiB) — stock tm.ko aclRamInit equivalent. Without
+	 * this the classifier rules match random data → frames misrouted.
+	 * Also zero Flow RAM (1 MiB).
+	 */
+	memset_io(base + CARVED_ACL_OFF, 0, CARVED_ACL_SIZE);
+	memset_io(base + CARVED_FLOW_OFF, 0, CARVED_FLOW_SIZE);
+	dev_info(e->dev, "carved: zeroed ACL RAM (4 MiB @+0x%lx) + Flow RAM (1 MiB @+0x%lx)\n",
+		 CARVED_ACL_OFF, CARVED_FLOW_OFF);
+
+	/* Pool entity layout: cpu (virt) = base + off; dma (phys) = CARVED + off. */
+	e->bppe_cpu   = (void *)(base + CARVED_BPPE_OFF);
+	e->bppe_dma   = CARVED_BASE_PHYS + CARVED_BPPE_OFF;
+	e->bp_cpu     = (void *)(base + CARVED_BP_OFF);
+	e->bp_dma     = CARVED_BASE_PHYS + CARVED_BP_OFF;
+	e->rxdesc_cpu = (void *)(base + CARVED_RXDESC_OFF);
+	e->rxdesc_dma = CARVED_BASE_PHYS + CARVED_RXDESC_OFF;
+	e->txdesc_cpu = (void *)(base + CARVED_TXUP_OFF);
+	e->txdesc_dma = CARVED_BASE_PHYS + CARVED_TXUP_OFF;
+	e->dndesc_cpu = (void *)(base + CARVED_TXDN_OFF);
+	e->dndesc_dma = CARVED_BASE_PHYS + CARVED_TXDN_OFF;
 	e->tx_head = 0;
 	spin_lock_init(&e->tm_tx_lock);
 	spin_lock_init(&e->bmu_free_lock);
@@ -1690,29 +1729,19 @@ static int zx_tm_alloc_pools(struct zx_eth *e)
 	for (i = 0; i < TM_BPPE_POOL_SIZE; i++)
 		bppe[i] = cpu_to_be16(i);
 
-	dev_info(e->dev, "TM pools: bppe=%pad (%zu B), bp=%pad (%zu B), rxdesc=%pad (%zu B)\n",
-		 &e->bppe_dma, bppe_sz, &e->bp_dma, bp_sz,
-		 &e->rxdesc_dma, desc_sz);
+	dev_info(e->dev, "TM pools (carved): bppe@%pad, bp@%pad, rxdesc@%pad, txup@%pad, txdn@%pad\n",
+		 &e->bppe_dma, &e->bp_dma, &e->rxdesc_dma,
+		 &e->txdesc_dma, &e->dndesc_dma);
 	return 0;
 }
 
 static void zx_tm_free_pools(struct zx_eth *e)
 {
-	if (e->bppe_cpu)
-		dma_free_coherent(e->dev, TM_BPPE_POOL_SIZE * sizeof(u16),
-				  e->bppe_cpu, e->bppe_dma);
-	if (e->bp_cpu)
-		dma_free_coherent(e->dev, TM_BPPE_POOL_SIZE * TM_BP_SIZE,
-				  e->bp_cpu, e->bp_dma);
-	if (e->rxdesc_cpu)
-		dma_free_coherent(e->dev, 0x40000,
-				  e->rxdesc_cpu, e->rxdesc_dma);
-	if (e->txdesc_cpu)
-		dma_free_coherent(e->dev, TM_TX_RING_SIZE * TM_TX_DESC_SIZE,
-				  e->txdesc_cpu, e->txdesc_dma);
-	if (e->dndesc_cpu)
-		dma_free_coherent(e->dev, TM_TX_RING_SIZE * TM_TX_DESC_SIZE,
-				  e->dndesc_cpu, e->dndesc_dma);
+	/* Carved region — single memremap; no per-block dma_free. */
+	if (e->carved_va) {
+		memunmap(e->carved_va);
+		e->carved_va = NULL;
+	}
 	e->bppe_cpu = e->bp_cpu = e->rxdesc_cpu = e->txdesc_cpu = e->dndesc_cpu = NULL;
 }
 
