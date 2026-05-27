@@ -1204,19 +1204,46 @@ static void zx_pp_init(struct zx_eth *e)
  */
 static void zx_smac_init_port(struct zx_eth *e, int port)
 {
-	writel(0xBAE003,   e->base + mac_off(port, MAC_REG_CONTROL));
-	writel(0xFFFF,     e->base + mac_off(port, MAC_REG_IRQ_MASK));
-	writel(0x80000001, e->base + mac_off(port, MAC_REG_ENABLE));
-	{
-		u32 v = readl(e->base + mac_off(port, MAC_REG_D00));
+	void __iomem *mac = e->base + mac_off(port, 0);
 
-		writel(v & ~0x2, e->base + mac_off(port, MAC_REG_D00));
+	writel(0xBAE003,   mac + MAC_REG_CONTROL);
+	writel(0xFFFF,     mac + MAC_REG_IRQ_MASK);
+	writel(0x80000001, mac + MAC_REG_ENABLE);
+	{
+		u32 v = readl(mac + MAC_REG_D00);
+
+		writel(v & ~0x2, mac + MAC_REG_D00);
 	}
 	{
-		u32 v = readl(e->base + mac_off(port, MAC_REG_D30));
+		u32 v = readl(mac + MAC_REG_D30);
 
-		writel(v & ~0x20, e->base + mac_off(port, MAC_REG_D30));
+		writel(v & ~0x20, mac + MAC_REG_D30);
 	}
+
+	/* [Iter 21] Mirror U-Boot's per-port MAC init from FUN_40e50c40 (per
+	 * tasks/00.10.03.re-uboot/findings/static_analysis_uboot_eth.md). These
+	 * are MAC↔PHY interface config (clock/IFG/flow-control) that stock SDK
+	 * hides behind fpga_write_reg abstractions but U-Boot exposes plainly.
+	 * Without them: PHY link UP, but MAC RX counter stays 0 — frames don't
+	 * decode through the MAC.
+	 */
+	writel(0x00011200, mac + 0x0E0);	/* PHY callback config */
+	writel(0x00000032, mac + 0xC20);	/* MAC[N][0xC20] (purpose unknown) */
+	writel(0x000000A8, mac + 0xC50);	/* MAC[N][0xC50] (purpose unknown) */
+	writel(0x00300002, mac + 0x070);	/* IFG / rate config */
+	writel(0x00004000, mac + 0x0B4);	/* MAC[N][0xB4] (purpose unknown) */
+	writel(0x0010FF11, mac + 0xB00);	/* flow control (?) */
+
+	/* Final TX+RX enable — U-Boot ends per-port init with `MAC[N][0] |= 3`.
+	 * Our initial 0xBAE003 write above already has bits 0+1 set, but be
+	 * explicit to match U-Boot's pattern exactly (no functional change).
+	 */
+	{
+		u32 v = readl(mac + MAC_REG_CONTROL);
+
+		writel(v | 0x3, mac + MAC_REG_CONTROL);
+	}
+
 	/* Enable the MAC at NPP level (npp[(port+1)*0x40000] |= 2) */
 	npp_or(e, (port + 1) * MAC_STRIDE, 0x2);
 }
