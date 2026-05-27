@@ -2238,15 +2238,15 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	writel(0x0000001f, pp + 0x8380);
 	writel(0xaaaaaaaa, pp + 0x863c);
 
-	/* SMAC_LOOK_EN — 1 bit per port; was 0xff (all 8 enabled).
-	 * Disable SMAC learn on CPU port (bit 5).
-	 * Hypothesis: switch hairpins our own egress back to CPU port; with
-	 * SMAC learn enabled there, switch updates FDB from the looped-back
-	 * frame (sometimes with src_mac rewritten by switch egress stamping)
-	 * → FDB flap → flood. Disabling CPU-port learn keeps FDB stable.
-	 * LAN ports 0-4,6,7 still learn so external hosts get FDB entries.
+	/* SMAC_LOOK_EN — 1 bit per port. Phase 50 (PING BIDI WORKS) had all
+	 * 8 ports enabled (0xff). A later commit (cf65924ff4) cleared bit 5
+	 * to prevent CPU-port-hairpin FDB flap; that revealed itself as the
+	 * regressor that breaks the host→CPU RX path: clearing bit 5 stops
+	 * the switch from doing source-MAC lookup on frames arriving at the
+	 * CPU port (the path the IRQ-driven NAPI feeds from). Restore to
+	 * 0xff to match stock + Phase 50 baseline.
 	 */
-	writel(ZX_ALL_PORTS_BITMAP & ~ZX_CPU_PORT_BIT, pp + 0x81c0);
+	writel(ZX_ALL_PORTS_BITMAP, pp + 0x81c0);
 
 	writel(0x00005555, pp + 0x81c4);
 	writel(0x0013f434, pp + 0x8188);
