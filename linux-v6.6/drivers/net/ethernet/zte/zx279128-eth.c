@@ -366,6 +366,7 @@ static int zx_brg_wait_ready(struct zx_eth *e)
 {
 	void __iomem *pp = e->base + PP_OFF;
 	int n = 50;
+
 	while (n--) {
 		if (readl(pp + PP_BRG_RAM_READY) & 1)
 			return 0;
@@ -414,6 +415,7 @@ static u16 zx_crc16(const u8 *data, int len)
 {
 	u16 crc = 0;
 	int i, j;
+
 	for (i = 0; i < len; i++) {
 		crc ^= data[i];
 		for (j = 0; j < 8; j++)
@@ -445,6 +447,7 @@ static u16 zx_sbrg_hash(const u8 *mac, u16 vlan)
 	};
 	u16 crc = 0;
 	int i, j;
+
 	for (i = 0; i < 8; i++) {
 		crc ^= ((u16)rev[i]) << 8;
 		for (j = 0; j < 8; j++)
@@ -505,6 +508,7 @@ static int zx_fdb_add(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 	{
 		u32 save_d1 = d1, save_d2 = d2;
 		u32 ex_d1, ex_d2;
+
 		for (slot = 0; slot < 4; slot++) {
 			if (zx_brg_ram_get(e, bucket, slot, &existing, &ex_d1, &ex_d2))
 				return -EBUSY;
@@ -550,6 +554,7 @@ static int zx_fdb_add(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 static int zx_sbrag_wait(struct zx_eth *e)
 {
 	int n = 10;
+
 	while (n-- > 0) {
 		if (readl(e->fpga_base + ZX_SBRAG_BUSY) & 1)
 			return 0;
@@ -675,6 +680,7 @@ static void zx_port_isolate(struct zx_eth *e, u8 port, u8 mask)
 {
 	void __iomem *pp = e->base + PP_OFF;
 	u32 v = readl(pp + PP_BRG_ISOLATE(port));
+
 	writel(v | mask, pp + PP_BRG_ISOLATE(port));
 }
 
@@ -818,21 +824,21 @@ static void zx_pon_tail_lookup_init(struct zx_eth *e)
  * ============================================================ */
 static const u32 zx_tm_per_instance_init_data[64] = {
 	/*  0..*/ 0x4ffeff10, 0x4ec33b10, 0x4ec33b90, 0x4ffeff20,
-	          0x4ec30e10, 0x4ec30e90, 0x4ffeff30, 0x4ec31710,
+		  0x4ec30e10, 0x4ec30e90, 0x4ffeff30, 0x4ec31710,
 	/*  8..*/ 0x4ec31790, 0x4ec2bd10, 0x4ffefee0, 0x4ec2d810,
-	          0x4ffefef0, 0x4ec2fc10, 0x4ffeff00, 0x4ec2f310,
+		  0x4ffefef0, 0x4ec2fc10, 0x4ffeff00, 0x4ec2f310,
 	/* 16..*/ 0x00008010, 0x00020080, 0x00020036, 0x00008010,
-	          0x00020080, 0x00020016, 0x00008010, 0x00020080,
+		  0x00020080, 0x00020016, 0x00008010, 0x00020080,
 	/* 24..*/ 0x00020046, 0x0002002e, 0x00008010, 0x0002002e,
-	          0x00008010, 0x0002002e, 0x00008010, 0x0002002e,
+		  0x00008010, 0x0002002e, 0x00008010, 0x0002002e,
 	/* 32..*/ 0x4ec2c610, 0x4ec2c690, 0x4ff2bd40, 0x4ec34d10,
-	          0x4ec29a10, 0x4ec29a90, 0x4ec29b10, 0x4ff2bd00,
+		  0x4ec29a10, 0x4ec29a90, 0x4ec29b10, 0x4ff2bd00,
 	/* 40..*/ 0x4ec2e110, 0x4ec2e190, 0x4ec2e210, 0x4ff2bd10,
-	          0x4ec2ea10, 0x4ff2bd20, 0x4ec30510, 0x4ff2bd30,
+		  0x4ec2ea10, 0x4ff2bd20, 0x4ec30510, 0x4ff2bd30,
 	/* 48..*/ 0x0000002f, 0x0000002a, 0x00000021, 0x00000028,
-	          0x0000002f, 0x0000002f, 0x00000025, 0x00000021,
+		  0x0000002f, 0x0000002f, 0x00000025, 0x00000021,
 	/* 56..*/ 0x0000002f, 0x0000002f, 0x00000023, 0x00000021,
-	          0x00000028, 0x00000021, 0x00000028, 0x00000021,
+		  0x00000028, 0x00000021, 0x00000028, 0x00000021,
 };
 
 static void zx_tm_per_instance_init(struct zx_eth *e)
@@ -989,8 +995,10 @@ static void zx_pp_init(struct zx_eth *e)
 	 * See tasks/00.10.02.re-stock-kmods/findings/ */
 	{
 		int inst;
+
 		for (inst = 0; inst < 4; inst++) {
 			u32 ibase = 0x0100 + inst * 0x400;
+
 			writel(0x0000000f, pp + ibase + 0x00);
 			writel(0x000242f0, pp + ibase + 0x04);	/* marker */
 			writel(0x00000064, pp + ibase + 0x08);
@@ -1122,10 +1130,12 @@ static void zx_smac_init_port(struct zx_eth *e, int port)
 	writel(0x80000001, e->base + mac_off(port, MAC_REG_ENABLE));
 	{
 		u32 v = readl(e->base + mac_off(port, MAC_REG_D00));
+
 		writel(v & ~0x2, e->base + mac_off(port, MAC_REG_D00));
 	}
 	{
 		u32 v = readl(e->base + mac_off(port, MAC_REG_D30));
+
 		writel(v & ~0x20, e->base + mac_off(port, MAC_REG_D30));
 	}
 	/* Enable the MAC at NPP level (npp[(port+1)*0x40000] |= 2) */
@@ -1214,6 +1224,7 @@ static int zx_idm_init_rx(struct zx_eth *e)
 static void zx_idm_free_rx(struct zx_eth *e)
 {
 	u32 *rx_desc = e->desc_cpu;
+
 	for (int i = 0; i < IDM_RX_RING_SIZE; i++) {
 		if (!e->rx_skb[i])
 			continue;
@@ -1670,6 +1681,7 @@ static void zx_tm_bmu_enable(struct zx_eth *e)
 static int zx_pp_pm_wait_done(struct zx_eth *e)
 {
 	int t = 100;
+
 	while (t-- && !(readl(e->base + PP_PM_REG_DONE) & 1))
 		udelay(50);
 	return t < 0 ? -EBUSY : 0;
@@ -1688,6 +1700,7 @@ static int zx_pp_pm_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 				const u32 data[8])
 {
 	int i;
+
 	if (zx_pp_pm_wait_done(e))
 		return -EBUSY;
 	for (i = 0; i < 4; i++)
@@ -1751,6 +1764,7 @@ static int zx_pp_pm_set_cpu_mac(struct zx_eth *e, u8 slot, const u8 *mac)
 static int zx_cla_wait_done(struct zx_eth *e)
 {
 	int t = 100;
+
 	while (t-- && !(readl(e->base + CLA_REG_DONE) & 1))
 		udelay(5);
 	return t < 0 ? -EBUSY : 0;
@@ -1762,6 +1776,7 @@ static int zx_cla_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 			      const u32 data[17])
 {
 	int i;
+
 	if (zx_cla_wait_done(e))
 		return -EBUSY;
 	for (i = 0; i < 17; i++)
@@ -1809,6 +1824,7 @@ static void zx_cla_apply_replay(struct zx_eth *e)
 static int zx_cla_set_cpu_queue_id(struct zx_eth *e, u32 addr, u8 qid)
 {
 	u32 ram7_data[17] = {0,};
+
 	ram7_data[0] = qid;
 	/* Reuses zx_cla_write_entry: writes data[0..16] then CMD with ram_id<<22.
 	 * For trap_queue setup we only set data[0]=qid, rest 0. */
@@ -1846,6 +1862,7 @@ static int zx_table_write(struct zx_eth *e,
 			  u16 reg_id, u32 val, u32 sub_idx)
 {
 	int rc = zx_fpga_table_write(e->fpga_base, table, n, reg_id, val, sub_idx);
+
 	if (rc < 0)
 		dev_warn_ratelimited(e->dev, "fpga_table_write(%u, val=%#x, sub=%u): %d\n",
 				     reg_id, val, sub_idx, rc);
@@ -1869,7 +1886,7 @@ static int zx_tm_port_isolate_set(struct zx_eth *e, u32 port, u32 mask)
 	u32 inv = ~mask;
 	u32 hw  = ((inv >> 5) & 1u)
 		| ((inv << 1) & 0x3eu)
-		| ( inv       & 0xc0u);
+		| (inv       & 0xc0u);
 	return zx_table_write(e, zx_sbragregtable,
 			      ZX_SBRAGREGTABLE_COUNT, 57, hw, port);
 }
@@ -1896,11 +1913,13 @@ static int zx_spa_set_enty_pktdeal_cfg(struct zx_eth *e, u8 port, u8 proto, u8 a
 static void zx_chip_tm_init_pro_action(struct zx_eth *e)
 {
 	int port, i, ok = 0, fail = 0;
+
 	for (port = 0; port < 8; port++) {
 		for (i = 0; i < ZX_PP_PRO_ACTION_COUNT; i++) {
 			/* Most entries are symmetric PP0 == PP1; we use PP0 action.
 			 * proto 0x14 differs (PP0=1, PP1=0) — pick the trap variant. */
 			u8 action = zx_pp_pro_actions[i].action_pp0;
+
 			if (zx_spa_set_enty_pktdeal_cfg(e, port, zx_pp_pro_actions[i].proto, action) == 0)
 				ok++;
 			else
@@ -1922,8 +1941,10 @@ static void zx_chip_tm_init_pro_action(struct zx_eth *e)
 static void zx_chip_tm_init_isolate(struct zx_eth *e)
 {
 	int p;
+
 	for (p = 0; p < 8; p++) {
 		int rc = zx_tm_port_isolate_set(e, p, 0xffffff00u | (1u << p));
+
 		if (rc)
 			dev_warn(e->dev, "isolate port %d: %d\n", p, rc);
 	}
@@ -1938,8 +1959,10 @@ static void zx_chip_tm_init_trap_queues(struct zx_eth *e)
 	for (i = 0; i < ZX_DEF_PTL_PKT_MAP_COUNT; i++) {
 		u8 ptype = zx_def_ptl_pkt_map[i].ptype;
 		u8 qid   = zx_def_ptl_pkt_map[i].qid0;	/* bank 0 only for now */
+
 		for (port = 0; port < 8; port++) {
 			u32 addr;
+
 			if (port == 5)
 				continue;	/* CPU port — skip */
 			addr = ptype | zx_pkt_port_addr_offset[port];
@@ -1960,6 +1983,7 @@ static void zx_register_cpu_mac(struct zx_eth *e, u8 slot, const u8 *mac)
 		  ((u32)mac[4] << 8)  | mac[5];
 	u32 high = ((u32)mac[0] << 8) | mac[1];
 	void __iomem *spa = e->base + ZX_SPA_ONU_MAC_BASE + slot * 8;
+
 	writel(low,  spa + 0);
 	writel(high, spa + 4);
 	zx_pp_pm_set_cpu_mac(e, slot, mac);
@@ -1988,8 +2012,10 @@ static void zx_register_cpu_mac(struct zx_eth *e, u8 slot, const u8 *mac)
 static void zx_tm_pre_init(struct zx_eth *e)
 {
 	int inst;
+
 	for (inst = 0; inst < TM_NUM_INSTANCES; inst++) {
 		u32 base = inst * TM_INSTANCE_STRIDE;
+
 		tm_write(e, base + 0x000, 0x00000140);	/* master config */
 		tm_write(e, base + 0x004, 0x00000010);
 		tm_write(e, base + 0x104, 0xfffffffc);	/* IRQ mask, bits 0,1 unmasked */
@@ -2011,6 +2037,7 @@ static int zx_red_set_queue_cfg(struct zx_eth *e, u16 q_idx, u32 type,
 				u32 w0, u32 w1, u32 w2, u32 w3)
 {
 	int retries;
+
 	for (retries = 0; retries < 20; retries++)
 		if (tm_read(e, 0x4018) & 1)
 			break;
@@ -2058,6 +2085,7 @@ static void zx_tm_red_init(struct zx_eth *e)
 static void zx_pp_ctrl_init(struct zx_eth *e)
 {
 	void __iomem *pp = e->fpga_base + 0x380000;
+
 	writel(0x01070104, pp + 0x28);
 	writel(0x00000002, pp + 0x00);
 	msleep(52);
@@ -2137,8 +2165,10 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	 * approximate "set vlan 0 and 1 entries to 0x1FFFF" via brg_ram_set. */
 	{
 		int vlan;
+
 		for (vlan = 0; vlan <= 1; vlan++) {
 			int retries;
+
 			for (retries = 0; retries < 50; retries++)
 				if (readl(pp + 0x8018) & 1)
 					break;
@@ -2179,6 +2209,7 @@ static void zx_pp_brg_init(struct zx_eth *e)
 static void zx_tm_post_bmu(struct zx_eth *e)
 {
 	int inst;
+
 	for (inst = 0; inst < TM_NUM_INSTANCES; inst++) {
 		u32 base = inst * TM_INSTANCE_STRIDE;
 		/* Descriptor base address — only one buffer pool, use same for all instances. */
@@ -2191,6 +2222,7 @@ static void zx_tm_post_bmu(struct zx_eth *e)
 	{
 		u32 *d = (u32 *)e->rxdesc_cpu;
 		int i;
+
 		for (i = 0; i < 1024; i++)
 			d[i] = 0xDEAD0000u | (u32)i;
 		dma_wmb();
@@ -2312,6 +2344,7 @@ static int zx_bmu_free_bp(struct zx_eth *e, u16 bp_idx, u8 is_pon);
 static void zx_tm_release_rx_desc_raw(struct zx_eth *e, u8 q, u16 count, u8 sop)
 {
 	int t = 100;
+
 	while (t-- && (tm_read(e, 0x4064) & 1))
 		udelay(2);
 	if (t < 0) {
@@ -2378,8 +2411,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 			 * (delivered all-zero garbage to Linux). */
 			u16 bppe_idx = ((u16)(desc[7] >> 1)) |
 				       ((u16)desc[8] << 7);
-			RXCP(e, 4, "q=%d desc[%u] @%p: len=%u bppe=%u "
-			          "raw[0..7]=%02x %02x %02x %02x %02x %02x %02x %02x",
+			RXCP(e, 4, "q=%d desc[%u] @%p: len=%u bppe=%u raw[0..7]=%02x %02x %02x %02x %02x %02x %02x %02x",
 			     q, idx, desc, len, bppe_idx,
 			     desc[0], desc[1], desc[2], desc[3],
 			     desc[4], desc[5], desc[6], desc[7]);
@@ -2416,6 +2448,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 				/* Per-ingress counter for empirical CPU-loopback port id */
 				{
 					int slot = (ingress_port + 1) & 0x1F;
+
 					e->tm_rx_per_ingress[slot]++;
 				}
 				if (e->sw_dev && !memcmp(src + 6, e->sw_dev->dev_addr, 6)) {
@@ -2423,13 +2456,14 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 					if (e->tm_rx_loopback_drops <= 5)
 						dev_info(e->dev, "LOOPBACK drop #%u src=%pM dst=%pM ethertype=%04x len=%u ingress=%d\n",
 							 e->tm_rx_loopback_drops, src + 6, src,
-							 ntohs(*(__be16*)(src + 12)), len, ingress_port);
+							 ntohs(*(__be16 *)(src + 12)), len, ingress_port);
 					/* BMU free on drops DISABLED — RX wedged in test
 					 * suspect still double-frees the same
 					 * way as the unconditional call. Pool leak is slow
 					 * (~30 BPs/min) so acceptable for now. */
 				} else {
 					struct sk_buff *skb = netdev_alloc_skb(e->sw_dev, len + 64);
+
 					if (skb) {
 						skb_reserve(skb, 32);
 						memcpy(skb_put(skb, len), src, len);
@@ -2439,10 +2473,9 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 						netif_receive_skb(skb);
 						e->tm_rx_count++;
 						if (e->tm_rx_count <= 10) {
-							dev_info(e->dev, "TM RX q=%d idx=%u len=%u bppe=%u "
-								 "src=%pM dst=%pM ethertype=%04x ingress=%d delivered\n",
+							dev_info(e->dev, "TM RX q=%d idx=%u len=%u bppe=%u src=%pM dst=%pM ethertype=%04x ingress=%d delivered\n",
 								 q, idx, len, bppe_idx,
-								 src + 6, src, ntohs(*(__be16*)(src + 12)),
+								 src + 6, src, ntohs(*(__be16 *)(src + 12)),
 								 ingress_port);
 						}
 						/* Dynamic FDB learning DISABLED (degradation test).
@@ -2495,7 +2528,7 @@ static irqreturn_t zx_tm_irq(int irq, void *dev_id)
 	e->tm_irq_count++;
 	if (e->tm_irq_count < 5)
 		pr_debug("[ZXETH/TM_IRQ#%u] status=%#x mask=%#x pending=%#x — scheduling NAPI\n",
-		         e->tm_irq_count, status, mask, pending);
+			 e->tm_irq_count, status, mask, pending);
 	/* Mask our bits during NAPI (stock: mask |= 7) */
 	tm_or(e, TM_REG_IRQ_MASK, TM_IRQ_ARM_BITS);
 	napi_schedule(&e->tm_napi);
@@ -2520,7 +2553,9 @@ static void zx_bmu_dump_fn(struct work_struct *w)
 {
 	struct zx_eth *e = zx_bmu_dump_eth;
 	u32 alloc, rls, bppe_avail, bppi, bp_stat, tx_kick, tx_done;
-	if (!e) return;
+
+	if (!e)
+		return;
 	/* Compact one-line dump: most-changing counters for ping-loop correlation */
 	alloc      = tm_read(e, 0x8090);
 	rls        = tm_read(e, 0x8098);
@@ -2530,8 +2565,7 @@ static void zx_bmu_dump_fn(struct work_struct *w)
 	tx_kick    = tm_read(e, 0x10054);
 	tx_done    = tm_read(e, 0x10058);
 	dev_dbg(e->dev,
-		 "STATS uptime_jiff=%lu drv:rx=%u rxlb=%u tx=%u txdrop=%u napi=%u irq=%u "
-		 "hw:alloc=%u rls=%u(diff=%d) bppe_avail=%u bppi=%u bp_stat=%08x "
+		 "STATS uptime_jiff=%lu drv:rx=%u rxlb=%u tx=%u txdrop=%u napi=%u irq=%u hw:alloc=%u rls=%u(diff=%d) bppe_avail=%u bppi=%u bp_stat=%08x "
 		 "tx_kick=%u tx_done=%u\n",
 		 jiffies,
 		 e->tm_rx_count, e->tm_rx_loopback_drops, e->tm_tx_count, e->tm_tx_dropped,
@@ -2545,8 +2579,7 @@ static void zx_bmu_dump_fn(struct work_struct *w)
 	 * loopback source. Drop frames from it to break the amplification
 	 * loop. Slots [0..31] = ingress_port+1 (so slot 0 = ingress -1 "invalid",
 	 * slot 1 = port 0, slot 8 = port 7, etc.). */
-	dev_dbg(e->dev, "STATS rx_per_ingress[]: "
-		 "[ing-1]=%u [0]=%u [1]=%u [2]=%u [3]=%u [4]=%u [5]=%u [6]=%u "
+	dev_dbg(e->dev, "STATS rx_per_ingress[]: [ing-1]=%u [0]=%u [1]=%u [2]=%u [3]=%u [4]=%u [5]=%u [6]=%u "
 		 "[7]=%u [8]=%u [9]=%u [10]=%u [11]=%u [12]=%u [13]=%u\n",
 		 e->tm_rx_per_ingress[0],
 		 e->tm_rx_per_ingress[1],  e->tm_rx_per_ingress[2],
@@ -2742,8 +2775,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 		spin_unlock_irqrestore(&e->tm_tx_lock, flags);
 		/* First failure: emit ONE clean diagnostic via kernel printk */
 		if (e->tm_tx_dropped == 0) {
-			pr_debug("[ZXETH] BMU alloc FAIL #1: 8000=%#x 8014=%#x "
-				 "800c=%#x 8048=%#x 8058=%#x 8080=%#x 8090=%#x\n",
+			pr_debug("[ZXETH] BMU alloc FAIL #1: 8000=%#x 8014=%#x 800c=%#x 8048=%#x 8058=%#x 8080=%#x 8090=%#x\n",
 				 tm_read(e, 0x8000), tm_read(e, 0x8014),
 				 tm_read(e, 0x800c), tm_read(e, 0x8048),
 				 tm_read(e, 0x8058), tm_read(e, 0x8080),
@@ -2803,8 +2835,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 		*(__le16 *)(desc + 12) = cpu_to_le16((len & 0x3fff) << 2);
 
 	dma_wmb();
-	TXCP(e, 5, "desc[0..15]=%02x %02x %02x %02x  %02x %02x %02x %02x  "
-	          "%02x %02x %02x %02x  %02x %02x %02x %02x",
+	TXCP(e, 5, "desc[0..15]=%02x %02x %02x %02x  %02x %02x %02x %02x  %02x %02x %02x %02x  %02x %02x %02x %02x",
 	     desc[0], desc[1], desc[2], desc[3], desc[4], desc[5], desc[6], desc[7],
 	     desc[8], desc[9], desc[10], desc[11], desc[12], desc[13], desc[14], desc[15]);
 	e->tx_head = (e->tx_head + 1) & (TM_TX_RING_SIZE - 1);
@@ -2833,6 +2864,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	{
 		u32 prev = (e->tx_head - 1) & (TM_TX_RING_SIZE - 1);
 		u8 *pdesc = (u8 *)e->txdesc_cpu + prev * TM_TX_DESC_SIZE;
+
 		pdesc[11] &= ~0x20;
 		dma_wmb();
 	}
@@ -2923,6 +2955,7 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	 * Adding port=6 entry may have caused flood / DUPs. */
 	{
 		int rc = zx_fdb_add(e, ndev->dev_addr, 0, 1);
+
 		netdev_info(ndev, "HW FDB seed (PP_BRG_RAM): self MAC port=1 rc=%d\n", rc);
 		/* DO NOT call zx_sbrg_set_unknown_unicast_flood_policy(e, 0x20).
 		 * Evidence (Agent 1 RE + git blame): an earlier init at L1831
@@ -2953,7 +2986,7 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	struct zx_eth *e = s->private;
 	u32 i;
 
-	seq_printf(s, "=== Driver counters ===\n");
+	seq_puts(s, "=== Driver counters ===\n");
 	seq_printf(s, "tm_irq_count      = %u\n", e->tm_irq_count);
 	seq_printf(s, "tm_napi_count     = %u\n", e->tm_napi_count);
 	seq_printf(s, "tm_rx_count       = %u\n", e->tm_rx_count);
@@ -2971,16 +3004,19 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	seq_printf(s, "rx_idx            = %u\n", e->rx_idx);
 	seq_printf(s, "tx_idx / tx_done  = %u / %u  pending=%d\n",
 		   e->tx_idx, e->tx_done, atomic_read(&e->tx_pending));
-	seq_printf(s, "rx_head[0..7]     = ");
-	for (i = 0; i < 8; i++) seq_printf(s, "%u ", e->rx_head[i]);
-	seq_printf(s, "\n");
+	seq_puts(s, "rx_head[0..7]     = ");
+	for (i = 0; i < 8; i++)
+		seq_printf(s, "%u ", e->rx_head[i]);
+	seq_puts(s, "\n");
 
 	if (e->rxdesc_cpu) {
 		const u32 *d = (const u32 *)e->rxdesc_cpu;
 		u32 first_nz_off = 0xFFFFFFFF, nz_count = 0;
+
 		for (i = 0; i < (0x40000/4); i++) {
 			if (d[i] != (0xDEAD0000u | (u32)i)) {
-				if (first_nz_off == 0xFFFFFFFF) first_nz_off = i*4;
+				if (first_nz_off == 0xFFFFFFFF)
+					first_nz_off = i*4;
 				nz_count++;
 			}
 		}
@@ -2988,28 +3024,33 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 			   nz_count, first_nz_off);
 		if (first_nz_off != 0xFFFFFFFF) {
 			u32 base = first_nz_off / 4;
-			seq_printf(s, "  bytes near first diff: ");
+
+			seq_puts(s, "  bytes near first diff: ");
 			for (i = 0; i < 8 && (base+i)*4 < 0x40000; i++)
 				seq_printf(s, "[+0x%x]=0x%08x ", (base+i)*4, d[base+i]);
-			seq_printf(s, "\n");
+			seq_puts(s, "\n");
 		}
 	}
 	if (e->bp_cpu) {
 		const u32 *bp = (const u32 *)e->bp_cpu;
 		u32 nz = 0;
-		for (i = 0; i < (524288/4); i++) if (bp[i]) nz++;
+
+		for (i = 0; i < (524288/4); i++)
+			if (bp[i]) nz++;
 		seq_printf(s, "bp area: %u non-zero words (size 524288B)\n", nz);
 	}
 	if (e->bp_cpu) {
 		const u32 *bp = (const u32 *)e->bp_cpu;
-		seq_printf(s, "bp[bppe=0] (first 64B of BP buffer 0): ");
-		for (i = 0; i < 16; i++) seq_printf(s, "%08x ", bp[i]);
-		seq_printf(s, "\n");
+
+		seq_puts(s, "bp[bppe=0] (first 64B of BP buffer 0): ");
+		for (i = 0; i < 16; i++)
+			seq_printf(s, "%08x ", bp[i]);
+		seq_puts(s, "\n");
 	}
 	seq_printf(s, "Verify TM[0xF0] now = 0x%08x (expected rxdesc_dma=%pad)\n",
 		   tm_read(e, 0xF0), &e->rxdesc_dma);
 
-	seq_printf(s, "\n=== TOPCRM (clock control) — stock should match ===\n");
+	seq_puts(s, "\n=== TOPCRM (clock control) — stock should match ===\n");
 	if (e->topcrm) {
 		seq_printf(s, "TOPCRM[0x004] = 0x%08x  (stock=0x000001fb)\n", readl(e->topcrm + 0x004));
 		seq_printf(s, "TOPCRM[0x008] = 0x%08x  (stock=0x1ff7ffff)\n", readl(e->topcrm + 0x008));
@@ -3020,7 +3061,7 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 		seq_printf(s, "TOPCRM[0x04c] = 0x%08x  (stock=0x0003cfff)\n", readl(e->topcrm + 0x04c));
 	}
 
-	seq_printf(s, "\n=== TM regs ===\n");
+	seq_puts(s, "\n=== TM regs ===\n");
 	seq_printf(s, "TM[0x0100] IRQ_STATUS       = 0x%08x  (bits 0,1 are RX/TX pending)\n", tm_read(e, 0x100));
 	seq_printf(s, "TM[0x0104] IRQ_MASK         = 0x%08x\n", tm_read(e, TM_REG_IRQ_MASK));
 	seq_printf(s, "TM[0x0124] (queue enable?)  = 0x%08x\n", tm_read(e, 0x124));
@@ -3034,14 +3075,15 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	seq_printf(s, "TM[0x10058] DMA_DESC_CNT_UP = 0x%08x\n", tm_read(e, TM_REG_DMA_DESC_CNT_UP));
 	seq_printf(s, "TM[0x10068] DMA_DESC_CNT_DN = 0x%08x\n", tm_read(e, TM_REG_DMA_DESC_CNT_DN));
 	seq_printf(s, "TM[0x10030] DMA_TIMEOUT     = 0x%08x\n", tm_read(e, TM_REG_DMA_TIMEOUT));
-	seq_printf(s, "\n=== Per-queue RX desc counts (TM[0x10100+q*4]) ===\n");
+	seq_puts(s, "\n=== Per-queue RX desc counts (TM[0x10100+q*4]) ===\n");
 	for (i = 0; i < 8; i++) {
 		u32 v = tm_read(e, 0x10100 + i * 4);
+
 		seq_printf(s, "  q[%d] TM[0x%05x] = 0x%08x  (low16=avail, high16=??)\n",
 			   i, 0x10100 + i * 4, v);
 	}
 
-	seq_printf(s, "\n=== PP regs ===\n");
+	seq_puts(s, "\n=== PP regs ===\n");
 	seq_printf(s, "PP[0x2c] CPU_FWD            = 0x%08x  (stock=0x00000106)\n",
 		   readl(e->base + PP_OFF + PP_REG_CPU_FWD));
 	seq_printf(s, "PP[0x04]                    = 0x%08x  (stock=0x02abfc8d)\n", readl(e->base + PP_OFF + 0x04));
@@ -3052,7 +3094,7 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	seq_printf(s, "PP[0x3c]                    = 0x%08x  (stock=0x00000106)\n", readl(e->base + PP_OFF + 0x3c));
 	seq_printf(s, "PP[0x40]                    = 0x%08x  (stock=0x01030101)\n", readl(e->base + PP_OFF + 0x40));
 
-	seq_printf(s, "\n=== IDM regs ===\n");
+	seq_puts(s, "\n=== IDM regs ===\n");
 	seq_printf(s, "IDM[0x8000] CTRL            = 0x%08x\n", readl(e->base + IDM_REG_CONTROL));
 	seq_printf(s, "IDM[0x8020] IRQ_STATUS      = 0x%08x\n", readl(e->base + IDM_REG_IRQ_STATUS));
 	seq_printf(s, "IDM[0x8024] IRQ_MASK        = 0x%08x\n", readl(e->base + IDM_REG_IRQ_MASK));
@@ -3062,12 +3104,13 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	seq_printf(s, "IDM[0x8004] TX_DESC_BASE    = 0x%08x\n", readl(e->base + 0x8004));
 	seq_printf(s, "IDM[0x8008] RX_DESC_BASE    = 0x%08x\n", readl(e->base + 0x8008));
 
-	seq_printf(s, "\n=== Per-port MAC[i] @ (i+1)*0x40000, first 64 bytes ===\n");
+	seq_puts(s, "\n=== Per-port MAC[i] @ (i+1)*0x40000, first 64 bytes ===\n");
 	for (i = 0; i < 5; i++) {
 		u32 base = (i + 1) * MAC_STRIDE;
 		u32 ctrl = readl(e->base + base + MAC_REG_CONTROL);
 		u32 mask = readl(e->base + base + MAC_REG_IRQ_MASK);
 		u32 en   = readl(e->base + base + MAC_REG_ENABLE);
+
 		seq_printf(s, "MAC[%u] @0x%05x ctrl=%08x mask=%08x en=%08x\n",
 			   i, base, ctrl, mask, en);
 	}
@@ -3094,11 +3137,16 @@ static ssize_t zx_mem_read(struct file *file, char __user *ubuf,
 {
 	struct zx_eth *e = file->private_data;
 	const size_t REGION = 0x200000;
-	if (*ppos >= REGION) return 0;
-	if (*ppos + count > REGION) count = REGION - *ppos;
+
+	if (*ppos >= REGION)
+		return 0;
+	if (*ppos + count > REGION)
+		count = REGION - *ppos;
 	{
 		void *tmp = kmalloc(count, GFP_KERNEL);
-		if (!tmp) return -ENOMEM;
+
+		if (!tmp)
+			return -ENOMEM;
 		memcpy_fromio(tmp, e->base + *ppos, count);
 		if (copy_to_user(ubuf, tmp, count)) { kfree(tmp); return -EFAULT; }
 		kfree(tmp);
