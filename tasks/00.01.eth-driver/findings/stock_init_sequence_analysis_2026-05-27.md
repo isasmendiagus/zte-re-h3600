@@ -524,3 +524,77 @@ notification" symptom.
 So the TX bug and RX-IRQ bug may have a **single common root cause** in
 the switch-fabric enable / clock / control state.
 
+
+## Final RE finding — Stock has periodic TX reclaim timer
+
+Stock decomp `pon_tm_check_tx_done_nolock` (decomp 6360):
+```c
+void pon_tm_check_tx_done_nolock(int dir) {
+    if (dir != 1)
+        net_txq.tx_done -= (TM[0x10058] & 0xffff);   // sw netdev
+    else
+        net_txq.tx_done_pon -= (TM[0x10068] & 0xffff); // pon netdev
+}
+```
+
+Called every jiffy by `pon_tm_timer` (decomp 6436, runs from `add_timer`
+in `pon_tm_net_init`). For each direction, reads the **low 16 bits of
+the DMA_DESC_CNT register** and subtracts it from a SW pending counter.
+
+This is the SW-side "reclaim" that completes the TX cycle.
+
+**Mainline doesn't have this timer.** Without it:
+- HW may be using TM[0x10058] low16 as "consumed since last read" — a
+  clear-on-read counter. Without periodic reads, HW thinks SW never
+  acknowledges → never advances internal cursor → ring fills → no more
+  consumption.
+- OR mainline's TX desc format may be subtly wrong (bad checksum,
+  invalid valid-bit), HW skips them, counts them as queued forever.
+
+Three hypothesis for next session, in order of likelihood:
+
+### Hypothesis 1: TM[0x10058] low16 is clear-on-read
+
+Add a periodic timer in mainline that reads TM[0x10058] every jiffy.
+If the read itself drives the HW state, this fix is one line:
+
+```c
+mod_timer(&e->tx_reclaim, jiffies + 1);
+static void tx_reclaim_fn(timer) {
+    (void)tm_read(e, 0x10058);  // discard — read advances HW
+    (void)tm_read(e, 0x10068);
+    mod_timer(&e->tx_reclaim, jiffies + 1);
+}
+```
+
+Easy to test. If ping bidi comes back after adding this, hypothesis
+confirmed.
+
+### Hypothesis 2: TX desc format bug
+
+We already wire desc[0]=0xc9, desc[2..3]=port hint, desc[8..11]=
+bp_idx+len, desc[12..13]=len<<2. But there could be other bits/bytes
+HW expects (e.g., a VALID bit at desc[15]) that we omit. Stock's
+`pon_tm_data_raw_send` (decomp 6596) should be the authoritative
+TX desc format. Compare line-by-line with our `zx_sw_xmit`.
+
+### Hypothesis 3: Missing TX engine enable register
+
+There may be a register that gates the HW "TX consume engine" from
+running. Search stock init for any "tx_en" / "egress_en" type writes
+near tm_pon_tm_init that we might have missed.
+
+## Total commits this session
+
+```
+915120431 findings: HW won't consume TX descriptors — switch fabric egress wedged
+bd3bc21a3 findings: TX also broken at wire level — bug is shared TX+RX path
+a20e1f83c RE: full stock init sequence analysis + mainline gap matrix
+b3411b71a NAPI: read queue pending count from high 16 bits (un-revert Phase 51)
+a9691534a PP: OR PP_CPU_FWD_BIT into PP[0x002c] (Phase 50 + stock-validated)
+f7c6fc9d7 PP: restore SMAC_LOOK_EN to 0xff (Phase 50 baseline + stock)
+f20382821 TM NAPI: re-introduce zx_bmu_free_bp per descriptor (delivered + dropped)
+5b3407ca4 TM: also use distinct dndesc_dma in repoint helper
+9a278d294 TM RX: allocate distinct DN ring; document stock fixed-RAM strategy
+```
+
