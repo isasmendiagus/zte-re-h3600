@@ -1931,7 +1931,18 @@ static int zx_cla_set_cpu_queue_id(struct zx_eth *e, u32 addr, u8 qid)
  * the descriptor entries we touch want whole-register writes.
  */
 /* Wrapper around the inline helper in zx-fpga-reg-tables.h that adds
- * the struct zx_eth's fpga_base lookup + ratelimited dev_warn diagnostics.
+ * the struct zx_eth's fpga_base lookup + diagnostics.
+ *
+ * Error-code triage (zx_fpga_table_write returns negatives):
+ *   -1  reg_id is past the end of our captured descriptor table. Happens
+ *       when callers (notably the pro_action proto loop) try ids stock
+ *       knows about but we never extracted. Expected — log at dev_dbg.
+ *   -2  table[reg_id].reg_id mismatch — sparse-table corruption. Real
+ *       bug; keep the dev_warn_ratelimited.
+ *   -3  sub_idx > max_sub_idx. Happens when callers iterate ports over
+ *       a SoC-wide register (max_sub_idx == 0). Expected — log at
+ *       dev_dbg.
+ *   -4  descriptor marked not-writable. Real bug; keep the warn.
  */
 static int zx_table_write(struct zx_eth *e,
 			  const struct zx_fpga_reg *table, size_t n,
@@ -1939,7 +1950,10 @@ static int zx_table_write(struct zx_eth *e,
 {
 	int rc = zx_fpga_table_write(e->fpga_base, table, n, reg_id, val, sub_idx);
 
-	if (rc < 0)
+	if (rc == -1 || rc == -3)
+		dev_dbg(e->dev, "fpga_table_write(%u, val=%#x, sub=%u): %d (expected)\n",
+			reg_id, val, sub_idx, rc);
+	else if (rc < 0)
 		dev_warn_ratelimited(e->dev, "fpga_table_write(%u, val=%#x, sub=%u): %d\n",
 				     reg_id, val, sub_idx, rc);
 	return rc;
