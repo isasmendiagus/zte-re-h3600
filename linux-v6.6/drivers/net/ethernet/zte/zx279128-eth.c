@@ -278,9 +278,25 @@ struct zx_eth {
 					 * helper only (separate from existing direct
 					 * tm_write/pp_write paths).
 					 */
+	/* [A02] Extra MMIO regions mapped from DT — needed by stock's
+	 * zx_pon_clk_reset_init (SERDES band cal, sys_ctrl bit twiddle) and
+	 * by gephy_ldo_timer_func temp compensation. Optional: probe()
+	 * doesn't fail if these aren't in DT (older DTBs won't have them).
+	 */
+	void __iomem *sys_ctrl;	/* 0x94100000 (1 page) — sys_ctrl + temp sensor */
+	void __iomem *pin_mux;	/* 0x94200000 (1 page) — pin routing config */
+	void __iomem *pon_serdes;	/* 0x9fe00000 (1 MiB) — SERDES regs incl. band reg @+0x44 */
+
 	int irq_idm;
 	int irq_npp;
 	int irq_tm;
+	/* [A07][A08] Defensive PON / PP IRQs — fire ~0/ping on stock but the
+	 * stock kmod registers them so we mirror for parity. PP IRQ exposes
+	 * 4 useful event types (port migrate, static violation, hash
+	 * collision, mac aged) — see gap matrix.
+	 */
+	int irq_pon;
+	int irq_pp;
 
 	/* TM subsystem (CPU↔switch via "sw" netdev) */
 	struct napi_struct tm_napi;
@@ -3428,6 +3444,33 @@ static int zx_pipeline_stats_show(struct seq_file *s, void *_unused)
 	seq_puts(s, "  (TODO) qmg hw fwd / hw trap                       [need TM_QMG offsets]\n");
 	seq_puts(s, "  (TODO) red fwd / trap / drop                      [need TM_RED stat offsets]\n");
 
+	/* ---------- [A02] new MMIO regions (sys_ctrl / pin_mux / pon_serdes) ---------- */
+	seq_puts(s, "\nextras mapped via DT (gap [A02]):\n");
+	if (e->sys_ctrl) {
+		seq_printf(s, "  sys_ctrl[0x10]   = 0x%08x  (stock=0x00000100 — bit 11 clear)\n",
+			   readl(e->sys_ctrl + 0x10));
+	} else {
+		seq_puts(s, "  sys_ctrl         = (not mapped)\n");
+	}
+	if (e->pon_serdes) {
+		seq_printf(s, "  pon_serdes[0x40] = 0x%08x  (stock=0x043c0000 — bit 26 = band ena)\n",
+			   readl(e->pon_serdes + 0x40));
+		seq_printf(s, "  pon_serdes[0x44] = 0x%08x  (stock=0xea2ca013 — bits 16-21 = coarse band 0x2c)\n",
+			   readl(e->pon_serdes + 0x44));
+		seq_printf(s, "  pon_serdes[0x68] = 0x%08x  (stock=0x00001558 — bit 4 = rxpll lock)\n",
+			   readl(e->pon_serdes + 0x68));
+		seq_printf(s, "  pon_serdes[0x70] = 0x%08x  (stock=0x01b15555 — bit 24 = PLL band ready)\n",
+			   readl(e->pon_serdes + 0x70));
+	} else {
+		seq_puts(s, "  pon_serdes       = (not mapped)\n");
+	}
+	if (e->pin_mux) {
+		seq_printf(s, "  pin_mux[0x00]    = 0x%08x  (stock=0x0f0ffffa)\n",
+			   readl(e->pin_mux + 0x00));
+	} else {
+		seq_puts(s, "  pin_mux          = (not mapped)\n");
+	}
+
 	/* ---------- DOWNSTREAM (CPU → UNI) ---------- */
 	seq_puts(s, "\ndownstream statistics:\n");
 	seq_puts(s, "  (TODO) QMG sw fwd / hw fwd / hw trap pkts         [need TM_QMG offsets]\n");
@@ -4018,10 +4061,42 @@ static int zx_eth_probe(struct platform_device *pdev)
 	if (IS_ERR(eth->base))
 		return dev_err_probe(dev, PTR_ERR(eth->base), "ioremap NPP\n");
 
+	/* [A02] Optional extras — older DTBs without these names won't error.
+	 * We use the *_optional() byname helper so a missing resource returns
+	 * NULL instead of failing probe. Subsequent iters (zx_pon_clk_reset_init
+	 * et al.) will check for NULL and skip the feature if absent.
+	 */
+	{
+		struct resource *r;
+
+		r = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sys_ctrl");
+		eth->sys_ctrl = r ? devm_ioremap_resource(dev, r) : NULL;
+		if (IS_ERR(eth->sys_ctrl))
+			eth->sys_ctrl = NULL;
+
+		r = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pin_mux");
+		eth->pin_mux = r ? devm_ioremap_resource(dev, r) : NULL;
+		if (IS_ERR(eth->pin_mux))
+			eth->pin_mux = NULL;
+
+		r = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pon_serdes");
+		eth->pon_serdes = r ? devm_ioremap_resource(dev, r) : NULL;
+		if (IS_ERR(eth->pon_serdes))
+			eth->pon_serdes = NULL;
+
+		dev_info(dev, "MMIO extras: sys_ctrl=%s pin_mux=%s pon_serdes=%s\n",
+			 eth->sys_ctrl  ? "mapped" : "absent",
+			 eth->pin_mux   ? "mapped" : "absent",
+			 eth->pon_serdes ? "mapped" : "absent");
+	}
+
 	eth->irq_idm = platform_get_irq_byname(pdev, "idm");
 	if (eth->irq_idm < 0)
 		eth->irq_idm = platform_get_irq(pdev, 0);
 	eth->irq_npp = platform_get_irq_byname_optional(pdev, "npp");
+	/* [A07][A08] Optional PON / PP IRQs — present if DT has them. */
+	eth->irq_pon = platform_get_irq_byname_optional(pdev, "pon");
+	eth->irq_pp  = platform_get_irq_byname_optional(pdev, "pp");
 
 	platform_set_drvdata(pdev, eth);
 
