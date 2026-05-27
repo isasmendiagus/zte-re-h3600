@@ -21,7 +21,8 @@ calls. Both have proper doc comments.
 
 | # | Description | Estimated effort |
 | --- | --- | --- |
-| **10b** | Driver reads pon + topcrm + clocks from DT instead of `devm_ioremap(0x9..., …)`. Patches in: `zx_eth_init_topcrm`, `zx_eth_init_extra_mmio`, plus the DT node + binding YAML. | half a day |
+| **10b-pon** | ✅ Phase 41 (commit b4bb802ff). `zx_eth_init_extra_mmio` now derives both pon_early and fpga_base from the DT "pon" resource via `platform_get_resource_byname`. Boot gate passed. | DONE |
+| **10b-topcrm** | Remaining hardcoded address: `devm_ioremap(ZX_TOPCRM_BASE, 0x100)` in `zx_eth_init_topcrm`. Migration path: switch the 7 readl/writel sites that touch `e->topcrm` to regmap_read/_write against the existing `&topcrm` syscon node. Separate refactor; medium risk. | half a day |
 | **32** | Sweep "2026-05-2X" date-stamps and "Phase 4" dev-cycle phrasings from comments. Keep technical content; drop archaeology. ~25 sites. | 1-2 h |
 | **33** | Run `scripts/checkpatch.pl --strict` on the four new/touched files and fix style issues. | 1-2 h |
 | **34** | Add the `compatible = "zte,zx279128s-eth"` line to `MAINTAINERS`. | 5 min |
