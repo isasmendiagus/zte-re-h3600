@@ -38,7 +38,8 @@
 		};
 
 		/* Real UART input clock from LSP0 (lb_lsp0_25m_wclk) — verified
-		 * from stock IBRD=13 FBRD=36: clk = 115200 * 16 * 13.5625 = 25 MHz */
+		 * from stock IBRD=13 FBRD=36: clk = 115200 * 16 * 13.5625 = 25 MHz
+		 */
 		uart_clk: uart_clk {
 			compatible = "fixed-clock";
 			#clock-cells = <0>;
@@ -157,7 +158,8 @@
 
 			/* Required by of_irq_parse_pci so endpoint INTx are routed.
 			 * MT7915/16 use MSI so this is mostly to silence the warning,
-			 * but is required by the PCI core regardless. */
+			 * but is required by the PCI core regardless.
+			 */
 			#interrupt-cells = <1>;
 			interrupt-map-mask = <0 0 0 7>;
 			interrupt-map = <0 0 0 1 &gic GIC_SPI 0x3f IRQ_TYPE_LEVEL_HIGH>,
@@ -180,7 +182,8 @@
 		 * The driver currently maps both windows but also still
 		 * devm_ioremaps the hardcoded addresses for the PON window
 		 * and TOPCRM — Phase 10b (task #71) migrates the driver to
-		 * read from these DT properties instead. */
+		 * read from these DT properties instead.
+		 */
 		eth: ethernet@921c0000 {
 			compatible = "zte,zx279128s-eth";
 			reg = <0x92000000 0x1c0000>,	/* pon */
@@ -190,7 +193,8 @@
 			 *   NPP main : GIC_SPI 0x23 (35) — pon_npp
 			 *   TM       : GIC_SPI 0x24 (36) — pon_tm = CPU↔switch traffic ⭐
 			 *   PP       : GIC_SPI 0x25 (37) — pon_pp (not used)
-			 *   IDM      : GIC_SPI 0x26 (38) — WiFi forwarding only */
+			 *   IDM      : GIC_SPI 0x26 (38) — WiFi forwarding only
+			 */
 			interrupts = <GIC_SPI 0x26 IRQ_TYPE_LEVEL_HIGH>,	/* idm */
 				     <GIC_SPI 0x23 IRQ_TYPE_LEVEL_HIGH>,	/* npp */
 				     <GIC_SPI 0x24 IRQ_TYPE_LEVEL_HIGH>;	/* tm */
@@ -199,13 +203,15 @@
 			/* Phase 14: phylink-style PHY handles. We list all four
 			 * GePHYs so the driver can call phy_init_hw() on each
 			 * during probe — that runs the vendor LDO + TX DAC
-			 * power-up sequence in drivers/net/phy/phy-zte-gephy.c. */
+			 * power-up sequence in drivers/net/phy/phy-zte-gephy.c.
+			 */
 			zte,gephys = <&gephy0>, <&gephy1>, <&gephy2>, <&gephy3>;
 			status = "disabled";
 		};
 
 		/* MDIO bus to the four built-in GePHYs. Cross-checked with
-		 * the ZX279128R sibling DTS in refs/. */
+		 * the ZX279128R sibling DTS in refs/.
+		 */
 		mdio: mdio@9a101000 {
 			compatible = "zte,zx279128s-mdio";
 			reg = <0x9a101000 0x18>;
@@ -216,7 +222,8 @@
 			/* Four GePHYs (PHY ID 0x84b95031) confirmed at MDIO
 			 * addresses 10..13 by Phase 12 boot scan, matching
 			 * stock's uni_phy[]={0a,0b,0c,0d,...} table. phylib
-			 * will pick up the phy-zte-gephy driver by ID. */
+			 * will pick up the phy-zte-gephy driver by ID.
+			 */
 			gephy0: ethernet-phy@a { reg = <10>; };
 			gephy1: ethernet-phy@b { reg = <11>; };
 			gephy2: ethernet-phy@c { reg = <12>; };

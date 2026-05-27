@@ -87,7 +87,8 @@ static int zte_gephy_config_init(struct phy_device *phydev)
 	phydev_info(phydev, "config_init (LDO arm + TX DAC drive enable)\n");
 
 	/* (1) LDO enable. The vendor kernel arms via 0x17=0x2448 then pokes
-	 * extended reg 0xb640. Without this the PHY core stays unpowered. */
+	 * extended reg 0xb640. Without this the PHY core stays unpowered.
+	 */
 	ret = phy_write(phydev, ZTE_GEPHY_LDO_CTRL_REG, ZTE_GEPHY_LDO_CTRL_VAL);
 	if (ret < 0)
 		return ret;
