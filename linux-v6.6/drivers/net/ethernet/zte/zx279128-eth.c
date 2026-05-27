@@ -29,10 +29,8 @@
  * Most of the bring-up is bit-exact replay of what stock's
  * plat-zxylzb_9128S.ko / tm.ko produce at boot, captured into static
  * tables (zx_stock_*.h, zx_cla_table.h, zx_pm_table.h, zx_npp_twin_data.h).
- * Refactor #38 is the long-running effort to turn the replay into
- * explicit named init functions; see
- *   tasks/00.01.eth-driver/findings/driver_architecture.md
- * for the current state of that work.
+ * Some sub-blocks of that replay are now explicit named init functions;
+ * the remainder go through a generic per-block apply walker.
  */
 
 #include <linux/delay.h>
@@ -307,9 +305,9 @@ struct zx_eth {
 	spinlock_t bmu_free_lock;
 	u32 tm_bmu_free_ok;
 	u32 tm_bmu_free_fail;
-	/* Phase 5: dedup set for FDB learning — 128 buckets, 1 bit each.
-	 * Indexed by (src_mac[11] & 0x7f). Crude but avoids re-adding the
-	 * same MAC repeatedly. Reset on reload.
+	/* Dedup set for FDB learning — 128 buckets, 1 bit each. Indexed by
+	 * (src_mac[11] & 0x7f). Crude but avoids re-adding the same MAC
+	 * repeatedly. Reset on reload.
 	 */
 	u8  fdb_learned[16];
 
@@ -333,10 +331,9 @@ struct zx_eth {
 
 	bool started;
 
-	/* All 3 replay snapshots that used to be runtime firmware blobs are
-	 * now embedded as zx_{cla,pm,stock}_init_table[] in their respective
-	 * headers (refactor #38 Phase 1+2+3). No more firmware_request at
-	 * driver probe.
+	/* Stock-init replay snapshots (CLA, PM, stock-bursts) are embedded
+	 * as static tables in zx_{cla,pm,stock}_table.h — applied directly
+	 * during probe, no firmware_request().
 	 */
 };
 
@@ -745,16 +742,13 @@ static int zx_vlan_add_port(struct zx_eth *e, u16 vid, u8 port, u8 mode)
 }
 
 /* ============================================================
- *   PON low-bank init (refactor #38 Phase 9a)
+ *   PON low-bank init
  *
- * Replaces the first 16 entries of the old zx_stock_init_table[] (the
- * PON_LOW block). Stock hits four identical PON sub-blocks at pon_early
- * offsets 0x00000, 0x10000, 0x20000, 0x30000 with the same 4-word
- * pattern. Capturing it as a loop here makes the intent obvious to a
- * netdev reviewer; the wires are bit-for-bit identical to stock.
+ * Stock hits four identical PON sub-blocks at pon_early offsets
+ * 0x00000, 0x10000, 0x20000, 0x30000 with the same 4-word pattern.
  *
  * The fourth word per block (0x44bef) is the only non-trivial value —
- * we leave it unnamed until the matching .ko-side RE catches up.
+ * its semantics are not yet RE'd on the .ko side.
  * ============================================================
  */
 static void zx_pon_low_init(struct zx_eth *e)
@@ -772,12 +766,12 @@ static void zx_pon_low_init(struct zx_eth *e)
 }
 
 /* ============================================================
- *   NPP twin-pair init (refactor #38 Phase 9f)
+ *   NPP twin-pair init
  *
  * NPP has three pairs of sub-blocks at stride 0x2000 that receive
- * BIT-IDENTICAL writes in stock — instances (0,1), (2,3), (6,7).
- * Rather than store the data twice, we keep one copy per pair (in
- * zx_npp_twin_data.h) and apply each set to both instance bases.
+ * bit-identical writes in stock — instances (0,1), (2,3), (6,7).
+ * One payload per pair is kept in zx_npp_twin_data.h and applied to
+ * both instance bases.
  *
  * The pair 6/7 payload at +0x280..+0x2bc holds an embedded Ethernet
  * frame template (dst MAC + IPv4/TCP) used by the HW classifier
@@ -785,7 +779,7 @@ static void zx_pon_low_init(struct zx_eth *e)
  * (encodes the unit's connected-host MAC); preserved bit-for-bit
  * pending dynamic-construction RE.
  *
- * Instance 10 (96 writes at +0x14000) is NOT a twin pair and stays
+ * Instance 10 (96 writes at +0x14000) is not a twin pair and stays
  * in the generic zx_stock_apply_block("NPP") path.
  * ============================================================
  */
@@ -810,9 +804,9 @@ static void zx_npp_twin_init(struct zx_eth *e)
 }
 
 /* ============================================================
- *   PON_TAIL lookup RAM init (refactor #38 Phase 9e)
+ *   PON_TAIL lookup RAM init
  *
- * The single biggest run in stock.bin: 4082 contiguous writes at
+ * The single biggest run in stock-init: 4082 contiguous writes at
  * pon_early fpga byte 0xc0040..0xc4004 (16 KB), filling a HW lookup
  * RAM with the default value 0x00004bef, then setting 2 control
  * words immediately after.
@@ -825,9 +819,6 @@ static void zx_npp_twin_init(struct zx_eth *e)
  * lookup table (FDB / ACL TCAM / VLAN map) being initialized to a
  * default "miss" action, followed by a 2-word footer holding the
  * table's runtime parameters.
- *
- * Replaces a 16 KB rodata burst array + 1 __iowrite32_copy with a
- * tiny loop. Reader can see at a glance what's happening.
  * ============================================================
  */
 static void zx_pon_tail_lookup_init(struct zx_eth *e)
@@ -843,21 +834,20 @@ static void zx_pon_tail_lookup_init(struct zx_eth *e)
 }
 
 /* ============================================================
- *   TM per-instance table init (refactor #38 Phase 9d)
+ *   TM per-instance table init
  *
  * Each of the 16 TM instances (0x180000 + i * 0x400) carries a
  * 64-word config table at +0x10240. The stock blob writes the
- * SAME 256-byte image into all 16 instances — verified
- * bit-identical (see findings/stock_table_structural_patterns.md
- * pattern B).
+ * SAME 256-byte image into all 16 instances — verified bit-identical.
  *
  * High half of the first 16 words is DDR-backed (0x4ec____, 0x4ff____):
  * very likely default queue/buffer descriptor base pointers. The
  * later words look like small queue control / threshold bytes.
  * Exact semantics still un-RE'd; the bit pattern is preserved.
  *
- * Replaces 1024 individual writel() calls with 16 __iowrite32_copy
- * calls of a shared source array.
+ * Each instance also gets a fixed 7-word control-register write
+ * (handled in the same loop body to keep the per-instance code in
+ * one place).
  * ============================================================
  */
 static const u32 zx_tm_per_instance_init_data[64] = {
@@ -886,7 +876,7 @@ static void zx_tm_per_instance_init(struct zx_eth *e)
 	for (i = 0; i < 16; i++) {
 		void __iomem *tm_i = e->base + 0x180000 + i * 0x400;
 
-		/* Phase 9g: 7 control regs identical across all 16 TM instances. */
+		/* 7 control regs identical across all 16 TM instances. */
 		writel(0x00000140, tm_i + 0x000);  /* instance enable / mode? */
 		writel(0x00000010, tm_i + 0x004);
 		writel(0x4ff1f000, tm_i + 0x0f0);  /* DDR base pointer */
@@ -895,19 +885,18 @@ static void zx_tm_per_instance_init(struct zx_eth *e)
 		writel(0x00001fff, tm_i + 0x12c);
 		writel(0x001fffff, tm_i + 0x134);
 
-		/* Phase 9d: 64-word per-instance config table. */
+		/* 64-word per-instance config table. */
 		__iowrite32_copy(tm_i + 0x10240,
 				 zx_tm_per_instance_init_data, 64);
 	}
 }
 
 /* ============================================================
- *   NPP_AUX init (refactor #38 Phase 9c)
+ *   NPP_AUX init
  *
  * 13 NPP_AUX sub-blocks at base offsets 0xcc000, 0xd0000, 0xd4000, …,
- * 0xfc000 (stride 0x4000). Each gets the SAME 12-word init —
- * verified bit-identical across all 13 instances. Replaces 156 entries
- * of the stock table with a single 13-iteration loop.
+ * 0xfc000 (stride 0x4000). Each gets the same 12-word init — verified
+ * bit-identical across all 13 instances.
  *
  * What these registers are exactly is still un-RE'd; the values are
  * preserved bit-for-bit. The pattern alone tells us NPP has at least
@@ -937,20 +926,18 @@ static void zx_npp_aux_init(struct zx_eth *e)
 }
 
 /* ============================================================
- *   Stock-init replay (refactor #38 Phase 8 + 9b per-block)
+ *   Stock-init replay walker
  *
- * zx_stock_ops[] (zx_stock_bursts.h) is the same set of writes as
- * zx_stock_init_table[] but pre-classified: contiguous +4 stride runs
- * of ≥4 entries become RUN ops backed by static const u32 arrays and
+ * zx_stock_ops[] (zx_stock_bursts.h) holds the captured writes
+ * pre-classified into two op kinds: contiguous +4 stride runs of
+ * ≥4 entries become RUN ops backed by static const u32 arrays and
  * flushed via __iowrite32_copy(); everything else is a SINGLE op
- * (one writel()). Original order is preserved, so the chip sees an
+ * (one writel()). Original order is preserved so the chip sees an
  * identical sequence of MMIO writes.
  *
- * Walked per-block (Phase 9b) so explicit zx_<block>_init() calls can
- * be interleaved at the right point in the init sequence.
- *
- * Most of the savings live in PON_TAIL where ~16 KB of contiguous
- * RAM-table init was 4082 individual writel() calls before.
+ * The walker takes [start, end) over the ops array so explicit
+ * named init helpers can be interleaved at the right point in the
+ * init sequence by splitting the table into named ranges.
  * ============================================================
  */
 static void zx_stock_apply_block(struct zx_eth *e, const char *name,
@@ -1051,13 +1038,10 @@ static void zx_pp_init(struct zx_eth *e)
 			writel(0xf000107c, pp + ibase + 0x18);
 		}
 	}
-	/* Removed: live-stock dump shows PP[+0x2c] = 0x00000106 across
-	 * ALL 8 per-port blocks. Our previous |= BIT(25) wrote 0x02000106, which
-	 * is wrong. The per-port block's +0x2c init value (0x106 from line 512)
-	 * is the correct stock value. Bit 25 was a misinterpretation of the
-	 * stock decomp (`pp[0x2c] |= 1 << (lan_up_port + 0x19)` was conditional
-	 * on `lan_up != 0` which is not set in our boot path).
-	 * See tasks/00.01.eth-driver/findings/
+	/* Note: stock leaves PP[+0x2c] = 0x00000106 on all 8 per-port blocks.
+	 * Bit 25 (the `pp[0x2c] |= 1 << (lan_up_port + 0x19)` write in stock
+	 * decomp) is conditional on lan_up != 0, which is not the boot path
+	 * we exercise — so we deliberately do not set it here.
 	 */
 
 	/* pon_pp_brg_init — ALL values verified via live stock dump (not Ghidra
@@ -1703,8 +1687,7 @@ static void zx_tm_bmu_init(struct zx_eth *e)
 	tm_write(e, TM_REG_BMU_JUMBO_POOL,  0);  /* no jumbo */
 
 	/* tm[0x8058] = number of BPPE slots. Stock runtime = 0x100 = 256
-	 * (captured via regtracer on running stock).  Our previous formula
-	 * "(POOL_SIZE>>5)-1" wrote 7 which kept the BMU rejecting allocs.
+	 * (captured via regtracer on running stock).
 	 */
 	tm_write(e, TM_REG_BMU_BUCKETS_M1,  TM_BPPE_POOL_SIZE);
 	tm_write(e, TM_REG_BMU_JUMBO_BUCK,  0);
@@ -1782,9 +1765,9 @@ static int zx_pp_pm_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 	return zx_pp_pm_wait_done(e);
 }
 
-/* Replay all pp_pm entries dumped from stock (ram=3 default flow_info + ram=6 global). */
-/* Refactor #38 Phase 2: pm.bin → embedded zx_pm_init_table.
- * Bit-identical writes, no semantic change. See gen_pm_table.py.
+/* Replay all pp_pm entries dumped from stock (ram=3 default flow_info
+ * + ram=6 global). Embedded static C array — see zx_pm_table.h for the
+ * regeneration command.
  */
 #include "zx_pm_table.h"
 
@@ -1908,8 +1891,7 @@ static int zx_cla_set_cpu_queue_id(struct zx_eth *e, u32 addr, u8 qid)
 }
 
 /* ===================================================================
- * Phase 4: per-function ports of stock
- * chip_tm_init's call chain.
+ * Per-function C ports of stock chip_tm_init's call chain.
  *
  * Each function here is the C equivalent of a stock tm.ko leaf
  * helper. The data sources used to write them:
@@ -2089,23 +2071,16 @@ static void zx_register_cpu_mac(struct zx_eth *e, u8 slot, const u8 *mac)
 
 /* Pre-DMA setup (tm_pon_tm_init opening lines).
  *
- * Important: stock /dev/mem dump via dumpregs.sh shows:
- * TM register block has **4 identical instances** replicated at offsets
- * 0x000, 0x400, 0x800, 0xC00. Each instance is 0x400 bytes. Stock programs
- * all 4 instances with IDENTICAL values. Likely one TM instance per
- * port/channel (4 GE PHY ports). Our previous code only wrote to instance
- * 0 (plus partial 0x400) — the TX wire-emit may use any of instance 0..3
- * depending on which port the packet egresses on. Now writes all 4.
+ * The TM register block has 4 identical instances at offsets 0x000,
+ * 0x400, 0x800, 0xC00 (each 0x400 bytes wide), one per GePHY port.
+ * Stock programs all 4 instances with identical values; TX wire-emit
+ * may use any of instance 0..3 depending on egress port.
  *
- * See tasks/00.10.02.re-stock-kmods/findings/ for the dump.
+ * The full per-mem dump shows 16-instance state but stock's
+ * pon_tm_int_init only writes instance 0..3 explicitly; the rest is HW
+ * mirroring and writing to instances 4..15 hangs the FPGA IRQ path.
  */
 #define TM_INSTANCE_STRIDE 0x400
-/* Stock dump shows master config 0x140 in 16 instances but stock plat
- * module's pon_tm_int_init writes ONLY to instance 0's tm_base+0x104.
- * Reverted to 4 — bumping to 16 caused silent hang after FPGA IRQ enable
- * during in-tree test. The per-instance state in dump may come from
- * HW mirroring, not explicit writes.
- */
 #define TM_NUM_INSTANCES   4
 static void zx_tm_pre_init(struct zx_eth *e)
 {
@@ -2519,10 +2494,8 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 				   (q * TM_RX_DESC_PER_Q + idx) * TM_DESC_SIZE;
 			u16 len = le16_to_cpu(*(__le16 *)(desc + 12)) >> 2;
 			/* bp_idx is 10 bits split: low 7 in desc[7]>>1, high 7 in desc[8].
-			 * Stock pon_tm_net_poll line 8754:
+			 * Stock pon_tm_net_poll @ +0x8754:
 			 *   uVar11 = (desc[7]>>1) | (desc[8]<<7);
-			 * We previously used only desc[7]>>1 → wrong buffer for bp>=128
-			 * (delivered all-zero garbage to Linux).
 			 */
 			u16 bppe_idx = ((u16)(desc[7] >> 1)) |
 				       ((u16)desc[8] << 7);
@@ -2542,10 +2515,9 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 				u16 et_at_0 = ntohs(*(const __be16 *)(bp_buf + 12));
 				const u8 *src = (et_at_0 >= 0x0600 && et_at_0 != 0xffff) ?
 						bp_buf : (bp_buf + 16);
-				/* Phase 5 deep probe: dump bytes 0..47 of bp_buf for first
-				 * 12 packets to see exactly what HW writes. We want to
-				 * distinguish fresh-RX (HW prefix at 0..15, frame at 16+)
-				 * from looped-TX (frame at 0+, no prefix).
+				/* Diagnostic: dump bytes 0..47 of bp_buf for the first
+				 * 20 packets. Distinguishes fresh-RX (HW prefix at 0..15,
+				 * frame at 16+) from looped-TX (frame at 0+, no prefix).
 				 */
 				if (e->tm_rx_count + e->tm_rx_loopback_drops < 20) {
 					dev_info(e->dev,
@@ -2558,9 +2530,10 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 						bp_buf[32], bp_buf[33], bp_buf[34], bp_buf[35], bp_buf[36], bp_buf[37], bp_buf[38], bp_buf[39],
 						bp_buf[40], bp_buf[41], bp_buf[42], bp_buf[43], bp_buf[44], bp_buf[45], bp_buf[46], bp_buf[47]);
 				}
-				/* Phase 5: ingress port from desc[6] bits 3..7, minus 1.
-				 * Per stock RE: `r2 = (desc[6] >> 3) & 0x1F; r2 -= 1; pkt[180] = r2`.
-				 * This is the UNI/PON port the packet arrived on.
+				/* Ingress port comes from desc[6] bits 3..7 minus 1.
+				 * Per stock RE: `r2 = (desc[6] >> 3) & 0x1F; r2 -= 1;
+				 * pkt[180] = r2`. This is the UNI/PON port the packet
+				 * arrived on.
 				 */
 				int ingress_port = ((desc[6] >> 3) & 0x1F) - 1;
 				/* Per-ingress counter for empirical CPU-loopback port id */
@@ -2761,19 +2734,19 @@ static int zx_sw_stop(struct net_device *ndev)
  *    2. poll tm[0x8014] & 3 == 0 (busy/done bits)
  *    3. read tm[0x800c]; bit31 = error, bits[15:0] = bp idx
  */
-/* REAL HW BMU allocator — replaces the cycle-counter HACK.
- * Stock protocol per pon_tm_bmu_alloc_bp (plat-zxylzb_9128S.ko @ 0x18668):
- *   1. set tm[0x8014] |= 1  (alloc kick)
- *   2. poll tm[0x8014] & 3 == 0  (busy/done bits clear when alloc done)
- *   3. read tm[0x800c]: bit31 SET = valid, bits[15:0] = bp_idx
- *      (bit31 CLEAR = pool empty / error → return invalid)
+/* HW BMU buffer-pool allocator.
  *
- * Returns the allocated bp_idx (0..1023), or U32_MAX on failure (pool empty
- * or HW hung). Caller must check and drop TX on failure.
+ * Protocol per pon_tm_bmu_alloc_bp in plat-zxylzb_9128S.ko @ 0x18668:
+ *   1. set tm[0x8014] |= 1            (alloc kick)
+ *   2. poll tm[0x8014] & 3 == 0       (busy/done bits clear when done)
+ *   3. read tm[0x800c]: bit31 SET = valid, bits[15:0] = bp_idx;
+ *                       bit31 CLEAR = pool empty / error
  *
- * Spin-locked because alloc must be serialized — HW has 1 alloc engine.
- * Stock used spin_lock_bh; we use the existing e->tx_lock since alloc only
- * happens in the TX path here.
+ * Returns the allocated bp_idx (0..1023), or U32_MAX on failure. Caller
+ * must check and drop TX on failure.
+ *
+ * Spin-locked because alloc must be serialized — HW has one alloc engine.
+ * Reuses e->tx_lock since alloc only happens in the TX path.
  */
 static u32 zx_bmu_alloc_bp(struct zx_eth *e)
 {
@@ -2918,11 +2891,9 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 
 	bp_buf = (u8 *)e->bp_cpu + (u32)bp * TM_BP_SIZE;
 	/* HW BP layout: [16-byte HW prefix][ethernet frame].
-	 * RX path confirmed this (BPDUMP shows zeros at +0..15, frame at +16).
-	 * TX must mirror it: place frame at bp_buf+16. Confirmed via Phase 5g
-	 * no-replay experiment which showed device TX reaches wire BUT shifted
-	 * by 16 bytes (frame appears starting at ARP-payload offset 2 instead
-	 * of L2 dst MAC) — exactly what putting frame at bp_buf+0 would cause.
+	 * RX path confirms this (BPDUMP shows zeros at +0..15, frame at +16).
+	 * TX must mirror it: place frame at bp_buf+16 so the wire format
+	 * matches.
 	 */
 	memset(bp_buf, 0, 16);                  /* zero the HW prefix area */
 	memcpy(bp_buf + 16, skb->data, len);    /* frame goes at +16 */
@@ -3085,9 +3056,9 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	e->sw_dev = ndev;
 	netdev_info(ndev, "sw registered (MAC %pM)\n", ndev->dev_addr);
 
-	/* Phase 6: single port=1 entry only (was port=1 + port=6).
-	 * Stock kotrace captured exactly one sbrg_add_mactable call with port=1.
-	 * Adding port=6 entry may have caused flood / DUPs.
+	/* Stock kotrace captures exactly one sbrg_add_mactable call with
+	 * port=1; we mirror it. Don't seed port=6 here — it caused flood /
+	 * DUPs in trial runs.
 	 */
 	{
 		int rc = zx_fdb_add(e, ndev->dev_addr, 0, 1);
@@ -3358,7 +3329,7 @@ static int zx_eth_probe_port(struct zx_eth *eth, int idx)
 }
 
 /*
- * Phase 14: run drv->config_init on each PHY referenced from the DT.
+ * Run drv->config_init on each PHY referenced from the DT.
  *
  * The monolithic eth driver doesn't have per-port netdevs to attach
  * via phylink_connect_phy() yet (that's the DSA refactor), but the
@@ -3423,29 +3394,29 @@ static void zx_eth_register_cpu_mac_slots(struct zx_eth *eth);
  * order stock's boot does it.
  *
  * For each block we call either:
- *   - an explicit zx_<block>_init() helper (the "extracted" blocks
- *     where we have decoded the writes into readable C), or
+ *   - an explicit zx_<block>_init() helper (blocks where we have
+ *     decoded the writes into readable C), or
  *   - zx_stock_apply_block() which streams the still-generic
  *     (off,val) ops from zx_stock_bursts.h.
  *
- * As Phase-9X chips away at the still-generic blocks, the matching
- * stock_apply_block call here gets replaced by the new helper, and
- * the SKIP_BLOCKS entry in tasks/00.01.eth-driver/scripts/
- * gen_stock_bursts.py drops the entries from the generated ops table.
+ * Decoded blocks let us drop the corresponding entries from the
+ * generated ops table (via SKIP_BLOCKS in
+ * tasks/00.01.eth-driver/scripts/gen_stock_bursts.py) so the data we
+ * ship stays minimal.
  */
 static void zx_eth_apply_stock_init(struct zx_eth *eth)
 {
-	zx_pon_low_init(eth);                 /* Phase 9a — 4 sub-blocks × 4 writes */
+	zx_pon_low_init(eth);                 /* 4 sub-blocks × 4 writes */
 	zx_stock_apply_block(eth, "PON_B",
 			     ZX_STOCK_OPS_PON_B_START,    ZX_STOCK_OPS_PON_B_END);
-	zx_pon_tail_lookup_init(eth);         /* Phase 9e — 16 KB lookup RAM */
+	zx_pon_tail_lookup_init(eth);         /* 16 KB lookup RAM */
 	zx_stock_apply_block(eth, "PON_TAIL",
 			     ZX_STOCK_OPS_PON_TAIL_START, ZX_STOCK_OPS_PON_TAIL_END);
-	zx_npp_twin_init(eth);                /* Phase 9f — 3 twin-pair sub-blocks */
+	zx_npp_twin_init(eth);                /* 3 twin-pair sub-blocks */
 	zx_stock_apply_block(eth, "NPP",
 			     ZX_STOCK_OPS_NPP_START,      ZX_STOCK_OPS_NPP_END);
-	zx_npp_aux_init(eth);                 /* Phase 9c — 13 × 12 identical writes */
-	zx_tm_per_instance_init(eth);         /* Phase 9d + 9g — 16 instance tables */
+	zx_npp_aux_init(eth);                 /* 13 × 12 identical writes */
+	zx_tm_per_instance_init(eth);         /* 16 instance tables */
 	zx_stock_apply_block(eth, "TM",
 			     ZX_STOCK_OPS_TM_START,       ZX_STOCK_OPS_TM_END);
 	zx_stock_apply_block(eth, "PP_FUC",
@@ -3472,8 +3443,8 @@ static void zx_eth_apply_stock_init(struct zx_eth *eth)
  *      sbrg IRQ enable)
  *   7. replay the pp_pm flow_info / sub_ram tables
  *   8. RE-write the TM RX/TX desc base regs so HW points at OUR DMA
- *      pool, not the stock-DDR addresses left by the replay (this is
- *      the Phase 5j fix, mandatory).
+ *      pool, not the stock-DDR addresses left by the replay.
+ *      Mandatory — without this RX delivers from un-mapped memory.
  */
 static int zx_eth_init_tm_subsystem(struct zx_eth *eth,
 				    struct platform_device *pdev)
@@ -3553,10 +3524,6 @@ err_pools:
  *                            to a single writel at fpga_base + 0 (the
  *                            raw IRQ enable mask via sbragRegTable[0]).
  *                            Without this the TM IRQ count stays 0.
- *
- * The dead fpga.bin bulk replay that used to live here behind
- * #if ZX_BULK_REPLAY 0 was removed in Phase 4; the driver does not
- * need it (PING BIDI was achieved without it).
  */
 static void zx_eth_init_chip_tm(struct zx_eth *eth)
 {
@@ -3581,8 +3548,7 @@ static void zx_eth_init_chip_tm(struct zx_eth *eth)
  * Without re-pointing the registers, the TM ASIC writes RX descriptors
  * to whatever happens to live at 0x4ff1f000 (some random kernel page)
  * and reads TX descriptors from 0x4ffdf000 (garbage), so RX silently
- * corrupts memory and TX never leaves the chip. The single most
- * important fix in the entire bring-up — see Phase 5j commit history.
+ * corrupts memory and TX never leaves the chip.
  *
  * This must run AFTER zx_pp_pm_apply_replay() (which is where the
  * stock pointers get re-programmed) and BEFORE the netdev opens.
@@ -3780,13 +3746,6 @@ static int zx_eth_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, eth);
 
-	/* All 3 register-replay snapshots (stock, cla, pm) are now embedded
-	 * as static C tables in zx_{cla,pm,stock}_table.h (refactor #38
-	 * Phase 1+2+3). No more firmware_request() at probe — the driver
-	 * is self-contained. All 4 runtime
-	 * firmware loads (cla, pm, stock, fpga) are now gone.
-	 */
-
 	/* Set the DMA mask before allocating coherent buffers */
 	err = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(32));
 	if (err)
@@ -3805,7 +3764,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 
 	zx_eth_apply_stock_init(eth);
 
-	/* Phase 14: kick PHY power-up (LDO + TX DAC) on all GePHYs. */
+	/* Kick PHY power-up (LDO + TX DAC) on all GePHYs. */
 	zx_eth_init_phys(dev);
 
 	dev_dbg(dev, "PP[0x2c] (CPU_FWD) = %#x, IDM[0x8000] CTRL = %#x\n",
@@ -3937,9 +3896,6 @@ static int zx_eth_remove(struct platform_device *pdev)
 
 	zx_debugfs_exit();
 
-	/* 8. All replay images (cla/pm/stock) are now embedded — Phase 1+2+3.
-	 *    No firmware images to release.
-	 */
 	return 0;
 }
 
