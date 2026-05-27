@@ -1,0 +1,371 @@
+# Stock init sequence — full RE analysis vs mainline gaps
+
+Captured 2026-05-27 EOD after 6 RE-validated fixes failed to restore
+ping bidi. Goal: identify the MISSING init step(s) that prevent
+TM[0x100] bit 0 from ever firing in mainline.
+
+## Source-of-truth: stock `zx_pon_init` (plat-zxylzb_9128S.ko @ 0x1d9a8)
+
+Captured via shim+kotrace 2026-05-26 (16,340 events). Documented in
+`tasks/00.10.02.re-stock-kmods/findings/eth_init_flow_2026_05_26.md`.
+
+```
+zx_pon_init:
+  [a]  reserve_mem_info()
+  [b]  zte_get_pon_mode()  → returns 0x10 (LAN-only)
+  [c]  bp_max_number setup  → JUMBO_BP=2800, BPPE_POOL=256, BP_BUFFER=0xe0000
+  [d]  printk "lan_up=1, lan_up_port=4"               ← lan_up_port = 4 !!
+  [e]  of_find_matching_node_and_match("zte,zx279128s-pon"):
+         pon_base       = of_iomap(node, 0)   = 0x92000000, 4 MiB
+         top_crm_base   = of_iomap(node, 1)   = 0x94000000
+         sys_ctrl_base  = of_iomap(node, 2)
+         pin_mux_base   = of_iomap(node, 3)
+         pon_serdes_base= of_iomap(node, 4)
+         g_pon_irq      = irq_of_parse_and_map(node, 0)
+       for "zte,zx279128s-gephy":
+         for i in 0..3: g_phy_irq[i] = irq_of_parse_and_map(gephy, i)
+  [f]  pon_reset(0xffffffff)
+  [g]  msleep(10)
+  [h]  pon_base + 0x40018 = 2                          ← scope of bit unknown
+  [i]  zx_pon_clk_reset_init(1)                        ← SERDES bring-up, REG read-modify-writes
+  [j]  register_pon_int()                              ← request_threaded_irq(g_pon_irq, ...)
+  [k]  pon_base + 0x40044 = 0xffffff7f                 ← interrupt MASK (pon_int_enable target)
+  [l]  pon_base + 0x4001c = 0xf                        ← scope unknown
+  [m]  msleep(1)
+  [n]  tm_pon_tm_init()                                ← see below
+  [o]  netdebug_module_init()
+  [p]  tm_pon_pp_init()                                ← see below
+  [q]  tm_pon_npp_init()                               ← see below
+  [r]  if (lan_up != 0):
+         pp_base + 0x2c |= 1 << (lan_up_port + 0x19)  ← bit 29 for lan_up_port=4 !!
+         zx_pon_clk_reset()
+```
+
+## Stock `tm_pon_tm_init` body (decomp 7058)
+
+```c
+printk("pon tm init\n");
+*(tm_base + 0x128) = 0x1fff;          // we DO write this
+*(tm_base + 0x130) = 0x1fffff;        // we DO write this
+pon_tm_red_init();                    // see Phase 9d (we have it)
+pon_tm_dma_init();                    // see Phase 26 zx_eth_init_chip_tm
+iVar1 = pon_tm_bmu_init();            // we have zx_tm_bmu_init
+if (iVar1 >= 0) {
+    *(tm_base + 0xf0) = PHYS_ADDR;    // RX desc base — carved RAM @ 0x40520000 + (BMU pool offset)
+    pon_tm_bmu_enable();              // we have zx_tm_bmu_enable
+    *(tm_base + 0xc008) = 0;          // ⚠️ MISSING in mainline (verified by grep)
+    pon_tm_net_init();                // creates netdevs + queues, enables PHY IRQs
+    pon_tm_int_init();                // request_threaded_irq(g_tm_irq, zx_pon_tm_int, "pon_tm", ...)
+}
+```
+
+## Stock `tm_pon_pp_init` body (decomp 5525)
+
+```c
+printk("pon_pp init\n");
+pon_pp_ctrl_init();
+pon_pp_brg_init();
+pon_pp_cla_init();
+request_threaded_irq(g_pp_irq, zx_pon_pp_int, ...);
+```
+
+### `pon_pp_ctrl_init` (decomp 5562)
+
+```c
+pp_base[10]   = 0x1070104;            // = pp_base + 0x28 = 0x1070104 ✅ we write
+*pp_base      = 2;                    // pp_base + 0 = 2 ✅ but only after Phase 4
+(*_request_threaded_irq)(0x66665b0);  // delay loop (~52ms)
+```
+
+### `pon_pp_brg_init` (decomp 5359 — all 14 writes)
+
+We have all 14 PP_BRG writes in mainline post Phase 50 (verified above).
+
+### `pon_pp_cla_init` (decomp 5500)
+
+```c
+*(pp_base + 0xc000) = ...;            // CLA RAM init via cla_ram_set
+```
+
+We have CLA init via `zx_cla_apply_replay` / stock_table.
+
+## Stock `tm_pon_npp_init` body (decomp 2236)
+
+```c
+printk("pon_npp init\n");
+*(npp_base + 8)    = 0xffffff;        // ⚠️ check mainline
+*(npp_base + 0xc)  = 0xfffff;         // ⚠️ check mainline
+msleep(1);
+pon_npp_idm_init();                   // ⚠️ idm_net_register, NAPI add, idm IRQ regs
+pon_npp_spa_init();                   // NPP[0x141c0] = 0
+pon_npp_sipc_init();                  // NPP[0xc000] = 0x11
+pon_npp_smct_init();                  // NPP[0x10000] = 0xb, NPP[0x10010] = 0x3810
+*(npp_base + 4)    = 0xffffffff;      // ⚠️ check mainline
+*(npp_base + 0x48) = 0;               // ⚠️ check mainline
+pon_npp_smac_init();                  // 4x smac_init() — we have via stock_table
+request_threaded_irq(g_npp_irq, pon_npp_int, ...);   // ⚠️ MISSING: we don't register pon_npp IRQ
+*(npp_base + 0x40) |= 0x300;          // ⚠️ check mainline
+*(npp_base + 0x10008) = 0x80;         // ⚠️ check mainline
+pon_npp_uopc_init();                  // NPP[0x18000] |= 8
+```
+
+### `pon_npp_idm_init` (decomp 4340)
+
+```c
+idm_net_register(1, "idm1");
+idm_net_register(0, "idm0");
+netif_napi_add(idm_netdev, idm_net_poll, weight=255);
+*(npp_base + 0x8024) = 0x1f;          // IDM IRQ_MASK
+idm_int_mask = 0x1f;
+*(npp_base + 0x8018) = 0x40;          // IDM something
+*(npp_base + 0x801c) = 5000;          // IDM TIMEOUT?
+// ... more
+```
+
+We DO ioremap idm_base but **do not implement idm_net_register/idm netdev**.
+We DO write `IDM_REG_IRQ_MASK = 0x1f` to npp+0x8024 per stock match.
+
+## Critical observation: lan_up_port = 4 (not 0)
+
+```c
+// Stock init flow doc line 27:
+printk "lan_up=1, lan_up_port=4"
+```
+
+And:
+```c
+// Stock decomp line 8940:
+*(pp_base + 0x2c) |= 1 << (lan_up_port + 0x19U);  // 4+25 = 29 → BIT(29)
+```
+
+Mainline definition (line 129):
+```c
+#define PP_CPU_FWD_BIT  BIT(25)         // ← WRONG: should be BIT(29)
+```
+
+But: even live `devmem 0x9238002c 32 0x20000106` (BIT(29) set) does NOT
+stick — readback stays 0x00000106. The register is **HW-locked** by
+some prior init state that mainline doesn't establish.
+
+## Comparison: Phase 50 init order vs HEAD vs stock
+
+| Step | Stock | Phase 50 (PING BIDI WORKS) | HEAD |
+|---|---|---|---|
+| pon_reset(-1) | ✅ explicit | ❌ no | ❌ no |
+| msleep(10) | ✅ | ❌ | ❌ |
+| pon_base + 0x40018 = 2 | ✅ | ⚠️ residue from stock pre-reboot | ⚠️ residue |
+| zx_pon_clk_reset_init | ✅ SERDES | ⚠️ partial via TOPCRM | ⚠️ partial |
+| register_pon_int | ✅ | ❌ no PON IRQ | ❌ no PON IRQ |
+| pon + 0x40044 = 0xffffff7f | ✅ | ⚠️ residue | ⚠️ residue |
+| pon + 0x4001c = 0xf | ✅ | ❌ missing (live = 0) | ❌ missing (live = 0) |
+| msleep(1) | ✅ | ❌ | ❌ |
+| TM[0x128] = 0x1fff | ✅ | ✅ | ✅ |
+| TM[0x130] = 0x1fffff | ✅ | ✅ | ✅ |
+| pon_tm_red_init | ✅ | ✅ via phase 9d | ✅ |
+| pon_tm_dma_init | ✅ | ✅ via Phase 26 | ✅ (with UP/DN fix) |
+| pon_tm_bmu_init | ✅ | ✅ | ✅ |
+| TM[0xF0] = phys carved | ✅ carved | ✅ rxdesc_dma | ✅ rxdesc_dma |
+| pon_tm_bmu_enable | ✅ | ✅ | ✅ |
+| **TM[0xc008] = 0** | ✅ | ❓ unverified | ❌ likely missing |
+| pon_tm_net_init | ✅ | partial — netif_napi_add | partial |
+| pon_tm_int_init | ✅ request_threaded_irq | ✅ devm_request_irq | ✅ devm_request_irq |
+| netdebug_module_init | ✅ | ❌ noop | ❌ noop |
+| pon_pp_ctrl_init | ✅ | ✅ via stock_table | ✅ |
+| pon_pp_brg_init (14 regs) | ✅ | ✅ via PP block | ✅ |
+| pon_pp_cla_init | ✅ | ✅ | ✅ |
+| request_threaded_irq pp_irq | ✅ | ❌ no PP IRQ | ❌ no PP IRQ |
+| pon_npp_idm_init | ✅ register idm netdev | ❌ no idm netdev | ❌ |
+| pon_npp_spa/sipc/smct/uopc | ✅ | ✅ via stock_table | ✅ |
+| NPP[+4] = 0xffffffff | ✅ | ❓ check | ❓ |
+| NPP[+0x48] = 0 | ✅ | ❓ check | ❓ |
+| NPP[+0x40] \|= 0x300 | ✅ | ❓ check | ❓ |
+| NPP[+0x10008] = 0x80 | ✅ | ❓ check | ❓ |
+| request_threaded_irq npp_irq | ✅ | ❌ | ❌ |
+| **if lan_up: PP[0x2c] \|= BIT(29)** | ✅ | ⚠️ bit 25 (wrong) | ⚠️ bit 25 (wrong) |
+| zx_pon_clk_reset() | ✅ | ❌ | ❌ |
+
+## Conclusions
+
+### The ping-blocking pieces (in priority order)
+
+1. **HW-lock state**: PP[0x2c] bit 29 cannot be set without prior
+   `pon_reset` + `zx_pon_clk_reset_init` + the proper sequence. The
+   register is locked until those run. Mainline lacks the full ceremony.
+
+2. **Missing `pon_reset(0xffffffff)`** at module init. Stock's reset
+   clears `pon_base + 8` bits, waits, restores. This puts HW in a
+   known state. Without it the HW retains old state from any prior
+   stock boot, which may have set "locks" we can't undo.
+
+3. **Missing `zx_pon_clk_reset_init(1)`** SERDES bring-up. We replay
+   some TOPCRM bits via stock_table but not the band-calibration loop.
+
+4. **Missing `register_pon_int()`** — we don't request the PON IRQ
+   (linux IRQ #26 in stock). The PON IRQ handler may be required for
+   some path even if it doesn't fire RX directly.
+
+5. **Missing `request_threaded_irq` for pon_pp and pon_npp**. Same
+   pattern as PON: we don't register them.
+
+6. **PP_CPU_FWD_BIT = BIT(25)** is hard-coded WRONG. Should be
+   BIT(29) for `lan_up_port=4`. (Won't fix it alone — bit is locked.)
+
+7. **TM[0xc008] = 0** write missing (small, may not be load-bearing
+   but stock does it).
+
+### Theory of cause
+
+The HW is in a "partially initialized" state when our mainline code
+runs. We benefit from residual register values from the prior stock
+boot (e.g. 0x40018 = 2). But some registers got cleared / reset to
+defaults by `pon_reset(-1)` that stock DOES run at module init —
+and our mainline never executes pon_reset. Without it:
+
+- The HW reset cycle never happens.
+- Internal HW state machines that gate "frame → TM RX → bit 0 IRQ"
+  remain in a clamped state.
+- PP[0x2c] write to bit 29 is rejected because the HW is in a
+  pre-reset mode where that register is read-only.
+
+### Next-session implementation roadmap
+
+1. **Add a `zx_pon_init` function in mainline** that mirrors stock's
+   `zx_pon_init` exactly:
+   ```c
+   static int zx_pon_init(struct zx_eth *e)
+   {
+       /* a-c: reserve mem, pon mode — we don't need these on mainline */
+       /* d: print lan_up_port — informational */
+       /* e: already done by DT parse */
+
+       /* f-g: pon_reset() — ⚠️ NEED TO RE-IMPLEMENT */
+       u32 v = readl(e->pon_early + 8);
+       writel(v & ~0xffffffffu, e->pon_early + 8);
+       msleep(10);
+       writel(v | 0xffffffffu, e->pon_early + 8);
+
+       /* h: pon_base + 0x40018 = 2 */
+       writel(2, e->pon_early + 0x40018);
+
+       /* i: zx_pon_clk_reset_init — need to port this carefully */
+       /* This requires top_crm_base, pon_serdes_base, sys_ctrl_base.
+        * The serdes calibration is involved (read pon_serdes_base + 0x68
+        * waiting for bit 4, then band calc from temp_ctrl_read). */
+       zx_pon_clk_reset_init(e, 1);  /* NEW helper */
+
+       /* j: register_pon_int — request_threaded_irq for irq_pon */
+       err = devm_request_irq(dev, e->irq_pon, zx_pon_irq, 0, "pon", e);
+       if (err) return err;
+
+       /* k-l: writes ordered */
+       writel(0xffffff7f, e->pon_early + 0x40044);
+       writel(0xf,        e->pon_early + 0x4001c);
+
+       msleep(1);
+
+       /* n: tm_pon_tm_init equivalent — we have zx_eth_init_chip_tm */
+       zx_eth_init_chip_tm(e);
+       /* + missing: writel(0, e->base + 0xc008) */
+
+       /* p: tm_pon_pp_init — we have via apply_stock + pp_brg + etc */
+
+       /* q: tm_pon_npp_init — we have most but missing IDM netdev */
+
+       /* r: if lan_up: PP[0x2c] |= BIT(lan_up_port + 0x19) */
+       if (lan_up) {
+           u32 v = readl(e->base + PP_OFF + 0x2c);
+           writel(v | BIT(lan_up_port + 0x19), e->base + PP_OFF + 0x2c);
+           zx_pon_clk_reset(e);  /* NEW helper */
+       }
+       return 0;
+   }
+   ```
+
+2. **Fix PP_CPU_FWD_BIT to derive from lan_up_port**:
+   ```c
+   #define PP_CPU_FWD_BIT(lan_up_port)  BIT((lan_up_port) + 25)
+   /* For lan_up_port=4: BIT(29) */
+   ```
+   And read `lan_up_port` value from a DT property or hard-code to 4
+   for the H3600.
+
+3. **Verify pon_irq is wired**: check our DT has `interrupts` for
+   "pon" (GIC SPI 0x42 = 66), "pp" (0x45 = 69), "npp" (0x43 = 67).
+   Currently only "tm", "npp", "idm" are in DT.
+
+4. **TM[0xc008] write**: add `writel(0, e->base + 0xc008)` after
+   `pon_tm_bmu_enable` in `zx_eth_init_chip_tm`.
+
+## Status of fixes already applied this session
+
+| Commit | Description | Confidence | Helped? |
+|---|---|---|---|
+| `9a278d294` | UP/DN DMA rings separated | High (RE-validated) | HW state changed but ping unchanged |
+| `f20382821` | BMU release in NAPI | High (matches stock soft_release_rx_desc) | Stops leak; ping unchanged |
+| `f7c6fc9d7` | SMAC_LOOK_EN to 0xff | High (matches stock 0xff) | Live state correct; ping unchanged |
+| `a9691534a` | PP_CPU_FWD_BIT OR | Architecturally right but wrong bit (BIT(25) vs BIT(29)) AND register HW-locked | No live effect |
+| `b3411b71a` | Queue counter high16 | High (stock pon_tm_net_poll RE-confirmed) | No effect (NAPI doesn't run anyway) |
+
+## Final recommendation
+
+The 6 fixes are correct in isolation but **the HW is operating in a
+state that doesn't permit the RX IRQ to fire**, because of the missing
+`pon_reset` → SERDES bring-up → ordered helper calls ceremony. The
+fix is to implement a proper `zx_pon_init()` equivalent in mainline.
+Estimated effort: 4-8 hours including testing.
+
+## EOD update — PP[0x002c] is HW-write-protected on most bits
+
+Bench test 2026-05-27 EOD: writing 0xffffffff to PP[0x002c] via
+`busybox devmem` and reading back yields **0x00000f0f**.
+
+Writable bits: only bits 0-3 and 8-11 (`mask = 0x00000f0f`).
+Bits 25 (PP_CPU_FWD_BIT) and 29 (`lan_up_port + 0x19`) are NOT
+writable via direct register access. They stay 0 regardless of what
+we write.
+
+Stock decomp shows stock writes via:
+```c
+*(pp_base + 0x2c) |= 1 << (lan_up_port + 0x19);  // bit 29
+```
+which is a normal read-modify-write. **Yet stock somehow succeeds.**
+
+Possible explanations:
+1. Stock's `pp_base` is at a DIFFERENT physical address than ours
+   (different of_iomap mapping). Our pp_base = 0x92380000.
+2. There's an indirect-write mechanism not yet RE'd (a config
+   register that gates write access to the upper bits).
+3. The HW enters a different state after stock's full init ceremony
+   where the upper bits become writable.
+
+Status of pon+8 (reset register):
+- Live mainline reads `pon_base + 8 = 0xffffffff` → already in
+  post-reset state. So `pon_reset(0xffffffff)` would be a no-op.
+- That rules out "HW stuck in reset" hypothesis.
+
+Status of `register_pon_int` etc:
+- Mainline has no PON, PP, or NPP IRQ registered. Only TM and IDM.
+- This may keep upstream queues backpressured if they need draining
+  via dedicated IRQ servicing.
+
+## Probably-right concrete next steps (in priority order)
+
+1. **Verify pp_base address**: dump stock /proc/iomem to see where
+   "pp" maps in its address space. Compare with our PP_OFF=0x1c0000
+   from npp base. They may differ.
+
+2. **Register the missing IRQs**: add devm_request_irq for PON,
+   NPP, and PP in addition to TM and IDM. Even empty handlers might
+   help if the HW needs them serviced to avoid backpressure.
+
+3. **Look for indirect "write enable" register** by:
+   - Searching stock for register reads in `0x80..0x100` range of
+     pp_base around the time it sets PP[0x2c]. There may be a
+     "config commit" register.
+   - Verifying via memdump on stock LIVE what PP[0x002c] reads as
+     and what bit pattern it has bits 25/29 set to.
+
+4. **Read PP[0x002c] on running stock** to confirm bit 29 IS set
+   there. If it is → stock can set it; we just don't know how. If
+   it ISN'T → maybe the bit's role is different from what the RE
+   suggested.
