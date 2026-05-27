@@ -162,6 +162,54 @@ def _log_size():
         return 0
 
 
+def bridge_dtr_pulse(host="localhost", port=9998, hold_secs=2.0):
+    """Pulse DTR via the uart-bridge daemon's ctl port — cold-boots the
+    device. Same atomic operation tftp_boot_mainline used to do inline;
+    extracted here so run_uboot_seq can invoke recovery transparently
+    on terminal TFTP failures."""
+    import socket as _socket
+    s = _socket.create_connection((host, port), timeout=5)
+    try:
+        s.recv(1024)  # greeting
+        s.sendall(b"DTR_HIGH\n")  # device OFF
+        s.recv(1024)
+        print(f"[bridge_dtr_pulse] DTR HIGH for {hold_secs}s (cold reset)")
+        time.sleep(hold_secs)
+        s.sendall(b"DTR_LOW\n")   # device ON
+        resp = s.recv(1024)
+        print(f"[bridge_dtr_pulse] DTR LOW → {resp.decode(errors='replace').strip()}")
+    finally:
+        s.close()
+
+
+def drive_cspstart_to_uboot(ser, password="Boot4128s!", timeout=60):
+    """After a DTR pulse, drive cspstart's interactive prompts to reach
+    U-Boot. Returns True if '=>' prompt seen, False on timeout. Used by
+    run_uboot_seq's TFTP failure recovery to re-reach U-Boot after a
+    cold reset."""
+    deadline = time.time() + timeout
+    buf = b""
+    sent_one = sent_pw = False
+    while time.time() < deadline:
+        data = ser.read(512)
+        if data:
+            sys.stdout.buffer.write(data); sys.stdout.buffer.flush()
+            buf += data
+            if not sent_one and b"Press 1" in buf:
+                ser.write(b"1\r"); ser.flush()
+                sent_one = True
+                print("\n[drive_cspstart] sent '1'")
+            if sent_one and not sent_pw and b"password" in buf:
+                ser.write(password.encode() + b"\r"); ser.flush()
+                sent_pw = True
+                print("[drive_cspstart] sent password")
+            if b"=>" in buf:
+                return True
+        else:
+            time.sleep(0.05)
+    return False
+
+
 def wait_for_marker(marker, timeout=120, start_offset=0, log_path=None):
     """Poll the bridge log for a substring. Returns True if found within
     `timeout` seconds. Search begins at `start_offset` bytes into the log
@@ -318,27 +366,62 @@ def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False,
         return "ok"
 
     full_cmds = (list(_PREAMBLE) if not skip_preamble else []) + list(cmds)
-    for cmd, wait in full_cmds:
+
+    def _run_preamble():
+        """Re-issue _PREAMBLE on `ser`. Used after DTR cold-reset recovery
+        — env is wiped, need to re-set ipaddr/serverip/tftpblocksize."""
+        for pcmd, pwait in _PREAMBLE:
+            _send_and_wait(pcmd, pwait)
+
+    i = 0
+    while i < len(full_cmds):
+        cmd, wait = full_cmds[i]
         attempt = 1
+        used_dtr_recovery = False
         while True:
             status = _send_and_wait(cmd, wait, attempt)
             if status == "ok" or status == "timeout":
                 break
+
             if status == "tftp_fail" and retry_on_tftp_fail and "tftp" in cmd:
-                if attempt >= max_retries:
-                    print(f"[run_uboot_seq] tftp failed after {max_retries} attempts, giving up",
+                # Tier 1: simple re-send up to max_retries.
+                if attempt < max_retries:
+                    attempt += 1
+                    print(f"[run_uboot_seq] tftp failure marker detected — "
+                          f"retrying ({attempt}/{max_retries})", flush=True)
+                    time.sleep(3)
+                    continue
+
+                # Tier 2: simple re-sends exhausted. Try ONCE more after
+                # a full DTR cold-reset + cspstart drive + preamble replay.
+                # This handles the case where U-Boot itself got wedged
+                # (e.g., its tftp engine is stuck) rather than just a
+                # transient ARP miss.
+                if not used_dtr_recovery:
+                    print(f"[run_uboot_seq] tftp failed {max_retries}x — "
+                          f"DTR cold-reset + replay cspstart→U-Boot + preamble",
                           flush=True)
-                    break
-                attempt += 1
-                print(f"[run_uboot_seq] tftp failure marker detected — retrying ({attempt}/{max_retries})",
-                      flush=True)
-                # Brief pause to let U-Boot get back to its prompt cleanly
-                # before resending. The "Retry count exceeded; starting again"
-                # message means U-Boot is already auto-retrying — we wait a
-                # beat then send a fresh tftp command.
-                time.sleep(3)
-                continue
+                    try:
+                        bridge_dtr_pulse()
+                    except Exception as e:
+                        print(f"[run_uboot_seq] bridge DTR_PULSE failed: {e}",
+                              flush=True)
+                        break
+                    if not drive_cspstart_to_uboot(ser):
+                        print("[run_uboot_seq] ERROR: could not reach U-Boot "
+                              "after DTR — giving up", flush=True)
+                        break
+                    _run_preamble()
+                    used_dtr_recovery = True
+                    attempt = 1   # reset counter for one more round
+                    continue
+
+                # Tier 3: even DTR didn't help. Give up cleanly.
+                print(f"[run_uboot_seq] tftp still failing after DTR recovery, "
+                      f"giving up", flush=True)
+                break
             break
+        i += 1
 
     stop.set()
     t.join()
