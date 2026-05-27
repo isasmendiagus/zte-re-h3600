@@ -35,6 +35,7 @@
  * for the current state of that work.
  */
 
+#include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/etherdevice.h>
 #include <linux/interrupt.h>
@@ -1198,7 +1199,7 @@ static void zx_npp_init(struct zx_eth *e)
 	/* All values verified from live stock dump. */
 	npp_write(e, NPP_REG_IRQ_ENABLE, 0x000000);	/* stock = 0, not 0xFFFFFF */
 	npp_write(e, NPP_REG_IRQ_MASK,   0x03FFFF);	/* stock = 0x3FFFF */
-	msleep(1);
+	usleep_range(1000, 2000);
 
 	/* IDM IRQs masked at probe — open() unmasks bit 2 selectively. */
 	npp_write(e, IDM_REG_IRQ_MASK,   IDM_IRQ_ALL_MASKED);
@@ -3877,7 +3878,7 @@ static int zx_eth_remove(struct platform_device *pdev)
 		/* c) Clear DMA control bits (stop TX/RX engines) */
 		tm_write(eth, TM_REG_DMA_CTRL, 0);
 		/* d) Tiny delay to let in-flight transactions complete */
-		msleep(10);
+		usleep_range(10000, 11000);
 		/* e) Now safe to free IRQ + NAPI + netdev */
 		devm_free_irq(eth->dev, eth->irq_tm, eth);
 		unregister_netdev(eth->sw_dev);
