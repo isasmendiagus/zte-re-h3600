@@ -4,3 +4,4 @@
 #
 
 obj-$(CONFIG_ZX279128_ETH) += zx279128-eth.o
+zx279128-eth-y := zx-eth-main.o zx-pon-plat.o
