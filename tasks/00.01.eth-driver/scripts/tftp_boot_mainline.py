@@ -25,7 +25,7 @@ import time
 
 sys.path.insert(0, os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "lib")))
-from uart import send_slow, log_loop, LOG  # noqa: E402
+from uart import send_slow, log_loop, LOG, run_uboot_seq  # noqa: E402
 
 # Force TCP transport (the bridge). Set BEFORE importing open_port so the
 # UART_TCP env-var check sees it.
@@ -128,37 +128,17 @@ def main():
         print("ERROR: never reached U-Boot prompt")
         return 1
 
-    print("\n>>> U-Boot reached. setenv + TFTP + bootm.")
-    log_size_at_uboot = os.path.getsize(BRIDGE_LOG) if os.path.exists(BRIDGE_LOG) else 0
-
-    fout = open(LOG, "ab")
-    stop = threading.Event()
-    t = threading.Thread(target=log_loop, args=(ser, fout, stop, True))
-    t.start()
-    time.sleep(0.5)
-
-    send_slow(ser, f"setenv ipaddr {PORT_IP}"); time.sleep(1)
-    send_slow(ser, f"setenv serverip {SERVER_IP}"); time.sleep(1)
-    send_slow(ser, f"tftp 0x42000000 {KERNEL_IMG}")
-
-    # Wait for "Bytes transferred" — adapts to TFTP speed.
-    print(">>> Waiting for TFTP to complete...")
-    if not wait_for_marker(BRIDGE_LOG, "Bytes transferred", timeout=300,
-                           start_offset=log_size_at_uboot):
-        print("ERROR: TFTP did not complete in 180s")
-        stop.set(); t.join(); fout.close()
-        return 1
-    print(">>> TFTP done")
-
-    time.sleep(1)
-    send_slow(ser, "bootm 0x42000000")
-    print(">>> bootm sent — kernel should boot now.")
-
-    # Watch for a few seconds then exit; caller polls UART for kernel-up marker.
-    time.sleep(3)
-    stop.set()
-    t.join()
-    fout.close()
+    print("\n>>> U-Boot reached. Running TFTP + bootm via run_uboot_seq helper.")
+    # The helper prepends _PREAMBLE (empty-newline wake + setenv ipaddr/
+    # serverip + tftpblocksize=1468 → ~1 MiB/s instead of ~146 KiB/s) which
+    # both fixes the "first command lost after U-Boot prompt" race and
+    # accelerates TFTP by ~8×. At ~1 MiB/s an 11 MB kernel transfers in
+    # ~12s, so a 60s wait is conservative.
+    run_uboot_seq(ser, [
+        (f"tftp 0x42000000 {KERNEL_IMG}", 60),  # ~12s real with blocksize=1468
+        ("bootm 0x42000000",               5),
+    ])
+    print(">>> bootm sent — kernel should boot now. Caller polls UART for kernel-up marker.")
     return 0
 
 

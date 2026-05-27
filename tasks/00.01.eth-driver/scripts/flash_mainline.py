@@ -31,22 +31,16 @@ import sys, os, time
 # tasks/00.01.eth-driver/scripts/ → zxic/lib/ (parent.parent.parent + lib for uart.py)
 sys.path.insert(0, os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "lib")))
-from uart import open_port, send_slow, log_loop, _wait_for_boot_and_drive_prompts, LOG
-import threading
+from uart import open_port, _wait_for_boot_and_drive_prompts, run_uboot_seq
 
-PORT_IP = "192.168.1.1"
-SERVER_IP = "192.168.1.50"
-
+# CMDS sent AFTER run_uboot_seq's _PREAMBLE (which already does the empty-
+# newline wake + setenv ipaddr/serverip + tftpblocksize=1468). With
+# tftpblocksize=1468 TFTP throughput is ~1 MiB/s (8× faster than the 146
+# KiB/s default), so the 11 MB kernel transfers in ~12s instead of ~75s.
+# Waits are conservative bounds, not measurements.
 CMDS = [
-    # cmd                                                     wait_after_seconds
-    (f"setenv ipaddr {PORT_IP}",                              2),
-    (f"setenv serverip {SERVER_IP}",                          2),
-    # 1. Mainline kernel.
-    # 2026-05-22 BUG FIX: TFTP at ~150 KB/s for 11 MiB takes ~75s. The
-    # previous 45s wait caused `nand erase`/`nand write` to be sent into
-    # U-Boot mid-TFTP and silently dropped, so the kernel never got written.
-    # Bumped to 180s to leave huge margin even if network is slow.
-    ("tftp 0x42000000 slotA.bin",                             180),
+    # 1. Mainline kernel — slotA.bin is padded to 0xc00000 by build_slotA.py.
+    ("tftp 0x42000000 slotA.bin",                             60),
     ("nand erase 0x700000 0x1980000",                         60),
     ("nand write 0x42000000 0x700000 0xc00000",               120), # ~11 MiB write
     # 2. Modified header
@@ -66,27 +60,16 @@ def main():
         print("ERROR: did not reach U-Boot prompt")
         return 1
 
-    print("\n>>> U-Boot reached. Streaming output to terminal + log...\n")
-    fout = open(LOG, "ab")
-    stop = threading.Event()
-    t = threading.Thread(target=log_loop, args=(ser, fout, stop, True))
-    t.start()
-    time.sleep(1)
-
-    for i, (cmd, wait) in enumerate(CMDS, 1):
-        print(f"\n>>> [{i}/{len(CMDS)}] {cmd}  (wait {wait}s)")
-        send_slow(ser, cmd)
-        time.sleep(wait)
+    print("\n>>> U-Boot reached. Running flash sequence via run_uboot_seq helper.\n")
+    run_uboot_seq(ser, CMDS)
 
     print("\n>>> All commands sent. Modem is rebooting now.")
     print(">>> Watching boot output — Ctrl+C to stop.\n")
     try:
-        while True: time.sleep(1)
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
         pass
-    stop.set()
-    t.join()
-    fout.close()
 
 if __name__ == "__main__":
     sys.exit(main() or 0)

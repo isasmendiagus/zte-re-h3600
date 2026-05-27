@@ -159,6 +159,36 @@ _PREAMBLE = [
     ("setenv tftpblocksize 1468",           1),
 ]
 
+def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False):
+    """Run a list of (cmd, wait_seconds) tuples on a UART already at the
+    U-Boot prompt. Caller is responsible for: opening `ser`, doing the
+    DTR reset, and driving cspstart prompts to U-Boot.
+
+    Prepends `_PREAMBLE` (the empty-newline wake + setenv ipaddr/serverip +
+    tftpblocksize=1468) which:
+      - fixes the "first command after U-Boot prompt is lost" race
+      - configures network for TFTP
+      - bumps TFTP throughput from ~146 KiB/s to ~1 MiB/s
+
+    Set skip_preamble=True if the caller already programmed the env."""
+    log_open_mode = "ab" if append else "wb"
+    fout = open(LOG, log_open_mode)
+    stop = threading.Event()
+    t = threading.Thread(target=log_loop, args=(ser, fout, stop, mirror))
+    t.start()
+    time.sleep(0.5)
+
+    full_cmds = (list(_PREAMBLE) if not skip_preamble else []) + list(cmds)
+    for cmd, wait in full_cmds:
+        label = repr(cmd) if cmd else "<empty newline wake>"
+        print(f">>> [uboot] {label}  (wait {wait}s)", flush=True)
+        send_slow(ser, cmd)
+        time.sleep(wait)
+
+    stop.set()
+    t.join()
+    fout.close()
+
 def cmd_aloop(args):
     """Tiny 116-byte payload — verified prints AAAA stream after bootm.
     Use this to confirm the cleanup→re-init UART sequence is working."""
