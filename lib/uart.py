@@ -88,6 +88,14 @@ def send_slow(ser, cmd, delay=0.01):
 # the moment log_loop's ser.read() returns. Each run_uboot_seq() can
 # call _buf_snapshot_size() at the start to get a "start_offset" so its
 # checks only see data appended AFTER its command was sent.
+#
+# TODO: consider a single-threaded refactor of run_uboot_seq that does
+# ser.read + mirror + marker-check inline, removing the log_loop thread
+# + _RX_BUF lock entirely. Cleaner architecturally but ~50 lines of
+# refactor + risk to other lib callers (cmd_log, cmd_wait, _run_seq)
+# that share log_loop. Worth doing if we add more inline-buffer
+# detectors (e.g., kernel-panic watcher) and the thread coordination
+# becomes annoying.
 _RX_BUF = bytearray()
 _RX_BUF_LOCK = threading.Lock()
 
