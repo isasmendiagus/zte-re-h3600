@@ -159,11 +159,20 @@
 #define TM_REG_DMA_REG388	0x10388
 
 #define TM_RX_QCNT_BASE		(0x4040 * 4)	/* tm[0x10100+q*4] per-queue RX count */
-/* TM IRQ_MASK: 1 = MASKED. Stock 0xFFFFFFFC = bits 0,1 (PON RX/TX) unmasked.
- * Reverted to stock bits — TM IRQ flood at 61k/s when we unmasked other bits
- * meant they're spurious/keep-asserted state bits, not edge-triggered events.
+/* TM IRQ_MASK semantics: 1 = MASKED. Stock unmasks bits 0 (RX) and 1 (TX).
+ *
+ * We currently unmask bit 0 only. The NAPI poll handles RX queues by reading
+ * per-queue counters and releasing RX descs, which clears the bit 0 IRQ
+ * source. We do not yet implement TX-completion reclaim (TX done is observed
+ * via tm_tx_count counter rather than per-frame), so leaving bit 1 unmasked
+ * causes an IRQ storm — HW asserts bit 1 after the first TX, the handler
+ * runs, NAPI finds no RX work and re-arms, the bit is still asserted, IRQ
+ * refires immediately.
+ *
+ * Masking bit 1 entirely is a known-safe stop-gap pending proper TX-completion
+ * reclaim. See tasks/00.01.eth-driver/findings/ping_bidi_irq_storm_2026-05-27.md.
  */
-#define TM_IRQ_ARM_BITS		0x03		/* bits 0,1 only */
+#define TM_IRQ_ARM_BITS		0x01		/* bit 0 (RX) only */
 
 /* Stock prints `BPPE_POOL_SIZE=2000` in `pon init` = 0x2000 = 8192. Match
  * stock to avoid buffer exhaustion under sustained traffic (boot UART capture, mainline_eth/captures/boot_init.log).
@@ -878,7 +887,7 @@ static void zx_tm_per_instance_init(struct zx_eth *e)
 		writel(0x00000140, tm_i + 0x000);  /* instance enable / mode? */
 		writel(0x00000010, tm_i + 0x004);
 		writel(0x4ff1f000, tm_i + 0x0f0);  /* DDR base pointer */
-		writel(0xfffffffc, tm_i + 0x104);
+		writel(~(u32)TM_IRQ_ARM_BITS, tm_i + 0x104);  /* mask all but our IRQ bits */
 		writel(0x03ffffff, tm_i + 0x124);
 		writel(0x00001fff, tm_i + 0x12c);
 		writel(0x001fffff, tm_i + 0x134);
@@ -2089,7 +2098,7 @@ static void zx_tm_pre_init(struct zx_eth *e)
 
 		tm_write(e, base + 0x000, 0x00000140);	/* master config */
 		tm_write(e, base + 0x004, 0x00000010);
-		tm_write(e, base + 0x104, 0xfffffffc);	/* IRQ mask, bits 0,1 unmasked */
+		tm_write(e, base + 0x104, ~(u32)TM_IRQ_ARM_BITS);  /* mask all but our IRQ bits */
 		tm_write(e, base + 0x124, 0x03ffffff);
 		tm_write(e, base + 0x12c, 0x00001fff);	/* IRQ enable mask */
 		tm_write(e, base + 0x134, 0x001fffff);
