@@ -42,6 +42,7 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
@@ -118,8 +119,10 @@
 #define PP_BRG_BASE		0x8000
 #define PP_CLA_BASE		0xC000
 
-/* TOP_CRM clock control (separate ioremap from main NPP block) */
-#define ZX_TOPCRM_BASE		0x94000000
+/* TOP_CRM clock control: base address comes from the zte,topcrm phandle,
+ * mapped separately from the main NPP block. The two offsets we touch are
+ * verified against the stock zx_pon_clk_reset_init sequence.
+ */
 #define TOPCRM_REG_PON_CLK	0x0C	/* zx_pon_clk_reset_init final write: |= 0x1E0 */
 #define TOPCRM_PON_CLK_BITS	0x1E0	/* bits 5-8 — PON subsystem clocks */
 
@@ -3407,8 +3410,8 @@ static void zx_eth_init_phys(struct device *dev)
  * values that turn on the FPGA → GIC IRQ routing we depend on. Linux
  * defaults leave many of those bits cleared.
  *
- * TODO Phase 10b: consume the `zte,topcrm = <&topcrm>` syscon phandle
- * from DT instead of devm_ioremap'ing a hardcoded address.
+ * The TOPCRM base address is resolved from the `zte,topcrm` phandle on
+ * our DT node (points at a syscon@94000000 sibling).
  */
 /* Forward declarations — defined further below. */
 static void zx_eth_init_chip_tm(struct zx_eth *eth);
@@ -3709,21 +3712,40 @@ static int zx_eth_init_extra_mmio(struct zx_eth *eth,
 	return 0;
 }
 
+static void zx_eth_iounmap_action(void *iomem)
+{
+	iounmap((void __iomem *)iomem);
+}
+
 static int zx_eth_init_topcrm(struct zx_eth *eth)
 {
 	struct device *dev = eth->dev;
+	struct device_node *np;
+	int rc;
 
-	eth->topcrm = devm_ioremap(dev, ZX_TOPCRM_BASE, 0x100);
+	np = of_parse_phandle(dev->of_node, "zte,topcrm", 0);
+	if (!np)
+		return dev_err_probe(dev, -ENODEV,
+				     "missing zte,topcrm phandle\n");
+
+	eth->topcrm = of_iomap(np, 0);
+	of_node_put(np);
 	if (!eth->topcrm)
-		return dev_err_probe(dev, -ENOMEM, "ioremap TOPCRM\n");
+		return dev_err_probe(dev, -ENOMEM,
+				     "of_iomap TOPCRM failed\n");
+
+	rc = devm_add_action_or_reset(dev, zx_eth_iounmap_action,
+				      (void *)eth->topcrm);
+	if (rc)
+		return rc;
 
 	writel(readl(eth->topcrm + TOPCRM_REG_PON_CLK) | TOPCRM_PON_CLK_BITS,
 	       eth->topcrm + TOPCRM_REG_PON_CLK);
 	dev_dbg(dev, "TOPCRM[0x0C] = %#x (PON clocks enabled)\n",
 		readl(eth->topcrm + TOPCRM_REG_PON_CLK));
 
-	writel(0x0003cfff, eth->topcrm + 0x4c);   /* was 0x000381ff */
-	writel(0x1ff7ffff, eth->topcrm + 0x08);   /* was 0x10061fff */
+	writel(0x0003cfff, eth->topcrm + 0x4c);
+	writel(0x1ff7ffff, eth->topcrm + 0x08);
 	dev_dbg(dev, "TOPCRM[0x4c]=%#x [0x08]=%#x (stock-match)\n",
 		readl(eth->topcrm + 0x4c), readl(eth->topcrm + 0x08));
 
@@ -3743,8 +3765,9 @@ static int zx_eth_probe(struct platform_device *pdev)
 	spin_lock_init(&eth->tx_lock);
 
 	/* DTS exposes two reg entries — "pon" and "npp". Map the npp one
-	 * by name so the driver is robust to reg-entry reordering (the
-	 * pon hardcoded ioremap a few lines below is the Phase 10b TODO).
+	 * by name so the driver is robust to reg-entry reordering. The pon
+	 * mapping (and the topcrm syscon mapping) is done in dedicated
+	 * helpers further below.
 	 */
 	eth->base = devm_platform_ioremap_resource_byname(pdev, "npp");
 	if (IS_ERR(eth->base))
