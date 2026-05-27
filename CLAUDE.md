@@ -307,6 +307,23 @@ own deletions**.
 - Device IP: `192.168.1.1`. SSH creds: `admin / UkuGPeyRDU`. U-Boot pw: `Boot4128s!`
 - See `tools/dtr-mod/README.md` for the FTDI cable's DTR→relay hardware mod
 
+#### Bench cable topology (host ↔ device wiring)
+Three USB-Ethernet adapters on the dev host, one cable each into a
+different physical port of the device. Lets us exercise multiple
+PHYs/MACs simultaneously without losing SSH (host stays on LAN 3).
+
+| Host iface | Host MAC | Host IP | Device port | Internal map |
+|---|---|---|---|---|
+| `enx2c9975313ea9` | `2c:99:75:31:3e:a9` | 192.168.1.128 | LAN 1 | PHY[0] @ MDIO 10 → MAC[0] @ 0x92200000 |
+| `enxc8a362e95900` | `c8:a3:62:e9:59:00` | 192.168.1.50  | LAN 3 | PHY[2] @ MDIO 12 → MAC[2] @ 0x92280000 (SSH path) |
+| `enx6c70cbb68169` | `6c:70:cb:b6:81:69` | (no IP)        | WAN   | RGMII → MAC[4] @ 0x92300000 |
+
+Mapping rule (confirmed via stock register diff 2026-05-27, doc
+`tasks/00.01.eth-driver/findings/stock_vs_mainline_regs_2026-05-27.md`):
+**LAN N (physical) = PHY[N-1] = MAC[N-1]** for LAN 1..4. WAN goes
+through an external PHY (separate from the 4 internal GePHYs) on
+RGMII to MAC[4]; not on the MDIO bus at 0x9a101000.
+
 ### Shell access on the bake-in rootfs — netshell on port 9001
 - For iterative work on a bake-in rootfs, connect with `nc 192.168.1.1 9001`
   to the `netshell` daemon — a raw-TCP shell we ship at `/sbin/netshell`
