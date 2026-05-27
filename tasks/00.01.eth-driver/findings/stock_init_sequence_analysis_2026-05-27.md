@@ -467,3 +467,60 @@ by TX and RX:
 
 Next session: compare MAC[2] (0x92280000) + pin_mux (0x94200000)
 live values stock-vs-mainline. Differences there are the real bug.
+
+## 🔥 ULTRA-CRITICAL FINDING — HW won't consume our TX
+
+Bench test 2026-05-27 even-later EOD via debugfs dump:
+
+```
+tm_tx_count               = 63   ← driver pushed 63 TX descriptors + kicks
+TM[0x10058] DMA_DESC_CNT_UP = 0x00290000   ← 41 pending (high16) NOT consumed
+TM[0x10054] TX kick          = 0x00000001  ← kick is set
+```
+
+We kicked 63 TX through the UP path (sw netdev TX path, per stock
+soft_insert_tx_1desc). HW consumed only **22 of 63** (63 - 41 pending
+= 22). The other 41 are queued in the UP TX ring but the HW **never
+consumes them**.
+
+Combined with:
+```
+q[0] RX queue counter = 0x00060000  ← 6 frames pending (host pings)
+```
+
+The **RX path works** up to the TM CPU queue (HW classifies host pings
+correctly, puts them in queue 0).
+
+The **TX path is broken** at the HW switch-fabric egress consume
+engine — we kick, descriptors queue, but HW doesn't drain.
+
+This rules out everything we've been investigating (TM IRQ, BMU pool,
+PP_CPU_FWD_BIT, queue counter interpretation) as the primary cause.
+The bug is **upstream**: the HW that should pull TX descriptors from
+the UP ring and forward to MAC[N] for serialization is **not running**.
+
+### What could gate HW TX consumption?
+
+1. A specific "TX engine enable" bit in some control register
+2. A clock to the switch-fabric egress path that's not enabled
+3. The TX desc format may be wrong (HW skips invalid descriptors,
+   counting them as "pending" forever)
+4. A "credit" mechanism (similar to BMU) for TX-side that's exhausted
+5. The dndesc_dma DMA region (for DN path) needs to also be set for
+   UP path because HW expects coupled state
+
+The fact that **stock works with the same DMA address scheme** (UP and
+DN at distinct phys addresses) suggests stock has the right "TX enable"
+sequence. We're missing it.
+
+### Why bit 0 of TM[0x100] never fires (linked to TX bug)
+
+If the switch-fabric is partially wedged (TX engine off, RX engine on),
+the HW might also gate IRQ assertion to prevent SW from servicing the
+RX queue while TX is stuck. This would prevent NAPI from running and
+draining RX, creating the observed "RX frames queue without
+notification" symptom.
+
+So the TX bug and RX-IRQ bug may have a **single common root cause** in
+the switch-fabric enable / clock / control state.
+
