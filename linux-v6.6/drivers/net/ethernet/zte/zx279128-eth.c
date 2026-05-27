@@ -2670,6 +2670,32 @@ static irqreturn_t zx_tm_irq(int irq, void *dev_id)
 static struct delayed_work zx_bmu_dump_work;
 static struct zx_eth *zx_bmu_dump_eth;
 
+/* TM TX reclaim periodic reader — stock pon_tm_timer pattern.
+ * Stock pon_tm_check_tx_done_nolock reads TM[0x10058] (UP) and TM[0x10068]
+ * (DN) every jiffy. Pattern `tx_done -= reg.low16` requires clear-on-read
+ * semantics; empirical test on stock confirms values vary across reads
+ * (0x7→0x2→0x2 with ping flood) — only consistent with HW incrementing
+ * AND something draining (= stock timer).
+ * Mainline has no such timer; HW low16 stays at 0, high16 fills with
+ * pending TXs (41 stuck in last test). Adding a 1-jiffy delayed_work
+ * that does a discard read of both regs to test if HW resumes
+ * consumption.
+ */
+static struct delayed_work zx_tm_tx_reclaim_work;
+static struct zx_eth *zx_tm_tx_reclaim_eth;
+
+static void zx_tm_tx_reclaim_fn(struct work_struct *w)
+{
+	struct zx_eth *e = zx_tm_tx_reclaim_eth;
+
+	if (!e)
+		return;
+	/* Discard reads — drain the clear-on-read counters */
+	(void)tm_read(e, 0x10058);
+	(void)tm_read(e, 0x10068);
+	schedule_delayed_work(&zx_tm_tx_reclaim_work, 1);  /* 1 jiffy = ~1ms on HZ=1000 */
+}
+
 /* Periodic STATS dump — DISABLED by default (was flooding the bridge log
  * every 5s with no actionable change). Re-enable temporarily for debug by
  * defining ZX_PERIODIC_STATS=1. The one-shot at sw_open+30s is enough for
@@ -2742,6 +2768,14 @@ static int zx_sw_open(struct net_device *ndev)
 	zx_bmu_dump_eth = e;
 	INIT_DELAYED_WORK(&zx_bmu_dump_work, zx_bmu_dump_fn);
 	schedule_delayed_work(&zx_bmu_dump_work, msecs_to_jiffies(10000));
+
+	/* TM TX reclaim timer — read TM[0x10058]/TM[0x10068] every jiffy
+	 * to drain the clear-on-read counters, replicating stock's
+	 * pon_tm_timer behavior.
+	 */
+	zx_tm_tx_reclaim_eth = e;
+	INIT_DELAYED_WORK(&zx_tm_tx_reclaim_work, zx_tm_tx_reclaim_fn);
+	schedule_delayed_work(&zx_tm_tx_reclaim_work, 1);
 
 	return 0;
 }
@@ -2946,13 +2980,13 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	 */
 	desc[0]  = 0xc9;
 	desc[1]  = 0x00;
-	/* desc[2..3] encodes egress port hint: ((port+0x28) & 0x3f) << 4.
-	 * Hardcoded port=0 (LAN port 0) works as proven baseline.
-	 * Experiment with desc[2..3]=0 dropped tm_rx_count from 700k to 6k —
-	 * port hint IS needed. Future: replace with FDB lookup of dst MAC.
+	/* desc[2..3] encodes egress port hint: ((lan_up_port+0x28) & 0x3f) << 4.
+	 * Stock uses lan_up_port=4 per zx_pon_init flow doc (line 8909:
+	 * "lan_up=1, lan_up_port=4"). Previous mainline hardcoded 0 → encoded
+	 * 0x280; stock encodes 0x2c0. Testing if matching stock fixes TX wire.
 	 */
 	{
-		u32 port = 0;
+		u32 port = 4;	/* lan_up_port for H3600 LAN-only config */
 		*(__le16 *)(desc + 2) = cpu_to_le16(((port + 0x28) & 0x3f) << 4);
 	}
 	*(u32 *)(desc + 4) = cpu_to_le32(0x00010000);
