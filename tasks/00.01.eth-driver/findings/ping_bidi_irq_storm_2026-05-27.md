@@ -64,7 +64,30 @@ TX-completion FIFO. Our NAPI poll **does not touch the TX side at
 all** — it only walks the 8 RX queue counters (TM[0x10100..0x1011c]
 range) and releases RX descs.
 
-## Probable fix path (NOT executed in autonomous loop)
+## Resolution (Phase 48, commit 3181f81c2)
+
+Option (1) below was applied. Result:
+
+  * tm_irq_count: 318 M → 0
+  * No "nobody cared", no "Disabling IRQ #20"
+  * `sw open: TM IRQ_MASK now 0xfffffffe`
+  * Boot reaches REPL cleanly
+
+The single-bit mask change required updating three sites: the
+`TM_IRQ_ARM_BITS` constant **plus** the two pre-existing hardcoded
+`0xfffffffc` writes in `zx_tm_per_instance_init` and `zx_tm_pre_init`
+that set the mask before sw_open. Without those, the HW IRQ line
+stays asserted because HW-level mask still has bit 1 clear, and the
+software ARM_BITS filter only changes what the handler reports —
+not what GIC sees.
+
+**Ping bidi STILL FAILS after this fix.** Pre-fix the RX counter
+was already 0; the IRQ storm was a separate symptom. Phase 48 only
+killed the CPU burn. The remaining RX-path investigation is in
+[ping_bidi_rx_path_open.md] (TBD — RX queues never fire bit 0 IRQ,
+host pings don't reach driver's NAPI poll at all).
+
+## Probable fix path (historical — kept for reference)
 
 Three candidates ordered by risk:
 
