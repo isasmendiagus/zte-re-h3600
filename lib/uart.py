@@ -74,7 +74,12 @@ def open_port():
     ser.dtr = False       # belt-and-suspenders: ensure released after open
     return ser
 
-def send_slow(ser, cmd, delay=0.01):
+def send_slow(ser, cmd, delay=0.03):
+    """Slow per-char send. 30ms/char gives the U-Boot input parser time
+    to consume each byte — at 0.01 we observed occasional command-split
+    artifacts (the "Unknown command '0x42000000'" symptom from a
+    bootm being chopped). At ~115200bps a typical 30-char command is
+    ~1s end-to-end, which is fine for boot-time orchestration."""
     for ch in cmd:
         ser.write(ch.encode())
         ser.flush()
@@ -284,10 +289,12 @@ def wait_for_uboot_prompt(timeout=180, start_offset=0):
 # treat them as failure if they exceed a threshold — a few Ts on a
 # normal transfer are tolerated.
 UBOOT_FAIL_MARKERS = ("Retry count exceeded", "TIMEOUT_ERR")
-UBOOT_T_THRESHOLD = 8   # consecutive 'T ' markers tolerated before declaring failure
-                        # — 8 ≈ 8 seconds at U-Boot's 1s/retry default, fast
-                        # enough to react before the 30s "Retry count exceeded"
-                        # auto-restart adds another lap.
+UBOOT_T_THRESHOLD = 2   # consecutive 'T ' markers — react FAST. Successful TFTP
+                        # never prints 'T ' (only '#'); 2 Ts already means at
+                        # least one packet timeout. Don't wait — DTR immediately.
+                        # False positive cost (DTR + replay ~30s) is acceptable
+                        # vs the cost of letting U-Boot fail completely
+                        # (autoboot to NAND = stock kernel = full bench cycle wasted).
 
 
 def _count_consecutive_ts(data: bytes) -> int:
@@ -329,16 +336,99 @@ def wait_for_uboot_prompt_or_fail(timeout=180, start_offset=0):
     return "timeout"
 
 # Common preamble: set IPs + big TFTP blocksize (default 512B → 143 KiB/s; 1468 → >1 MiB/s)
+# Per-command wait bumped to 2s — U-Boot's input parser can hiccup if we
+# send the next command while it's still flushing the previous one's
+# response, especially right after cspstart drive (U-Boot fresh out of
+# its banner). 2s leaves the env in a known-quiet state between sets.
 _PREAMBLE = [
-    ("",                                    1),  # newline to wake prompt
-    ("setenv serverip 192.168.1.50",        1),
-    ("setenv ipaddr 192.168.1.1",           1),
-    ("setenv tftpblocksize 1468",           1),
+    ("",                                    2),  # newline to wake prompt
+    ("setenv serverip 192.168.1.50",        2),
+    ("setenv ipaddr 192.168.1.1",           2),
+    ("setenv tftpblocksize 1468",           2),
 ]
 
+def flash_image_to_ram(ser, image_name="zImage_dtb.uimg",
+                       load_addr=0x42000000,
+                       cspstart_password="Boot4128s!",
+                       kernel_ready_marker="REPL ready",
+                       kernel_ready_timeout=120,
+                       max_retries=3,
+                       skip_dtr_first_attempt=False):
+    """High-level workflow: load a kernel image to RAM via TFTP and boot
+    it. Encapsulates EVERY step needed:
+
+      1. DTR cold-reset (skipped on first attempt if `skip_dtr_first_attempt`)
+      2. Drive cspstart prompts to reach U-Boot ('Press 1' + password)
+      3. Send U-Boot _PREAMBLE (setenv serverip/ipaddr/tftpblocksize=1468)
+      4. tftp <addr> <image_name> — wait for '=>' prompt return
+      5. bootm <addr>
+      6. Wait for `kernel_ready_marker` in UART output (default 120s)
+
+    Failure recovery: if ANY step fails (tftp 'T T T' burst, U-Boot
+    wedge, kernel hang past kernel_ready_timeout) the ENTIRE flow
+    restarts from step 1 (fresh DTR), up to `max_retries` times.
+
+    Returns True iff `kernel_ready_marker` was observed within
+    `kernel_ready_timeout` seconds after the final bootm.
+
+    This is the function consumers should use — `run_uboot_seq` alone
+    doesn't know about kernel-boot recovery semantics."""
+    for attempt in range(1, max_retries + 1):
+        print(f"\n>>> [flash_image_to_ram] attempt {attempt}/{max_retries}",
+              flush=True)
+
+        if attempt > 1 or not skip_dtr_first_attempt:
+            try:
+                bridge_dtr_pulse()
+            except Exception as e:
+                print(f"[flash_image_to_ram] DTR pulse failed: {e}",
+                      flush=True)
+                continue
+            if not drive_cspstart_to_uboot(ser, password=cspstart_password):
+                print(f"[flash_image_to_ram] could not reach U-Boot after DTR",
+                      flush=True)
+                continue
+
+        # Snapshot buffer pos so we can scan only the kernel-up portion
+        # after bootm, not the U-Boot output above.
+        post_bootm_offset = _buf_size()
+
+        result = run_uboot_seq(ser, [
+            (f"tftp 0x{load_addr:x} {image_name}", 180),
+            (f"bootm 0x{load_addr:x}",             5),
+        ], wait_for_prompt=True, prompt_timeout=180)
+
+        if result["status"] != "ok":
+            print(f"[flash_image_to_ram] U-Boot sequence failed: "
+                  f"{result['status']} at cmd #{result['failed_at']} — "
+                  f"will retry from DTR", flush=True)
+            continue
+
+        # bootm sent; wait for the kernel-up marker. The marker is the
+        # SCRIPT-LEVEL signal that the kernel actually booted (e.g.
+        # 'REPL ready' from our initramfs init's REPL banner). If it
+        # doesn't appear we don't know if the kernel hung in early boot,
+        # panicked, or what — DTR + retry is the safe move.
+        print(f"[flash_image_to_ram] bootm sent — waiting up to "
+              f"{kernel_ready_timeout}s for marker {kernel_ready_marker!r}",
+              flush=True)
+        if wait_for_marker(kernel_ready_marker, timeout=kernel_ready_timeout,
+                           start_offset=0):
+            # Note: search the whole bridge log file (not the in-mem buf)
+            # because that buf gets cleared inside run_uboot_seq.
+            print(f">>> [flash_image_to_ram] kernel up — '{kernel_ready_marker}' "
+                  f"observed", flush=True)
+            return True
+        print(f"[flash_image_to_ram] kernel marker not seen within "
+              f"{kernel_ready_timeout}s — will retry from DTR", flush=True)
+
+    print(f"[flash_image_to_ram] gave up after {max_retries} attempts",
+          flush=True)
+    return False
+
+
 def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False,
-                  wait_for_prompt=False, prompt_timeout=180,
-                  retry_on_tftp_fail=True, max_retries=3):
+                  wait_for_prompt=False, prompt_timeout=180):
     """Run a list of (cmd, wait_seconds) tuples on a UART already at the
     U-Boot prompt. Caller is responsible for: opening `ser`, doing the
     DTR reset, and driving cspstart prompts to U-Boot.
@@ -380,23 +470,40 @@ def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False,
     t.start()
     time.sleep(0.5)
 
+    def _cmd_should_wait_for_prompt(cmd):
+        """Per-command override: bootm/bootz/go don't return to a prompt
+        (they hand control to the kernel), so even if the run_uboot_seq
+        caller set wait_for_prompt=True we must NOT wait for '=>' on
+        these. Everything else uses the caller's wait_for_prompt value."""
+        if not wait_for_prompt or not cmd:
+            return False
+        for terminal_cmd in ("bootm", "bootz", "go ", "reset"):
+            if cmd.startswith(terminal_cmd):
+                return False
+        return True
+
     def _send_and_wait(cmd, wait, attempt=1):
         """Send one command and (optionally) wait for prompt return.
         Returns 'ok' on success, 'tftp_fail' for caller-handled retry,
         or 'timeout' on giving up."""
         label = repr(cmd) if cmd else "<empty newline wake>"
         attempt_str = f" [attempt {attempt}]" if attempt > 1 else ""
-        if wait_for_prompt and cmd:
+        should_wait = _cmd_should_wait_for_prompt(cmd)
+        if should_wait:
             print(f">>> [uboot] {label}  (wait for '=>' prompt, up to {prompt_timeout}s){attempt_str}",
                   flush=True)
         else:
             print(f">>> [uboot] {label}  (wait {wait}s){attempt_str}", flush=True)
 
-        offset_before = _buf_size() if wait_for_prompt and cmd else None
+        offset_before = _buf_size() if should_wait else None
         send_slow(ser, cmd)
 
-        if wait_for_prompt and cmd:
-            time.sleep(0.5)
+        if should_wait:
+            # 1s settle so the command echo + initial output reach the
+            # bridge log BEFORE we start polling — otherwise the first
+            # poll might run on a partial echo line and time-shift the
+            # '=>' detection later than necessary.
+            time.sleep(1.0)
             status = wait_for_uboot_prompt_or_fail(timeout=prompt_timeout,
                                                    start_offset=offset_before)
             if status == "prompt":
@@ -412,65 +519,23 @@ def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False,
 
     full_cmds = (list(_PREAMBLE) if not skip_preamble else []) + list(cmds)
 
-    def _run_preamble():
-        """Re-issue _PREAMBLE on `ser`. Used after DTR cold-reset recovery
-        — env is wiped, need to re-set ipaddr/serverip/tftpblocksize."""
-        for pcmd, pwait in _PREAMBLE:
-            _send_and_wait(pcmd, pwait)
-
-    i = 0
-    while i < len(full_cmds):
-        cmd, wait = full_cmds[i]
-        attempt = 1
-        used_dtr_recovery = False
-        while True:
-            status = _send_and_wait(cmd, wait, attempt)
-            if status == "ok" or status == "timeout":
-                break
-
-            if status == "tftp_fail" and retry_on_tftp_fail and "tftp" in cmd:
-                # Tier 1: simple re-send up to max_retries.
-                if attempt < max_retries:
-                    attempt += 1
-                    print(f"[run_uboot_seq] tftp failure marker detected — "
-                          f"retrying ({attempt}/{max_retries})", flush=True)
-                    time.sleep(3)
-                    continue
-
-                # Tier 2: simple re-sends exhausted. Try ONCE more after
-                # a full DTR cold-reset + cspstart drive + preamble replay.
-                # This handles the case where U-Boot itself got wedged
-                # (e.g., its tftp engine is stuck) rather than just a
-                # transient ARP miss.
-                if not used_dtr_recovery:
-                    print(f"[run_uboot_seq] tftp failed {max_retries}x — "
-                          f"DTR cold-reset + replay cspstart→U-Boot + preamble",
-                          flush=True)
-                    try:
-                        bridge_dtr_pulse()
-                    except Exception as e:
-                        print(f"[run_uboot_seq] bridge DTR_PULSE failed: {e}",
-                              flush=True)
-                        break
-                    if not drive_cspstart_to_uboot(ser):
-                        print("[run_uboot_seq] ERROR: could not reach U-Boot "
-                              "after DTR — giving up", flush=True)
-                        break
-                    _run_preamble()
-                    used_dtr_recovery = True
-                    attempt = 1   # reset counter for one more round
-                    continue
-
-                # Tier 3: even DTR didn't help. Give up cleanly.
-                print(f"[run_uboot_seq] tftp still failing after DTR recovery, "
-                      f"giving up", flush=True)
-                break
+    # Dumb sequence executor — runs cmds in order, stops at first failure.
+    # Retry / recovery semantics belong in higher-level workflow helpers
+    # (e.g., flash_image_to_ram).
+    failed_at = None
+    final_status = "ok"
+    for i, (cmd, wait) in enumerate(full_cmds):
+        status = _send_and_wait(cmd, wait)
+        if status != "ok":
+            failed_at = i
+            final_status = status
             break
-        i += 1
 
     stop.set()
     t.join()
     fout.close()
+    return {"status": final_status, "failed_at": failed_at,
+            "cmds_run": len(full_cmds) if failed_at is None else failed_at + 1}
 
 def cmd_aloop(args):
     """Tiny 116-byte payload — verified prints AAAA stream after bootm.
