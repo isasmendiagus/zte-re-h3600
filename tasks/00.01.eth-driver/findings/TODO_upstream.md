@@ -35,7 +35,7 @@ calls. Both have proper doc comments.
 | --- | --- | --- |
 | 37 | Convert the in-driver "zx_stock_apply_block" into a per-block u32 array (still generic) but in **one** header file instead of stock_bursts.h being 1.2 MB. Big improvement for source tarball size. | A reviewer running `make zx279128-eth.o` shouldn't see a 1 MB generated header. |
 | 38 | Move zx_stock_bursts.h, zx_npp_twin_data.h to `drivers/net/ethernet/zte/data/` (or even outside the kernel tree if reviewers push back on the 22 k-entry table). | Currently they sit alongside .c source which is unusual. |
-| 39 | Audit `dev_warn_ratelimited("fpga_table_write(N, ...): rc")` storm during init. 74 of 568 pro_action writes fail with `-3` (descriptor mismatch). Either map those reg_ids properly, or silence the warn for ones we expect to fail. | The warns appear in default-level dmesg even after the dev_info cleanup. |
+| 39 | ✅ Phase 42 (commit 3c7400d1b). Downgraded expected -1 and -3 returns to dev_dbg in zx_table_write; -2 and -4 still warn (real bugs). Per-port replay aggregate count stays at dev_info. | DONE |
 | 40 | Stop registering `eth0` (`sw` netdev) + `idm0`/`idm1` from the same platform driver. The right shape is a DSA switch driver that exposes per-port netdevs (`swp0..swp3`). | Reviewers will ask. |
 
 ## Long horizon (post-RFC)
