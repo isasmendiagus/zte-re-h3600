@@ -3379,12 +3379,105 @@ static const struct file_operations zx_mem_fops = {
 	.llseek = default_llseek,
 };
 
+/* ============================================================
+ *   pipeline_stats — mirror stock /sys/devices/platform/tm/tmTest/{tmup,tmdn}
+ *
+ *   This is the OBSERVABILITY layer (gap matrix [A01], Layer 0).
+ *   Each line maps to a counter stock prints; lines marked (TODO) are
+ *   for register offsets we haven't pinned down yet — they'll fill in
+ *   as future iters implement each block's accessors.
+ *
+ *   Diff against stock: capture stock tmup/tmdn via the kmsg trick
+ *   (tasks/00.01.eth-driver/scripts/stock_fpga_dump.sh pattern) and
+ *   compare line-by-line.
+ *
+ *   Stock reference live capture:
+ *     tasks/00.01.eth-driver/findings/stock_runtime_visibility_2026-05-27.md
+ * ============================================================
+ */
+
+/* MAC[N] cumulative byte/packet counters at +0x710..+0x71c.
+ * Per-port base = e->base + (port+1) * MAC_STRIDE (existing mac_off helper).
+ * Verified on stock 2026-05-27 via memdump @ 0x9220071[0-c], 0x9228071[0-c], etc.
+ */
+static int zx_pipeline_stats_show(struct seq_file *s, void *_unused)
+{
+	struct zx_eth *e = s->private;
+	int p;
+
+	seq_puts(s, "=== mainline pipeline_stats — mirror of stock tmTest/{tmup,tmdn} ===\n");
+	seq_puts(s, "Stock reference: tasks/00.01.eth-driver/findings/stock_runtime_visibility_2026-05-27.md\n");
+	seq_puts(s, "Lines marked (TODO) wait for the corresponding block's reg accessor (subsequent gap-matrix iters).\n\n");
+
+	/* ---------- UPSTREAM (UNI → CPU) ---------- */
+	seq_puts(s, "upstream statistics:\n");
+	for (p = 0; p < 5; p++) {
+		void __iomem *mac = e->base + mac_off(p, 0);
+		u32 r710 = readl(mac + 0x710);
+		u32 r714 = readl(mac + 0x714);
+		u32 r718 = readl(mac + 0x718);
+		u32 r71c = readl(mac + 0x71c);
+
+		seq_printf(s, "  smac%d MAC[+710..71c] = %08x %08x %08x %08x   (RX/TX byte+pkt counters)\n",
+			   p, r710, r714, r718, r71c);
+	}
+	seq_puts(s, "  (TODO) sdet uniN egress_transport_cnt / drop_cnt  [need NPP_Sdet offsets]\n");
+	seq_puts(s, "  (TODO) sipc2cpu_aful_cnt_up                       [need NPP_Sipc offset]\n");
+	seq_puts(s, "  (TODO) spa_fwd / spa_trp                          [need NPP_Spa offsets]\n");
+	seq_puts(s, "  (TODO) cla trap pkts                              [need PP_CLA stats offset]\n");
+	seq_puts(s, "  (TODO) qmg hw fwd / hw trap                       [need TM_QMG offsets]\n");
+	seq_puts(s, "  (TODO) red fwd / trap / drop                      [need TM_RED stat offsets]\n");
+
+	/* ---------- DOWNSTREAM (CPU → UNI) ---------- */
+	seq_puts(s, "\ndownstream statistics:\n");
+	seq_puts(s, "  (TODO) QMG sw fwd / hw fwd / hw trap pkts         [need TM_QMG offsets]\n");
+	seq_puts(s, "  (TODO) DSCH in / out que pkts                     [need TM_DSCH offsets]\n");
+	for (p = 0; p < 5; p++)
+		seq_printf(s, "  (TODO) sopc_send2smac%d                            [need NPP_Sopc per-port offset]\n", p);
+
+	/* ---------- ERROR COUNTERS ---------- */
+	seq_puts(s, "\nerror counters (all should be 0 on healthy path):\n");
+	seq_puts(s, "  (TODO) smct(0x14..0x54) — sipc_err / mult_err / drop_err / res_more / des_err\n");
+	seq_puts(s, "  (TODO) bmu(0x30..0x39)  — sw_alcecnt / *_erlscnt / normal+jumbo_bperr\n");
+	seq_puts(s, "  (TODO) qmg(0x0c, 0x37..0x42) — fifo_err / cache_active_N\n");
+	seq_puts(s, "  (TODO) red(0x2b) reg_up_dbg, pp_ctrl(0x25) ram_left_cnt\n");
+	seq_puts(s, "  (TODO) uopc(0xa2..0xb1) — no_sop_err / no_eop_err / wr_no_*_err_high\n");
+
+	/* ---------- DRIVER-INTERNAL COUNTERS ---------- */
+	seq_puts(s, "\n=== driver-internal counters (mainline ground truth) ===\n");
+	seq_printf(s, "tm_irq_count         = %u\n", e->tm_irq_count);
+	seq_printf(s, "tm_napi_count        = %u\n", e->tm_napi_count);
+	seq_printf(s, "tm_rx_count          = %u\n", e->tm_rx_count);
+	seq_printf(s, "tm_rx_loopback_drops = %u\n", e->tm_rx_loopback_drops);
+	seq_printf(s, "tm_tx_count          = %u\n", e->tm_tx_count);
+	seq_printf(s, "tm_tx_dropped        = %u\n", e->tm_tx_dropped);
+	seq_printf(s, "tm_bmu_free_ok       = %u\n", e->tm_bmu_free_ok);
+	seq_printf(s, "tm_bmu_free_fail     = %u\n", e->tm_bmu_free_fail);
+
+	return 0;
+}
+
+static int zx_pipeline_stats_open(struct inode *inode, struct file *f)
+{
+	return single_open(f, zx_pipeline_stats_show, inode->i_private);
+}
+
+static const struct file_operations zx_pipeline_stats_fops = {
+	.owner   = THIS_MODULE,
+	.open    = zx_pipeline_stats_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
 static void zx_debugfs_init(struct zx_eth *e)
 {
 	zx_debugfs_root = debugfs_create_dir("zx_eth", NULL);
 	debugfs_create_file("stats", 0444, zx_debugfs_root, e, &zx_stats_fops);
 	debugfs_create_file("mem",   0444, zx_debugfs_root, e, &zx_mem_fops);
-	dev_info(e->dev, "debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem}\n");
+	debugfs_create_file("pipeline_stats", 0444, zx_debugfs_root, e,
+			    &zx_pipeline_stats_fops);
+	dev_info(e->dev, "debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem,pipeline_stats}\n");
 }
 
 static void zx_debugfs_exit(void)
