@@ -339,6 +339,14 @@ struct zx_eth {
 
 	bool started;
 
+	/* PHY link-state tracking. Up to 4 GePHYs (one per LAN port).
+	 * Populated in zx_eth_init_phys when each PHY is attached to the
+	 * sw netdev. Last-known link state cached so adjust_link can
+	 * detect transitions and write MAC[port].ctrl accordingly.
+	 */
+	struct phy_device *gephy[4];
+	bool phy_was_link[4];
+
 	/* Stock-init replay snapshots (CLA, PM, stock-bursts) are embedded
 	 * as static tables in zx_{cla,pm,stock}_table.h — applied directly
 	 * during probe, no firmware_request().
@@ -1151,24 +1159,28 @@ static void zx_pp_init(struct zx_eth *e)
  * ============================================================
  */
 
-/* MAC_REG_CONTROL semantics (verified from stock live dump):
- *   bit 0+1 (0x3) = MAC enable/running
- *   bit 13  (0x2000) = "no PHY / power-saved" (set when no link)
- * Stock writes 0xBAE003 initially (smac_init default), then phy_int handler
- * adjusts per port:
- *   - link UP:   clear bit 13, keep bits 0+1  → 0xBA6003
- *   - link DOWN: clear bits 0+1, set bit 13   → 0xBAE000
- * We don't run MDIO so hardcode: port 0 (LAN1, confirmed link UP from U-Boot)
- * gets 0xBA6003; other ports get 0xBAE000.
+/* MAC_REG_CONTROL semantics (decomp of stock smac_init @ +0x13278):
+ *   bits 0+1 (0x3) = MAC enable/running. Stock toggles via
+ *                    pon_npp_smac_{enable,disable}_part_* on link state.
+ *   bit 13 (0x2000) = gigabit mode (set by config_speed_duplex when 1Gbps).
+ *   bit 14 (0x4000) = 100 Mbps mode.
+ *   bit 15 (0x8000) = half-duplex / 10 Mbps mode.
+ *   bit 19 (0x80000) = ??? — set unconditionally by stock smac_init,
+ *                       never cleared anywhere in the decomp. Earlier
+ *                       guess that "phy_int handler clears it on link up"
+ *                       was a misread (it actually clears bit 13 via the
+ *                       speed-duplex path; bit 19 stays set).
  *
- * MAC_REG_IRQ_MASK stock = 0x3FFF (not 0xFFFF as default init suggested).
+ * Use stock's value 0xBAE003 verbatim — even for unused ports — and let
+ * speed_duplex / enable_part_* adjust the lower bits as needed.
+ *
+ * MAC_REG_IRQ_MASK stock = 0xFFFF (smac_init). We used to write 0x3FFF
+ * which leaves bits 14,15 masked; harmless but doesn't match stock.
  */
 static void zx_smac_init_port(struct zx_eth *e, int port)
 {
-	u32 ctrl = (port == 0) ? 0xBA6003 : 0xBAE000;
-
-	writel(ctrl,       e->base + mac_off(port, MAC_REG_CONTROL));
-	writel(0x3FFF,     e->base + mac_off(port, MAC_REG_IRQ_MASK));
+	writel(0xBAE003,   e->base + mac_off(port, MAC_REG_CONTROL));
+	writel(0xFFFF,     e->base + mac_off(port, MAC_REG_IRQ_MASK));
 	writel(0x80000001, e->base + mac_off(port, MAC_REG_ENABLE));
 	{
 		u32 v = readl(e->base + mac_off(port, MAC_REG_D00));
@@ -3372,20 +3384,71 @@ static int zx_eth_probe_port(struct zx_eth *eth, int idx)
 	return 0;
 }
 
-/*
- * Run drv->config_init on each PHY referenced from the DT.
+/* MAC.ctrl values (RE'd from stock pon_npp_smac_enable/disable_part_*
+ * + verified live by toggling MAC[3].ctrl via devmem2 on stock —
+ * see tasks/00.01.eth-driver/findings/phy_irq_state_machine_2026-05-27.md).
  *
- * The monolithic eth driver doesn't have per-port netdevs to attach
- * via phylink_connect_phy() yet (that's the DSA refactor), but the
- * PHY analog blocks still need their LDO + TX DAC powered up via the
- * phy-zte-gephy config_init callback. phy_init_hw() is the documented
- * way to fire config_init without a netdev attach.
- *
- * Looks up "zte,gephys = <&gephy0>, ..." in DT, resolves each handle
- * to a struct phy_device, and inits it.
+ * Bits 0+1 are the RX/TX enable pair; stock always moves them together.
+ * Bit 19 starts set (smac_init writes 0xBAE003) and clears on the first
+ * link UP for the lifetime of the device. We don't model the sticky
+ * bit explicitly — just write the full value, which already has bit 19
+ * cleared in both runtime values.
  */
-static void zx_eth_init_phys(struct device *dev)
+#define MAC_CTRL_LINK_UP	0xBA6003u	/* enabled + bit 19 clear */
+#define MAC_CTRL_LINK_DOWN	0xBA6000u	/* disabled + bit 19 clear */
+
+/* adjust_link callback fired by the phylib state machine whenever any
+ * attached PHY's link state changes. We have all 4 GePHYs attached to
+ * the same sw netdev (the CPU-side aggregate), so this callback fires
+ * for every PHY transition. Walk our cached pointers, detect which one
+ * flipped, and update the corresponding MAC[port].ctrl.
+ */
+static void zx_eth_adjust_link(struct net_device *ndev)
 {
+	struct zx_eth *e = *(struct zx_eth **)netdev_priv(ndev);
+	int i;
+
+	for (i = 0; i < 4; i++) {
+		struct phy_device *phy = e->gephy[i];
+		bool now;
+
+		if (!phy)
+			continue;
+		now = phy->link;
+		if (now == e->phy_was_link[i])
+			continue;
+
+		writel(now ? MAC_CTRL_LINK_UP : MAC_CTRL_LINK_DOWN,
+		       e->base + mac_off(i, MAC_REG_CONTROL));
+		netdev_info(ndev, "PHY[%d] link %s @ %d/%s → MAC[%d].ctrl=%#x\n",
+			    i, now ? "UP" : "DOWN",
+			    now ? phy->speed : 0,
+			    now ? (phy->duplex ? "FD" : "HD") : "-",
+			    i,
+			    now ? MAC_CTRL_LINK_UP : MAC_CTRL_LINK_DOWN);
+		e->phy_was_link[i] = now;
+	}
+}
+
+/*
+ * Attach each GePHY to the sw netdev so phylib's state machine drives
+ * our adjust_link callback on link changes. After phy_init_hw fires
+ * the vendor config (LDO + TX DAC), phy_attach_direct wires the PHY
+ * to the netdev, phy_request_interrupt arms the GIC IRQ line that the
+ * DT declared, and phy_start kicks the state machine.
+ *
+ * All 4 PHYs share the sw netdev because we don't yet have per-port
+ * netdevs (that's the DSA refactor). adjust_link detects which PHY
+ * flipped by walking e->gephy[] and comparing against phy_was_link[].
+ *
+ * EXPERIMENTAL — implemented from RE evidence and stock register
+ * snapshot diff, not yet bench-tested on mainline. See
+ * findings/phy_irq_state_machine_2026-05-27.md for the empirical
+ * validation that drove this design.
+ */
+static void zx_eth_init_phys(struct zx_eth *e)
+{
+	struct device *dev = e->dev;
 	struct device_node *np = dev->of_node;
 	int n = of_count_phandle_with_args(np, "zte,gephys", NULL);
 	int i;
@@ -3394,6 +3457,9 @@ static void zx_eth_init_phys(struct device *dev)
 		dev_info(dev, "no zte,gephys phandles in DT (n=%d)\n", n);
 		return;
 	}
+	if (n > 4)
+		n = 4;
+
 	for (i = 0; i < n; i++) {
 		struct device_node *phy_np;
 		struct phy_device *phydev;
@@ -3408,13 +3474,42 @@ static void zx_eth_init_phys(struct device *dev)
 			dev_warn(dev, "  [%d] phy_device not found\n", i);
 			continue;
 		}
+
 		ret = phy_init_hw(phydev);
 		if (ret)
 			dev_warn(dev, "  [%d] phy_init_hw(%s) = %d\n",
 				 i, phydev_name(phydev), ret);
-		put_device(&phydev->mdio.dev);
+
+		/* Hook the PHY to sw netdev so phylib's state machine
+		 * routes link-change events to zx_eth_adjust_link.
+		 * Multiple attach to the same netdev: the netdev's
+		 * phydev pointer will end up as the last-attached one;
+		 * we don't care, we use our own e->gephy[] array.
+		 */
+		if (e->sw_dev) {
+			ret = phy_attach_direct(e->sw_dev, phydev, 0,
+						PHY_INTERFACE_MODE_INTERNAL);
+			if (ret) {
+				dev_warn(dev, "  [%d] phy_attach_direct = %d\n",
+					 i, ret);
+				put_device(&phydev->mdio.dev);
+				continue;
+			}
+			phydev->adjust_link = zx_eth_adjust_link;
+			phy_request_interrupt(phydev);
+			phy_start(phydev);
+			e->gephy[i] = phydev;
+			e->phy_was_link[i] = false;
+			/* phy_attach_direct already takes its own reference;
+			 * drop the of_phy_find_device one to balance.
+			 */
+			put_device(&phydev->mdio.dev);
+		} else {
+			/* No netdev yet — just init_hw and release. */
+			put_device(&phydev->mdio.dev);
+		}
 	}
-	dev_info(dev, "PHY init complete (%d GePHYs)\n", n);
+	dev_info(dev, "PHY init complete (%d GePHYs attached)\n", n);
 }
 
 /*
@@ -3808,9 +3903,6 @@ static int zx_eth_probe(struct platform_device *pdev)
 
 	zx_eth_apply_stock_init(eth);
 
-	/* Kick PHY power-up (LDO + TX DAC) on all GePHYs. */
-	zx_eth_init_phys(dev);
-
 	dev_dbg(dev, "PP[0x2c] (CPU_FWD) = %#x, IDM[0x8000] CTRL = %#x\n",
 		 readl(eth->base + PP_OFF + PP_REG_CPU_FWD),
 		 readl(eth->base + IDM_REG_CONTROL));
@@ -3843,6 +3935,12 @@ static int zx_eth_probe(struct platform_device *pdev)
 	err = zx_eth_init_tm_subsystem(eth, pdev);
 	if (err)
 		goto err_napi;
+
+	/* PHY power-up (LDO + TX DAC) + attach to sw netdev for link-state
+	 * tracking. Must run AFTER zx_eth_init_tm_subsystem so e->sw_dev is
+	 * valid for phy_attach_direct.
+	 */
+	zx_eth_init_phys(eth);
 
 	/* Intentionally no FDB seeding here.
 	 *

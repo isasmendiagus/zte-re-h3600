@@ -223,11 +223,32 @@
 			 * addresses 10..13 by Phase 12 boot scan, matching
 			 * stock's uni_phy[]={0a,0b,0c,0d,...} table. phylib
 			 * will pick up the phy-zte-gephy driver by ID.
+			 *
+			 * Per-PHY link-change interrupts at GIC SPI 0x47..0x4a
+			 * (= 71..74 decimal). Verified via /proc/interrupts
+			 * on stock and via cable-swap counter increments on
+			 * each gphy[i] line.
 			 */
-			gephy0: ethernet-phy@a { reg = <10>; };
-			gephy1: ethernet-phy@b { reg = <11>; };
-			gephy2: ethernet-phy@c { reg = <12>; };
-			gephy3: ethernet-phy@d { reg = <13>; };
+			gephy0: ethernet-phy@a {
+				reg = <10>;
+				interrupt-parent = <&gic>;
+				interrupts = <GIC_SPI 0x47 IRQ_TYPE_LEVEL_HIGH>;
+			};
+			gephy1: ethernet-phy@b {
+				reg = <11>;
+				interrupt-parent = <&gic>;
+				interrupts = <GIC_SPI 0x48 IRQ_TYPE_LEVEL_HIGH>;
+			};
+			gephy2: ethernet-phy@c {
+				reg = <12>;
+				interrupt-parent = <&gic>;
+				interrupts = <GIC_SPI 0x49 IRQ_TYPE_LEVEL_HIGH>;
+			};
+			gephy3: ethernet-phy@d {
+				reg = <13>;
+				interrupt-parent = <&gic>;
+				interrupts = <GIC_SPI 0x4a IRQ_TYPE_LEVEL_HIGH>;
+			};
 		};
 
 		pcie1: pcie@f100000 {

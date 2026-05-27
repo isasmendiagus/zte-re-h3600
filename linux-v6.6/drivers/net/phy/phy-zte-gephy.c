@@ -43,6 +43,18 @@
 #define ZTE_GEPHY_LDO_CTRL_REG		0x17  /* mandatory write before LDO arm */
 #define   ZTE_GEPHY_LDO_CTRL_VAL	0x2448
 
+/* Vendor link-change interrupt registers (RE'd from stock register_phy_int
+ * @ +0x144d4 in plat-zxylzb_9128S.ko + live cable-swap experiment, see
+ * tasks/00.01.eth-driver/findings/phy_irq_state_machine_2026-05-27.md):
+ *   reg 0x18 = interrupt enable. Stock writes 0x0005 to arm link-state IRQ.
+ *   reg 0x1a = status latch. Bit 6 (0x40) reflects link UP, bits 7..9 the
+ *              speed code. Read clears the latch.
+ */
+#define ZTE_GEPHY_INT_ENABLE_REG	0x18
+#define   ZTE_GEPHY_INT_LINK_EVT	0x0005
+#define ZTE_GEPHY_STATUS_REG		0x1a
+#define   ZTE_GEPHY_STATUS_LINK_UP	BIT(6)
+
 /* Extended-page register addresses */
 #define ZTE_GEPHY_EXT_LDO_ARM		0xb640
 #define   ZTE_GEPHY_EXT_LDO_ENABLE	0x001f
@@ -109,14 +121,42 @@ static int zte_gephy_config_init(struct phy_device *phydev)
 	return 0;
 }
 
+static int zte_gephy_config_intr(struct phy_device *phydev)
+{
+	u16 val = (phydev->interrupts == PHY_INTERRUPT_ENABLED)
+		  ? ZTE_GEPHY_INT_LINK_EVT : 0;
+
+	return phy_write(phydev, ZTE_GEPHY_INT_ENABLE_REG, val);
+}
+
+static irqreturn_t zte_gephy_handle_interrupt(struct phy_device *phydev)
+{
+	int status;
+
+	/* Read the status reg to clear the latch and learn the new link
+	 * state. Stock reads twice (latch clear then settled) but the
+	 * second read is only needed to capture the new state for the
+	 * tasklet — phy_trigger_machine here will queue a state-machine
+	 * run which does its own read via the standard MII_BMSR path.
+	 */
+	status = phy_read(phydev, ZTE_GEPHY_STATUS_REG);
+	if (status < 0)
+		return IRQ_NONE;
+
+	phy_trigger_machine(phydev);
+	return IRQ_HANDLED;
+}
+
 static struct phy_driver zte_gephy_drivers[] = {
 	{
 		PHY_ID_MATCH_MODEL(ZTE_GEPHY_PHY_ID),
-		.name		= "ZTE ZXIC ZX279128S GePHY",
+		.name			= "ZTE ZXIC ZX279128S GePHY",
 		/* PHY_GBIT_FEATURES from genphy_* */
-		.flags		= PHY_IS_INTERNAL,
-		.probe		= zte_gephy_probe,
-		.config_init	= zte_gephy_config_init,
+		.flags			= PHY_IS_INTERNAL,
+		.probe			= zte_gephy_probe,
+		.config_init		= zte_gephy_config_init,
+		.config_intr		= zte_gephy_config_intr,
+		.handle_interrupt	= zte_gephy_handle_interrupt,
 	},
 };
 
