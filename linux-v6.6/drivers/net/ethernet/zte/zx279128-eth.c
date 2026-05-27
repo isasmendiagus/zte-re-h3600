@@ -288,7 +288,8 @@ struct zx_eth {
 	void *bppe_cpu;		dma_addr_t bppe_dma;	/* u16 index array */
 	void *bp_cpu;		dma_addr_t bp_dma;	/* BP backing store */
 	void *rxdesc_cpu;	dma_addr_t rxdesc_dma;	/* 8 queues * N * 16B */
-	void *txdesc_cpu;	dma_addr_t txdesc_dma;	/* 1024 * 16B TM TX desc ring */
+	void *txdesc_cpu;	dma_addr_t txdesc_dma;	/* 1024 * 16B TM TX UP (RX-from-switch) desc ring */
+	void *dndesc_cpu;	dma_addr_t dndesc_dma;	/* 1024 * 16B TM TX DN (CPU-to-switch) desc ring — stock keeps UP/DN distinct */
 	u32 tx_head;		/* current TX desc write index (0..1023) */
 	spinlock_t tm_tx_lock;
 	u32 rx_head[TM_NUM_RX_QUEUES];
@@ -1644,10 +1645,17 @@ static int zx_tm_alloc_pools(struct zx_eth *e)
 	e->bppe_cpu = dma_alloc_coherent(e->dev, bppe_sz, &e->bppe_dma, GFP_KERNEL);
 	e->bp_cpu   = dma_alloc_coherent(e->dev, bp_sz,   &e->bp_dma,   GFP_KERNEL);
 	e->rxdesc_cpu = dma_alloc_coherent(e->dev, desc_sz, &e->rxdesc_dma, GFP_KERNEL);
-	/* TM TX desc ring: 1024 × 16 B */
+	/* TM TX desc ring: 1024 × 16 B. UP and DN are TWO physically distinct
+	 * rings (stock keeps them 0x10000 apart in carved RAM at 0x4FFD/E F000).
+	 * Sharing the address between TM[0x10050] (UP) and TM[0x10060] (DN)
+	 * makes HW conclude the ring is "full" after ~24 entries and stop
+	 * asserting TM[0x100] bit 0 — IRQ never fires, NAPI never runs.
+	 */
 	e->txdesc_cpu = dma_alloc_coherent(e->dev, TM_TX_RING_SIZE * TM_TX_DESC_SIZE,
 					   &e->txdesc_dma, GFP_KERNEL);
-	if (!e->bppe_cpu || !e->bp_cpu || !e->rxdesc_cpu || !e->txdesc_cpu)
+	e->dndesc_cpu = dma_alloc_coherent(e->dev, TM_TX_RING_SIZE * TM_TX_DESC_SIZE,
+					   &e->dndesc_dma, GFP_KERNEL);
+	if (!e->bppe_cpu || !e->bp_cpu || !e->rxdesc_cpu || !e->txdesc_cpu || !e->dndesc_cpu)
 		return -ENOMEM;
 	e->tx_head = 0;
 	spin_lock_init(&e->tm_tx_lock);
@@ -1682,7 +1690,10 @@ static void zx_tm_free_pools(struct zx_eth *e)
 	if (e->txdesc_cpu)
 		dma_free_coherent(e->dev, TM_TX_RING_SIZE * TM_TX_DESC_SIZE,
 				  e->txdesc_cpu, e->txdesc_dma);
-	e->bppe_cpu = e->bp_cpu = e->rxdesc_cpu = e->txdesc_cpu = NULL;
+	if (e->dndesc_cpu)
+		dma_free_coherent(e->dev, TM_TX_RING_SIZE * TM_TX_DESC_SIZE,
+				  e->dndesc_cpu, e->dndesc_dma);
+	e->bppe_cpu = e->bp_cpu = e->rxdesc_cpu = e->txdesc_cpu = e->dndesc_cpu = NULL;
 }
 
 /* pon_tm_bmu_init equivalent — register pool addrs + sizes with BMU */
@@ -2349,9 +2360,15 @@ static void zx_tm_dma_init(struct zx_eth *e)
 	tm_write(e, 0x10038,               0x00010001);	/* stock */
 	tm_write(e, TM_REG_DMA_REG20,      0x20);
 	tm_write(e, TM_REG_DMA_REG24,      0x20);
-	/* TX desc regions — UP ring is our real txdesc, DN unused (no PON) */
+	/* TX desc regions: stock writes two DISTINCT addresses (UP ring at
+	 * 0x4FFDF000, DN ring at 0x4FFEF000 — 64 KiB apart in carved RAM).
+	 * Sharing the same DMA address between UP and DN deadlocks the HW
+	 * after ~24 UP entries because the consumer ptr never advances.
+	 * Validated via stock devmem2 reads + pon_tm_dma_init RE — see
+	 * findings/tm_rx_path_bench_validation_2026-05-27.md.
+	 */
 	tm_write(e, TM_REG_DMA_TX_UP_BASE, e->txdesc_dma);
-	tm_write(e, TM_REG_DMA_TX_DN_BASE, e->txdesc_dma);
+	tm_write(e, TM_REG_DMA_TX_DN_BASE, e->dndesc_dma);
 	tm_write(e, TM_REG_DMA_REG388,     0x131217);
 	tm_write(e, TM_REG_DMA_REG3C,      0x400040);
 
