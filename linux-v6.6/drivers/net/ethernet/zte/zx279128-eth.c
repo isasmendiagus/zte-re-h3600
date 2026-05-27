@@ -39,6 +39,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/mii.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_mdio.h>
@@ -3231,6 +3232,42 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 
 		seq_printf(s, "MAC[%u] @0x%05x ctrl=%08x mask=%08x en=%08x\n",
 			   i, base, ctrl, mask, en);
+	}
+
+	/* PHY link state — read BMSR (reg 1) + LPA (reg 5) + 1000T STATUS
+	 * (reg 0xA) for each GePHY on the DT phandle list. BMSR bit 2 =
+	 * Link Status (1 = up); bit 5 = Auto-Neg complete (1 = done).
+	 */
+	{
+		struct device_node *np = e->dev->of_node;
+		int n = of_count_phandle_with_args(np, "zte,gephys", NULL);
+		int p;
+
+		seq_puts(s, "\n=== PHY link state ===\n");
+		for (p = 0; p < n; p++) {
+			struct device_node *phy_np;
+			struct phy_device *phydev;
+			int bmsr, lpa, t1000;
+
+			phy_np = of_parse_phandle(np, "zte,gephys", p);
+			if (!phy_np)
+				continue;
+			phydev = of_phy_find_device(phy_np);
+			of_node_put(phy_np);
+			if (!phydev) {
+				seq_printf(s, "  PHY[%d] not found\n", p);
+				continue;
+			}
+			bmsr = phy_read(phydev, MII_BMSR);
+			lpa  = phy_read(phydev, MII_LPA);
+			t1000 = phy_read(phydev, MII_STAT1000);
+			seq_printf(s, "  PHY[%d] %s BMSR=0x%04x link=%d an_done=%d  LPA=0x%04x  STAT1000=0x%04x\n",
+				   p, phydev_name(phydev), bmsr & 0xffff,
+				   !!(bmsr & BMSR_LSTATUS),
+				   !!(bmsr & BMSR_ANEGCOMPLETE),
+				   lpa & 0xffff, t1000 & 0xffff);
+			put_device(&phydev->mdio.dev);
+		}
 	}
 
 	return 0;
