@@ -4063,6 +4063,103 @@ static void zx_serdes_apply_defaults(struct zx_eth *e)
 }
 
 /*
+ * [A06c] PLL integer-divider config — mirror of stock plat:8094
+ * `pll_cfg_integer(base, p2, p3, p4, p5)`.
+ *
+ * Stock decomp:
+ *   *base    |= 0x80000000;
+ *   *base    |= 0x08000000;
+ *   *base    &= 0xfeffffff;
+ *   *base     = (val & 0xff03ffff) | (p2 << 18);   // post-divide
+ *   *base     = (val & 0xfffc003f) | (p3 << 6);    // feedback divide
+ *   if (p4) *base = (val & 0xffffffc7) | (p4 << 3);
+ *   if (p5) *base = (val & 0xfffffff8) | p5;
+ *   base[1]  &= 0xf7ffffff;
+ *   base[1]  |= 0x04000000;
+ *   base[1]  &= 0xfdffffff;
+ *   base[1]  &= 0xfeffffff;
+ *   base[1]  &= 0xff000000;
+ *   delay 100x;
+ *   *base    &= 0x7fffffff;
+ *
+ * `base` is passed as `topcrm + 0x50` (the ref-clock PLL pair of regs).
+ * `base[1]` is `topcrm + 0x54`. Not called yet — A06d final glue
+ * will invoke this with the kernel-mode args (1, 0x32, 4, 2).
+ */
+static void zx_pll_cfg_integer(void __iomem *base, u32 p2, u32 p3,
+			       u32 p4, u32 p5)
+{
+	u32 v;
+
+	v = readl(base + 0); writel(v | 0x80000000,        base + 0);
+	v = readl(base + 0); writel(v | 0x08000000,        base + 0);
+	v = readl(base + 0); writel(v & 0xfeffffff,        base + 0);
+	v = readl(base + 0); writel((v & 0xff03ffff) | (p2 << 18), base + 0);
+	v = readl(base + 0); writel((v & 0xfffc003f) | (p3 << 6),  base + 0);
+	if (p4) {
+		v = readl(base + 0);
+		writel((v & 0xffffffc7) | (p4 << 3), base + 0);
+	}
+	if (p5) {
+		v = readl(base + 0);
+		writel((v & 0xfffffff8) | p5, base + 0);
+	}
+	v = readl(base + 4); writel(v & 0xf7ffffff,        base + 4);
+	v = readl(base + 4); writel(v | 0x04000000,        base + 4);
+	v = readl(base + 4); writel(v & 0xfdffffff,        base + 4);
+	v = readl(base + 4); writel(v & 0xfeffffff,        base + 4);
+	v = readl(base + 4); writel(v & 0xff000000,        base + 4);
+
+	udelay(200);                          /* stock: 100x __delay ≈ 200us */
+
+	v = readl(base + 0); writel(v & 0x7fffffff,        base + 0);
+}
+
+/*
+ * [A06c] Reference clock PLL setup — mirror of stock plat:8206
+ * `ref_clk_set(mode)`.
+ *
+ * Stock decomp:
+ *   *(top_crm_base + 0x50) &= 0x7fffffff;
+ *   if ((mode & 0xfffffffd) == 1)   // mode == 1 (kernel)
+ *       pll_cfg_integer(top_crm_base + 0x50, 1, 0x32, 4, 2);
+ *   else                             // mode != 1 (U-Boot path)
+ *       pll_cfg_fractional(top_crm_base + 0x50, 1, 0x5d, 0x4fdf3b, 5, 3);
+ *   delay 50x;
+ *
+ * We only port the mode=1 (kernel) path — U-Boot already did its
+ * mode=0 fractional setup before mainline runs.
+ *
+ * Not called yet. A06d final glue invokes this from
+ * zx_pon_clk_reset_init.
+ */
+static void zx_ref_clk_set(struct zx_eth *e, int mode)
+{
+	void __iomem *base;
+
+	if (!e->topcrm) {
+		dev_dbg(e->dev, "[A06c] topcrm not mapped — skipping ref_clk_set\n");
+		return;
+	}
+	base = e->topcrm + 0x50;
+
+	/* clear MSB before reconfigure */
+	writel(readl(base) & 0x7fffffff, base);
+
+	if (mode == 1) {
+		zx_pll_cfg_integer(base, 1, 0x32, 4, 2);
+	} else {
+		dev_warn(e->dev, "[A06c] ref_clk_set mode=%d not implemented (only mode=1)\n",
+			 mode);
+		return;
+	}
+
+	udelay(100);                          /* stock: 50x __delay ≈ 100us */
+	dev_info(e->dev, "[A06c] ref_clk_set(mode=%d) done. topcrm[0x50]=0x%08x\n",
+		 mode, readl(base));
+}
+
+/*
  * [A06b] SERDES mode = 1 (standard GE) — mirror of stock plat:7924
  * `serdes_mode_set(1)`. 7 read-modify-write operations on
  * pon_serdes_base[0, 2, 5, 8, 9]. Stock decomp:
@@ -4102,6 +4199,133 @@ static void zx_serdes_mode_set_1(struct zx_eth *e)
 }
 
 /*
+ * [A06d] Full SERDES bring-up — mirror of stock plat:8266
+ * `zx_pon_clk_reset_init(mode)`. Ties together A06a (defaults),
+ * A06b (mode-set), A06c (ref_clk + PLL), plus the TOPCRM[8] clock
+ * cycle, wait loops for rxpll lock + PLL band ready, temperature-
+ * compensated coarse band calibration, and the sys_ctrl + final
+ * TOPCRM[0xc] enable.
+ *
+ * Stock sequence (plat:8266):
+ *   1. ref_clk_set(mode)
+ *   2. TOPCRM[0x08] &= ~0x20; &= ~0x10; delay; |= 0x20; delay;
+ *   3. reg_def_set()
+ *   4. serdes_mode_set(mode, 0, 0)
+ *   5. TOPCRM[0x08] |= 0x10
+ *   6. spin until pon_serdes[0x68] & 0x10  (rxpll lock)
+ *   7. spin until pon_serdes[0x70] & 0x1000000  (PLL band ready, max 20 tries)
+ *   8. coarse = (pon_serdes[0x70] << 8) >> 0x1a
+ *   9. temp-compensate coarse
+ *   10. pon_serdes[0x44] = (val & 0xffc0ffff) | (coarse << 16)
+ *   11. pon_serdes[0x40] |= 0x04000000
+ *   12. sys_ctrl[0x10] &= ~0x800
+ *   13. TOPCRM[0x0c] |= 0x1e0
+ *
+ * Temperature: stock uses temp_ctrl_read() (CPU thermal sensor).
+ * We don't have a clean kernel API hook yet — hardcode 30°C
+ * which puts us in the same "warm/normal" band as stock at bench
+ * temp (matches coarse-=1 path → 0x2c on this device).
+ */
+static int zx_pon_clk_reset_init(struct zx_eth *e, int mode)
+{
+	void __iomem *crm = e->topcrm;
+	void __iomem *sr = e->pon_serdes;
+	int retries;
+	u32 v, raw_coarse, coarse, temp_c;
+
+	if (!crm || !sr) {
+		dev_warn(e->dev, "[A06d] topcrm/pon_serdes not mapped — SERDES bring-up SKIPPED\n");
+		return -ENODEV;
+	}
+
+	/* 1. Reference clock PLL */
+	zx_ref_clk_set(e, mode);
+
+	/* 2. TOPCRM[0x08] clock cycle: disable bits 4+5, delay, re-enable
+	 *    bit 5 first (the SERDES sub-clock that gates apb access). */
+	v = readl(crm + 0x08); writel(v & ~0x20u, crm + 0x08);
+	v = readl(crm + 0x08); writel(v & ~0x10u, crm + 0x08);
+	udelay(20);                              /* stock: 10x __delay */
+	v = readl(crm + 0x08); writel(v | 0x20u, crm + 0x08);
+	udelay(20);
+
+	/* 3 + 4. defaults + mode set (now in the right order w.r.t. clocks) */
+	zx_serdes_apply_defaults(e);
+	zx_serdes_mode_set_1(e);
+
+	/* 5. Enable the second SERDES sub-clock */
+	v = readl(crm + 0x08); writel(v | 0x10u, crm + 0x08);
+
+	/* 6. Wait for rxpll lock (no timeout in stock — we add a generous
+	 *    one). 100ms is plenty: stock typically locks in microseconds,
+	 *    but on cold boot or after a heavy TOPCRM cycle it can take
+	 *    a few hundred us. 5ms was too tight. */
+	retries = 2000;                              /* 2000 × 50us = 100ms */
+	while ((readl(sr + 0x68) & 0x10u) == 0 && --retries > 0)
+		udelay(50);
+	if (retries <= 0) {
+		dev_err(e->dev, "[A06d] rxpll lock timeout (100ms) — pon_serdes[0x68]=0x%08x\n",
+			readl(sr + 0x68));
+		return -ETIMEDOUT;
+	}
+	dev_info(e->dev, "[A06d] rxpll_ready (waited %d × 50us)\n", 2000 - retries);
+
+	/* 7. Wait for PLL band ready (stock: 20 retries) */
+	retries = 20;
+	while ((readl(sr + 0x70) & 0x01000000u) == 0 && --retries > 0)
+		udelay(50);
+	if (retries <= 0) {
+		dev_err(e->dev, "[A06d] PLL band-ready timeout — pon_serdes[0x70]=0x%08x\n",
+			readl(sr + 0x70));
+		return -ETIMEDOUT;
+	}
+
+	/* 8. Extract PLL's raw coarse band */
+	raw_coarse = ((readl(sr + 0x70) << 8) >> 26) & 0x3f;
+
+	/* 9. Temperature compensation. Hardcode 30°C for now — matches
+	 *    the "warm/normal" band stock computed at bench temperatures
+	 *    of 39-42°C (both produced final coarse=0x2c via the temp-10<0x31
+	 *    branch). TODO: hook thermal_zone_get_temp() for real read. */
+	temp_c = 30;
+	coarse = raw_coarse;
+	if ((int)temp_c < -6)
+		coarse = (coarse + 1) & 0x3f;
+	else if (temp_c > 9) {
+		if (temp_c >= 10 && temp_c < 59)
+			coarse = (coarse - 1) & 0x3f;
+		else if (temp_c >= 59 && temp_c < 92)
+			coarse = (coarse - 2) & 0x3f;
+		else
+			coarse = (coarse - 3) & 0x3f;
+	}
+	dev_info(e->dev, "[A06d] serdes band cpu_temper:%u coarse:0x%x (raw 0x%x)\n",
+		 temp_c, coarse, raw_coarse);
+
+	/* 10. Write final coarse band */
+	v = readl(sr + 0x44);
+	writel((v & 0xffc0ffffu) | (coarse << 16), sr + 0x44);
+
+	/* 11. Enable band */
+	v = readl(sr + 0x40); writel(v | 0x04000000u, sr + 0x40);
+
+	dev_info(e->dev, "[A06d] band calc fin — pon_serdes[0x44]=0x%08x [0x40]=0x%08x\n",
+		 readl(sr + 0x44), readl(sr + 0x40));
+
+	/* 12. sys_ctrl bit clear (purpose: unknown — likely gates some
+	 *     downstream SERDES output) */
+	if (e->sys_ctrl) {
+		v = readl(e->sys_ctrl + 0x10);
+		writel(v & ~0x800u, e->sys_ctrl + 0x10);
+	}
+
+	/* 13. Final TOPCRM clock enable */
+	v = readl(crm + 0x0c); writel(v | 0x1e0u, crm + 0x0c);
+
+	return 0;
+}
+
+/*
  * [A05] Chip-level small writes — equivalent to a tiny subset of stock
  * plat-zxylzb_9128S init_module's pre-TM writes.
  *
@@ -4124,6 +4348,7 @@ static void zx_serdes_mode_set_1(struct zx_eth *e)
 static void zx_eth_init_pon_chip(struct zx_eth *eth)
 {
 	struct device *dev = eth->dev;
+	int rc;
 
 	/* [A05] pon_base + 0x4001c = 0xf (purpose unknown; stock sets it
 	 * unconditionally right before tm_pon_tm_init). Live mainline read
@@ -4134,19 +4359,13 @@ static void zx_eth_init_pon_chip(struct zx_eth *eth)
 	dev_info(dev, "PON chip pre-init: pon[0x4001c]=0x%08x (stock=0xf)\n",
 		 readl(eth->pon_early + 0x4001c));
 
-	/* [A06a] SERDES register defaults — sub-step of
-	 * zx_pon_clk_reset_init bring-up. Safe to call alone: it only
-	 * writes the 24 default register values stock writes via
-	 * reg_def_set; no clock toggling, no PLL state change.
-	 */
-	zx_serdes_apply_defaults(eth);
-
-	/* [A06b] SERDES mode = 1 (standard GE). Stock calls this with
-	 * arg=1 from zx_pon_clk_reset_init, AFTER reg_def_set. The
-	 * mode bits select the SERDES into GE mode rather than other
-	 * line rates the silicon also supports.
-	 */
-	zx_serdes_mode_set_1(eth);
+	/* [A06d] Full SERDES bring-up — replaces the previous individual
+	 * A06a + A06b calls (those are now invoked inside zx_pon_clk_reset_init
+	 * in the proper order, between TOPCRM[8] cycle steps). */
+	rc = zx_pon_clk_reset_init(eth, 1);
+	if (rc)
+		dev_warn(dev, "[A06] zx_pon_clk_reset_init returned %d — SERDES may be uncalibrated\n",
+			 rc);
 }
 
 static int zx_eth_init_topcrm(struct zx_eth *eth)
