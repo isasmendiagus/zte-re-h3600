@@ -348,6 +348,72 @@ Status of `register_pon_int` etc:
 - This may keep upstream queues backpressured if they need draining
   via dedicated IRQ servicing.
 
+## ⭐ ENORME UPDATE — Missing SERDES/sys_ctrl/pin_mux mappings
+
+Per sibling-chip DT (`refs/zte-zx279128R/zx279128R.dts`), stock's
+`pon@92000000` node has SEVEN reg ranges:
+
+```
+0x92000000 0x2000000   # pon_base (range 1)
+0x92000000 0x140000    # pon (range 2, partial)
+0x92000000 0x2000000   # pon (range 3, duplicate)
+0x94000000 0x100000    # top_crm_base
+0x94100000 0x100000    # sys_ctrl_base
+0x94200000 0x100000    # pin_mux_base
+0x9fe00000 0x100000    # pon_serdes_base
+```
+
+**Mainline only maps 4 of 5 unique blocks**:
+
+| Block | Stock | Mainline | Live read |
+|---|---|---|---|
+| pon_base | ✅ 0x92000000 | ✅ `e->pon_early`/`fpga_base` | active |
+| top_crm | ✅ 0x94000000 | ✅ `e->topcrm` | active |
+| sys_ctrl | ✅ 0x94100000 | ❌ MISSING | live: mostly 0, 0x100 @ +0x10 |
+| pin_mux | ✅ 0x94200000 | ❌ MISSING | live: `0x0f0ffffa` etc — active config |
+| pon_serdes | ✅ 0x9fe00000 | ❌ NOT EVEN IN DT | live: `0x800010a7` etc — HW alive |
+
+(Live readings via devmem 2026-05-27 EOD)
+
+**Stock's `zx_pon_clk_reset_init` writes to pon_serdes_base** (decomp
+line 8284) including a temperature-compensated band calibration. We
+**don't replicate this** at all in mainline.
+
+## Why Phase 50 ping worked but now doesn't (revised theory)
+
+Phase 50 worked because the test flow was:
+1. Reboot to stock (NAND boot)
+2. Stock runs full init: pon_reset, SERDES band calibration, pin_mux setup
+3. Power stays on
+4. TFTP-boot mainline kernel **into RAM** (no HW reset)
+5. Mainline kernel inherits stock's HW state — including the proper
+   SERDES calibration and pin_mux config
+6. Ping bidi works because the HW is properly configured
+
+Today the test flow is the same, **but SERDES calibration drifts with
+temperature**. The H3600 has been on for hours, possibly warmed up
+beyond the band stock calibrated for. When the temperature shifts
+more than ~6°C from the calibration point, the SERDES becomes
+marginal — frames still get to MAC level but data integrity at the
+internal switch fabric degrades. Symptoms: TM IRQ stops firing
+because frames don't make it through the switch with valid CRC.
+
+This would also explain why **early in the morning** ping might work
+(cooler chip) and **after sustained activity** it breaks.
+
+## Confirmation experiment
+
+To confirm the theory:
+1. Cold-reboot device fully (DTR pulse) to stock
+2. Run ping bidi for ~5 minutes — should work
+3. Wait 30 minutes (chip warms up)
+4. Re-test ping — should still work (stock recalibrates if it drifts)
+5. Now TFTP-boot mainline
+6. Run ping — predict will fail (mainline can't recalibrate SERDES)
+
+If ping works in step 2-4 but fails in step 6 reproducibly, theory
+confirmed.
+
 ## Probably-right concrete next steps (in priority order)
 
 1. **Verify pp_base address**: dump stock /proc/iomem to see where
@@ -369,3 +435,35 @@ Status of `register_pon_int` etc:
    there. If it is → stock can set it; we just don't know how. If
    it ISN'T → maybe the bit's role is different from what the RE
    suggested.
+
+## 🚨 CRITICAL UPDATE — TX is also broken at wire level
+
+Bench test 2026-05-27 EOD via host-side tcpdump filter on sw MAC:
+
+```bash
+sudo tcpdump -i enxc8a362e95900 -n -e ether src f4:f6:47:0f:42:64
+```
+
+Triggered TX from mainline device by:
+- `busybox ifconfig sw down` + `up` (gratuitous ARP on bring-up)
+- `busybox ifconfig sw 192.168.1.99 netmask 255.255.255.0` (re-add IP)
+- Multiple cycles
+
+Driver counter `tm_tx_count`: 16 → 63 (+47 TX operations)
+Host tcpdump capture: **0 frames received**
+
+The driver believes it transmitted 47 frames, but **zero reached the
+host's NIC at wire level**. TX is broken just like RX — not just the
+TM→CPU NAPI delivery path, but **the entire frame path from driver
+through HW to physical cable**.
+
+This rules out all RX-specific theories. The bug is in a path SHARED
+by TX and RX:
+- Pin mux (not mapped in mainline; live shows `0x0f0ffffa` etc — may
+  be wrong config)
+- MAC[2] clock/enable to PHY (link reports up but doesn't drive PHY)
+- Switch fabric egress dropping at MAC handoff
+- PHY TX-path disable (link UP on RX side but TX side off)
+
+Next session: compare MAC[2] (0x92280000) + pin_mux (0x94200000)
+live values stock-vs-mainline. Differences there are the real bug.
