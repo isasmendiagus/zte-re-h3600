@@ -2479,14 +2479,10 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 	RXCP(e, 1, "enter budget=%d tm_irq_count=%u tm_rx_count=%u",
 	     budget, e->tm_irq_count, e->tm_rx_count);
 
-	/* Check each of 8 RX queues for pending descriptors. The per-queue
-	 * counter at TM[0x10100 + q*4] packs: low 16 = consumed (HW updates
-	 * as we ack via zx_tm_release_rx_desc), high 16 = pending count.
-	 * Stock pon_tm_net_poll uses (raw >> 16) for the pending field.
-	 */
+	/* Check each of 8 RX queues for pending descriptors */
 	for (q = 0; q < TM_NUM_RX_QUEUES && done < budget; q++) {
 		u32 status = tm_read(e, TM_RX_QCNT_BASE + q * 4);
-		u32 pending = status >> 16;
+		u32 pending = status & 0xFFFF;	/* low 16 = pending */
 		u32 take, n, ack = 0;
 
 		if (!pending) {
