@@ -89,7 +89,7 @@
 #define IDM_REG_CONTROL		0x8000
 /* Stock writes idm_desc_addr (offset 0 = RX descs) to npp+0x8008 and
  * idm_desc_addr+0x4000 (TX descs) to npp+0x8004. Our defines were SWAPPED:
- * fixed 2026-05-20 after RE pon_npp_idm_init. */
+ * Fixed via RE of pon_npp_idm_init. */
 #define IDM_REG_TX_DESC_BASE	0x8004
 #define IDM_REG_RX_DESC_BASE	0x8008
 #define IDM_REG_RX_ENABLE	0x800C
@@ -160,8 +160,7 @@
 #define TM_IRQ_ARM_BITS		0x03		/* bits 0,1 only */
 
 /* Stock prints `BPPE_POOL_SIZE=2000` in `pon init` = 0x2000 = 8192. Match
- * stock to avoid buffer exhaustion under sustained traffic (2026-05-22 boot
- * UART capture, tasks/mainline_eth/captures/boot_init_2026-05-22.log line 451). */
+ * stock to avoid buffer exhaustion under sustained traffic (boot UART capture, mainline_eth/captures/boot_init.log). */
 #define TM_BPPE_POOL_SIZE	1024	/* was 8192 — 18MB bp_pool failed dma_alloc_coherent
 					 * on default CMA. 1024 entries → ~2.3 MB,
 					 * fits comfortably. Reduce buffer head-room
@@ -383,7 +382,7 @@ static int zx_brg_ram_set(struct zx_eth *e, u32 bucket, u32 slot,
 	if (zx_brg_wait_ready(e))
 		return -EBUSY;
 	writel(bucket | (slot << 22), pp + PP_BRG_RAM_CMD);
-	/* 2026-05-25: write in REVERSE order (D2 first, D0 last) — D0 commits.
+	/* Write in REVERSE order (D2 first, D0 last) — D0 commits.
 	 * Per stock sbrg_set_indreg_wr (decomp_all_tm.c L8422): writes 0x4e
 	 * (D2) → 0x4d (D1) → 0x4c (D0). Writing D0 first commits with stale
 	 * D1/D2 → entry partially written → switch silently uses bad data. */
@@ -457,7 +456,7 @@ static u16 zx_sbrg_hash(const u8 *mac, u16 vlan)
 /* Add a static MAC entry to the FDB → switch routes frames with this dst MAC
  * to the given port.
  *
- * 2026-05-25: rewrote entry encoding to match stock sbrg_add_mactable
+ * Entry encoding matches stock sbrg_add_mactable
  * (decomp_all_tm.c L10836-L10840) instead of old (wrong) format.
  *
  * Stock 3-word format:
@@ -525,7 +524,7 @@ static int zx_fdb_add(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 /* ============================================================
  *   SBRAG indirect-protocol MAC FDB (THE table the switch consults)
  *
- *   Round-2 reviewer (2026-05-24) confirmed zx_brg_ram_set above writes
+ *   Verified by independent review: zx_brg_ram_set above writes
  *   to PP_BRG_RAM = VLAN/per-port table, NOT the MAC FDB. The real MAC
  *   table is reached via stock's sbrg_set_indreg_wr protocol against
  *   sbragRegTable.  Physical offsets (byte) from fpga_base:
@@ -630,7 +629,7 @@ static int zx_sbrag_add_mac(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 
 /* Disable unknown-unicast flood for all ports except CPU.
  *
- * THE big DUPs fix (Plan agent 2026-05-25): when the switch can't find the
+ * The big DUPs fix: when the switch can't find the
  * destination MAC in its FDB, it floods the frame to every port that has
  * "unknown unicast forward" enabled. Stock kotrace
  * (kotrace_p3c_analysis.txt) shows it calls `tm_port_unknwn_unicast_fwd_set`
@@ -983,11 +982,11 @@ static void zx_pp_init(struct zx_eth *e)
 	writel(0x0000052e, pp + 0x00d8);
 	writel(0x04f4052e, pp + 0x00dc);
 	writel(0x0a220a22, pp + 0x00e0);
-	/* PP per-instance config replicated 4 times — stock dump 2026-05-21 showed
+	/* PP per-instance config replicated 4 times — stock dump showed
 	 * the marker 0x242F0 at offsets 0x104, 0x504, 0x904, 0xD04 (Δ 0x400).
 	 * Each instance has the same 7-word config block. Our prior code only wrote
 	 * instance 0 → other 3 unprogrammed → possibly the missing TX wire-emit fix.
-	 * See H3600/stock_state/FINDINGS_2026-05-21.md */
+	 * See tasks/00.10.02.re-stock-kmods/findings/ */
 	{
 		int inst;
 		for (inst = 0; inst < 4; inst++) {
@@ -1001,13 +1000,13 @@ static void zx_pp_init(struct zx_eth *e)
 			writel(0xf000107c, pp + ibase + 0x18);
 		}
 	}
-	/* REMOVED 2026-05-24: live-stock dump shows PP[+0x2c] = 0x00000106 across
+	/* Removed: live-stock dump shows PP[+0x2c] = 0x00000106 across
 	 * ALL 8 per-port blocks. Our previous |= BIT(25) wrote 0x02000106, which
 	 * is wrong. The per-port block's +0x2c init value (0x106 from line 512)
 	 * is the correct stock value. Bit 25 was a misinterpretation of the
 	 * stock decomp (`pp[0x2c] |= 1 << (lan_up_port + 0x19)` was conditional
 	 * on `lan_up != 0` which is not set in our boot path).
-	 * See tasks/00.01.eth-driver/findings/stock_register_state_2026-05-24.md */
+	 * See tasks/00.01.eth-driver/findings/ */
 
 	/* pon_pp_brg_init — ALL values verified via live stock dump (not Ghidra
 	 * decompile, which had printk strings cast as constants). */
@@ -1026,7 +1025,7 @@ static void zx_pp_init(struct zx_eth *e)
 	writel(0x00000600, pp + PP_CLA_BASE + 0x0080);
 	/* stock leaves CLA[0x0084] as 0 — skip */
 
-	/* === HW classifier + SPA CPU pktdeal config from stock kotrace 2026-05-24 ===
+	/* === HW classifier + SPA CPU pktdeal config from stock kotrace ===
 	 * RE: cspd calls during init (kotrace_phase5b_dump.txt):
 	 *   - cla_set_oth_l3_pkt_action_cfg(0) — 1 call (action 0 for unknown L3)
 	 *   - spa_set_enty_pktdeal_cfg(port 0..7, slot 0..58, val=1) — 465 calls
@@ -1420,7 +1419,7 @@ static netdev_tx_t zx_idm_xmit(struct sk_buff *skb, struct net_device *ndev)
 	unsigned long flags;
 	u32 idx, len;
 
-	/* Min frame length 0x40 per stock pon_tm_data_raw_send (decomp 2026-05-24):
+	/* Min frame length 0x40 per stock pon_tm_data_raw_send (per stock decomp):
 	 * if (len < 0x40 && param_3==0 && (desc[14]&1)==0) zeropad to 0x40 and
 	 * encode len=0x40 in desc[12..13]=0x100 and desc[8..11] |= 0x40<<9. */
 	if (skb->len < 0x40) {
@@ -1700,7 +1699,7 @@ static int zx_pp_pm_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 }
 
 /* Replay all pp_pm entries dumped from stock (ram=3 default flow_info + ram=6 global). */
-/* Refactor #38 Phase 2 (2026-05-26): pm.bin → embedded zx_pm_init_table.
+/* Refactor #38 Phase 2: pm.bin → embedded zx_pm_init_table.
  * Bit-identical writes, no semantic change. See gen_pm_table.py. */
 #include "zx_pm_table.h"
 
@@ -1771,7 +1770,7 @@ static int zx_cla_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 	return zx_cla_wait_done(e);
 }
 
-/* Refactor #38 Phase 1 (2026-05-26): use embedded static table instead of
+/* Refactor #38 Phase 1: use embedded static table instead of
  * firmware_request("zx-replay/cla.bin"). Bit-identical writes — verified
  * by comparing the generated zx_cla_table.h against the in-tree partial
  * zx279128-eth-cla-regs.h. The firmware_request for cla.bin can be made
@@ -1817,7 +1816,7 @@ static int zx_cla_set_cpu_queue_id(struct zx_eth *e, u32 addr, u8 qid)
 }
 
 /* ===================================================================
- * Phase 4 (in progress, 2026-05-24): per-function ports of stock
+ * Phase 4: per-function ports of stock
  * chip_tm_init's call chain.
  *
  * Each function here is the C equivalent of a stock tm.ko leaf
@@ -1970,7 +1969,7 @@ static void zx_register_cpu_mac(struct zx_eth *e, u8 slot, const u8 *mac)
 
 /* Pre-DMA setup (tm_pon_tm_init opening lines).
  *
- * IMPORTANT FINDING (2026-05-21, stock /dev/mem dump via dumpregs.sh):
+ * Important: stock /dev/mem dump via dumpregs.sh shows:
  * TM register block has **4 identical instances** replicated at offsets
  * 0x000, 0x400, 0x800, 0xC00. Each instance is 0x400 bytes. Stock programs
  * all 4 instances with IDENTICAL values. Likely one TM instance per
@@ -1978,12 +1977,12 @@ static void zx_register_cpu_mac(struct zx_eth *e, u8 slot, const u8 *mac)
  * 0 (plus partial 0x400) — the TX wire-emit may use any of instance 0..3
  * depending on which port the packet egresses on. Now writes all 4.
  *
- * See H3600/stock_state/FINDINGS_2026-05-21.md for the dump. */
+ * See tasks/00.10.02.re-stock-kmods/findings/ for the dump. */
 #define TM_INSTANCE_STRIDE 0x400
 /* Stock dump shows master config 0x140 in 16 instances but stock plat
  * module's pon_tm_int_init writes ONLY to instance 0's tm_base+0x104.
  * Reverted to 4 — bumping to 16 caused silent hang after FPGA IRQ enable
- * during 2026-05-24 test. The per-instance state in dump may come from
+ * during in-tree test. The per-instance state in dump may come from
  * HW mirroring, not explicit writes. */
 #define TM_NUM_INSTANCES   4
 static void zx_tm_pre_init(struct zx_eth *e)
@@ -2078,7 +2077,7 @@ static void zx_pp_brg_init(struct zx_eth *e)
 {
 	void __iomem *pp = e->fpga_base + 0x380000;
 
-	/* 2026-05-25 — log INHERITED state from U-Boot before we overwrite.
+	/* Log INHERITED state from U-Boot before we overwrite.
 	 * Lets us see what U-Boot left behind so we can spot regs where we
 	 * may be clobbering a known-good config. Diff against the writes
 	 * below tells us which writes are no-ops vs. destructive. */
@@ -2102,7 +2101,7 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	writel(0xaaaaaaaa, pp + 0x863c);
 
 	/* SMAC_LOOK_EN — 1 bit per port; was 0xff (all 8 enabled).
-	 * 2026-05-25 EXPERIMENT: disable SMAC learn on CPU port (bit 5).
+	 * Disable SMAC learn on CPU port (bit 5).
 	 * Hypothesis: switch hairpins our own egress back to CPU port; with
 	 * SMAC learn enabled there, switch updates FDB from the looped-back
 	 * frame (sometimes with src_mac rewritten by switch egress stamping)
@@ -2164,7 +2163,7 @@ static void zx_pp_brg_init(struct zx_eth *e)
 
 /* Post-BMU setup (tm_pon_tm_init between bmu_init and pon_tm_net_init).
  *
- * Stock dump 2026-05-21 showed per-instance desc base registers at
+ * Stock dump showed per-instance desc base registers at
  * offsets +0xE8/+0xEC/+0xF0/+0xF4/+0xF8 (5 of them) in ALL 4 TM instances.
  * Stock values per instance (identical across all 4):
  *   +0xE8 0x4E700000   +0xEC 0x4E710000   +0xF0 0x4FF1F000  (TX desc)
@@ -2426,7 +2425,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 							 e->tm_rx_loopback_drops, src + 6, src,
 							 ntohs(*(__be16*)(src + 12)), len, ingress_port);
 					/* BMU free on drops DISABLED — RX wedged in test
-					 * 2026-05-25; suspect still double-frees the same
+					 * suspect still double-frees the same
 					 * way as the unconditional call. Pool leak is slow
 					 * (~30 BPs/min) so acceptable for now. */
 				} else {
@@ -2446,7 +2445,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 								 src + 6, src, ntohs(*(__be16*)(src + 12)),
 								 ingress_port);
 						}
-						/* Dynamic FDB learning DISABLED 2026-05-25 (degradation test).
+						/* Dynamic FDB learning DISABLED (degradation test).
 						 * Per round-2 review: zx_fdb_add writes to PP_BRG_RAM
 						 * (VLAN table), not the sbrag MAC FDB the switch reads
 						 * on egress. After many writes the wrong-table state
@@ -2456,7 +2455,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 					}
 				}
 				/* DO NOT call zx_bmu_free_bp here. Empirical test
-				 * 2026-05-25: ALLOC_BPCNT=15864, RLS_BPCNT=15893 →
+				 * ALLOC_BPCNT=15864, RLS_BPCNT=15893 →
 				 * HW was already releasing more than allocating, so
 				 * our explicit free was DOUBLE-freeing, corrupting the
 				 * pool and killing RX entirely (100% loss). HW must
@@ -2606,7 +2605,7 @@ static int zx_sw_stop(struct net_device *ndev)
  *    2. poll tm[0x8014] & 3 == 0 (busy/done bits)
  *    3. read tm[0x800c]; bit31 = error, bits[15:0] = bp idx
  */
-/* REAL HW BMU allocator — replaces the cycle-counter HACK (2026-05-24).
+/* REAL HW BMU allocator — replaces the cycle-counter HACK.
  * Stock protocol per pon_tm_bmu_alloc_bp (plat-zxylzb_9128S.ko @ 0x18668):
  *   1. set tm[0x8014] |= 1  (alloc kick)
  *   2. poll tm[0x8014] & 3 == 0  (busy/done bits clear when alloc done)
@@ -2774,7 +2773,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	memset(desc, 0, TM_TX_DESC_SIZE);
 	TXCP(e, 4, "desc[%u]=%p prepared (memset done, BP_SIZE=%u)", e->tx_head, desc, TM_BP_SIZE);
 	/* Stock TX desc format (Ghidra decomp of pon_tm_net_tx + pon_tm_data_raw_send,
-	 * 2026-05-24, see tasks/00.10.02.re-stock-kmods/findings/tx_path_stock_decomp.md):
+	 * see tasks/00.10.02.re-stock-kmods/findings/tx_path_stock_decomp.md):
 	 *   desc[0]   = 0xc9 (CPU/source marker; was 0x80 in our baseline)
 	 *   desc[1..3]= 0 except desc[2..3] port hint
 	 *   desc[4..7]= 0x00010000  (so desc[6]=1)
@@ -2811,7 +2810,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	e->tx_head = (e->tx_head + 1) & (TM_TX_RING_SIZE - 1);
 	TXCP(e, 6, "tx_head=%u (post-incr); about to kick TM[0x10054]=1, TM[0x10064]=1", e->tx_head);
 
-	/* Stock soft_insert_tx_1desc (decomp 2026-05-24) kicks ONE reg (UP=0x10054 or
+	/* Stock soft_insert_tx_1desc (per stock decomp) kicks ONE reg (UP=0x10054 or
 	 * DN=0x10064) by direction. Tested single-kick (UP only) on top of fixed
 	 * desc[11]=0x21: 100% loss vs dual-kick's 60% loss + DUPs. So switch needs
 	 * BOTH rings populated to actually move packets to the wire in our setup
@@ -2820,7 +2819,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	tm_write(e, 0x10054, 1);	/* upstream kick */
 	/* tm_write(e, 0x10064, 1); */	/* downstream kick — disabled */
 
-	/* Post-kick desc invalidation 2026-05-25:
+	/* Post-kick desc invalidation:
 	 * pcap data showed HW emitting the SAME TX desc multiple times — host
 	 * received 300 replies for 30 sent (10x amplification), with replies
 	 * for old (cross-run) ICMP seqs continuing to fire. Hypothesis: HW
@@ -2906,7 +2905,7 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	eth_hw_addr_set(ndev, mac);
 
 	/* Stock prints `netif_napi_add() called with weight 512 on device pon`
-	 * in `pon tm init` (2026-05-22 UART capture line 464). Default mainline
+	 * in `pon tm init` (boot UART capture). Default mainline
 	 * NAPI_POLL_WEIGHT=64 is 8x lower than stock and bottlenecks bursty RX. */
 	netif_napi_add_weight(ndev, &e->tm_napi, zx_tm_napi_poll, 512);
 
@@ -2919,7 +2918,7 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	e->sw_dev = ndev;
 	netdev_info(ndev, "sw registered (MAC %pM)\n", ndev->dev_addr);
 
-	/* Phase 6 2026-05-24: single port=1 entry only (was port=1 + port=6).
+	/* Phase 6: single port=1 entry only (was port=1 + port=6).
 	 * Stock kotrace captured exactly one sbrg_add_mactable call with port=1.
 	 * Adding port=6 entry may have caused flood / DUPs. */
 	{
@@ -3602,7 +3601,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 			goto err_unregister;
 	}
 	/* NAPI attached to port 0 (arbitrary). Weight 512 to match stock pon NAPI
-	 * (2026-05-22 UART capture). */
+	 * (boot UART capture). */
 	netif_napi_add_weight(eth->ports[0].netdev, &eth->napi, zx_idm_poll, 512);
 
 	err = devm_request_irq(dev, eth->irq_idm, zx_idm_irq, 0,
