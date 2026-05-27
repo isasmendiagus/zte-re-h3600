@@ -82,6 +82,29 @@ def send_slow(ser, cmd, delay=0.01):
     ser.write(b"\r")
     ser.flush()
 
+# In-memory mirror of the UART stream — populated by log_loop, consumed
+# by wait_for_uboot_prompt_or_fail. Reading from this is ~zero-latency
+# vs polling a flushed file; markers like '=>' or 'T T T...' are visible
+# the moment log_loop's ser.read() returns. Each run_uboot_seq() can
+# call _buf_snapshot_size() at the start to get a "start_offset" so its
+# checks only see data appended AFTER its command was sent.
+_RX_BUF = bytearray()
+_RX_BUF_LOCK = threading.Lock()
+
+
+def _buf_size():
+    """Current size of the in-memory UART mirror."""
+    with _RX_BUF_LOCK:
+        return len(_RX_BUF)
+
+
+def _buf_snapshot(start_offset=0):
+    """Snapshot of the UART mirror from `start_offset` to end. Returns
+    bytes (not a view, to keep callers race-free)."""
+    with _RX_BUF_LOCK:
+        return bytes(_RX_BUF[start_offset:])
+
+
 def log_loop(ser, fout, stop_event, mirror=False):
     while not stop_event.is_set():
         try:
@@ -91,6 +114,8 @@ def log_loop(ser, fout, stop_event, mirror=False):
         if data:
             fout.write(data)
             fout.flush()
+            with _RX_BUF_LOCK:
+                _RX_BUF.extend(data)
             if mirror:
                 sys.stdout.buffer.write(data)
                 sys.stdout.buffer.flush()
@@ -251,42 +276,48 @@ def wait_for_uboot_prompt(timeout=180, start_offset=0):
 # treat them as failure if they exceed a threshold — a few Ts on a
 # normal transfer are tolerated.
 UBOOT_FAIL_MARKERS = ("Retry count exceeded", "TIMEOUT_ERR")
-UBOOT_T_THRESHOLD = 15  # consecutive 'T ' markers tolerated before declaring failure
+UBOOT_T_THRESHOLD = 8   # consecutive 'T ' markers tolerated before declaring failure
+                        # — 8 ≈ 8 seconds at U-Boot's 1s/retry default, fast
+                        # enough to react before the 30s "Retry count exceeded"
+                        # auto-restart adds another lap.
+
+
+def _count_consecutive_ts(data: bytes) -> int:
+    """Longest run of 'T ' tokens on any single line of `data`. U-Boot's
+    TFTP failure prints 'T T T T T...' all on one line."""
+    best = 0
+    for line in data.split(b"\n"):
+        c = line.count(b"T ")
+        if c > best:
+            best = c
+    return best
 
 
 def wait_for_uboot_prompt_or_fail(timeout=180, start_offset=0):
-    """Poll bridge log for either the '=>' prompt OR a failure marker.
+    """Poll the in-memory UART mirror (populated by log_loop directly
+    from the socket — no file I/O race) for either the '=>' prompt OR a
+    failure marker.
 
     Returns one of:
       'prompt'    — command completed, '=>' found
-      'tftp_fail' — TFTP retry-exceeded or excessive 'T ' markers (>15)
+      'tftp_fail' — 'Retry count exceeded', 'TIMEOUT_ERR', or >= UBOOT_T_THRESHOLD
+                    consecutive 'T ' markers on a single line
       'timeout'   — neither marker within the deadline
 
-    Used by run_uboot_seq when wait_for_prompt=True + retry_on_tftp_fail=True
-    so the caller can re-send the command on transient TFTP timeouts (a
-    known intermittent on this device, especially right after a DTR
-    reset when ARP isn't fully settled)."""
+    The `start_offset` should be `_buf_size()` captured BEFORE sending
+    the command — that way the search ignores stale prompts/markers
+    from earlier output."""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        try:
-            with open(LOG, "rb") as f:
-                f.seek(start_offset)
-                data = f.read()
-            if b"=>" in data:
-                return "prompt"
-            for fm in UBOOT_FAIL_MARKERS:
-                if fm.encode() in data:
-                    return "tftp_fail"
-            # Count consecutive T-with-space patterns from the latest run.
-            # TFTP failures print "T T T T " in a row.
-            t_runs = max((len(s) // 2 for s in data.split(b"\n")
-                          if s.count(b"T ") >= UBOOT_T_THRESHOLD),
-                         default=0)
-            if t_runs >= UBOOT_T_THRESHOLD:
+        data = _buf_snapshot(start_offset)
+        if b"=>" in data:
+            return "prompt"
+        for fm in UBOOT_FAIL_MARKERS:
+            if fm.encode() in data:
                 return "tftp_fail"
-        except FileNotFoundError:
-            pass
-        time.sleep(0.3)
+        if _count_consecutive_ts(data) >= UBOOT_T_THRESHOLD:
+            return "tftp_fail"
+        time.sleep(0.1)
     return "timeout"
 
 # Common preamble: set IPs + big TFTP blocksize (default 512B → 143 KiB/s; 1468 → >1 MiB/s)
@@ -330,6 +361,12 @@ def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False,
     reset, or transient packet loss."""
     log_open_mode = "ab" if append else "wb"
     fout = open(LOG, log_open_mode)
+    # Reset the in-memory UART mirror so this invocation sees a clean
+    # slice. start_offset captures from _buf_size() *inside* this call
+    # so unrelated cspstart output from before main() called us doesn't
+    # match our prompt/fail patterns.
+    with _RX_BUF_LOCK:
+        _RX_BUF.clear()
     stop = threading.Event()
     t = threading.Thread(target=log_loop, args=(ser, fout, stop, mirror))
     t.start()
@@ -347,7 +384,7 @@ def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False,
         else:
             print(f">>> [uboot] {label}  (wait {wait}s){attempt_str}", flush=True)
 
-        offset_before = _log_size() if wait_for_prompt and cmd else None
+        offset_before = _buf_size() if wait_for_prompt and cmd else None
         send_slow(ser, cmd)
 
         if wait_for_prompt and cmd:
