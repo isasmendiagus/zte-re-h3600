@@ -4014,6 +4014,55 @@ static void zx_eth_iounmap_action(void *iomem)
 }
 
 /*
+ * [A06a] SERDES register defaults — mirror of stock plat:8231
+ * `reg_def_set`. Pokes 24 default values into pon_serdes_base[0..0x17].
+ * This is the "factory" SERDES register baseline that stock writes
+ * inside zx_pon_clk_reset_init BEFORE the band calibration.
+ *
+ * The band coarse value at pon_serdes_base[0x44] is INTENTIONALLY left
+ * at 0xea00a013 (pre-band-cal) — A06d (band cal) will OR in the
+ * temperature-compensated coarse bits to produce the final 0xea2ca013.
+ *
+ * Skip cleanly if pon_serdes wasn't mapped (older DTBs).
+ */
+static const struct {
+	u32 off;	/* byte offset from pon_serdes_base */
+	u32 val;
+} zx_serdes_defaults[] = {
+	{ 0x00, 0x800180a7 },	{ 0x04, 0x0000008f },
+	{ 0x08, 0x00000540 },	{ 0x0c, 0x00000004 },
+	{ 0x10, 0x00000000 },	{ 0x14, 0x018a6400 },
+	{ 0x18, 0x00b50140 },	{ 0x1c, 0x01216000 },
+	{ 0x20, 0x40000000 },	{ 0x24, 0x0b510007 },
+	{ 0x28, 0x00000000 },	{ 0x2c, 0x00000000 },
+	{ 0x30, 0xa02e2400 },	{ 0x34, 0xc0593d44 },
+	{ 0x38, 0x00000f0f },	{ 0x3c, 0x00000000 },
+	{ 0x40, 0x003c0000 },	{ 0x44, 0xea00a013 },
+	{ 0x48, 0x101038ca },	{ 0x4c, 0x0005a008 },
+	{ 0x50, 0x33333333 },	{ 0x54, 0x33333333 },
+	{ 0x58, 0x03e23333 },	{ 0x5c, 0x00040244 },
+};
+
+static void zx_serdes_apply_defaults(struct zx_eth *e)
+{
+	struct device *dev = e->dev;
+	int i;
+
+	if (!e->pon_serdes) {
+		dev_dbg(dev, "[A06a] pon_serdes not mapped — skipping defaults\n");
+		return;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(zx_serdes_defaults); i++)
+		writel(zx_serdes_defaults[i].val,
+		       e->pon_serdes + zx_serdes_defaults[i].off);
+
+	dev_info(dev, "[A06a] SERDES defaults applied (%d regs). pon_serdes[0x44]=0x%08x (stock pre-band-cal=0xea00a013)\n",
+		 (int)ARRAY_SIZE(zx_serdes_defaults),
+		 readl(e->pon_serdes + 0x44));
+}
+
+/*
  * [A05] Chip-level small writes — equivalent to a tiny subset of stock
  * plat-zxylzb_9128S init_module's pre-TM writes.
  *
@@ -4045,6 +4094,15 @@ static void zx_eth_init_pon_chip(struct zx_eth *eth)
 
 	dev_info(dev, "PON chip pre-init: pon[0x4001c]=0x%08x (stock=0xf)\n",
 		 readl(eth->pon_early + 0x4001c));
+
+	/* [A06a] SERDES register defaults — sub-step of
+	 * zx_pon_clk_reset_init bring-up. Safe to call alone: it only
+	 * writes the 24 default register values stock writes via
+	 * reg_def_set; no clock toggling, no PLL state change.
+	 * Subsequent A06 sub-iters add mode-select + waits + band cal
+	 * to complete the SERDES bring-up.
+	 */
+	zx_serdes_apply_defaults(eth);
 }
 
 static int zx_eth_init_topcrm(struct zx_eth *eth)
