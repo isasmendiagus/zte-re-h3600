@@ -1,0 +1,247 @@
+echo '=== MAC[0..4] ctrl/mask/en + 0x0c ==='; echo DONE_$$_MARK_v2
+=== MAC[0..4] ctrl/mask/en + 0x0c ===
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92200000 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f1e000.
+Value at address 0x92200000 (0xb6f1e000): 0xBAE000
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92200004 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f84000.
+Value at address 0x92200004 (0xb6f84004): 0x3FFF
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92200008 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f45000.
+Value at address 0x92200008 (0xb6f45008): 0x80000001
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x9220000c w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f37000.
+Value at address 0x9220000C (0xb6f3700c): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92240000 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6fc3000.
+Value at address 0x92240000 (0xb6fc3000): 0xBAE000
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92240004 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f22000.
+Value at address 0x92240004 (0xb6f22004): 0x3FFF
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92240008 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f2f000.
+Value at address 0x92240008 (0xb6f2f008): 0x80000001
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92280000 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6fa6000.
+Value at address 0x92280000 (0xb6fa6000): 0xBA6003
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92280004 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f2c000.
+Value at address 0x92280004 (0xb6f2c004): 0x3FFF
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92280008 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f93000.
+Value at address 0x92280008 (0xb6f93008): 0x80000001
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x922c0000 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f77000.
+Value at address 0x922C0000 (0xb6f77000): 0xBAE000
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x922c0004 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6ff8000.
+Value at address 0x922C0004 (0xb6ff8004): 0x3FFF
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x922c0008 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f49000.
+Value at address 0x922C0008 (0xb6f49008): 0x80000001
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92300000 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f63000.
+Value at address 0x92300000 (0xb6f63000): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92300008 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6fb4000.
+Value at address 0x92300008 (0xb6fb4008): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+echo '=== MAC[0].D00 D30 ==='; echo DONE_$$_MARK_v2
+=== MAC[0].D00 D30 ===
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92200d00 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f87000.
+Value at address 0x92200D00 (0xb6f87d00): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92200d30 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6fe7000.
+Value at address 0x92200D30 (0xb6fe7d30): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+echo '=== TM IRQ ==='; echo DONE_$$_MARK_v2
+=== TM IRQ ===
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92340100 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f00000.
+Value at address 0x92340100 (0xb6f00100): 0x10
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92340104 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6ff0000.
+Value at address 0x92340104 (0xb6ff0104): 0xFFFFFFFC
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92340108 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f67000.
+Value at address 0x92340108 (0xb6f67108): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x9234010c w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f3a000.
+Value at address 0x9234010C (0xb6f3a10c): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+echo '=== TM queue counters (8 queues) ==='; echo DONE_$$_MARK_v2
+=== TM queue counters (8 queues) ===
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92350100 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f3b000.
+Value at address 0x92350100 (0xb6f3b100): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92350104 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6faf000.
+Value at address 0x92350104 (0xb6faf104): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92350108 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6fd4000.
+Value at address 0x92350108 (0xb6fd4108): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x9235010c w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6fc9000.
+Value at address 0x9235010C (0xb6fc910c): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92350110 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6fb7000.
+Value at address 0x92350110 (0xb6fb7110): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92350114 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f58000.
+Value at address 0x92350114 (0xb6f58114): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x92350118 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6fda000.
+Value at address 0x92350118 (0xb6fda118): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x9235011c w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f08000.
+Value at address 0x9235011C (0xb6f0811c): 0x0
+DONE_1206_MARK_v2
+/ # 
+----
+echo '=== Port isolation table ==='; echo DONE_$$_MARK_v2
+=== Port isolation table ===
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x923883c0 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6fa5000.
+Value at address 0x923883C0 (0xb6fa53c0): 0xFE
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x923883c4 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f98000.
+Value at address 0x923883C4 (0xb6f983c4): 0xFD
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x923883c8 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f7e000.
+Value at address 0x923883C8 (0xb6f7e3c8): 0xFB
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x923883cc w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f38000.
+Value at address 0x923883CC (0xb6f383cc): 0xF7
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x923883d0 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f33000.
+Value at address 0x923883D0 (0xb6f333d0): 0xEF
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x923883d4 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6f37000.
+Value at address 0x923883D4 (0xb6f373d4): 0xDF
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x923883d8 w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6fba000.
+Value at address 0x923883D8 (0xb6fba3d8): 0xFF
+DONE_1206_MARK_v2
+/ # 
+----
+devmem2 0x923883dc w; echo DONE_$$_MARK_v2
+Memory mapped at address 0xb6fa7000.
+Value at address 0x923883DC (0xb6fa73dc): 0xFF
+DONE_1206_MARK_v2
+/ # 
+----
