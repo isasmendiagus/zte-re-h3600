@@ -151,6 +151,49 @@ def _run_seq(cmds):
     t.join()
     fout.close()
 
+
+def _log_size():
+    """Current size of the bridge log file (0 if absent)."""
+    try:
+        with open(LOG, "rb") as f:
+            f.seek(0, 2)
+            return f.tell()
+    except FileNotFoundError:
+        return 0
+
+
+def wait_for_marker(marker, timeout=120, start_offset=0, log_path=None):
+    """Poll the bridge log for a substring. Returns True if found within
+    `timeout` seconds. Search begins at `start_offset` bytes into the log
+    so callers can search only what appears AFTER they sent a command.
+
+    If `log_path` is None, uses the module-global LOG (the bridge log)."""
+    path = log_path if log_path is not None else LOG
+    deadline = time.time() + timeout
+    needle = marker.encode() if isinstance(marker, str) else marker
+    while time.time() < deadline:
+        try:
+            with open(path, "rb") as f:
+                f.seek(start_offset)
+                if needle in f.read():
+                    return True
+        except FileNotFoundError:
+            pass
+        time.sleep(0.3)
+    return False
+
+
+def wait_for_uboot_prompt(timeout=180, start_offset=0):
+    """Wait for the U-Boot '=>' prompt return marker in the bridge log.
+
+    This is the generic command-completion detector for U-Boot — every
+    successful command returns control to the '=>' prompt. Use this
+    instead of fixed sleeps when command duration is variable (TFTP,
+    erase, write).
+
+    Returns True on success, False on timeout."""
+    return wait_for_marker("=>", timeout=timeout, start_offset=start_offset)
+
 # Common preamble: set IPs + big TFTP blocksize (default 512B → 143 KiB/s; 1468 → >1 MiB/s)
 _PREAMBLE = [
     ("",                                    1),  # newline to wake prompt
@@ -159,7 +202,8 @@ _PREAMBLE = [
     ("setenv tftpblocksize 1468",           1),
 ]
 
-def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False):
+def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False,
+                  wait_for_prompt=False, prompt_timeout=180):
     """Run a list of (cmd, wait_seconds) tuples on a UART already at the
     U-Boot prompt. Caller is responsible for: opening `ser`, doing the
     DTR reset, and driving cspstart prompts to U-Boot.
@@ -170,7 +214,18 @@ def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False):
       - configures network for TFTP
       - bumps TFTP throughput from ~146 KiB/s to ~1 MiB/s
 
-    Set skip_preamble=True if the caller already programmed the env."""
+    Set skip_preamble=True if the caller already programmed the env.
+
+    If `wait_for_prompt=True`, after each non-empty command the function
+    polls the bridge log for the '=>' prompt return (using
+    `wait_for_uboot_prompt`) instead of sleeping for the fixed
+    `wait_seconds`. The per-command tuple's second element is still
+    respected — if the prompt-wait succeeds we move on immediately; if
+    the prompt-wait times out (limited by `prompt_timeout`) we fall back
+    to the fixed wait. This makes the helper safe to use for variable-
+    duration commands like `tftp` / `erase` / `nand write` without
+    racing into the next command. Note: do NOT pass wait_for_prompt=True
+    for `bootm` — that command doesn't return to a prompt."""
     log_open_mode = "ab" if append else "wb"
     fout = open(LOG, log_open_mode)
     stop = threading.Event()
@@ -181,8 +236,28 @@ def run_uboot_seq(ser, cmds, mirror=True, append=True, skip_preamble=False):
     full_cmds = (list(_PREAMBLE) if not skip_preamble else []) + list(cmds)
     for cmd, wait in full_cmds:
         label = repr(cmd) if cmd else "<empty newline wake>"
-        print(f">>> [uboot] {label}  (wait {wait}s)", flush=True)
+        if wait_for_prompt and cmd:
+            print(f">>> [uboot] {label}  (wait for '=>' prompt, up to {prompt_timeout}s)",
+                  flush=True)
+        else:
+            print(f">>> [uboot] {label}  (wait {wait}s)", flush=True)
+
+        # Capture log offset BEFORE sending the command so the search for
+        # the '=>' prompt doesn't match stale prompts from earlier output.
+        offset_before = _log_size() if wait_for_prompt and cmd else None
         send_slow(ser, cmd)
+
+        if wait_for_prompt and cmd:
+            # Let the command line echo into the log, then wait for the
+            # NEXT '=>' which is the prompt return.
+            time.sleep(0.5)
+            if wait_for_uboot_prompt(timeout=prompt_timeout,
+                                     start_offset=offset_before):
+                # Prompt returned cleanly — move on without extra sleep.
+                continue
+            print(f"[run_uboot_seq] timeout waiting for prompt after {cmd!r}, "
+                  f"falling back to fixed sleep ({wait}s)", flush=True)
+
         time.sleep(wait)
 
     stop.set()

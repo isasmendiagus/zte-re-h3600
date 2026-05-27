@@ -69,22 +69,6 @@ def atomic_dtr_pulse():
         s.close()
 
 
-def wait_for_marker(log_path: str, marker: str, timeout: float,
-                    start_offset: int = 0) -> bool:
-    """Poll the bridge log for a substring. Returns True if found."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            with open(log_path, "rb") as f:
-                f.seek(start_offset)
-                if marker.encode() in f.read():
-                    return True
-        except FileNotFoundError:
-            pass
-        time.sleep(0.5)
-    return False
-
-
 def main():
     print(">>> Atomic DTR_PULSE via bridge ctl port")
     try:
@@ -128,16 +112,22 @@ def main():
         print("ERROR: never reached U-Boot prompt")
         return 1
 
-    print("\n>>> U-Boot reached. Running TFTP + bootm via run_uboot_seq helper.")
-    # The helper prepends _PREAMBLE (empty-newline wake + setenv ipaddr/
-    # serverip + tftpblocksize=1468 → ~1 MiB/s instead of ~146 KiB/s) which
-    # both fixes the "first command lost after U-Boot prompt" race and
-    # accelerates TFTP by ~8×. At ~1 MiB/s an 11 MB kernel transfers in
-    # ~12s, so a 60s wait is conservative.
+    print("\n>>> U-Boot reached. Sending tftp + bootm with auto prompt-wait.")
+    # run_uboot_seq with wait_for_prompt=True polls the bridge log for '=>'
+    # after each command (using lib/uart.py:wait_for_uboot_prompt) instead
+    # of relying on fixed sleeps that race with variable-length operations
+    # like TFTP. The per-command tuple's second element is the fallback
+    # timeout in case the prompt never returns.
+    #
+    # bootm is the exception — it doesn't return to a prompt (it boots
+    # the kernel). Run it in a separate call with wait_for_prompt=False.
     run_uboot_seq(ser, [
-        (f"tftp 0x42000000 {KERNEL_IMG}", 60),  # ~12s real with blocksize=1468
-        ("bootm 0x42000000",               5),
-    ])
+        (f"tftp 0x42000000 {KERNEL_IMG}",    180),  # fallback only
+    ], wait_for_prompt=True, prompt_timeout=180)
+
+    run_uboot_seq(ser, [
+        ("bootm 0x42000000",                 5),
+    ], skip_preamble=True, wait_for_prompt=False)
     print(">>> bootm sent — kernel should boot now. Caller polls UART for kernel-up marker.")
     return 0
 
