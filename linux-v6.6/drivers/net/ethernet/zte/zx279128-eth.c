@@ -3660,27 +3660,38 @@ static void zx_eth_init_vlan_and_isolation(struct zx_eth *eth)
 }
 
 /*
- * Map the two extra MMIO windows the driver needs beyond the DT-listed
- * "npp" resource: fpga_base (a 4 MiB unified window starting at the PON
- * base, used by zx_fpga_table_write descriptor-driven access) and
- * pon_early (the first 1.75 MiB of that, used by negative-offset stock
- * writes). Both overlap the DT-listed regions but ioremap is happy to
- * provide overlapping mappings here.
+ * Map the two extra MMIO windows the driver needs alongside the DT-listed
+ * "npp" resource:
  *
- * TODO Phase 10b: take pon_early from the DT "pon" reg-name entry and
- * derive fpga_base = pon_early ∪ npp via the platform_resource API.
+ *   pon_early : the "pon" reg-name resource (1.75 MiB at PON base),
+ *               used by negative-offset stock writes.
+ *   fpga_base : a unified 4 MiB window starting at the same PON base,
+ *               used by descriptor-driven zx_fpga_table_write access.
+ *               It overlaps the "pon" + "npp" resources plus a small
+ *               tail; that's why it's not its own DT reg entry (DT
+ *               bindings forbid overlapping resources).
+ *
+ * Both use plain devm_ioremap (no request_mem_region) so they can coexist
+ * with the byname mapping of "pon" without resource-collision errors.
  */
-static int zx_eth_init_extra_mmio(struct zx_eth *eth)
+static int zx_eth_init_extra_mmio(struct zx_eth *eth,
+				  struct platform_device *pdev)
 {
 	struct device *dev = eth->dev;
+	struct resource *pon_res;
 
-	eth->fpga_base = devm_ioremap(dev, 0x92000000, 0x400000);
-	if (!eth->fpga_base)
-		return dev_err_probe(dev, -ENOMEM, "ioremap fpga_base failed\n");
+	pon_res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pon");
+	if (!pon_res)
+		return dev_err_probe(dev, -ENODEV, "missing 'pon' reg\n");
 
-	eth->pon_early = devm_ioremap(dev, 0x92000000, 0x1C0000);
+	eth->pon_early = devm_ioremap(dev, pon_res->start,
+				      resource_size(pon_res));
 	if (!eth->pon_early)
 		return dev_err_probe(dev, -ENOMEM, "ioremap PON early\n");
+
+	eth->fpga_base = devm_ioremap(dev, pon_res->start, 0x400000);
+	if (!eth->fpga_base)
+		return dev_err_probe(dev, -ENOMEM, "ioremap fpga_base failed\n");
 
 	return 0;
 }
@@ -3752,7 +3763,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 	zx_pp_init(eth);
 	zx_npp_init(eth);
 
-	err = zx_eth_init_extra_mmio(eth);
+	err = zx_eth_init_extra_mmio(eth, pdev);
 	if (err)
 		return err;
 
