@@ -3136,6 +3136,13 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	TXCP(e, 3, "BMU alloc OK: bp=%u bp_buf=%p, copied %u bytes from skb (frame at +16)",
 	     bp, bp_buf, len);
 
+	/* [Iter 34] REVERT Iter 32. Per agent 12 RE (tx_consume_engine_re.md):
+	 * Stock pon_tm_net_tx for "sw" netdev (LAN-only mode, param_1=0)
+	 * takes the lan_up==1 branch and calls pon_tm_data_raw_send(skb,
+	 * desc, 0) → soft_insert_tx_1desc(desc, 0) which kicks UP ring
+	 * (TM[0x10054]), NOT DN. The 315 "loopback drops" in iter31 were
+	 * FDB-miss flooding hairpin, not ring direction misuse.
+	 */
 	desc = (u8 *)e->txdesc_cpu + e->tx_head * TM_TX_DESC_SIZE;
 	memset(desc, 0, TM_TX_DESC_SIZE);
 	TXCP(e, 4, "desc[%u]=%p prepared (memset done, BP_SIZE=%u)", e->tx_head, desc, TM_BP_SIZE);
@@ -3186,8 +3193,8 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	 * (likely because we don't have GPON DN traffic but switch routing expects
 	 * activity on DN side too). Keep dual-kick.
 	 */
-	tm_write(e, 0x10054, 1);	/* upstream kick */
-	/* tm_write(e, 0x10064, 1); */	/* downstream kick — disabled */
+	/* UP kick per stock soft_insert_tx_1desc(desc, dir=0). */
+	tm_write(e, 0x10054, 1);
 
 	/* Post-kick desc invalidation:
 	 * pcap data showed HW emitting the SAME TX desc multiple times — host
@@ -3201,13 +3208,13 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	 * reads desc asynchronously (after kick returns), we'd break TX —
 	 * in which case revert and implement a NAPI-driven reclaim instead.
 	 */
-	{
-		u32 prev = (e->tx_head - 1) & (TM_TX_RING_SIZE - 1);
-		u8 *pdesc = (u8 *)e->txdesc_cpu + prev * TM_TX_DESC_SIZE;
-
-		pdesc[11] &= ~0x20;
-		dma_wmb();
-	}
+	/* [Iter 33] Removed post-kick desc invalidation. Was clearing
+	 * desc[11] VALID bit (0x20) immediately after kick to prevent HW
+	 * re-emitting (UP-ring era artifact). On DN ring, HW reads desc
+	 * asynchronously and we may clear VALID before HW reads → HW skips
+	 * desc → TX never consumed (TM[0x10068] HIGH16 grows but never
+	 * drains). Let HW manage the valid bit naturally.
+	 */
 
 	TXCP(e, 7, "kick done; TM[0x10058]=%#x (UP cnt) TM[0x10068]=%#x (DN cnt)",
 	     tm_read(e, 0x10058), tm_read(e, 0x10068));
