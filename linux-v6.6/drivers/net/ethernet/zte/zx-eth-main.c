@@ -3756,6 +3756,15 @@ static void zx_eth_adjust_link(struct net_device *ndev)
  * findings/phy_irq_state_machine_2026-05-27.md for the empirical
  * validation that drove this design.
  */
+/* Set ZX_SKIP_PHY_INIT=1 to skip mainline's phy_init_hw + phy_attach.
+ * Per user 2026-05-28 suggestion: U-Boot leaves PHYs initialized; let
+ * mainline inherit that state instead of overwriting it. Caveat:
+ * pon_reset(0xffffffff) in A03 may already wipe U-Boot state — this
+ * test will tell us if PHY config_init is needed or if U-Boot's state
+ * suffices.
+ */
+#define ZX_SKIP_PHY_INIT  0
+
 static void zx_eth_init_phys(struct zx_eth *e)
 {
 	struct device *dev = e->dev;
@@ -3769,6 +3778,11 @@ static void zx_eth_init_phys(struct zx_eth *e)
 	}
 	if (n > 4)
 		n = 4;
+
+	if (ZX_SKIP_PHY_INIT) {
+		dev_info(dev, "ZX_SKIP_PHY_INIT=1 — leaving PHYs in U-Boot state, no phy_init_hw/attach\n");
+		return;
+	}
 
 	for (i = 0; i < n; i++) {
 		struct device_node *phy_np;
