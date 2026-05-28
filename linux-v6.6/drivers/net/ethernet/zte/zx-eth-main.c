@@ -3728,14 +3728,32 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 		if (now == e->phy_was_link[i])
 			continue;
 
+		/* [Iter 24] Per agent 7 finding (phy_init_perturbs_bmu_re.md):
+		 * stock's extphy_timer_func issues pon_reset(1<<(N+6)) on every
+		 * link-state transition to clear any wedged TX FIFO state from
+		 * the RGMII glitch caused by PHY analog config. Mirror that
+		 * before re-enabling the MAC: bit (N+6) of pon[8] toggled
+		 * low→high pulses the per-port reset. Skip for unconnected ports
+		 * (only if we have pon_early mapped — sanity check).
+		 */
+		if (e->pon_early) {
+			u32 mask = 1u << (i + 6);
+			u32 v = readl(e->pon_early + 8);
+
+			writel(v & ~mask, e->pon_early + 8);
+			msleep(10);                           /* stock pattern */
+			writel(v | mask, e->pon_early + 8);
+		}
+
 		writel(now ? MAC_CTRL_LINK_UP : MAC_CTRL_LINK_DOWN,
 		       e->base + mac_off(i, MAC_REG_CONTROL));
-		netdev_info(ndev, "PHY[%d] link %s @ %d/%s → MAC[%d].ctrl=%#x\n",
+		netdev_info(ndev, "PHY[%d] link %s @ %d/%s → MAC[%d].ctrl=%#x (port-reset bit %d pulsed)\n",
 			    i, now ? "UP" : "DOWN",
 			    now ? phy->speed : 0,
 			    now ? (phy->duplex ? "FD" : "HD") : "-",
 			    i,
-			    now ? MAC_CTRL_LINK_UP : MAC_CTRL_LINK_DOWN);
+			    now ? MAC_CTRL_LINK_UP : MAC_CTRL_LINK_DOWN,
+			    i + 6);
 		e->phy_was_link[i] = now;
 	}
 }

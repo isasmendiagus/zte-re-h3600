@@ -86,6 +86,16 @@ static int zte_gephy_ext_write(struct phy_device *phydev, u16 addr, u16 val)
 	return phy_write(phydev, ZTE_GEPHY_EXT_DATA_REG, val);
 }
 
+static int zte_gephy_ext_read(struct phy_device *phydev, u16 addr)
+{
+	int ret;
+
+	ret = phy_write(phydev, ZTE_GEPHY_EXT_ADDR_REG, addr);
+	if (ret < 0)
+		return ret;
+	return phy_read(phydev, ZTE_GEPHY_EXT_DATA_REG);
+}
+
 static int zte_gephy_probe(struct phy_device *phydev)
 {
 	phydev_info(phydev, "ZTE GePHY bound (PHY ID %#010x)\n", phydev->phy_id);
@@ -94,9 +104,26 @@ static int zte_gephy_probe(struct phy_device *phydev)
 
 static int zte_gephy_config_init(struct phy_device *phydev)
 {
-	int ret, i;
+	int ret, i, ldo_state;
 
-	phydev_info(phydev, "config_init (LDO arm + TX DAC drive enable)\n");
+	/* [Iter 23] Skip LDO arm + TX-DAC writes if PHY analog is already
+	 * up. Per agent 7 (phy_init_perturbs_bmu_re.md): re-arming the LDO
+	 * power-cycles the PHY analog domain → RGMII glitch → switch fabric
+	 * sees link bounce → MAC TX FIFO wedges (mainline doesn't issue the
+	 * per-port pon_reset(1<<(N+6)) stock does in extphy_timer_func).
+	 * U-Boot already armed the LDO; checking ext 0xb640 == 0x001f lets
+	 * us skip the disruptive writes when already armed. The PHY ID is
+	 * read in probe so we know the PHY is reachable via MDIO.
+	 */
+	ldo_state = zte_gephy_ext_read(phydev, ZTE_GEPHY_EXT_LDO_ARM);
+	if (ldo_state == ZTE_GEPHY_EXT_LDO_ENABLE) {
+		phydev_info(phydev, "config_init: LDO already armed (ext 0xb640=0x%04x) — skipping disruptive writes\n",
+			    ldo_state);
+		return 0;
+	}
+
+	phydev_info(phydev, "config_init: arming LDO + TX DAC drive (prior state 0x%04x)\n",
+		    ldo_state);
 
 	/* (1) LDO enable. The vendor kernel arms via 0x17=0x2448 then pokes
 	 * extended reg 0xb640. Without this the PHY core stays unpowered.
