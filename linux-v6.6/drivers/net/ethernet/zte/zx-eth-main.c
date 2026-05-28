@@ -3747,6 +3747,53 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 
 		writel(now ? MAC_CTRL_LINK_UP : MAC_CTRL_LINK_DOWN,
 		       e->base + mac_off(i, MAC_REG_CONTROL));
+
+		/* [Iter 25] SOPC↔SMAC bridge handshake at NPP[0x19068].
+		 * Per agent 8 (phy_mac_rgmii_wedge_re.md) — THIS is the
+		 * gate that lets the switch fabric route frames in/out of
+		 * MAC[N]. Stock smac_sopc_mode_switch (plat:2290) +
+		 * U-Boot FUN_40e50c40: on link UP, poll bit (port+5) for
+		 * "PHY-MAC link-ready", then set bit port for SOPC→SMAC
+		 * bridge enable. On link DOWN, clear bit port to disable
+		 * the bridge.
+		 */
+		if (now) {
+			int retries = 5;
+			u32 ready_bit = 1u << (i + 5);
+			u32 enable_bit = 1u << i;
+			u32 duplex_bit = 1u << (i + 16);	/* NPP[0x19038] half-duplex flag */
+			u32 reg;
+
+			while (retries-- > 0) {
+				reg = readl(e->base + 0x19068);
+				if (reg & ready_bit)
+					break;
+				msleep(1);
+			}
+			if (retries <= 0)
+				netdev_warn(ndev, "[Iter25] PHY[%d] link-ready bit %d NEVER set in NPP[0x19068]=%#x (max 5 polls)\n",
+					    i, i + 5, reg);
+			reg = readl(e->base + 0x19068);
+			writel(reg | enable_bit, e->base + 0x19068);
+			netdev_info(ndev, "[Iter25] PHY[%d] SOPC bridge enabled: NPP[0x19068] %#x → %#x\n",
+				    i, reg, readl(e->base + 0x19068));
+
+			/* [Iter 25b] NPP[0x19038] bit (port+16) = half-duplex flag.
+			 * Stock smac_sopc_mode_switch (plat:2305): sets bit if
+			 * duplex != 1 (= half), clears if duplex == 1 (= full).
+			 * For our 1000/FD this should be cleared.
+			 */
+			reg = readl(e->base + 0x19038);
+			if (phy->duplex == DUPLEX_FULL)
+				writel(reg & ~duplex_bit, e->base + 0x19038);
+			else
+				writel(reg | duplex_bit, e->base + 0x19038);
+		} else {
+			u32 reg = readl(e->base + 0x19068);
+
+			writel(reg & ~(1u << i), e->base + 0x19068);
+		}
+
 		netdev_info(ndev, "PHY[%d] link %s @ %d/%s → MAC[%d].ctrl=%#x (port-reset bit %d pulsed)\n",
 			    i, now ? "UP" : "DOWN",
 			    now ? phy->speed : 0,
