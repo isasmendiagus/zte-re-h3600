@@ -3556,13 +3556,19 @@ static int zx_pipeline_stats_show(struct seq_file *s, void *_unused)
 	seq_puts(s, "upstream statistics:\n");
 	for (p = 0; p < 5; p++) {
 		void __iomem *mac = e->base + mac_off(p, 0);
-		u32 r710 = readl(mac + 0x710);
-		u32 r714 = readl(mac + 0x714);
-		u32 r718 = readl(mac + 0x718);
-		u32 r71c = readl(mac + 0x71c);
+		/* CORRECTED: MAC[N]+0x710..0x71c are TX-side counters, NOT RX
+		 * (per agent 9 smac_real_counters_re.md). Real wire-side RX
+		 * counters: MAC[N]+0x780 (rx pkts), +0x784 (rx bytes).
+		 */
+		u32 rx_pkts  = readl(mac + 0x780);
+		u32 rx_bytes = readl(mac + 0x784);
+		u32 tx_bytes = readl(mac + 0x710);	/* relabel — these are TX */
+		u32 tx_pkts  = readl(mac + 0x714);
+		u32 tx_good_bc = readl(mac + 0x718);
+		u32 r71c     = readl(mac + 0x71c);
 
-		seq_printf(s, "  smac%d MAC[+710..71c] = %08x %08x %08x %08x   (RX/TX byte+pkt counters)\n",
-			   p, r710, r714, r718, r71c);
+		seq_printf(s, "  smac%d RX_pkts=%u RX_bytes=%u | TX_bytes=%u TX_pkts=%u TX_bc=%u r71c=0x%x\n",
+			   p, rx_pkts, rx_bytes, tx_bytes, tx_pkts, tx_good_bc, r71c);
 	}
 	seq_puts(s, "  (TODO) sdet uniN egress_transport_cnt / drop_cnt  [need NPP_Sdet offsets]\n");
 	seq_puts(s, "  (TODO) sipc2cpu_aful_cnt_up                       [need NPP_Sipc offset]\n");
