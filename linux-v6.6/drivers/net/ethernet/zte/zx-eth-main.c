@@ -2640,12 +2640,31 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 		take = min_t(u32, pending, (u32)(budget - done));
 		take = min_t(u32, take, TM_RX_DESC_PER_Q);
 
-		/* RX desc area at rxdesc_cpu+0 (was +0x10000), per TM[0xF0]=rxdesc_dma fix. */
+		/* [Iter 31] HW writes RX descs out-of-order: in queue 5, first
+		 * frame at idx 0, subsequent at idx 12+. SW rx_head[q] advance
+		 * by 1 each frame misses non-contiguous descs. Scan forward
+		 * looking for valid desc (len > 0) — skip empty/stale entries.
+		 */
 		for (n = 0; n < take; n++) {
 			u32 idx = e->rx_head[q];
-			u8 *desc = (u8 *)e->rxdesc_cpu +
-				   (q * TM_RX_DESC_PER_Q + idx) * TM_DESC_SIZE;
-			u16 len = le16_to_cpu(*(__le16 *)(desc + 12)) >> 2;
+			u8 *desc;
+			u16 len;
+			int scan;
+
+			/* Skip empty descs (len=0) up to a full ring scan */
+			for (scan = 0; scan < TM_RX_DESC_PER_Q; scan++) {
+				desc = (u8 *)e->rxdesc_cpu +
+					(q * TM_RX_DESC_PER_Q + idx) * TM_DESC_SIZE;
+				len = le16_to_cpu(*(__le16 *)(desc + 12)) >> 2;
+				if (len > 0 && len < 1600)
+					break;
+				idx = (idx + 1) & (TM_RX_DESC_PER_Q - 1);
+			}
+			if (scan >= TM_RX_DESC_PER_Q) {
+				/* Scanned whole ring, no valid desc → stop */
+				break;
+			}
+			e->rx_head[q] = idx;
 			/* bp_idx is 10 bits split: low 7 in desc[7]>>1, high 7 in desc[8].
 			 * Stock pon_tm_net_poll @ +0x8754:
 			 *   uVar11 = (desc[7]>>1) | (desc[8]<<7);
