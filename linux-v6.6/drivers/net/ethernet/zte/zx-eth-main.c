@@ -176,7 +176,7 @@
  * Masking bit 1 entirely is a known-safe stop-gap pending proper TX-completion
  * reclaim. See tasks/00.01.eth-driver/findings/ping_bidi_irq_storm_2026-05-27.md.
  */
-#define TM_IRQ_ARM_BITS		0x01		/* bit 0 (RX) only — bit 1 (TX) needs ack mechanism, see iter13_tm_bit1_storm_2026-05-27.md */
+#define TM_IRQ_ARM_BITS		0x03		/* bits 0+1 — RX (0) + TX done (1), stock match (after carved+SOPC+TM[0xc000] fixes, the storm from Iter 13 should not recur) */
 
 /* Stock prints `BPPE_POOL_SIZE=2000` in `pon init` = 0x2000 = 8192. Match
  * stock to avoid buffer exhaustion under sustained traffic (boot UART capture, mainline_eth/captures/boot_init.log).
@@ -2620,7 +2620,14 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 	/* Check each of 8 RX queues for pending descriptors */
 	for (q = 0; q < TM_NUM_RX_QUEUES && done < budget; q++) {
 		u32 status = tm_read(e, TM_RX_QCNT_BASE + q * 4);
-		u32 pending = status >> 16;	/* high 16 = pending (stock pon_tm_net_poll uses raw>>16) */
+		u32 pending = status & 0xffff;	/* [Iter 30] pending is LOW16
+						 * not high16. Empirical 2026-05-28
+						 * with PP CLA + QMG fixes in place:
+						 * TM[0x10114] read 0x0000000d under
+						 * ping, queue 5 had 13 packets pending
+						 * in LOW16. Prior `status >> 16` was
+						 * always 0 → NAPI saw no work.
+						 */
 		u32 take, n, ack = 0;
 
 		if (!pending) {
