@@ -3754,6 +3754,23 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 		writel(now ? MAC_CTRL_LINK_UP : MAC_CTRL_LINK_DOWN,
 		       e->base + mac_off(i, MAC_REG_CONTROL));
 
+		/* [Iter 28] Stock sw_port_alarm_kthread writes fpga[0xd3000]
+		 * on link state change. The reg is TM[0xc000] (= phys
+		 * 0x9234c000). Values:
+		 *   0x01f40fa0  link DOWN (sw_alarm_init initial)
+		 *   0x03f40050  link UP
+		 *
+		 * Empirical 2026-05-28: writing 0x03f40050 made QMG up
+		 * hw_trap counter (TM[0xc060]) increment from 2 → 13 under
+		 * ping load — frames now flow from CLA to QMG! Without this,
+		 * QMG silently drops CPU-bound frames. Mainline never
+		 * updated this reg (Iter 11 disproved A11 at the time,
+		 * but A11 IS load-bearing now that carved DMA + SOPC bridge
+		 * + 5 BMU instances are all in place).
+		 */
+		writel(now ? 0x03f40050 : 0x01f40fa0,
+		       e->base + TM_OFF + 0xc000);
+
 		/* [Iter 25] SOPC↔SMAC bridge handshake at NPP[0x19068].
 		 * Per agent 8 (phy_mac_rgmii_wedge_re.md) — THIS is the
 		 * gate that lets the switch fabric route frames in/out of
