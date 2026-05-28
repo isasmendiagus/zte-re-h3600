@@ -305,12 +305,20 @@ int zx_pon_plat_init(const struct zx_pon_plat_ctx *ctx)
 	dev_info(ctx->dev, "[A03] pon_reset(0xffffffff) done. pon[8]=0x%08x\n",
 		 readl(ctx->pon_early + 8));
 
-	/* [A05] pon_base + 0x4001c = 0xf (purpose unknown; stock sets it
-	 * unconditionally right before tm_pon_tm_init). */
-	writel(0xf, ctx->pon_early + 0x4001c);
+	/* [Iter 22] Stock init_module (plat-zxylzb_9128S line 8925-8930)
+	 * does 3 pon[+0x400XX] writes here, in this order, before TM init.
+	 * Per agent 5 hw_write_lock_pattern_re.md Q1.2.6 — the 0x40018 write
+	 * is the "single most plausible state divergence" between stock and
+	 * mainline; possibly an eth subsystem block-enable.
+	 */
+	writel(2,          ctx->pon_early + 0x40018);	/* purpose unknown */
+	writel(0xf,        ctx->pon_early + 0x4001c);	/* [A05] */
+	writel(0xffffff7f, ctx->pon_early + 0x40044);	/* PON IRQ mask: bit 7 unmasked */
 
-	dev_info(ctx->dev, "PON chip pre-init: pon[0x4001c]=0x%08x (stock=0xf)\n",
-		 readl(ctx->pon_early + 0x4001c));
+	dev_info(ctx->dev, "PON chip pre-init: pon[0x40018]=0x%08x pon[0x4001c]=0x%08x pon[0x40044]=0x%08x\n",
+		 readl(ctx->pon_early + 0x40018),
+		 readl(ctx->pon_early + 0x4001c),
+		 readl(ctx->pon_early + 0x40044));
 
 	/* [A06d] Full SERDES bring-up — must run immediately after A03 to
 	 * re-establish the band calibration that pon_reset just wiped. */
