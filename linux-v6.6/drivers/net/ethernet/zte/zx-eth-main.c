@@ -1206,33 +1206,25 @@ static void zx_smac_init_port(struct zx_eth *e, int port)
 {
 	void __iomem *mac = e->base + mac_off(port, 0);
 
-	writel(0xBAE003,   mac + MAC_REG_CONTROL);
-	writel(0xFFFF,     mac + MAC_REG_IRQ_MASK);
-	writel(0x80000001, mac + MAC_REG_ENABLE);
-	{
-		u32 v = readl(mac + MAC_REG_D00);
-
-		writel(v & ~0x2, mac + MAC_REG_D00);
-	}
-	{
-		u32 v = readl(mac + MAC_REG_D30);
-
-		writel(v & ~0x20, mac + MAC_REG_D30);
-	}
-
-	/* [Iter 21] Mirror U-Boot's per-port MAC init from FUN_40e50c40 (per
-	 * tasks/00.10.03.re-uboot/findings/static_analysis_uboot_eth.md). These
-	 * are MAC↔PHY interface config (clock/IFG/flow-control) that stock SDK
-	 * hides behind fpga_write_reg abstractions but U-Boot exposes plainly.
-	 * Without them: PHY link UP, but MAC RX counter stays 0 — frames don't
-	 * decode through the MAC.
-	 */
-	writel(0x00011200, mac + 0x0E0);	/* PHY callback config */
-	writel(0x00000032, mac + 0xC20);	/* MAC[N][0xC20] (purpose unknown) */
-	writel(0x000000A8, mac + 0xC50);	/* MAC[N][0xC50] (purpose unknown) */
-	writel(0x00300002, mac + 0x070);	/* IFG / rate config */
-	writel(0x00004000, mac + 0x0B4);	/* MAC[N][0xB4] (purpose unknown) */
-	writel(0x0010FF11, mac + 0xB00);	/* flow control (?) */
+	/* [egress fix 2026-05-29] Faithful port of U-Boot FUN_40e50c40 — the
+	 * authoritative per-link MAC↔PHY serializer bring-up whose tail makes the
+	 * SOPC↔MAC READY bit (0x19068 bit port+5) assert. The earlier [Iter21] port
+	 * had two bugs that left the serializer unconfigured (so READY never bonded):
+	 *   (1) it wrote 0x32/0xa8 to mac+0xC20/0xC50 — WRONG offsets. The decomp's
+	 *       pointer base is 0x922000e0 (MAC+0xe0), so its "+0xc20/+0xc50" are
+	 *       actually mac+0xD00 (tsf_mode/store-fwd) and mac+0xD30 (rsf_mode/flow);
+	 *       AND it separately CLEARED bits in 0xD00/0xD30 instead of writing them.
+	 *   (2) ctrl/mask used 0xBAE003/0xFFFF vs U-Boot's 0xBBE003/0xFFFE.
+	 * (The +0xb00 write IS correct: decomp 0x92200070+0xa90 = mac+0xb00.) */
+	writel(0x00bbe003, mac + MAC_REG_CONTROL);	/* npp[(port+1)*0x40000] */
+	writel(0x80000001, mac + MAC_REG_ENABLE);	/* +0x8 */
+	writel(0x00011200, mac + 0x0E0);		/* +0xe0 serializer/PHY iface */
+	writel(0x00000032, mac + MAC_REG_D00);		/* +0xd00 tsf/store-fwd (was mis-offset 0xC20) */
+	writel(0x000000A8, mac + MAC_REG_D30);		/* +0xd30 rsf/flow-ctrl (was mis-offset 0xC50) */
+	writel(0x0000fffe, mac + MAC_REG_IRQ_MASK);	/* +0x4 = 0xfffe */
+	writel(0x00300002, mac + 0x070);		/* +0x70 IFG / rate */
+	writel(0x00004000, mac + 0x0B4);		/* +0xb4 */
+	writel(0x0010ff11, mac + 0xB00);		/* +0xb00 (= decomp 0x92200070+0xa90) */
 
 	/* Final TX+RX enable — U-Boot ends per-port init with `MAC[N][0] |= 3`.
 	 * Our initial 0xBAE003 write above already has bits 0+1 set, but be
