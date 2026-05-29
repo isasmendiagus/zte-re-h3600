@@ -284,7 +284,34 @@
       `findings/session_2026-05-29_egress_fabric_cracked.md`, `kotrace_egress_capture.py`,
       `tx_egress_oracle.py`, `sch_shaper_dump.py`.
 
-**Last updated**: 2026-05-29 (Journey #21 — fabric egress cracked; final gap = MAC→PHY MII).
+22. **Egress: fabric gate stays cracked, but the REAL remaining blocker is the SOPC↔MAC
+    READY handshake not asserting from cold (2026-05-29, late)**: After #21, deeper testing +
+    two review agents corrected the picture:
+    - **CORRECTION**: the "bit19" claim in #21 was WRONG. Stock `MAC2 ctrl=0xBA6003` HAS bit19
+      SET; the driver already converges there (config_speed_duplex clears bit15, sets bit13 for
+      gigabit). DO NOT touch bit19. The egress-port hint (desc[2:3]=((port+0x28)&0x3f)<<4, was 0)
+      and the MAC init-order-wipe fix are the real, kept fixes — they get frames QMG→DSCH→SOPC.
+    - **DTR reset = COLD power-cycle** (user confirmed — unplugs/replugs PSU), so every RAM-boot is
+      clean HW; the "warm-boot pollution" theory was WRONG. Each test is a fair cold boot.
+    - **The blocker**: the SOPC↔MAC bridge `0x19068` **READY bit (port+5)** (MAC2=bit7=0x80) **does
+      NOT assert on a cold boot** → SOPC can't engage MAC2 → send2smac2 stays 0 → 0 on wire. RX
+      works (RX-side serializer bonds; TX/egress READY won't). All register pokes (bridge enable
+      bits[4:0], bit15, ctrl, egress-port) are MOOT without READY. The "ping 5/5" of #21 happened on
+      one boot where READY was transiently up (fragile U-Boot MII-serializer state + live RX learning).
+    - **Implemented (kept, in source)**: stock-faithful adjust_link chain (smac_init →
+      config_speed_duplex → ready-gated 0x19068 → enable), and a periodic **MAC keepalive**
+      (zx_mac_keepalive_fn, mirrors stock extphy_timer_func — re-asserts the light bring-up every
+      100ms to catch/hold READY). Keepalive can't help yet because READY never asserts to catch.
+    - **Root suspect**: incomplete MAC↔PHY serializer/MII bring-up — the +0xc20/+0xc50/+0xb00/+0xe0
+      MII regs are write-once and land non-deterministically; DTS has no phy-mode (relies on U-Boot,
+      which pon_reset wipes). Only writer of 0x19068 = smac_sopc_mode_switch (plat:2298); it's cleared
+      by the per-port pon_reset(1<<(port+6)) and never re-asserted with READY up on mainline.
+    - **NEXT**: targeted RE of what makes 0x19068 READY(port+5) assert on stock (kotrace the MAC↔PHY
+      bring-up watching 0x19068 + MII regs + GePHY MDIO + TOPCRM egress clock). See
+      `findings/session_2026-05-29_egress_fabric_cracked.md` (update pending).
+
+**Last updated**: 2026-05-29 (Journey #22 — corrected diagnosis: remaining blocker = 0x19068 READY
+handshake won't assert from cold; egress-port fix + MAC init-order fix are real & kept).
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)

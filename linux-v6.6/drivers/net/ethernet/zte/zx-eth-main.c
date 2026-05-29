@@ -3022,6 +3022,58 @@ static void zx_tm_tx_reclaim_fn(struct work_struct *w)
 	schedule_delayed_work(&zx_tm_tx_reclaim_work, 1);  /* 1 jiffy = ~1ms on HZ=1000 */
 }
 
+/* [egress keepalive 2026-05-29] Mirror stock extphy_timer_func (plat:3137), which
+ * re-runs the per-link MAC bring-up every ~10 jiffies. That re-trigger is what
+ * catches/holds the TRANSIENT SOPC<->MAC bridge READY bit (0x19068 bit port+5):
+ * mainline sets the bridge once at link-up, then READY drops and send2smac2 stops
+ * (egress dies). This worker periodically re-asserts the LIGHT part of the chain
+ * (config_speed_duplex ctrl + ready-gated 0x19068 enable + MAC enable) for each
+ * link-up host port — NO pon_reset/smac_init, so it doesn't disturb live traffic. */
+static struct delayed_work zx_mac_keepalive_work;
+static struct zx_eth *zx_mac_keepalive_eth;
+
+static void zx_mac_keepalive_fn(struct work_struct *w)
+{
+	struct zx_eth *e = zx_mac_keepalive_eth;
+	int i;
+
+	if (!e)
+		goto resched;
+	for (i = 0; i < 4; i++) {
+		struct phy_device *phy = e->gephy[i];
+		void __iomem *mc = e->base + mac_off(i, MAC_REG_CONTROL);
+		void __iomem *br = e->base + 0x19068;
+		u32 c, reg;
+		int t;
+
+		if (!phy || !phy->link || !e->phy_was_link[i])
+			continue;
+
+		/* re-write running ctrl (config_speed_duplex): gigabit/FD => clear
+		 * bit15, set bit13 (0xBA6003); re-triggers the MAC->PHY handshake. */
+		c = readl(mc);
+		if (phy->speed == SPEED_1000)
+			c = (c & ~0x8000u) | 0x2000u;
+		writel(c, mc);
+
+		/* ready-gated SOPC bridge enable: catch the READY pulse (i+5), set
+		 * the enable bit (i) ONLY when ready is observed (stock semantics). */
+		for (t = 0; t < 5; t++) {
+			reg = readl(br);
+			if (reg & (1u << (i + 5))) {
+				writel(reg | (1u << i), br);
+				break;
+			}
+			udelay(50);
+		}
+
+		/* re-assert MAC enable (stock steady-state pon_npp_smac_enable) */
+		writel(readl(mc) | 0x3u, mc);
+	}
+resched:
+	schedule_delayed_work(&zx_mac_keepalive_work, msecs_to_jiffies(100));
+}
+
 /* Periodic STATS dump — DISABLED by default (was flooding the bridge log
  * every 5s with no actionable change). Re-enable temporarily for debug by
  * defining ZX_PERIODIC_STATS=1. The one-shot at sw_open+30s is enough for
@@ -3102,6 +3154,12 @@ static int zx_sw_open(struct net_device *ndev)
 	zx_tm_tx_reclaim_eth = e;
 	INIT_DELAYED_WORK(&zx_tm_tx_reclaim_work, zx_tm_tx_reclaim_fn);
 	schedule_delayed_work(&zx_tm_tx_reclaim_work, 1);
+
+	/* [egress keepalive] periodic SOPC<->MAC bridge re-assert (stock extphy_timer
+	 * equivalent) — holds the transient 0x19068 READY so CPU->LAN egress stays up. */
+	zx_mac_keepalive_eth = e;
+	INIT_DELAYED_WORK(&zx_mac_keepalive_work, zx_mac_keepalive_fn);
+	schedule_delayed_work(&zx_mac_keepalive_work, msecs_to_jiffies(200));
 
 	return 0;
 }
@@ -3360,6 +3418,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	 * commit 2ad931ed8). Testing the verified egress-port fix on this proven path. */
 	tm_write(e, 0x10054, 1);	/* upstream kick */
 	tm_write(e, 0x10064, 1);	/* downstream kick */
+
 
 	/* Post-kick desc invalidation:
 	 * pcap data showed HW emitting the SAME TX desc multiple times — host
@@ -4094,11 +4153,33 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 		 * code only re-wrote CTRL here. Stock ALWAYS re-runs the full smac_init
 		 * after a reset pulse — mirror that so the MAC comes back fully live
 		 * (CTRL+MASK+ENABLE+iface+NPP enable). */
-		if (now)
+		if (now) {
+			void __iomem *mc = e->base + mac_off(i, MAC_REG_CONTROL);
+			u32 c;
+
+			/* (2) smac_init reset values: ctrl=0xBAE003, mask, en, +0xe0 (stock plat:3195) */
 			zx_smac_init_port(e, i);
-		else
+
+			/* (3) config_speed_duplex — the EXPLICIT ctrl rewrite that sets the
+			 * RUNNING value (stock plat:2737 / config_speed_duplex_part_0). For
+			 * gigabit/FD: clear bit15 (0x8000), set bit13 (0x2000) => 0xBA6003 (the
+			 * proven working value). bit15 is cleared HERE — before the SOPC bridge
+			 * handshake and before MAC enable — NOT later in the TX path. This is the
+			 * piece the old code skipped (it left ctrl at 0xBAE003). */
+			c = readl(mc);
+			if (phy->speed == SPEED_1000) {
+				c = (c & ~0x8000u) | 0x2000u;
+			} else {
+				c = (phy->duplex == DUPLEX_FULL) ? (c | 0xa000u)
+								 : ((c & ~0x2000u) | 0x8000u);
+				c = (phy->speed == SPEED_100) ? (c | 0x4000u)
+							      : (c & ~0x4000u);
+			}
+			writel(c, mc);
+		} else {
 			writel(MAC_CTRL_LINK_DOWN,
 			       e->base + mac_off(i, MAC_REG_CONTROL));
+		}
 
 		/* [Iter 28] Stock sw_port_alarm_kthread writes fpga[0xd3000]
 		 * on link state change. The reg is TM[0xc000] (= phys
@@ -4127,25 +4208,35 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 		 * the bridge.
 		 */
 		if (now) {
-			int retries = 5;
+			void __iomem *mc = e->base + mac_off(i, MAC_REG_CONTROL);
+			int retries = 20;
 			u32 ready_bit = 1u << (i + 5);
 			u32 enable_bit = 1u << i;
 			u32 duplex_bit = 1u << (i + 16);	/* NPP[0x19038] half-duplex flag */
 			u32 reg;
+			bool ready = false;
 
+			/* (4) smac_sopc_mode_switch (stock plat:2290): poll the PHY-MAC READY
+			 * bit (port+5), then set the bridge ENABLE bit (port) ONLY when ready
+			 * was observed — stock sets it inside the if. Writing the enable while
+			 * not-ready does NOT latch the bridge (why the old unconditional write
+			 * read back 0). */
 			while (retries-- > 0) {
 				reg = readl(e->base + 0x19068);
-				if (reg & ready_bit)
+				if (reg & ready_bit) {
+					ready = true;
 					break;
-				msleep(1);
+				}
+				udelay(100);
 			}
-			if (retries <= 0)
-				netdev_warn(ndev, "[Iter25] PHY[%d] link-ready bit %d NEVER set in NPP[0x19068]=%#x (max 5 polls)\n",
+			if (ready) {
+				writel(reg | enable_bit, e->base + 0x19068);
+				netdev_info(ndev, "[egress] PHY[%d] SOPC bridge ENABLED (ready): NPP[0x19068] %#x → %#x\n",
+					    i, reg, readl(e->base + 0x19068));
+			} else {
+				netdev_warn(ndev, "[egress] PHY[%d] SOPC ready bit %d NEVER set (NPP[0x19068]=%#x) — bridge NOT enabled\n",
 					    i, i + 5, reg);
-			reg = readl(e->base + 0x19068);
-			writel(reg | enable_bit, e->base + 0x19068);
-			netdev_info(ndev, "[Iter25] PHY[%d] SOPC bridge enabled: NPP[0x19068] %#x → %#x\n",
-				    i, reg, readl(e->base + 0x19068));
+			}
 
 			/* [Iter 25b] NPP[0x19038] bit (port+16) = half-duplex flag.
 			 * Stock smac_sopc_mode_switch (plat:2305): sets bit if
@@ -4157,6 +4248,12 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 				writel(reg & ~duplex_bit, e->base + 0x19038);
 			else
 				writel(reg | duplex_bit, e->base + 0x19038);
+
+			/* (5) enable — ctrl |= 3 (rx/tx en) as the FINAL step, AFTER the
+			 * bridge handshake (stock pon_npp_smac_enable / enable_part_3,
+			 * plat:3198). smac_init set these bits already, but stock enables
+			 * after the bridge is up, so re-assert here to match the order. */
+			writel(readl(mc) | 0x3u, mc);
 		} else {
 			u32 reg = readl(e->base + 0x19068);
 
