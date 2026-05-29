@@ -1,0 +1,1689 @@
+# ZX279128S ethernet/switch — DATASHEET (homemade)
+
+Reverse-engineered register/memory reference for the ZTE ZX279128S ethernet+switch
+block (no public *register-level* datasheet exists — only the vendor block brief, see
+diagrams below). Built from RE of stock kmods + live reads.
+Confidence per entry: ✅ verified live/decomp-named · 🟡 decomp/table-inferred ·
+❓ structure known, semantics unknown.
+
+**Three parts:**
+0. **Block diagrams** — vendor SoC brief + our RE'd ethernet datapath (where egress dies).
+1. **Overview / block map** — DT windows, the base-gotcha, per-block bases, egress pipeline, what is NOT dumped.
+2. **Register reference** — every RE'd register/field: absolute phys, bit-field, R/W, semantic name, confidence (623 table-derived + ~30 from findings, 25 blocks).
+
+Merged from the former MEMORY_LAYOUT.md + REGISTER_REFERENCE.md (now consolidated here).
+
+---
+
+# PART 0 — BLOCK DIAGRAMS
+
+## Vendor SoC block brief (ground truth for the silicon topology)
+Official ZTE block diagram: `img/zx279128s_official_block_diagram.png`. Transcribed:
+
+```mermaid
+flowchart TB
+  XTAL["25 MHz"]
+  DRAM[("DDR3/4 DRAM<br/>512Mb-2Gb")]
+  subgraph CHIP["ZX279128s package"]
+    subgraph DIE["ZX279128s_ONU die"]
+      CLK["POR · PLL<br/>TOP_CRM · PIN_MUX"]
+      A9["ARM Cortex-A9<br/>+256kB L2 + ACP"]
+      IO["USB2 · USB3<br/>PCIe x2"]
+      DDR["DDR3/4 controller"]
+      PERIPH["APB peripherals<br/>UART · I2C · NAND · SPIFC · SD<br/>MDIO · TDM · Timer · eFuse · ROM"]
+      subgraph PONTOP["PON_TOP"]
+        direction LR
+        SERDES["ponserdes"]
+        GMAC["GPON / EPON<br/>P2P MAC"]
+        PP["PP<br/>packet processor"]
+        subgraph SW["SW switch"]
+          direction TB
+          M0["MAC0"]
+          M1["MAC1"]
+          M2["MAC2 host"]
+          M3["MAC3"]
+          M4["MAC4"]
+        end
+        SERDES <--> GMAC
+        GMAC <--> PP
+        PP <--> SW
+      end
+    end
+    subgraph PHYS["integrated GEPHYs"]
+      direction TB
+      G0["GEPHY0"]
+      G1["GEPHY1"]
+      G2["GEPHY2"]
+      G3["GEPHY3"]
+      G4["GEPHY4"]
+    end
+  end
+  XTAL --> CLK
+  DRAM <-->|16/8-bit| DDR
+  A9 <-->|SW_AXI + APB| PP
+  PP <-->|PP_AXI| DDR
+  A9 <--> PERIPH
+  A9 <--> IO
+  SERDES <--> FIBER["optical<br/>NOT populated"]
+  M0 <-->|GMII/MII| G0
+  M1 <-->|MII| G1
+  M2 <-->|MII| G2
+  M3 <-->|MII| G3
+  M4 <-->|RGMII| G4
+  G0 <--> J0["RJ45"]
+  G1 <--> J1["RJ45"]
+  G2 <--> J2["RJ45 host"]
+  G3 <--> J3["RJ45"]
+  G4 <--> J4["RJ45 WAN?"]
+
+  classDef cpu fill:#3c6fb0,stroke:#1f3f6b,color:#fff;
+  classDef clk fill:#b9a7e0,stroke:#6b5aa0;
+  classDef serdes fill:#7ec850,stroke:#4d7a2e,color:#fff;
+  classDef mac fill:#6fa8dc,stroke:#2b5d8a,color:#fff;
+  classDef ext fill:#f3923a,stroke:#a85e1a,color:#fff;
+  classDef grey fill:#d9d9d9,stroke:#888;
+  class A9 cpu;
+  class CLK,DDR clk;
+  class SERDES serdes;
+  class M0,M1,M2,M3,M4,G0,G1,G2,G3,G4 mac;
+  class DRAM,XTAL,FIBER,J0,J1,J2,J3,J4 ext;
+  class PERIPH,IO,GMAC,PP grey;
+  style CHIP fill:#f7d9b8,stroke:#c07d2a;
+  style DIE fill:#cfe0f3,stroke:#5b7fa6;
+  style PONTOP fill:#d4e8b8,stroke:#6f9c3a;
+  style SW fill:#eeeeee,stroke:#888;
+  style PHYS fill:#cfe0f3,stroke:#5b7fa6;
+```
+(Colors match the vendor brief: orange package · blue ONU die · green PON_TOP · green
+ponserdes · blue MACs/GEPHYs · purple clock+DDR · dark-blue CPU · orange off-chip.
+Mermaid auto-routes edges, so positions approximate the brief; nesting/containment is exact.)
+
+**What the vendor brief confirms / adds (vs our RE):**
+- The datapath is **ponserdes ↔ GPON-MAC ↔ PP ↔ SW(MAC0..4) ↔ GEPHY ↔ RJ45**. The **PP**
+  (packet processor) is our whole fabric (QMG/SOPC/SPA/PM/CLA/SCH/TM-ring/BMU/PP_BRG); the
+  **SW** block holds the 5 per-port MACs (our SMAC[N] at 0x92200000 + i*0x40000).
+- **CPU reaches the datapath via SW_AXI + APB** (not through a MAC). So CPU→LAN = CPU → PP →
+  SW → MAC → GEPHY → RJ45. Our egress gate (SOPC `send2smacN` never firing) is exactly the
+  **PP→SW handoff** failing for CPU-sourced frames.
+- **TOP_CRM** (top-left clock/reset block) is where the egress clock-gate suspect lives —
+  outside the 2MiB dump.
+- Port PHYs: MAC0 = GMII/MII, MAC1-3 = MII, **MAC4 = RGMII** (likely the WAN port). Host is on **MAC2**.
+- This is an **ONU die** (fiber-capable) but this board has **no optical** — ponserdes/GPON-MAC
+  path is dead; only PP↔SW↔copper is active. Confirms: ignore all GPON/fiber config.
+
+## Our RE'd ethernet datapath + where egress dies
+```mermaid
+flowchart LR
+  CPU["CPU / sw netdev<br/>via SW_AXI/APB"] -->|inject| ING["CPU-port ingress<br/>SIPC 0x921cc000 · SMCT 0x921d0000 · IDM 0x921c8000"]
+  subgraph PPF["PP fabric (npp/tm windows)"]
+    ING --> QMG["QMG sw_fwd<br/>0x9234c044 ✅ ticks"]
+    QMG --> DSCH["SCH/DSCH shaper<br/>0x92354000 ✅ credit fixed"]
+    DSCH --> SOPC["SOPC send2smac2<br/>0x921d9164 ✅ FIRES (egress-port hint fix 2026-05-29)"]
+  end
+  SOPC -->|"PP→SW handoff ✅"| MAC2["SW MAC2<br/>0x92280000 · ctrl 0xbae003<br/>TX-ok 0x92280718 ✅ +N (counts TX)"]
+  MAC2 -. "✗ MII TX not driving copper = FINAL GAP" .-> PHY["GEPHY"] --> RJ["RJ45 (host)"]
+  RJ -. "RX path WORKS" .-> MAC2 -. "→ CLA → QMG → CPU ✅" .-> QMG
+```
+RX works fully. CPU→LAN egress now traverses the WHOLE fabric (QMG→RED→DSCH→SOPC send2smac2→
+MAC2 TX counter) — the fabric gate is **CRACKED** via the TX-descriptor **egress-port hint**
+(`desc[2:3]=((port+0x28)&0x3f)<<4`; mainline had hardcoded 0). **Final gap: MAC2→PHY→copper** —
+MAC2 counts TX but the GePHY doesn't drive the wire (host sees nothing, no errors). See
+`session_2026-05-29_egress_fabric_cracked.md`.
+
+---
+
+# PART 1 — OVERVIEW / BLOCK MAP
+
+# ZX279128S ethernet — MEMORY LAYOUT (homemade datasheet)
+
+Consolidated register/memory map for the ZTE ZX279128S ethernet/switch block, from
+RE + live reads. **Supersedes the block table in `eth_pipeline_architecture_2026-05-28.md`,
+which has base-confusion errors (it put QMG at 0x921cc000 and the TM ring at 0x921d0000 —
+both WRONG; see the GOTCHA below).** Confidence tags: ✅ live-verified this session;
+🟡 decomp/dump only; ❓ uncertain/approx.
+
+## ⚠️ THE BASE GOTCHA (cost us ~6 iterations — read this first)
+There are TWO base windows, and several blocks sit at the SAME offset from EACH, so
+"offset 0xc000 / 0x10000 / 0x14000" is ambiguous unless you say from WHICH base:
+
+| offset | from npp_base (0x921c0000) | from tm_base (0x92340000) |
+|---|---|---|
+| +0xc000  | **SIPC** = 0x921cc000        | **QMG** = 0x9234c000 |
+| +0x10000 | **SMCT** = 0x921d0000        | **TM DMA ring** = 0x92350000 |
+| +0x14000 | **SPA** = 0x921d4000         | **SCH/DSCH shaper** = 0x92354000 |
+
+`tm_base = npp_base + 0x180000 = 0x92340000` (driver `TM_OFF=0x180000`; stock `tm_base`
+is a separate of_iomap that resolves to the same phys). **`tm_write(off)` → 0x92340000+off.**
+The early oracles read the TM ring at npp+0x10000 (0x921d0054…) — that's SMCT, always ~0 —
+and wrongly concluded "ring unused." The REAL ring is tm_base+0x10000 (0x92350054…).
+**Always use absolute phys to avoid this.**
+
+## DT windows (from zx279128s.dtsi `ethernet@921c0000`)
+| name | phys | size | notes |
+|---|---|---|---|
+| `pon` | 0x92000000 | 0x1c0000 | DTS labels "MAC[0..4]"; **the `fpga_read_reg` base** (`*(0x92000000+id*4)`). PON/GPON-MAC. **NOT in the 2MiB dump.** ✅ |
+| `npp` | **0x921c0000** | 0x200000 | driver `e->base`; the **2MiB dump** = exactly this window (0x921c0000–0x923bffff). ✅ |
+| `sys_ctrl` | 0x94100000 | 0x1000 | clock/reset-ish. NOT dumped. 🟡 |
+| `pin_mux` | 0x94200000 | 0x1000 | NOT dumped. 🟡 |
+| `pon_serdes` | 0x9fe00000 | 0x100000 | fiber SerDes. NOT dumped, irrelevant (copper-only). 🟡 |
+| `mdio` | 0x9a101000 | 0x18 | PHY MDIO bus; 4 GePHYs at addr 10–13. ✅ |
+| TOPCRM | (DT phandle `zte,topcrm`) | — | clock/reset: [0x08], [0x0c]\|=0x1e0 (PON clks), [0x50] PLL?. NOT dumped. ❓ |
+
+`fpga_read_reg(id) = *(0x92000000 + id*4)` → **phys = 0x92000000 + id*4** (id = (phys-0x92000000)/4).
+
+## Blocks (ABSOLUTE phys)
+### npp window (0x921c0000), datapath
+| block | phys base | key regs (phys) | role | conf |
+|---|---|---|---|---|
+| greg / STP | 0x921c0000 | port-STP-state **0x921c0044** (3 bits/port, FWD=4; stock=0=off), stp_en 0x921c0040, port_closed 0x921c004c | global switch regs incl. per-port forwarding state | ✅ |
+| IDM | 0x921c8000 | TX desc base **0x921c8004**, TX kick **0x921c8040**, TX consume **0x921c8044**, ctrl 0x920f6766 | CPU-port DMA (idm0/idm1 netdevs, WiFi fwd). NOT the LAN-egress path. | ✅ |
+| BMU | 0x921c8000 (overlaps IDM low) | bp-idx 0x921c800c, alloc-poll 0x921c8014 | buffer-pointer alloc/free | 🟡 |
+| SIPC | 0x921cc000 | ctrl **0x921cc000=0x11** (cpu_up_en) | CPU↔fabric credit/mailbox bridge (NOT a ring) | ✅ |
+| SMCT | 0x921d0000 | init 0x921d0000=0xB, 0x921d0010=0x3810, free-gauge **0x921d0040**, free-doorbell 0x921d004c | CPU-port multi-channel transfer; gauges move during egress | 🟡 |
+| SPA (stream parser) | 0x921d4000 | match_mode **0x921d407c**, pkt-en 0x921d4000/04/08/40/44/48, indirect CMD **0x921d4014**/DONE 0x921d4018/DATA 0x921d401c–30, ONU-MAC tbl 0x921d4120/24 (=device MAC, mainline writes it) | source-port classifier; **match-RAM (ram_id0, 11 ent) is INDIRECT — not in flat dump** | ✅ |
+| SOPC (NPP) | 0x921d9000 | send2smac0..4 0x921d915c..**0x921d9164**(smac2)..916c | egress crossbar → physical MAC[N]. **Never fires for CPU frames = the GATE.** | ✅ |
+| drop counters | 0x921da000 | drop_PP 0x921da040, drop_RED 0x921da044, drop_DSCH 0x921da04c | per-stage drop counters | ✅ |
+| PM (G.988 port-mapper) | 0x921e0000 | ctrl **0x921e0054** (stock=0xc0: inport_eq_outport+cpu_not_drop), out-port rule **0x921e01a0=0x08**, in-port rules 0x921e0180+i*4 | source→allowed-egress authorizer. Mainline omits → `zx_pm_spa_init()` added (didn't fix). | ✅ |
+| SMAC[i] (MACs) | npp+(i+1)*0x40000 | per-MAC: ctrl +0x00, IRQ_MASK +0x04, ENABLE +0x08, iface +0xe0, TX-byte +0x714, **TX-ok +0x718**, **RX-ok +0x780** | per-port ethernet MAC | ✅ |
+| → MAC0 | 0x92200000 | ctrl=0 (down) | | ✅ |
+| → MAC1 | 0x92240000 | ctrl=0 (down) | | ✅ |
+| → **MAC2** | **0x92280000** | ctrl=**0xba6003** (tx/rx-en+link), RX-ok counts host, **TX-ok=0** | **HOST is cabled here.** Same ctrl as stock (which egresses) → MAC2 TX HW is fine. | ✅ |
+| → MAC3 | 0x922c0000 | ctrl=0 | | ✅ |
+| → MAC4 | 0x92300000 | ctrl=0 | | ✅ |
+| PP ctrl | 0x92380000 | CPU-fwd **0x9238002c** (pp[0x2c]; bit (lan_up_port+0x19); high bits not CPU-writable) | packet-processor control | ✅ |
+| PP_BRG (bridge) | 0x92388000 | flood bitmap **0x92388340**, bcast gates 0x92388300/04/44, isolation 0x923883c0+, VLAN-check 0x92388008 | FDB/VLAN/isolation/flood/learn. All verified stock-faithful; not the gate. | ✅ |
+| ETH_TM2 mux | 0x923a0000 | mux **0x923a00e0** (U-Boot=0x11), PON_PP_TM_CFG **0x923a001c**=0x21200000 | **U-Boot direct-egress mux** (bypasses fabric). Block is CLOCK-GATED in kmod/mainline (writes to 0xe0 don't latch). Option B. | ✅/❓ |
+
+### tm_base window (0x92340000 = npp+0x180000), traffic manager
+| block | phys base | key regs (phys) | role | conf |
+|---|---|---|---|---|
+| QMG | 0x9234c000 | **sw_fwd 0x9234c044**, hw_fwd 0x9234c048, hw_trap 0x9234c04c | queue manager / forward decision. CPU frame reaches sw_fwd then loops to CPU. | ✅ |
+| TM DMA ring | 0x92350000 | UP base 0x92350050 / kick **0x92350054** / consume 0x92350058 / cursor 0x9235005c; DN base 0x92350060 / kick **0x92350064** / consume 0x92350068 / cursor 0x9235006c | the REAL TM TX ring (UP+DN). mainline `tm_write(0x10054/64)` lands here. | ✅ |
+| SCH/DSCH shaper | 0x92354000 | indirect CMD **0x92354014** / DONE 0x92354018 / DATA 0x9235401c | downstream token-bucket shaper (RAMID per-queue/tcont). `zx_sch_init` fixed the UP-path credit. | ✅ |
+| RED | ~0x92344000 | — | random-early-detect / congestion | ❓ |
+
+## Egress pipeline (CPU→LAN), and where it dies
+```
+CPU frame → IDM/SMCT or TM ring → QMG (sw_fwd 0x9234c044 ✅ ticks)
+  → [DSCH shaper credit ✅ fixed] → SOPC send2smacN (0x921d9164 ✗ NEVER fires)
+  → SMAC[N] TX (MAC2 0x92280718 ✗ stays 0) → wire (✗ 0 packets, even broadcast)
+```
+Observed instead: the frame returns as **TM RX ingress=2 "delivered"** = loops to CPU.
+RX path (wire→PHY→MAC2→CLA→QMG→CPU) works fully.
+
+## What the 2MiB dump does NOT cover (so "config matches stock" is INCOMPLETE)
+1. **`pon` window 0x92000000–0x921bffff** (PON-MAC/GPON; copper-irrelevant but unverified).
+2. **TOPCRM / sys_ctrl / pin_mux / pon_serdes** — clock/reset/pinmux. **The clock-gate suspect (ETH_TM2) lives here.** Never dumped/diffed.
+3. **Indirect RAMs** (SPA match-RAM ram_id0, SCH shaper RAM, CLA tables) — behind index/data ports; a flat dump can't see them.
+4. **Write-only doorbells** (ring kicks) — read back as 0/garbage.
+
+## Port numbering
+- Logical→physical remap (tm.c:37917 / getPort): 0–4→0–4, 5→0(CPU), 6→5, 7→6. **CPU = logical 5 = phys 0.**
+- `lan_up_port = 4` (stock boot log), so CPU-fwd bit = 1<<(4+0x19) = bit 29.
+- Host/MAC2 = LAN3 in ZTE numbering.
+
+## IRQs (GIC SPI)
+tm=36 (CPU↔switch ⭐), npp=35, idm=38, pon=66, pp=37.
+
+## Egress status (journey #21, 2026-05-29) — FABRIC GATE CRACKED
+The fabric gate is SOLVED. CPU→LAN frames now traverse QMG→RED→DSCH→SOPC send2smac2→MAC2 TX
+(routed only to MAC2, zero drops). **The missing piece was the TX-descriptor egress-port hint**
+`desc[2:3]=((port+0x28)&0x3f)<<4` (decomp plat:6848) — mainline hardcoded 0 → fabric had no
+destination → SOPC never selected a MAC. Plus a MAC init-order-wipe fix (adjust_link now
+re-runs full smac_init on link-up). The earlier "loops to CPU / ring-less" reads were the
+address-map error (read SMCT 0x921d00xx, not the real TM ring 0x9235xxxx) — stock DOES use the
+DN ring; QMG sw_fwd is the egress signal, not a ticking ring counter.
+**Remaining (only) gap: MAC2→PHY→copper.** MAC2 counts TX (TX_frames/bytes +N) but the GePHY
+doesn't drive the wire (host NIC sees nothing AND no errors → not bad-CRC). MAC↔PHY MII TX
+config suspect (MAC2 +0xc20/+0xc50/+0xb00 partial). See `session_2026-05-29_egress_fabric_cracked.md`.
+
+
+---
+
+# PART 2 — REGISTER REFERENCE (per-register detail)
+
+# ZX279128S Ethernet/Switch — Register Reference (homemade datasheet)
+
+Synthesised purely from existing RE artefacts for an open-source GPL Linux driver
+(hardware owned by developer). **No device/build/git touched.**
+
+Sources: `zx-fpga-reg-tables.h` + `zx_reg_tables.h` (RE'd descriptor tables extracted
+from stock `tm.ko` .data), the `decomp_all_*.c` Ghidra decompilations (setter/getter
+function -> `tmOnuRegWrite(reg_id,...,&<blk>RegTable)` gives the semantic name), and the
+deeply-RE'd egress findings (`MEMORY_LAYOUT.md`, `cpu_source_port_egress_re.md`,
+`pm_spa_init_recipe_re.md`, `port_stp_state_re.md`, `mac_egress_enable_re.md`,
+`sopc_egress_port_gate_re.md`, `smac_real_counters_re.md`, `pipeline_counter_map.md`).
+
+## Address model
+`fpga reg-id (dword) -> phys = 0x92000000 + reg_id*4`, where `reg_id = base_off + stride*sub_idx`.
+A field is `(value & mask) << shift` within that 32-bit word (read-modify-write).
+`mode`: R=read-only, W=write-only, RW=read-write. **Per-`sub_idx` (max_sub_idx+1) copies**
+exist where stride>0 (e.g. per-port / per-entry).
+
+## Confidence legend
+- ✅ **verified** — decomp-named setter/getter AND/OR live-read cross-checked (stock dump).
+- 🟡 **inferred** — name from decomp accessor, table structure RE'd, not live-verified here.
+- ❓ **unknown** — bit-field structure known from the table, semantic meaning not established.
+
+## ⚠ Base gotcha (respect absolute phys)
+Two windows overlap by offset: **npp_base=0x921c0000** vs **tm_base=0x92340000**
+(tm = npp+0x180000). So QMG=**0x9234c000** (not 0x921cc000), TM-ring=**0x92350000**,
+SCH=**0x92354000**, SPA=**0x921d4000** vs SCH=0x92354000, RED~**0x92344000**. Always use the
+absolute phys in the tables below — they were computed from `base_off*4` directly.
+
+
+## greg / global switch + per-port STP
+
+**Block base ≈ `0x921c0000`** (zx_gregregtable). Role: global switch ctrl, per-port STP/forwarding state, OAM, PTP/LPI/MCI ints, RAM-init
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x921c0000` | 2 | R | [0] | mci_inir[port0] | ✅ |
+| `0x921c0000` | 7 | R | [1] | lpi_inir[port0] | ✅ |
+| `0x921c0000` | 3 | R | [2] | mci_inir[port1] | ✅ |
+| `0x921c0000` | 8 | R | [3] | lpi_inir[port1] | ✅ |
+| `0x921c0000` | 4 | R | [4] | mci_inir[port2] | ✅ |
+| `0x921c0000` | 9 | R | [5] | lpi_inir[port2] | ✅ |
+| `0x921c0000` | 5 | R | [6] | mci_inir[port3] | ✅ |
+| `0x921c0000` | 10 | R | [7] | lpi_inir[port3] | ✅ |
+| `0x921c0000` | 6 | R | [8] | mci_inir[port4] | ✅ |
+| `0x921c0000` | 11 | R | [9] | lpi_inir[port4] | ✅ |
+| `0x921c0000` | 1 | R | [17] | ptp_int_req | ✅ |
+| `0x921c0000` | 0 | R | [18] | soam_int_req | ✅ |
+| `0x921c0004` | 14 | RW | [0] | mci_int_mask[port0] | ✅ |
+| `0x921c0004` | 19 | RW | [1] | lpi_int_mask[port0] | ✅ |
+| `0x921c0004` | 15 | RW | [2] | mci_int_mask[port1] | ✅ |
+| `0x921c0004` | 20 | RW | [3] | lpi_int_mask[port1] | ✅ |
+| `0x921c0004` | 16 | RW | [4] | mci_int_mask[port2] | ✅ |
+| `0x921c0004` | 21 | RW | [5] | lpi_int_mask[port2] | ✅ |
+| `0x921c0004` | 17 | RW | [6] | mci_int_mask[port3] | ✅ |
+| `0x921c0004` | 22 | RW | [7] | lpi_int_mask[port3] | ✅ |
+| `0x921c0004` | 18 | RW | [8] | mci_int_mask[port4] | ✅ |
+| `0x921c0004` | 23 | RW | [9] | lpi_int_mask[port4] | ✅ |
+| `0x921c0004` | 13 | RW | [17] | ptp_int_mask | ✅ |
+| `0x921c0004` | 12 | RW | [18] | soam_int_mask | ✅ |
+| `0x921c0008` | 27 | RW | [5:0] | spa_ram_init | ✅ |
+| `0x921c0008` | 26 | RW | [7:6] | smct_ram_init | ✅ |
+| `0x921c0008` | 25 | RW | [9:8] | opc_ram_init | ✅ |
+| `0x921c0008` | 24 | RW | [12:10] | soam_ram_init | ✅ |
+| `0x921c000c` | 28 | RW | [4:0] | nppu_pm_ram_init | ✅ |
+| `0x921c0040` | 29 | RW | [0] | port_stp_en[port0] | ✅ |
+| `0x921c0040` | 30 | RW | [1] | port_stp_en[port1] | ✅ |
+| `0x921c0040` | 31 | RW | [2] | port_stp_en[port2] | ✅ |
+| `0x921c0040` | 32 | RW | [3] | port_stp_en[port3] | ✅ |
+| `0x921c0040` | 33 | RW | [4] | port_stp_en[port4] | ✅ |
+| `0x921c0040` | 34 | RW | [5] | port_stp_en[port5] | ✅ |
+| `0x921c0040` | 35 | RW | [6] | port_stp_en[port6] | ✅ |
+| `0x921c0040` | 36 | RW | [16] | port_sel_stp_rstp[port0] (0=STP,1=RSTP) | ✅ |
+| `0x921c0040` | 37 | RW | [17] | port_sel_stp_rstp[port1] (0=STP,1=RSTP) | ✅ |
+| `0x921c0040` | 38 | RW | [18] | port_sel_stp_rstp[port2] (0=STP,1=RSTP) | ✅ |
+| `0x921c0040` | 39 | RW | [19] | port_sel_stp_rstp[port3] (0=STP,1=RSTP) | ✅ |
+| `0x921c0040` | 40 | RW | [20] | port_sel_stp_rstp[port4] (0=STP,1=RSTP) | ✅ |
+| `0x921c0040` | 41 | RW | [21] | port_sel_stp_rstp[port5] (0=STP,1=RSTP) | ✅ |
+| `0x921c0040` | 42 | RW | [22] | port_sel_stp_rstp[port6] (0=STP,1=RSTP) | ✅ |
+| `0x921c0044` | 43 | RW | [2:0] | port_stp_rstp_status[port0] (0=Dis,1=Block,2=Listen,3=Learn,4=Forward) | ✅ |
+| `0x921c0044` | 44 | RW | [5:3] | port_stp_rstp_status[port1] (0=Dis,1=Block,2=Listen,3=Learn,4=Forward) | ✅ |
+| `0x921c0044` | 45 | RW | [8:6] | port_stp_rstp_status[port2] (0=Dis,1=Block,2=Listen,3=Learn,4=Forward) | ✅ |
+| `0x921c0044` | 46 | RW | [11:9] | port_stp_rstp_status[port3] (0=Dis,1=Block,2=Listen,3=Learn,4=Forward) | ✅ |
+| `0x921c0044` | 47 | RW | [14:12] | port_stp_rstp_status[port4] (0=Dis,1=Block,2=Listen,3=Learn,4=Forward) | ✅ |
+| `0x921c0044` | 48 | RW | [17:15] | port_stp_rstp_status[port5] (0=Dis,1=Block,2=Listen,3=Learn,4=Forward) | ✅ |
+| `0x921c0044` | 49 | RW | [20:18] | port_stp_rstp_status[port6] (0=Dis,1=Block,2=Listen,3=Learn,4=Forward) | ✅ |
+| `0x921c0048` | 50 | RW | [0] | port_need_authen[port0] | ✅ |
+| `0x921c0048` | 51 | RW | [1] | port_need_authen[port1] | ✅ |
+| `0x921c0048` | 52 | RW | [2] | port_need_authen[port2] | ✅ |
+| `0x921c0048` | 53 | RW | [3] | port_need_authen[port3] | ✅ |
+| `0x921c0048` | 54 | RW | [4] | port_need_authen[port4] | ✅ |
+| `0x921c0048` | 55 | RW | [5] | port_need_authen[port5] | ✅ |
+| `0x921c0048` | 56 | RW | [6] | port_need_authen[port6] | ✅ |
+| `0x921c004c` | 57 | RW | [0] | port_closed[port0] | ✅ |
+| `0x921c004c` | 58 | RW | [1] | port_closed[port1] | ✅ |
+| `0x921c004c` | 59 | RW | [2] | port_closed[port2] | ✅ |
+| `0x921c004c` | 60 | RW | [3] | port_closed[port3] | ✅ |
+| `0x921c004c` | 61 | RW | [4] | port_closed[port4] | ✅ |
+| `0x921c004c` | 62 | RW | [5] | port_closed[port5] | ✅ |
+| `0x921c004c` | 63 | RW | [6] | port_closed[port6] | ✅ |
+| `0x921c0058` | 64 | RW | [4:0] | one_step_mode | ✅ |
+| `0x921c0090` | 70 | RW | [31:0] | wifi_queue1_protocol | ✅ |
+| `0x921c0094` | 71 | RW | [31:0] | wifi_queue1_protocol(2) | ✅ |
+| `0x921c00c0` | 66 | RW | [1:0] | oam_action | ✅ |
+| `0x921c00c0` | 65 | RW | [3:2] | oam_mode | ✅ |
+| `0x921c010c` | 67 | RW | [0] | tm_oam_en | ✅ |
+| `0x921c0114` | 68 | RW | [3:0] | gap_add | ✅ |
+
+## SDETG (frame detect / VLAN det)
+
+**Block base ≈ `0x921c4000`** (zx_sdetgregtable). Role: min/max frame len, UNI OMP/PMP VID, soft-VID, c_tpid, SOAM drop
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x921c4000` | 5 | RW | [13:0] | minframe_length | 🟡 |
+| `0x921c4000` | 0 | RW | [29:16] | maxframe_length[port] (base) | 🟡 |
+| `0x921c4008` | 7 | RW | [11:0] | uni_pmp_vid (x6, +0x10/idx) | 🟡 |
+| `0x921c4008` | 6 | RW | [12] | uni_pmp_vid_vld (x6, +0x10/idx) | 🟡 |
+| `0x921c400c` | 9 | RW | [11:0] | uni_omp_vid (x6, +0x10/idx) | 🟡 |
+| `0x921c400c` | 8 | RW | [12] | uni_omp_vid_vld (x6, +0x10/idx) | 🟡 |
+| `0x921c4080` | 13 | RW | [11:0] | soft_vid (x21, +0x4/idx) | 🟡 |
+| `0x921c4080` | 12 | RW | [12] | soft_vid_vld(set) (x21, +0x4/idx) | 🟡 |
+| `0x921c4080` | 11 | RW | [30:19] | soft_vld/soft_vid (x21, +0x4/idx) | 🟡 |
+| `0x921c4080` | 10 | RW | [31] | soft_vid_vld(set) (x21, +0x4/idx) | 🟡 |
+| `0x921c40f0` | 14 | RW | [15:0] | c_tpid | 🟡 |
+| `0x921c4200` | 15 | RW | [2:0] | smac_md_level (x6, +0x4/idx) | 🟡 |
+| `0x921c4220` | 16 | RW | [29:16] | down_maxframe_length | 🟡 |
+| `0x921c4224` | 17 | RW | [5:0] | soam_drop_en | 🟡 |
+| `0x921c4250` | 1 | RW | [13:0] | *semantics unknown* | ❓ |
+| `0x921c4250` | 2 | RW | [29:16] | *semantics unknown* | ❓ |
+| `0x921c4254` | 3 | RW | [13:0] | *semantics unknown* | ❓ |
+| `0x921c4254` | 4 | RW | [29:16] | *semantics unknown* | ❓ |
+
+## SIPC (CPU<->fabric bridge)
+
+**Block base ≈ `0x921cc000`** (zx_sipcregtable). Role: rx_en / cpu_up_en credit/mailbox bridge
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x921cc000` | 0 | RW | [0] | rx_en | ✅ |
+| `0x921cc000` | 1 | RW | [2] | cpu_up_en | ✅ |
+
+## SMCT (CPU-port multi-channel xfer)
+
+**Block base ≈ `0x921d0000`** (zx_smctregtable). Role: uni/pp/ppmove PMAU gauges
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x921d0000` | 0 | RW | [9:0] | uni_pmau | ✅ |
+| `0x921d0004` | 1 | RW | [9:0] | pp_pmau | ✅ |
+| `0x921d0008` | 2 | RW | [9:0] | ppmove_pmau | ✅ |
+
+## UOPC (upstream OPC / tcont)
+
+**Block base ≈ `0x921d8000`** (zx_uopcregtable). Role: tcont num/sync/active, mac_ept_resume
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x921d8000` | 1 | RW | [2:0] | tcont_num | 🟡 |
+| `0x921d8000` | 0 | RW | [3] | tcont_num(set) | 🟡 |
+| `0x921d8004` | 2 | RW | [0] | tcont_sch_active_ena | 🟡 |
+| `0x921d8008` | 3 | RW | [0] | mac_ept_resume_ena | 🟡 |
+| `0x921d802c` | 4 | RW | [0] | tcont_syn_ena | 🟡 |
+| `0x921d8034` | 5 | RW | [1:0] | *semantics unknown* | ❓ |
+| `0x921d8034` | 6 | RW | [4:2] | *semantics unknown* | ❓ |
+| `0x921d8034` | 7 | RW | [5] | *semantics unknown* | ❓ |
+
+## SOPC / NPP egress crossbar
+
+**Block base ≈ `0x921d9004`** (zx_sopcregtable). Role: crc_pad, smac delay/half/ready, sp_rr; emits send2smac[N]
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x921d9004` | 0 | RW | [1:0] | crc_pad_cfg[port] | ✅ |
+| `0x921d9004` | 1 | RW | [3:2] | *semantics unknown* | ❓ |
+| `0x921d9004` | 2 | RW | [5:4] | *semantics unknown* | ❓ |
+| `0x921d9004` | 3 | RW | [7:6] | *semantics unknown* | ❓ |
+| `0x921d9004` | 4 | RW | [9:8] | *semantics unknown* | ❓ |
+| `0x921d9038` | 5 | RW | [15:0] | smac_delay_cnt_cfg | ✅ |
+| `0x921d9038` | 6 | RW | [20:16] | smac_half_mode | ✅ |
+| `0x921d9038` | 7 | RW | [30:21] | smac_ready_mode | ✅ |
+| `0x921da000` | 8 | RW | [0] | sp_rr (sched) | ✅ |
+
+## SPA (stream/source-port classifier)
+
+**Block base ≈ `0x921d4000`** (zx_sparegtable). Role: source-port match classifier, trap, untag/VLAN, ONU-MAC, indirect match/hash RAM
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x921d4000` | 0 | RW | [31:0] | dn_reg_pkt_en? (RAM) (x4, +0x4/idx) | ✅ |
+| `0x921d400c` | 2 | RW | [31:0] | up_reg_pps_en (x3, +0x4/idx) | ✅ |
+| `0x921d4014` | 4 | RW | [31:0] | indirect_rw_cmd | ✅ |
+| `0x921d4018` | 5 | R | [0] | indirect_rw_status | ✅ |
+| `0x921d401c` | 6 | RW | [31:0] | indirect_rw_data (x7, +0x4/idx) | ✅ |
+| `0x921d4040` | 1 | RW | [31:0] | dn_reg_pkt_en (x4, +0x4/idx) | ✅ |
+| `0x921d404c` | 3 | RW | [31:0] | dn_reg_pps_en (x3, +0x4/idx) | ✅ |
+| `0x921d4058` | 7 | RW | [1:0] | stp_action (global) | ✅ |
+| `0x921d4060` | 8 | RW | [6:0] | pt_bpdu_trap_en | ✅ |
+| `0x921d4064` | 9 | RW | [6:0] | pt_802x_trap_en | ✅ |
+| `0x921d4070` | 10 | RW | [2:0] | port_dft_pri[port] | ✅ |
+| `0x921d4070` | 11 | RW | [5:3] | *semantics unknown* | ❓ |
+| `0x921d4070` | 12 | RW | [8:6] | *semantics unknown* | ❓ |
+| `0x921d4070` | 13 | RW | [11:9] | *semantics unknown* | ❓ |
+| `0x921d4070` | 14 | RW | [14:12] | *semantics unknown* | ❓ |
+| `0x921d4070` | 15 | RW | [17:15] | *semantics unknown* | ❓ |
+| `0x921d4070` | 16 | RW | [20:18] | *semantics unknown* | ❓ |
+| `0x921d4070` | 17 | RW | [23:21] | *semantics unknown* | ❓ |
+| `0x921d407c` | 18 | RW | [1:0] | match_mode | ✅ |
+| `0x921d407c` | 19 | RW | [2] | match_rep_en | ✅ |
+| `0x921d4080` | 20 | RW | [26:0] | color_mode | ✅ |
+| `0x921d4088` | 21 | RW | [1] | loopback_en | ✅ |
+| `0x921d4120` | 22 | RW | [31:0] | onu_mac_addr[lo] (x17, +0x8/idx) | ✅ |
+| `0x921d4124` | 23 | RW | [15:0] | onu_mac_addr[hi] (x17, +0x8/idx) | ✅ |
+| `0x921d41a0` | 24 | RW | [31:0] | trap_dmac[lo] (x5, +0x8/idx) | ✅ |
+| `0x921d41a4` | 25 | RW | [15:0] | trap_dmac[hi] (x5, +0x8/idx) | ✅ |
+| `0x921d41c0` | 29 | RW | [7:0] | trap_protocol_type3 | ✅ |
+| `0x921d41c0` | 28 | RW | [15:8] | trap_protocol_type2 | ✅ |
+| `0x921d41c0` | 27 | RW | [23:16] | trap_protocol_type1 | ✅ |
+| `0x921d41c0` | 26 | RW | [31:24] | trap_protocol_type0 | ✅ |
+| `0x921d41c4` | 31 | RW | [15:0] | trap_eth_type1 | ✅ |
+| `0x921d41c4` | 30 | RW | [31:16] | trap_eth_type0 | ✅ |
+| `0x921d41c8` | 33 | RW | [15:0] | trap_eth_type3 | ✅ |
+| `0x921d41c8` | 32 | RW | [31:16] | trap_eth_type2 | ✅ |
+| `0x921d4240` | 34 | RW | [2:0] | tpid_i_sel_i (base) (x10, +0x8/idx) | ✅ |
+| `0x921d4240` | 35 | RW | [5:3] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4240` | 36 | RW | [8:6] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4240` | 37 | RW | [11:9] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4240` | 38 | RW | [14:12] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4240` | 39 | RW | [17:15] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4240` | 40 | RW | [20:18] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4240` | 41 | RW | [23:21] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4244` | 42 | RW | [2:0] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4244` | 43 | RW | [5:3] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4244` | 44 | RW | [8:6] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4244` | 45 | RW | [11:9] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4244` | 46 | RW | [14:12] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4244` | 47 | RW | [17:15] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4244` | 48 | RW | [20:18] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4244` | 49 | RW | [23:21] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x921d4288` | 50 | RW | [11:0] | pon_untag_svid | ✅ |
+| `0x921d4288` | 51 | RW | [14:12] | pon_untag_pri | ✅ |
+| `0x921d4288` | 52 | RW | [26:15] | cpu_untag_svid | ✅ |
+| `0x921d4288` | 53 | RW | [29:27] | cpu_untag_pri | ✅ |
+| `0x921d428c` | 54 | RW | [11:0] | port_up_untag_pvid (x8, +0x4/idx) | ✅ |
+| `0x921d428c` | 55 | RW | [23:12] | port_up_untag_svid (x8, +0x4/idx) | ✅ |
+| `0x921d428c` | 56 | RW | [26:24] | port_up_untag_pri (x8, +0x4/idx) | ✅ |
+| `0x921d42a8` | 57 | RW | [1:0] | port_pkt_filter[port] | ✅ |
+| `0x921d42a8` | 58 | RW | [3:2] | *semantics unknown* | ❓ |
+| `0x921d42a8` | 59 | RW | [5:4] | *semantics unknown* | ❓ |
+| `0x921d42a8` | 60 | RW | [7:6] | *semantics unknown* | ❓ |
+| `0x921d42a8` | 61 | RW | [9:8] | *semantics unknown* | ❓ |
+| `0x921d42a8` | 62 | RW | [11:10] | *semantics unknown* | ❓ |
+| `0x921d42a8` | 63 | RW | [13:12] | *semantics unknown* | ❓ |
+| `0x921d42a8` | 64 | RW | [15:14] | *semantics unknown* | ❓ |
+| `0x921d42a8` | 65 | RW | [17:16] | *semantics unknown* | ❓ |
+| `0x921d42ac` | 66 | RW | [5:0] | port_vlan_filter (x10, +0x4/idx) | ✅ |
+| `0x921d4300` | 67 | RW | [1:0] | enty_pktdeal_cfg[entry] (base) (x9, +0x14/idx) | ✅ |
+| `0x921d4300` | 68 | RW | [3:2] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 69 | RW | [5:4] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 70 | RW | [7:6] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 71 | RW | [9:8] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 72 | RW | [11:10] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 73 | RW | [13:12] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 74 | RW | [15:14] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 75 | RW | [17:16] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 76 | RW | [19:18] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 77 | RW | [21:20] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 78 | RW | [23:22] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 79 | RW | [25:24] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 80 | RW | [27:26] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 81 | RW | [29:28] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4300` | 82 | RW | [31:30] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 83 | RW | [1:0] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 84 | RW | [3:2] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 85 | RW | [5:4] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 86 | RW | [7:6] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 87 | RW | [9:8] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 88 | RW | [11:10] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 89 | RW | [13:12] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 90 | RW | [15:14] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 91 | RW | [17:16] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 92 | RW | [19:18] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 93 | RW | [21:20] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 94 | RW | [23:22] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 95 | RW | [25:24] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 96 | RW | [27:26] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 97 | RW | [29:28] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4304` | 98 | RW | [31:30] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 99 | RW | [1:0] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 100 | RW | [3:2] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 101 | RW | [5:4] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 102 | RW | [7:6] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 103 | RW | [9:8] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 104 | RW | [11:10] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 105 | RW | [13:12] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 106 | RW | [15:14] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 107 | RW | [17:16] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 108 | RW | [19:18] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 109 | RW | [21:20] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 110 | RW | [23:22] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4308` | 111 | RW | [29:28] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 112 | RW | [1:0] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 113 | RW | [3:2] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 114 | RW | [5:4] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 115 | RW | [7:6] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 116 | RW | [9:8] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 117 | RW | [11:10] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 118 | RW | [13:12] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 119 | RW | [15:14] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 120 | RW | [17:16] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 121 | RW | [19:18] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 122 | RW | [21:20] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 123 | RW | [23:22] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 124 | RW | [25:24] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 125 | RW | [27:26] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 126 | RW | [29:28] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d430c` | 127 | RW | [31:30] | *semantics unknown* (x9, +0x14/idx) | ❓ |
+| `0x921d4310` | 128 | RW | [1:0] | enty_pon_other_pktdeal_cfg[port] (base) | ✅ |
+| `0x921d4310` | 129 | RW | [3:2] | *semantics unknown* | ❓ |
+| `0x921d4310` | 130 | RW | [5:4] | *semantics unknown* | ❓ |
+| `0x921d4310` | 131 | RW | [7:6] | *semantics unknown* | ❓ |
+| `0x921d4310` | 132 | RW | [9:8] | *semantics unknown* | ❓ |
+| `0x921d4310` | 133 | RW | [11:10] | *semantics unknown* | ❓ |
+
+## PM (G.988 port-mapper)
+
+**Block base ≈ `0x921e0014`** (zx_pmregtable). Role: source->allowed-egress authorizer: in/out port-rule, g988 mode, inport==outport, cpu-drop
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x921e0014` | 0 | RW | [27:0] | indirect_rw_cmd | ✅ |
+| `0x921e0018` | 1 | R | [0] | indirect_rw_status | ✅ |
+| `0x921e001c` | 2 | RW | [31:0] | indirect_rw_data (x15, +0x4/idx) | ✅ |
+| `0x921e0054` | 3 | RW | [3:2] | g988_mode (x4, +0x4/idx) | ✅ |
+| `0x921e0054` | 5 | RW | [4] | g988_cpu_not_drop_staen | ✅ |
+| `0x921e0054` | 4 | RW | [5] | g988_cpu_drop_staen | ✅ |
+| `0x921e0054` | 16 | RW | [8:7] | g988_inport_equal_outport_staen | ✅ |
+| `0x921e0180` | 6 | RW | [3:0] | in_port_rule_valid[idx] (val=port|en<<3) (x9, +0x4/idx) | ✅ |
+| `0x921e01a0` | 7 | RW | [3:0] | out_port_rule_valid[idx] (val=port|en<<3) (x9, +0x4/idx) | ✅ |
+| `0x921e01d4` | 8 | RW | [0] | flow_sta_en | ✅ |
+| `0x921e01d4` | 9 | RW | [1] | flow_sta_pkt_len_sel | ✅ |
+| `0x921e01d4` | 10 | RW | [2] | flow_sta_read_clear_en | ✅ |
+| `0x921e01d4` | 11 | RW | [3] | flow_sta_cnt_mode | ✅ |
+| `0x921e01d4` | 12 | RW | [4] | flow_sta_fwd_only_en | ✅ |
+| `0x921e0248` | 13 | RW | [31:0] | g988 rule RAM[idx] (bit20=valid,b18-19 in,b15-17 out) (x65, +0x4/idx) | ✅ |
+| `0x921e0380` | 14 | RW | [31:0] | zte_index_cfg (x17, +0x4/idx) | ✅ |
+| `0x921e03c0` | 15 | RW | [31:0] | zte_index_cfg(2) (x17, +0x4/idx) | ✅ |
+
+## PON-PP
+
+**Block base ≈ `0x923a0000`** (zx_ponppregtable). Role: PON packet-processor cfg (PON/GPON path)
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x923a0000` | 0 | R | [0] | *semantics unknown* | ❓ |
+| `0x923a0004` | 1 | RW | [0] | *semantics unknown* | ❓ |
+| `0x923a0008` | 2 | RW | [8:0] | *semantics unknown* | ❓ |
+| `0x923a0008` | 3 | RW | [24:16] | *semantics unknown* | ❓ |
+| `0x923a000c` | 4 | R | [26:0] | *semantics unknown* | ❓ |
+| `0x923a0010` | 5 | RW | [8:0] | *semantics unknown* | ❓ |
+| `0x923a0014` | 6 | RW | [8:0] | *semantics unknown* | ❓ |
+| `0x923a0018` | 7 | RW | [0] | *semantics unknown* | ❓ |
+| `0x923a001c` | 8 | RW | [5:4] | *semantics unknown* | ❓ |
+| `0x923a001c` | 9 | RW | [7:6] | *semantics unknown* | ❓ |
+| `0x923a001c` | 10 | RW | [8] | *semantics unknown* | ❓ |
+| `0x923a001c` | 11 | RW | [9] | *semantics unknown* | ❓ |
+| `0x923a001c` | 12 | RW | [23:10] | *semantics unknown* | ❓ |
+| `0x923a001c` | 13 | RW | [31:24] | *semantics unknown* | ❓ |
+| `0x923a0020` | 14 | RW | [31:0] | *semantics unknown* | ❓ |
+| `0x923a0024` | 15 | RW | [31:0] | *semantics unknown* | ❓ |
+| `0x923a0028` | 16 | RW | [13:0] | *semantics unknown* | ❓ |
+| `0x923a0118` | 17 | RW | [15:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x923a03c0` | 18 | RW | [19:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x923a03e0` | 19 | RW | [15:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x923a0400` | 20 | RW | [31:0] | *semantics unknown* (x17, +0x4/idx) | ❓ |
+
+## PON-TM
+
+**Block base ≈ `0x92340000`** (zx_pontmregtable). Role: PON traffic-manager cfg
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x92340000` | 1 | RW | [7:4] | *semantics unknown* | ❓ |
+| `0x92340000` | 0 | RW | [10] | *semantics unknown* | ❓ |
+| `0x923400e8` | 2 | RW | [31:0] | *semantics unknown* | ❓ |
+| `0x923400ec` | 3 | RW | [31:0] | *semantics unknown* | ❓ |
+| `0x923400f0` | 4 | RW | [31:0] | *semantics unknown* | ❓ |
+| `0x923400f4` | 5 | RW | [31:0] | *semantics unknown* | ❓ |
+| `0x923400f8` | 6 | RW | [31:0] | *semantics unknown* | ❓ |
+| `0x923400fc` | 7 | RW | [29:0] | *semantics unknown* | ❓ |
+| `0x92340100` | 8 | R | [2:0] | *semantics unknown* | ❓ |
+| `0x92340100` | 9 | R | [4:3] | *semantics unknown* | ❓ |
+| `0x92340100` | 10 | R | [15:8] | *semantics unknown* | ❓ |
+| `0x92340104` | 11 | RW | [2:0] | *semantics unknown* | ❓ |
+| `0x92340104` | 12 | RW | [4:3] | *semantics unknown* | ❓ |
+| `0x92340104` | 13 | RW | [15:8] | *semantics unknown* | ❓ |
+
+## QMG (queue manager)
+
+**Block base ≈ `0x9234c000`** (zx_qmgregtable). Role: queue depth/threshold, trap cfg, forward-decision statistics (sw_fwd/hw_fwd/hw_trap)
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x9234c000` | 0 | RW | [12:0] | up_ram_thd | ✅ |
+| `0x9234c000` | 1 | RW | [25:13] | dn_ram_thd | ✅ |
+| `0x9234c004` | 2 | RW | [0] | ext_ddr_only_enable | ✅ |
+| `0x9234c004` | 3 | RW | [1] | ddr_cache_enable | ✅ |
+| `0x9234c008` | 4 | RW | [1:0] | qmg_trap_cfg | ✅ |
+| `0x9234c00c` | 5 | RW | [10:0] | qmg_up_ram_depth | ✅ |
+| `0x9234c044` | 6 | R | [31:0] | statistics(sw_fwd) | ✅ |
+| `0x9234c048` | 7 | R | [31:0] | statistics(hw_fwd) | ✅ |
+| `0x9234c04c` | 8 | R | [31:0] | statistics(hw_trap) | ✅ |
+| `0x9234c054` | 9 | R | [31:0] | statistics | ✅ |
+| `0x9234c05c` | 10 | R | [31:0] | statistics | ✅ |
+| `0x9234c060` | 11 | R | [31:0] | statistics | ✅ |
+
+## RED (random-early-detect)
+
+**Block base ≈ `0x92344004`** (zx_redregtable). Role: congestion/drop: share max, color trap, FEC, indirect RAM
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x92344004` | 0 | RW | [1:0] | cfg_enable | ✅ |
+| `0x92344004` | 3 | RW | [2] | share_mode | ✅ |
+| `0x92344004` | 2 | RW | [3] | trap_color_en | ✅ |
+| `0x92344004` | 1 | RW | [4] | open_out_en | ✅ |
+| `0x92344014` | 4 | RW | [27:0] | indirect_rw_cmd | ✅ |
+| `0x92344018` | 5 | R | [0] | ind_acc_done | ✅ |
+| `0x9234401c` | 6 | RW | [31:0] | ind_acc_data (x5, +0x4/idx) | ✅ |
+| `0x92344040` | 7 | RW | [12:0] | in_share_max | ✅ |
+| `0x9234406c` | 11 | RW | [0] | fec_enable | ✅ |
+| `0x92344074` | 12 | RW | [14:0] | up_out_share_max | ✅ |
+
+## SCH/DSCH (shaper/scheduler)
+
+**Block base ≈ `0x92354000`** (zx_schregtable). Role: token-bucket shaper, DWRR, aging, indirect per-queue/tcont RAM
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x92354000` | 0 | RW | [0] | que_sharp_enable | ✅ |
+| `0x92354000` | 1 | RW | [1] | dwrr_enable | ✅ |
+| `0x92354000` | 2 | RW | [2] | hw_up_age_enable | ✅ |
+| `0x92354000` | 3 | RW | [3] | hw_up_age_mode | ✅ |
+| `0x92354000` | 4 | RW | [4] | tcont_sharp_enable | ✅ |
+| `0x92354000` | 5 | RW | [5] | quesch_sharp_enable | ✅ |
+| `0x92354000` | 6 | RW | [6] | secsch_dwrr_enable | ✅ |
+| `0x92354000` | 7 | RW | [7] | oam_age_enable | ✅ |
+| `0x92354000` | 8 | RW | [8] | hw_dn_age_enable | ✅ |
+| `0x92354000` | 9 | RW | [9] | hw_dn_age_mode | ✅ |
+| `0x92354004` | 10 | RW | [31:0] | hw_age_time | ✅ |
+| `0x92354008` | 11 | RW | [7:0] | sw_age_pqid | ✅ |
+| `0x92354008` | 12 | RW | [8] | sw_age_enable | ✅ |
+| `0x92354014` | 13 | RW | [31:0] | indirect_rw_cmd | ✅ |
+| `0x92354018` | 14 | R | [0] | ind_acc_done | ✅ |
+| `0x9235401c` | 15 | RW | [31:0] | ind_acc_data (x3, +0x4/idx) | ✅ |
+| `0x92354024` | 16 | RW | [5:0] | spend_byte | ✅ |
+| `0x92354028` | 17 | RW | [17:0] | shp_fill_time | ✅ |
+| `0x92354340` | 18 | RW | [31:0] | quesch_mount_tcont_que (x41, +0x4/idx) | ✅ |
+
+## CLA (classifier/ACL)
+
+**Block base ≈ `0x9238c014`** (zx_claregtable). Role: L2/L3 flow defaults, MTU, mirror, trap-ACL, local IPv4/v6, hash, indirect RAM
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x9238c014` | 0 | RW | [27:0] | indirect_rw_cmd | 🟡 |
+| `0x9238c018` | 1 | R | [0] | indirect_rw_status | 🟡 |
+| `0x9238c01c` | 2 | RW | [31:0] | indirect_rw_data (x18, +0x4/idx) | 🟡 |
+| `0x9238c080` | 3 | RW | [19:0] | config | 🟡 |
+| `0x9238c080` | 5 | RW | [11] | mac_req_ctrl_config | 🟡 |
+| `0x9238c080` | 4 | RW | [17] | trap_acl_en_config | 🟡 |
+| `0x9238c088` | 6 | RW | [13:0] | l3_mtu_length_cfg | 🟡 |
+| `0x9238c088` | 7 | RW | [15:14] | l3_mtu_act_cfg | 🟡 |
+| `0x9238c08c` | 8 | RW | [7] | port_mirror_flow_ctrl_config[port] (base) | 🟡 |
+| `0x9238c08c` | 9 | RW | [9] | *semantics unknown* | ❓ |
+| `0x9238c08c` | 10 | RW | [11] | *semantics unknown* | ❓ |
+| `0x9238c08c` | 11 | RW | [13] | *semantics unknown* | ❓ |
+| `0x9238c090` | 12 | RW | [23:0] | hash_poly_config | 🟡 |
+| `0x9238c094` | 13 | RW | [3:0] | outspace_cfg | 🟡 |
+| `0x9238c098` | 16 | RW | [13:0] | dn_mtu_length_cfg | 🟡 |
+| `0x9238c098` | 17 | RW | [15:14] | dn_mtu_act_cfg | 🟡 |
+| `0x9238c098` | 14 | RW | [29:16] | up_mtu_length_cfg | 🟡 |
+| `0x9238c098` | 15 | RW | [31:30] | up_mtu_act_cfg | 🟡 |
+| `0x9238c09c` | 18 | RW | [31:0] | local_ipv4_addr | 🟡 |
+| `0x9238c0a0` | 19 | RW | [31:0] | local_ipv6_addr (x5, +0x4/idx) | 🟡 |
+| `0x9238c0c8` | 20 | RW | [1:0] | ttl_over_action_cfg | 🟡 |
+| `0x9238c0cc` | 21 | RW | [1:0] | oth_l3_pkt_action_cfg | 🟡 |
+| `0x9238c0d0` | 22 | RW | [1:0] | dn_unknown_da_action_cfg | 🟡 |
+| `0x9238c0fc` | 23 | RW | [31:0] | up_l2_uni_default_flow_cfg (x9, +0x4/idx) | 🟡 |
+| `0x9238c11c` | 26 | RW | [31:0] | dn_l2_default_flow_cfg | 🟡 |
+| `0x9238c120` | 30 | RW | [31:0] | up_l3_default_flow_cfg | 🟡 |
+| `0x9238c124` | 33 | RW | [31:0] | dn_l3_default_flow_cfg | 🟡 |
+| `0x9238c128` | 37 | RW | [28:0] | up_mirror_cfg (x3, +0x4/idx) | 🟡 |
+| `0x9238c138` | 38 | RW | [28:0] | dn_multi_flow_cfg | 🟡 |
+| `0x9238c13c` | 42 | RW | [28:0] | dn_broad_flow_cfg | 🟡 |
+| `0x9238c140` | 46 | RW | [31:0] | up_unicast_flow_cfg | 🟡 |
+| `0x9238c144` | 49 | RW | [31:0] | dn_unicast_flow_cfg | 🟡 |
+| `0x9238c148` | 82 | RW | [31:0] | (cla reg 0x52 RW; semantics unknown) | 🟡 |
+| `0x9238c14c` | 57 | RW | [31:0] | dn_mirror_cfg | 🟡 |
+| `0x9238c154` | 58 | RW | [9:0] | def_qos_info_cfg | 🟡 |
+| `0x9238c160` | 60 | RW | [5:0] | up_default_bucket_id_cfg | 🟡 |
+| `0x9238c164` | 59 | RW | [5:0] | dn_default_bucket_id_cfg | 🟡 |
+| `0x9238c404` | 24 | RW | [11] | up_l2_uni_default_flow_cfg (x9, +0x4/idx) | 🟡 |
+| `0x9238c404` | 25 | RW | [12] | up_l2_uni_default_flow_cfg (x9, +0x4/idx) | 🟡 |
+| `0x9238c424` | 27 | RW | [11] | dn_l2_default_flow_cfg | 🟡 |
+| `0x9238c424` | 28 | RW | [12] | dn_l2_default_flow_cfg | 🟡 |
+| `0x9238c424` | 29 | RW | [13] | dn_l2_default_flow_cfg | 🟡 |
+| `0x9238c428` | 31 | RW | [11] | up_l3_default_flow_cfg | 🟡 |
+| `0x9238c428` | 32 | RW | [12] | up_l3_default_flow_cfg | 🟡 |
+| `0x9238c42c` | 34 | RW | [11] | dn_l3_default_flow_cfg | 🟡 |
+| `0x9238c42c` | 35 | RW | [12] | dn_l3_default_flow_cfg | 🟡 |
+| `0x9238c42c` | 36 | RW | [13] | dn_l3_default_flow_cfg | 🟡 |
+| `0x9238c440` | 39 | RW | [11] | dn_multi_flow_cfg | 🟡 |
+| `0x9238c440` | 40 | RW | [12] | dn_multi_flow_cfg | 🟡 |
+| `0x9238c440` | 41 | RW | [13] | dn_multi_flow_cfg | 🟡 |
+| `0x9238c444` | 43 | RW | [11] | dn_broad_flow_cfg | 🟡 |
+| `0x9238c444` | 44 | RW | [12] | dn_broad_flow_cfg | 🟡 |
+| `0x9238c444` | 45 | RW | [13] | dn_broad_flow_cfg | 🟡 |
+| `0x9238c448` | 47 | RW | [11] | up_unicast_flow_cfg | 🟡 |
+| `0x9238c448` | 48 | RW | [12] | up_unicast_flow_cfg | 🟡 |
+| `0x9238c44c` | 50 | RW | [11] | dn_unicast_flow_cfg | 🟡 |
+| `0x9238c44c` | 51 | RW | [12] | dn_unicast_flow_cfg | 🟡 |
+| `0x9238c44c` | 52 | RW | [13] | dn_unicast_flow_cfg | 🟡 |
+| `0x9238c450` | 54 | RW | [11] | dn_unknown_flow_cfg | 🟡 |
+| `0x9238c450` | 55 | RW | [12] | dn_unknown_flow_cfg | 🟡 |
+| `0x9238c450` | 56 | RW | [13] | dn_unknown_flow_cfg | 🟡 |
+
+## SBRAG / PP_BRG (bridge: FDB/VLAN/flood)
+
+**Block base ≈ `0x92388004`** (zx_sbragregtable). Role: FDB learn/age, VLAN check, flood/bcast/mcast, isolation, mirror, indirect FDB RAM
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x92388004` | 1 | RW | [7:0] | pt_transfer_en | 🟡 |
+| `0x92388004` | 2 | RW | [15:8] | pt_macaddr_clr | 🟡 |
+| `0x92388004` | 3 | RW | [16] | pt_macaddr_clr | 🟡 |
+| `0x92388004` | 4 | RW | [17] | macaddr_age_en | 🟡 |
+| `0x92388004` | 5 | RW | [25:18] | pt_learn_limit_en | 🟡 |
+| `0x92388004` | 6 | RW | [26] | hash_collision_pktdeal | 🟡 |
+| `0x92388004` | 7 | RW | [27] | one_func_open | 🟡 |
+| `0x92388004` | 8 | RW | [28] | mac_bind | 🟡 |
+| `0x92388004` | 9 | RW | [29] | desc_monitor_sel | 🟡 |
+| `0x92388008` | 10 | RW | [7:0] | inport_vl_chk_en | 🟡 |
+| `0x92388008` | 11 | RW | [15:8] | outport_vl_chk_en | 🟡 |
+| `0x92388008` | 12 | RW | [16] | cpu_chk_en | 🟡 |
+| `0x92388008` | 13 | RW | [17] | outport_vlan_sle | 🟡 |
+| `0x92388008` | 14 | RW | [18] | stat_clean_en | 🟡 |
+| `0x92388014` | 15 | RW | [11:0] | *semantics unknown* | ❓ |
+| `0x92388014` | 19 | RW | [31:0] | indreg_cmd | 🟡 |
+| `0x92388014` | 16 | RW | [26:22] | *semantics unknown* | ❓ |
+| `0x92388014` | 17 | RW | [27] | *semantics unknown* | ❓ |
+| `0x92388014` | 18 | RW | [31] | *semantics unknown* | ❓ |
+| `0x92388018` | 20 | R | [0] | ind_access_initial_done | 🟡 |
+| `0x92388018` | 21 | R | [1] | ind_access_lk_lnok | 🟡 |
+| `0x9238801c` | 22 | RW | [31:0] | ind_access_data (x4, +0x4/idx) | 🟡 |
+| `0x9238801c` | 76 | RW | [31:0] | indreg_wr | 🟡 |
+| `0x92388020` | 77 | RW | [31:0] | indreg_wr | 🟡 |
+| `0x92388024` | 78 | RW | [31:0] | indreg_wr | 🟡 |
+| `0x92388180` | 23 | RW | [0] | macaddr_exchange_md | 🟡 |
+| `0x92388180` | 24 | RW | [1] | multicst_md | 🟡 |
+| `0x92388180` | 25 | RW | [2] | multi_vlan_mode | 🟡 |
+| `0x92388180` | 26 | RW | [3] | hash_mode | 🟡 |
+| `0x92388180` | 27 | RW | [4] | multi_mac_vlan_mode | 🟡 |
+| `0x92388180` | 28 | RW | [5] | multi_mac_hash_mode | 🟡 |
+| `0x92388184` | 29 | RW | [1:0] | table_sel | 🟡 |
+| `0x92388188` | 30 | RW | [31:0] | srcaddr_aging_cycle | 🟡 |
+| `0x92388190` | 31 | R | [0] | ptclr_bit | 🟡 |
+| `0x923881c0` | 32 | RW | [7:0] | pt_smac_look_en | 🟡 |
+| `0x923881c0` | 33 | RW | [15:8] | pt_smac_lookfail_pktdeal | 🟡 |
+| `0x923881c4` | 34 | RW | [1:0] | pt_learn_mode[port] (base) | 🟡 |
+| `0x923881c4` | 35 | RW | [3:2] | *semantics unknown* | ❓ |
+| `0x923881c4` | 36 | RW | [5:4] | *semantics unknown* | ❓ |
+| `0x923881c4` | 37 | RW | [7:6] | *semantics unknown* | ❓ |
+| `0x923881c4` | 38 | RW | [9:8] | *semantics unknown* | ❓ |
+| `0x923881c4` | 39 | RW | [11:10] | *semantics unknown* | ❓ |
+| `0x923881c4` | 40 | RW | [13:12] | *semantics unknown* | ❓ |
+| `0x923881c4` | 41 | RW | [15:14] | *semantics unknown* | ❓ |
+| `0x923881d4` | 42 | RW | [12:0] | macaddr_ln_num_limit (x9, +0x4/idx) | 🟡 |
+| `0x92388200` | 43 | R | [12:0] | macaddr_ln_statistics (x9, +0x4/idx) | 🟡 |
+| `0x923882c0` | 44 | RW | [7:0] | pt_da_lookup_en | 🟡 |
+| `0x923882d4` | 45 | RW | [15:0] | multicst_transmit_ctrl | 🟡 |
+| `0x923882d4` | 46 | RW | [23:16] | unknown_multicst_pktdeal | 🟡 |
+| `0x923882d4` | 47 | RW | [31:24] | unknown_multicst_fwd | 🟡 |
+| `0x923882d8` | 48 | RW | [7:0] | uni_unkmul_fld_inctrl / unkmul_flood_portmask (x9, +0x4/idx) | 🟡 |
+| `0x92388300` | 49 | RW | [7:0] | brdcst_fld_en | 🟡 |
+| `0x92388300` | 50 | RW | [15:8] | brdcst_fwd_en | 🟡 |
+| `0x92388304` | 51 | RW | [7:0] | pon_brdcst_fld_inctrl / pon_brdcst_flood_portmask | 🟡 |
+| `0x92388340` | 52 | RW | [7:0] | unknown_unicst_transmit_ctrl | 🟡 |
+| `0x92388340` | 53 | RW | [23:8] | unknown_unicst_pktdeal | 🟡 |
+| `0x92388340` | 54 | RW | [31:24] | unknown_unicst_fwd | 🟡 |
+| `0x92388344` | 55 | RW | [7:0] | pon_unkuni_fld_inctrl | 🟡 |
+| `0x92388380` | 56 | RW | [7:0] | pt_tls | 🟡 |
+| `0x923883c0` | 57 | RW | [7:0] | isolate_pt_cfg (x9, +0x4/idx) | 🟡 |
+| `0x92388630` | 58 | RW | [2:0] | capture_pt | 🟡 |
+| `0x92388630` | 59 | RW | [3] | vl_mirror_en | 🟡 |
+| `0x92388630` | 60 | RW | [4] | pt_mirror_en | 🟡 |
+| `0x92388630` | 61 | RW | [5] | gempt_mirror_en | 🟡 |
+| `0x92388630` | 62 | RW | [6] | igsdrp_mirror_en | 🟡 |
+| `0x92388630` | 63 | RW | [7] | globle_mirror_en | 🟡 |
+| `0x92388630` | 64 | RW | [15:8] | igs_mirror_en | 🟡 |
+| `0x92388630` | 65 | RW | [23:16] | egs_mirror_en | 🟡 |
+| `0x92388634` | 66 | RW | [11:0] | mirror_vlid | 🟡 |
+| `0x92388638` | 67 | RW | [7:0] | dft_multi_vl_trans_pktdeal | 🟡 |
+| `0x9238863c` | 68 | RW | [15:0] | dft_brd_vl_trans_pktdeal | 🟡 |
+| `0x9238863c` | 69 | RW | [31:16] | dft_unkuni_vl_trans_pktdeal | 🟡 |
+| `0x92388640` | 71 | RW | [7:0] | broad_vtrans_outvlan_check | 🟡 |
+| `0x92388640` | 70 | RW | [23:16] | uni_vtrans_outvlan_check | 🟡 |
+| `0x92388670` | 72 | RW | [31:0] | multicst_vltrans_table (x49, +0x4/idx) | 🟡 |
+| `0x92388730` | 73 | RW | [31:0] | broadcst_vltrans_table (x49, +0x4/idx) | 🟡 |
+| `0x92388800` | 74 | RW | [7:0] | multicst_pritrans_table (x49, +0x4/idx) | 🟡 |
+| `0x923888c0` | 75 | RW | [7:0] | broadcst_pritrans_table (x49, +0x4/idx) | 🟡 |
+| `0x92388d80` | 79 | RW | [15:0] | qnum_map_mode | 🟡 |
+| `0x92388d84` | 80 | RW | [23:0] | sbrg_pri_qtab_pon[idx] (base) (x9, +0x4/idx) | 🟡 |
+| `0x92388d88` | 81 | RW | [23:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x92388d8c` | 82 | RW | [23:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x92388d90` | 83 | RW | [23:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x92388d94` | 84 | RW | [23:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x92388d98` | 85 | RW | [23:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x92388d9c` | 86 | RW | [23:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x92388da0` | 87 | RW | [23:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+
+## SADM (subscriber admission/policing)
+
+**Block base ≈ `0x92384000`** (zx_sadmregtable). Role: per-flow policing, token bucket, pps limits, indirect RAM
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x92384000` | 0 | RW | [0] | adm_en | 🟡 |
+| `0x92384000` | 1 | RW | [1] | adm_mode | 🟡 |
+| `0x92384000` | 2 | RW | [4:2] | pps_type | 🟡 |
+| `0x92384000` | 3 | RW | [5] | adm_trap_en | 🟡 |
+| `0x92384004` | 4 | RW | [20:0] | bps_th | 🟡 |
+| `0x9238400c` | 5 | RW | [27:0] | one_second | 🟡 |
+| `0x92384014` | 6 | RW | [31:0] | indacs_cmd | 🟡 |
+| `0x92384018` | 7 | R | [0] | indacs_done | 🟡 |
+| `0x9238401c` | 8 | RW | [31:0] | indacs_dat (x4, +0x4/idx) | 🟡 |
+| `0x92384028` | 9 | RW | [20:0] | bucket_overspeed_threshold | 🟡 |
+| `0x9238402c` | 10 | RW | [4:0] | bucket_overspeed_en | 🟡 |
+| `0x92384030` | 11 | RW | [5:0] | spend_byte | 🟡 |
+| `0x92384034` | 12 | RW | [17:0] | bucket_fill_time | 🟡 |
+| `0x92384080` | 13 | RW | [12:0] | brgunsapt_pps_pktnum (x9, +0x4/idx) | 🟡 |
+| `0x92384080` | 14 | RW | [13] | brgunsapt_pps_en (x9, +0x4/idx) | 🟡 |
+| `0x923840a8` | 15 | RW | [12:0] | brgun_unidapt_pps_pktnum (x9, +0x4/idx) | 🟡 |
+| `0x923840a8` | 16 | RW | [13] | brgun_unidapt_pps_en (x9, +0x4/idx) | 🟡 |
+| `0x923840a8` | 18 | RW | [16] | brgun_muldapt_pps_en (x9, +0x4/idx) | 🟡 |
+| `0x923840a8` | 17 | RW | [41:29] | brgun_muldapt_pps_pktnum (x9, +0x4/idx) | 🟡 |
+| `0x92384284` | 19 | RW | [2:0] | up_tf_mode | 🟡 |
+| `0x92384284` | 20 | RW | [5:3] | dn_tf_mode | 🟡 |
+
+## ADM (admission/policing)
+
+**Block base ≈ `0x92394000`** (zx_admregtable). Role: turnon, color, bucket fill, protocol pkt counters, indirect RAM
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x92394000` | 0 | RW | [0] | turnon_enable | 🟡 |
+| `0x92394000` | 1 | RW | [2] | credit_cmp_mode | 🟡 |
+| `0x92394000` | 2 | RW | [4] | color_enable | 🟡 |
+| `0x92394004` | 4 | RW | [17:0] | bucket_fill_time | 🟡 |
+| `0x92394008` | 3 | RW | [20:0] | flow_stc_mode | 🟡 |
+| `0x92394014` | 5 | RW | [27:0] | indirect_rw_cmd | 🟡 |
+| `0x92394018` | 6 | R | [0] | ind_acc_done | 🟡 |
+| `0x9239401c` | 7 | RW | [31:0] | ind_acc_data (x4, +0x4/idx) | 🟡 |
+| `0x9239402c` | 8 | RW | [5:0] | spend_byte_cfg | 🟡 |
+| `0x92394040` | 9 | RW | [23:0] | protocol_pkt_map | 🟡 |
+| `0x92394044` | 10 | RW | [23:0] | protocol_pkt_map(2) | 🟡 |
+| `0x92394048` | 11 | RW | [27:0] | one_second | 🟡 |
+| `0x92394080` | 14 | RW | [20:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x92394080` | 12 | RW | [21] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x923940c0` | 15 | RW | [20:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x923940c0` | 13 | RW | [21] | *semantics unknown* (x9, +0x4/idx) | ❓ |
+| `0x92394100` | 16 | R | [31:0] | dn_pass_protocal_packtcnt (x9, +0x4/idx) | 🟡 |
+| `0x92394140` | 17 | R | [31:0] | up_pass_protocal_packtcnt (x9, +0x4/idx) | 🟡 |
+| `0x92394180` | 18 | R | [31:0] | dn_drop_protocal_packtcnt (x9, +0x4/idx) | 🟡 |
+| `0x923941c0` | 19 | R | [31:0] | up_drop_protocal_packtcnt (x9, +0x4/idx) | 🟡 |
+| `0x9239422c` | 20 | R | [31:0] | down_drop_protocol_pktcnt | 🟡 |
+| `0x92394230` | 21 | R | [31:0] | up_drop_protocol_pktcnt | 🟡 |
+
+## DPA (downstream packet analysis)
+
+**Block base ≈ `0x92398000`** (zx_dparegtable). Role: protocol cpu-pps en, default pri, tpid select
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x92398000` | 0 | RW | [6] | *semantics unknown* | ❓ |
+| `0x92398000` | 1 | RW | [7] | *semantics unknown* | ❓ |
+| `0x92398000` | 2 | RW | [8] | *semantics unknown* | ❓ |
+| `0x92398000` | 3 | RW | [9] | *semantics unknown* | ❓ |
+| `0x92398000` | 4 | RW | [10] | *semantics unknown* | ❓ |
+| `0x92398000` | 5 | RW | [11] | *semantics unknown* | ❓ |
+| `0x92398000` | 6 | RW | [12] | *semantics unknown* | ❓ |
+| `0x92398014` | 7 | RW | [0] | protocol_cpu_pps_en | 🟡 |
+| `0x92398038` | 8 | RW | [23:0] | pon_detault_pri | 🟡 |
+| `0x92398080` | 9 | RW | [2:0] | tpid_i_sel_i (base) (x10, +0x8/idx) | 🟡 |
+| `0x92398080` | 10 | RW | [5:3] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398080` | 11 | RW | [8:6] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398080` | 12 | RW | [11:9] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398080` | 13 | RW | [14:12] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398080` | 14 | RW | [17:15] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398080` | 15 | RW | [20:18] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398080` | 16 | RW | [23:21] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398084` | 17 | RW | [2:0] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398084` | 18 | RW | [5:3] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398084` | 19 | RW | [8:6] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398084` | 20 | RW | [11:9] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398084` | 21 | RW | [14:12] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398084` | 22 | RW | [17:15] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398084` | 23 | RW | [20:18] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+| `0x92398084` | 24 | RW | [23:21] | *semantics unknown* (x10, +0x8/idx) | ❓ |
+
+## PP_PM (PP port-mapper)
+
+**Block base ≈ `0x9239c014`** (zx_pppmregtable). Role: PP port-mapper cfg (semantics largely unknown)
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x9239c014` | 0 | RW | [27:0] | *semantics unknown* | ❓ |
+| `0x9239c018` | 1 | RW | [0] | *semantics unknown* | ❓ |
+| `0x9239c01c` | 2 | RW | [31:0] | *semantics unknown* (x5, +0x4/idx) | ❓ |
+| `0x9239c034` | 5 | RW | [0] | *semantics unknown* | ❓ |
+| `0x9239c034` | 4 | RW | [6:1] | *semantics unknown* | ❓ |
+| `0x9239c100` | 3 | RW | [31:0] | *semantics unknown* (x5, +0x4/idx) | ❓ |
+
+## SMAC[N] (per-port ethernet MAC)
+
+**Block base ≈ `0x92200000`** (zx_smacregtable). Role: per-MAC: CTRL/cfg, enable, IPG, flow-ctrl, statistics. Base=MAC0=0x92200000, stride 0x40000/port
+
+| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x92200000` | 1 | RW | [27:0] | cfg (CTRL: bit0/1=rx/tx-en, bit15=static-cfg/link) (x6, +0x40000/idx) | ✅ |
+| `0x92200000` | 0 | RW | [26:24] | ipg (x6, +0x40000/idx) | ✅ |
+| `0x92200008` | 2 | RW | [0] | pr (x6, +0x40000/idx) | ✅ |
+| `0x92200050` | 28 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200050` | 29 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200054` | 30 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200054` | 31 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200054` | 32 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200054` | 33 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200058` | 34 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x9220005c` | 39 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200064` | 46 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200070` | 58 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200070` | 59 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200070` | 3 | RW | [1] | tfe (x6, +0x40000/idx) | ✅ |
+| `0x92200070` | 5 | RW | [7] | dzpq (x6, +0x40000/idx) | ✅ |
+| `0x92200070` | 4 | RW | [31:16] | pt (x6, +0x40000/idx) | ✅ |
+| `0x92200074` | 62 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200090` | 6 | RW | [0] | rfe (x6, +0x40000/idx) | ✅ |
+| `0x92200700` | 13 | RW | [0] | cnt_rst (x6, +0x40000/idx) | ✅ |
+| `0x92200714` | 15 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200718` | 16 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x9220071c` | 17 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200720` | 18 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200724` | 19 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200728` | 20 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x9220072c` | 21 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200730` | 22 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200734` | 23 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200738` | 24 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x9220073c` | 25 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200740` | 26 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200744` | 27 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200764` | 35 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200768` | 36 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x9220076c` | 37 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200770` | 38 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200780` | 40 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200784` | 41 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200788` | 42 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x9220078c` | 43 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200790` | 44 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200794` | 45 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x9220079c` | 47 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007a0` | 48 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007a4` | 49 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007a8` | 50 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007ac` | 51 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007b0` | 52 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007b4` | 53 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007b8` | 54 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007bc` | 55 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007c0` | 56 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007c4` | 57 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007d0` | 60 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007d4` | 61 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x922007dc` | 63 | R | [31:0] | *semantics unknown* (x6, +0x40000/idx) | ❓ |
+| `0x92200b00` | 10 | RW | [31:0] | timestamp_control (x6, +0x40000/idx) | ✅ |
+| `0x92200d00` | 11 | RW | [1] | tsf_mode (x6, +0x40000/idx) | ✅ |
+| `0x92200d30` | 12 | RW | [5] | rsf_mode (x6, +0x40000/idx) | ✅ |
+| `0x92200d30` | 7 | RW | [7] | efc (x6, +0x40000/idx) | ✅ |
+| `0x92200d30` | 8 | RW | [13:8] | rfa (x6, +0x40000/idx) | ✅ |
+| `0x92200d30` | 9 | RW | [19:14] | rfd (x6, +0x40000/idx) | ✅ |
+
+## SMAC[N] MAC block — extra runtime regs & counters (from findings, not in smacRegTable)
+Per-MAC stride 0x40000; MAC0=0x92200000 … MAC2(host/LAN3)=0x92280000 … MAC4=0x92300000.
+| offset (per MAC) | phys (MAC2) | R/W | semantic name | meaning | conf |
+|---|---|---|---|---|---|
+| +0x000 | `0x92280000` | RW | CTRL | bit0/1 = rx/tx-enable pair; bit15(0x8000)=static MAC-cfg/link-present (set on live 1G/FD host); bit13 speed/duplex. stock host=0xBAE003 | ✅ |
+| +0x004 | `0x92280004` | RW | IRQ/FEATURE MASK | 0=MAC disabled; stock holds 0x3FFF/0xFFFF | ✅ |
+| +0x008 | `0x92280008` | RW | ENABLE | bit31=master MAC enable (clock/run gate); bit0=secondary run. stock=0x80000001 | ✅ |
+| +0x0e0 | `0x922800e0` | RW | iface / PHY-cb ptr | per-MAC interface mode (RGMII) | 🟡 |
+| +0x714 | `0x92280714` | R | TX total bytes | smac send total bytes | ✅ |
+| +0x718 | `0x92280718` | R | TX total frames | smac send total frames (host-egress witness; stays 0 when gate shut) | ✅ |
+| +0x780 | `0x92280780` | R | RX total frames | smac receive total frames | ✅ |
+| +0x784 | `0x92280784` | R | RX total bytes | smac receive total bytes (host RX witness) | ✅ |
+
+## SOPC egress crossbar — send2smac status (not in sopcRegTable; from MEMORY_LAYOUT/sopc findings)
+| phys | R/W | semantic | meaning | conf |
+|---|---|---|---|---|
+| `0x921d915c`..`0x921d916c` | R | send2smac0..4 | egress crossbar -> physical MAC[N] issue counters; send2smac2=`0x921d9164`. Never fires for CPU-sourced frames = the egress gate. | ✅ |
+| `0x921d91c8` | R | sopc status (=0x1f live) | SOPC ready/status bitmap | 🟡 |
+
+## QMG forward-decision live counters (qmg statistics reg_ids 6-0xb resolve here)
+| phys | R/W | semantic | meaning | conf |
+|---|---|---|---|---|
+| `0x9234c044` | R | sw_fwd count | software-forward (to-CPU) decision counter; ticks for CPU-loop frame | ✅ |
+| `0x9234c048` | R | hw_fwd count | hardware-forward (to egress port) counter | ✅ |
+| `0x9234c04c` | R | hw_trap count | trap-to-CPU counter | ✅ |
+
+## TM DMA ring (tm_base+0x10000 = 0x92350000) — write-only doorbells, not in any RegTable
+| phys | R/W | semantic | conf |
+|---|---|---|---|
+| `0x92350050/54/58/5c` | RW/W | UP ring: base / kick(doorbell) / consume / cursor | ✅ |
+| `0x92350060/64/68/6c` | RW/W | DN ring: base / kick(doorbell) / consume / cursor | ✅ |
+
+## Drop counters (0x921da000)
+| phys | R/W | semantic | conf |
+|---|---|---|---|
+| `0x921da040` | R | drop_PP | ✅ |
+| `0x921da044` | R | drop_RED | ✅ |
+| `0x921da04c` | R | drop_DSCH | ✅ |
+
+## PP / ETH_TM2 (outside the RegTables; from MEMORY_LAYOUT)
+| phys | R/W | semantic | meaning | conf |
+|---|---|---|---|---|
+| `0x9238002c` | RW | CPU-fwd ctrl (pp[0x2c]) | bit (lan_up_port+0x19) gates CPU-source forward; high bits not CPU-writable | ✅ |
+| `0x923a00e0` | RW | ETH_TM2 mux | U-Boot direct-egress mux (U-Boot=0x11); CLOCK-GATED under kmod/mainline | ✅/❓ |
+| `0x923a001c` | RW | PON_PP_TM_CFG | =0x21200000 stock; bit29 = CPU/WAN->TM-accept gate | ✅ |
+
+
+---
+## Coverage summary
+- **Table-derived register fields documented: 623** (380 decomp-named, 243 structure-only/❓).
+- Plus ~30 non-table regs (SMAC counters/ctrl, SOPC send2smac, QMG counters, TM ring doorbells, drop counters, PP/ETH_TM2) folded in from findings.
+
+### Per-block field counts (table-derived)
+
+- greg / global switch + per-port STP: 71
+- SDETG (frame detect / VLAN det): 18
+- SIPC (CPU<->fabric bridge): 2
+- SMCT (CPU-port multi-channel xfer): 3
+- UOPC (upstream OPC / tcont): 8
+- SOPC / NPP egress crossbar: 9
+- SPA (stream/source-port classifier): 134
+- PM (G.988 port-mapper): 17
+- PON-PP: 21
+- PON-TM: 14
+- QMG (queue manager): 12
+- RED (random-early-detect): 10
+- SCH/DSCH (shaper/scheduler): 19
+- CLA (classifier/ACL): 61
+- SBRAG / PP_BRG (bridge: FDB/VLAN/flood): 87
+- SADM (subscriber admission/policing): 21
+- ADM (admission/policing): 22
+- DPA (downstream packet analysis): 25
+- PP_PM (PP port-mapper): 6
+- SMAC[N] (per-port ethernet MAC): 63
+
+
+---
+
+# PART 3 — PER-BLOCK DEEP CONTEXT + DIAGRAMS
+
+Consolidates the scattered `findings/*.md` + decomp into one per-block reference.
+Conventions: **ABSOLUTE phys only** (respect the base-gotcha: npp_base=0x921c0000,
+tm_base=0x92340000, pp_base=0x92380000; `fpga_read_reg(id)=*(0x92000000+id*4)`).
+Decomp cites use `tm:NNNN`=`decomp_all_tm.c`, `plat:NNNN`=`decomp_all_plat_zxylzb_9128S.c`,
+`sw:NNNN`=`decomp_all_switch.c`, `idmfdb:NNNN`=`decomp_all_idmfdb.c`. Mainline cites use
+`main:NNNN`=`linux-v6.6/drivers/net/ethernet/zte/zx-eth-main.c`. Confidence ✅ verified
+(decomp-named AND/OR live) · 🟡 decomp/table-inferred · ❓ structure known, semantics unknown.
+
+> **Standing update — fabric gate CRACKED (journey #21, 2026-05-29):** CPU→LAN frames now
+> traverse QMG sw_fwd → RED → DSCH → **SOPC send2smac2 → MAC2 TX** (only smac2, zero drops).
+> Fix = the TX-descriptor **egress-port hint** `desc[2:3]=((port+0x28)&0x3f)<<4` (mainline had
+> hardcoded 0) + the MAC init-order-wipe fix. The pre-#21 "loops to CPU / NEVER fires / ring-less"
+> claims below are SUPERSEDED — they were driven by the address-map error (reads of SMCT
+> 0x921d00xx instead of the real TM ring 0x9235xxxx). **Only remaining gap: MAC2→PHY→copper**
+> (MAC counts TX, GePHY doesn't drive the wire, no errors at host → MII TX config). Full writeup:
+> `session_2026-05-29_egress_fabric_cracked.md`.
+
+## 3.0 Block index (role one-liners)
+| block | phys base | role | context depth |
+|---|---|---|---|
+| greg/STP | 0x921c0000 | global switch ctrl + per-port STP/forwarding-state | rich |
+| IDM | 0x921c8000 | CPU-port DMA (idm0/idm1 netdevs, WiFi fwd) | rich |
+| BMU | 0x92348000 (TM[0x8000]) | buffer-pointer alloc/free, 5 instances | rich |
+| SIPC | 0x921cc000 | CPU↔fabric credit/mailbox bridge | medium |
+| SMCT | 0x921d0000 | CPU-port multi-channel xfer gauges | thin |
+| SPA | 0x921d4000 | source-port classifier + match/hash RAM (indirect) | rich |
+| SOPC | 0x921d9000 | egress crossbar → physical MAC[N] (`send2smacN`) | rich |
+| PM | 0x921e0000 | source→allowed-egress (G.988 in/out-port) authorizer | rich |
+| CLA | 0x9238c000 | L2/L3 classifier, protocol→CPU-queue, indirect RAM | medium |
+| QMG | 0x9234c000 | queue manager / forward decision (sw/hw fwd/trap) | rich |
+| TM-ring | 0x92350000 | UP+DN DMA descriptor rings (doorbells) | rich |
+| SCH/DSCH | 0x92354000 | token-bucket shaper, per-queue/tcont, indirect RAM | rich |
+| RED | 0x92344000 | random-early-detect / congestion | thin |
+| PP_BRG/SBRAG | 0x92388000 | FDB learn/age, VLAN, isolation, flood, indirect FDB | rich |
+| SADM | 0x92384000 | subscriber admission/policing (PPS, token bucket) | thin |
+| ADM | 0x92394000 | admission/policing + protocol pass/drop counters | thin |
+| DPA | 0x92398000 | downstream protocol analysis, cpu-pps gate | thin |
+| PP_PM | 0x9239c000 | PP port-mapper (semantics largely unknown) | thin |
+| SMAC[N] | 0x92200000+N*0x40000 | per-port ethernet MAC | rich |
+| ETH_TM2 | 0x923a0000 | U-Boot direct-egress mux + PON_PP_TM_CFG | rich |
+| UOPC | 0x921d8000 | upstream OPC / tcont (PON) | thin |
+| PON-PP/PON-TM | 0x923a0000 / 0x92340000 | PON packet-proc / traffic-mgr cfg | thin |
+| TOP_CRM | 0x94000000 | SoC clock/reset (PON sub-clocks, PLL) | rich |
+
+---
+
+## 3.1 greg / STP — global switch + per-port forwarding state  ✅
+**Base 0x921c0000.** Role: global switch ctrl, per-port STP/forwarding state, OAM,
+PTP/LPI/MCI interrupts, RAM-init triggers.
+- **Key regs (abs phys):** stp_en `0x921c0040` (bit/port); **stp_rstp_status `0x921c0044`**
+  (3 bits/port, FWD=4); port_need_authen `0x921c0048`; port_closed `0x921c004c` (bit/port);
+  RAM-init triggers `0x921c0008` (spa/smct/opc/soam) / `0x921c000c` (nppu_pm). Full bitfields in PART 2.
+- **Stock fns:** `greg_set_port_stp_rstp_status(port,status)`→`tmOnuRegWrite(port+0x2b,…,&gregRegTable)`
+  (tm:22312); `greg_set_port_stp_en` subblk port+0x1d (tm:22190); `greg_set_port_sel_stp_rstp`
+  port+0x24 (tm:22252, 0=STP/1=RSTP); `greg_set_port_closed` port+0x39 (tm:22444). Initializer
+  `tm_pon_npp_greg_initial` (tm:43166) closes all ports at boot (`tm_port_status_set(p,0)`),
+  reopened on link-up.
+- **Init / live values (stock dump):** `0x921c0040=0` (STP off), `0x921c0044=0` (all ports
+  Disabled — dormant since STP off), `0x921c0048=0`, `0x921c004c=0` (all OPEN). So stock runs
+  **STP disabled, all ports open/forwarding-by-default**.
+- **Port remap (load-bearing):** greg uses **physical** port 0..6. `tm_port_stp_status_set`
+  (tm:37917): logical 0..4→0..4, 6→5, 7→6; **logical 5 (CPU) is rejected** — CPU has NO greg
+  STP slot. So greg is LAN-port-only.
+- **Mainline vs stock:** mainline **never writes greg** (`zx_gregregtable` defined but unused;
+  grep = 0 hits). Relies on HW default (STP off, ports open) = matches stock live. No-op for LAN path.
+- **Verified/ruled out:** ✅ STP not the egress gate (stock itself runs STP off). FORWARDING=4
+  encoding is 🟡 MEDIUM-HIGH (inferred from 5-state `<5` validation + 802.1D, name strings not in
+  printks). ⚠ A prior `sopc_egress_port_gate_re.md:131` claim "greg port-state @ 0x9238c14c" is
+  **WRONG** (conflated greg with a PP offset) — corrected to 0x921c0044 in `port_stp_state_re.md`.
+
+## 3.2 IDM — CPU-port DMA engine  ✅
+**Base 0x921c8000** (overlaps BMU low addresses). Role: CPU-port DMA for the **idm0/idm1
+netdevs + WiFi forward path** — NOT the bridged-LAN egress path.
+- **Key regs:** CONTROL `0x921c8000=0x020f6766` (bit25 set; mainline matches); TX-desc base
+  `0x921c8004`; TX kick `0x921c8040` (=nframes<<16); TX consume `0x921c8044`; BMU bp-idx
+  `0x921c800c`; BMU alloc-poll `0x921c8014`.
+- **Stock fns:** `idm_net_register`/`idm_net_netdev_ops`/`idm_net_tx` (idm0/idm1 only);
+  `idm_fdb_hook_xmit` (SW pre-TX port-routing), `idm_fdb_recv_handle` (RX, sets skb cb[0xb7]
+  ssid, idmfdb:16), `idm_fdb_forward`. 54 fns total (`idmfdb.ko`).
+- **Mainline vs stock:** mainline collapsed the `idm_fdb_*` SW routing layer into one
+  hardcoded `zx_sw_xmit` (port=0). CONTROL/ring bases already match stock; **not the gate**.
+- **Verified/ruled out:** ✅ IDM consume advances (+N) but QMG sw_fwd stays 0 in some tests;
+  the LAN/br0 netdev uses **`pon_tm_net_tx` (TM ring), NOT `idm_net_tx`** (idm is WiFi/host-mgmt).
+  IDM ring xmit tested → no egress (`idm_ring_xmit_test_result_2026-05-28.md`). cb[0xb7] is an
+  RX ssid, not a TX egress override (`idm_cpuport_fabric_forward_re.md` Q2).
+
+## 3.3 BMU — Buffer Management Unit  🟡 (rich, but live anomalies open)
+**Base TM[0x8000] = 0x92348000**, 5 instances at +0x400 (0x92348000/8400/8800/8C00/9000).
+Base-address regs at TM[0xE8..0xFC] = 0x923480e8..0x923480fc. Role: HW allocator/freer of
+**Buffer Pointers (BP)** for fabric + CPU TM path; two pools (normal + jumbo).
+- **Key regs (abs phys, instance 0):** BPPE_BASE `0x923480e8`, JUMBO_BPPE `0x923480ec`,
+  DESC_BASE `0x923480f0`, BP_BUFFER `0x923480f4`, JUMBO_BP `0x923480f8`, BP_SIZE
+  `0x923480fc` (low16=BP_SIZE 0x900, high16=jumbo 0x2800); cfg/ENABLE `0x92348000` (bit0),
+  bppCtrl `0x92348004/8=0x0104c040`, alloc-result `0x9234800c` (bit31=valid|bp_idx), free
+  `0x92348010`, alloc-kick `0x92348014` (bit0), **bppe-ptr `0x92348048`** (low16=read, high16=write),
+  pool-size `0x92348058`, free-credit `0x923480dc` (bits[8:3]).
+- **Stock fns:** `pon_tm_bmu_init` (plat:5694), `pon_tm_bmu_enable`, `pon_tm_bmu_alloc_bp`
+  (plat:5772, sticky-timeout retry), `pp_bmu_free_bp` (plat:5823, 6-bit HW credit), `dump_bmu_reg`
+  (plat:6103). Stock geometry: POOL=0x2000(8192), BP_SIZE=0x900, jumbo POOL=0x66/size 0x2800;
+  DDR pools at 0x4e700000 (BPPE,128KiB) / 0x4ec20000 (BP,18MiB).
+- **alloc:** poll `0x8014&3==0` → read `0x800c`, bit31=success. **free:** `0x8010 = bp_idx |
+  jumbo<<15`, credit from `(0x80dc>>3)&0x3f`.
+- **Mainline vs stock:** mainline POOL=1024 (8× smaller, uses dma_alloc_coherent); init only
+  **instance 0** (`zx_tm_bmu_init` main:1800, no loop) — stock fills all 5; BPPE 4KiB-aligned
+  vs stock 64KiB. `zx_bmu_alloc_bp` (main:2873)/`zx_bmu_free_bp` (main:2913) are faithful subsets.
+- **Verified/ruled out:** 🔴 OPEN anomalies in `bmu_protocol_deep_re.md` §6: (1) only instance 0
+  configured — TM may route alloc to an unconfigured instance → pool-empty; (2) `0x8048` written
+  0x04000000 reads back 0 (alignment/sequencing); (3) 128KiB BPPE prefetch. These are RX/alloc
+  concerns; not directly tied to the CPU-egress gate but on the same data path.
+
+## 3.4 SIPC — CPU↔fabric credit/mailbox bridge  ✅
+**Base 0x921cc000.** Role: rx_en / cpu_up_en credit bridge between CPU and the fabric. **NOT a
+DMA ring** (early oracles confused npp+0xc000 region — see base-gotcha).
+- **Key regs:** ctrl `0x921cc000` = bit0 rx_en, bit2 cpu_up_en; stock-live `0x11` (both on).
+  Downstream drop/aful counters at `0x921cc004` (nibble fields), sipc→spa handoff `0x921cc044`.
+- **Stock fns:** `sipc_set_rx_en`/`sipc_set_cpu_up_en` (`zx_sipcregtable`). Counters read in
+  `tm_dn_statistics_get` (tm:46525,46532).
+- **Mainline vs stock / verified:** ✅ ctrl matches stock. `stock_sipc_smct_sweep_re.md` swept
+  this region — not the gate.
+
+## 3.5 SMCT — CPU-port multi-channel transfer  🟡 (thin)
+**Base 0x921d0000.** Role: PMAU free-gauges for uni/pp/ppmove channels.
+- **Key regs:** uni_pmau `0x921d0000`, pp_pmau `0x921d0004`, ppmove_pmau `0x921d0008`; init
+  `0x921d0000=0xB`, `0x921d0010=0x3810`; free-gauge `0x921d0040`, free-doorbell `0x921d004c`.
+- **Context:** gauges at +0x40/+0x4c move during egress (`smct_channel_egress_localized_re.md`,
+  `smct_channel_submit_re.md`). **Beware:** npp+0x10000 (=SMCT) is the SAME offset as
+  tm_base+0x10000 (=TM ring) — the early-oracle TM-ring address error read SMCT here and wrongly
+  concluded "ring unused" (base-gotcha / `ADDRESS_MAP_ERROR_tm_ring`). Semantics 🟡 inferred.
+
+## 3.6 SPA — source-port classifier + match/hash RAM  ✅ (rich; RAM is indirect)
+**Base 0x921d4000.** Role: source-port match classifier (CAM), trap rules, untag/VLAN, ONU-MAC
+table, indirect match/hash RAM. **One of the two prime remaining egress-gate suspects.**
+- **Key direct regs:** up_pkt_en `0x921d4000/04/08`, dn_pkt_en `0x921d4040/44/48`, **indirect
+  CMD `0x921d4014` / DONE `0x921d4018` (bit0) / DATA `0x921d401c..30` (6 words)**, stp_action
+  `0x921d4058`, **match_mode `0x921d407c`** (=1 enables classifier), ONU-MAC table
+  `0x921d4120/4124` (+slot*8), match_mode/802x/dft_pri/pkt_filter priming.
+- **Stock fns / init:** `tm_pon_npp_spa_initial` (tm:43271): up/dn pkt-en all-1s, `0x921d4054 |=
+  0x03000000`, **`spa_set_match_mode(1)`** (tm:26715), **`spa_set_matchram`×11** from `_LANCHOR1`
+  blob (ram_id 0, tm:26131), `spa_set_hashram`×8 (ram_id 5, tm:26029), `spa_set_onu_mac_addr`
+  (tm:26870). Indirect protocol in `spa_indirect_ram_protocol_re.md` (see §Diagram 4).
+- **Init / live values:** `0x921d4000/04=0xffffffff,4008=0x00003fff`; `0x921d4040/44=0xffffffff,
+  4048=0x0007ffff`; `0x921d4054=0x03ff05dc`; **`0x921d407c=0x00000001`** (match enabled);
+  ONU-MAC `0x921d4120=470f4264 / 4124=0000f4f6` = `f4:f6:47:0f:42:64` (device MAC); leftover CMD
+  `0x921d4014=0x01400007` (=ram_id5, addr7 — last hash-RAM write).
+- **Match-RAM line format (tm:26164-26248):** 11 entries, 4 rules/line, 6 packed words/line;
+  per-rule = `rule_num, valid, v4_v6, offset_mode(2b), offset(6b), compare_mode(2b), mask(16b),
+  data(16b)` — an **offset/mask/data byte-matcher, NOT a src→out-port pair** (out-port decided
+  downstream by PM). CMD encoding: `addr[21:0] | ram_id[26:22]<<22 | rw[27]<<27` (rw 1=read-prefetch,
+  0=write-commit; tm:25957). Hash-RAM: 8 entries, 2 words each, fields `valid, match_array,
+  action_rsn, action(2b)`.
+- **Mainline vs stock:** mainline keeps only the bare `NPP[0x141c0]=0` (`pon_npp_spa_init`) +
+  `spa_set_onu_mac_addr` (main:1864) + `enty_pktdeal_cfg`. **OMITS match_mode=1 and the entire
+  match-RAM/hash-RAM load.** `zx_pm_spa_init` (main:4339) later added the direct PM/SPA pokes
+  (incl. match_mode) but **NOT the indirect match-RAM contents**.
+- **Verified/ruled out:** ✅ device-MAC is reg22/23 DIRECT at 0x921d4120/4124 (a prior
+  "match-RAM" claim was **corrected** in `pm_spa_init_recipe_re.md` §C — mainline already writes
+  it). ❓ Whether a CPU-source-port authorization rule lives in `_LANCHOR1` is **UNRESOLVED** —
+  the blob is in tm.ko .rodata (`_LANCHOR1`+`DAT_0004eee4`), NOT in the 2MiB MMIO dump (RAM is
+  indirect-only). This match-RAM is the **#1 recommended next probe** (session handoff #1).
+
+## 3.7 SOPC — egress crossbar → physical MAC[N]  ✅
+**Base 0x921d9000** (`sopcRegTable` base 0x921d9004). Role: hands a queued frame to the
+egress physical MAC; emits `send2smac[N]`. **NO LONGER the gate (journey #21)** — `send2smac2`
+now fires once the TX desc carries the egress-port hint `desc[2:3]=((port+0x28)&0x3f)<<4`.
+- **Key regs:** crc_pad `0x921d9004` (per-port), smac delay/half/ready `0x921d9038`, sp_rr
+  `0x921da000`; **`send2smac0..4` = `0x921d915c..0x921d916c`** (send2smac2=`0x921d9164`, host);
+  SOPC status `0x921d91c8=0x1f` live; SOPC↔SMAC bridge `0x921d9068` (bit per port), duplex
+  `0x921d9038` (bit N+16). 
+- **Stock fns:** `tm_pon_npp_sopc_initial` (tm:43242) sets only crc_pad×5 + sp_rr=0;
+  `smac_sopc_mode_switch(port,duplex)` (plat:2290) polls `0x921d9068 & BIT(port+5)` then sets
+  `BIT(port)` (the PHY-MAC link-ready handshake). send2smacN counters read in `tm_dn_statistics_get`
+  (tm:46582-46586).
+- **Mainline vs stock:** `smac_sopc_mode_switch` replicated in `zx_eth_adjust_link` (`0x921d9068`).
+  crc_pad/sp_rr init present.
+- **Verified/ruled out:** ✅ SOPC has NO source-gated egress-port matrix — confirmed, AND the
+  real determinant is the **TX-descriptor egress-port hint** (`desc[2:3]=((port+0x28)&0x3f)<<4`,
+  decomp plat:6848): with it set (mainline had 0), SOPC routes the frame to the correct
+  send2smacN. The egress port comes from the desc/upstream forwarding decision, not a SOPC knob.
+  `0x921d91c8=0x1f` / `0x191cc..dc` are read-only status. **FIXED 2026-05-29** — send2smac2 fires;
+  the frame reaches MAC2 TX. (Final gap moved downstream to MAC2→PHY MII — see §3.19.)
+
+## 3.8 PM — G.988 source→allowed-egress authorizer  ✅
+**Base 0x921e0000** (`zx_pmregtable` base 0x921e0014). Role: per-source `(in_port,out_port)`
+forwarding-pair authorizer + inport==outport hairpin handler + cpu-drop policy. **Historical
+prime gate suspect.**
+- **Key regs:** indirect CMD `0x921e0014` / DONE `0x921e0018` / DATA `0x921e001c..` (used only by
+  `pm_add_g988_rule`, which init never calls → rule-RAM `0x921e0248` stays 0); **ctrl
+  `0x921e0054`** (b2-3 g988_mode, b4 cpu_not_drop, b5 cpu_drop, **b7-8 inport_eq_outport**);
+  in-port rules `0x921e0180+i*4`; **out-port rules `0x921e01a0+i*4`** (val=`port|en<<3`).
+- **Stock fns / init:** `tm_pon_npp_pm_initial` (tm:43376): in/out-port rules i=0..7 set INVALID
+  (en=0); g988_mode 0/1/3; **`zte_api_set_port_rule({1,1,5})`→`pm_set_out_port_rule_valid(0,0,1)`**
+  (enables OUT-port rule for physical port 0, valid_en bit3); cpu_not_drop=0; **inport_eq_outport=1**.
+- **Init / live values:** **`0x921e0054=0x000000c0`** (b7=1 inport_eq, b6 unexplained — see flag),
+  **`0x921e01a0=0x00000008`** (idx0 port0 valid), `0x921e0180..019c=0..7` (en=0), `0x921e01a4..01bc
+  =1..7` (en=0), g988 rule-RAM `0x921e0248+`=0.
+- **Mainline vs stock:** mainline originally **omitted the entire PM block**; `zx_pm_spa_init`
+  (main:4339) was added to write the 3 load-bearing pokes (`0x921e01a0=0x08`, `0x921e0054=0xc0`,
+  `0x921d407c=0x01`). **Did NOT fix egress.**
+- **Verified/ruled out:** ✅ all live PM values match decomp'd stock writes (HIGH). 🟡 MEDIUM:
+  which physical-port idx = MAC2/host (A4 enables physical 0 = CPU port; host idx unproven from
+  decomp). ❓ **FLAG:** `0x921e0054` bit6 (0x40) is stock-live but `pm_initial` only produces
+  0x80 — bit6 is unmapped at base 0x78015 and set by power-on default or another writer (write
+  literal 0xc0 to be faithful). The PM pokes were applied at runtime AND boot → **STILL no egress**
+  (session handoff "ruled out").
+
+## 3.9 CLA — L2/L3 classifier / ACL  🟡
+**Base 0x9238c000** (`zx_claregtable` base 0x9238c014). Role: L2/L3 default-flow, MTU, mirror,
+trap-ACL, local IPv4/v6 (HW ARP/ICMP responder), protocol→CPU-queue map, hash, indirect RAM.
+- **Key regs:** indirect CMD `0x9238c014` / DONE `0x9238c018` / DATA `0x9238c01c..`; config
+  `0x9238c080`; MTU `0x9238c088/098`; local IPv4 `0x9238c09c`; default-flow/bucket cfgs. CLA fwd/
+  trap/drop/copy counters at `0x9238c3c0/c3c4/c3c8/c3d8` (16-bit, `&0xffff`).
+- **Stock fns:** `cla_set_cpu_queue_id` (tm:3959, indirect RAM-7: poll `0x9238c018` → CMD
+  `ram_addr|7<<22` → DATA queue), `cla_set_local_ipv4/v6_addr`, `cla_set_dn_unknown_da_action_cfg`,
+  `cla_set_dn_l2/l3_default_flow_cfg`. Protocol→queue from `DAT_00013cf4[164]` triples (ARP 0x0806/
+  ICMP→CPU queue 1). Indirect protocol: poll `0x9238c018` bit0, CMD `0x9238c014`, DATA `0x9238c01c`.
+- **Mainline vs stock:** protocol→queue replayed via `zx_cla_apply_replay` / `zx_cla_table.h`
+  (✅ present). 
+- **Verified/ruled out:** 🟡 `mac_to_cpu_path_re.md` Q4 flagged a possible **PP[0xc080]=0x600
+  (stock) vs 0x1000 (decomp/replay?)** mismatch as a CLA-config divergence affecting ARP/ICMP
+  trap — needs a live mainline-vs-stock diff to confirm (MEDIUM). RX path classification works
+  (host RX reaches CPU), so CLA RX-trap is effectively correct on the live device.
+
+## 3.10 QMG — queue manager / forward decision  ✅
+**Base 0x9234c000.** Role: queue depth/threshold, forward decision (sw_fwd/hw_fwd/hw_trap),
+DDR-vs-SRAM. The frame's **forward-vs-trap** verdict lives here.
+- **Key regs:** thresholds `0x9234c000` (up_ram_thd[12:0], dn_ram_thd[25:13]), ddr cfg
+  `0x9234c004`, trap_cfg `0x9234c008` (global 2-bit), **DN sw_fwd `0x9234c044`**, DN hw_fwd
+  `0x9234c048`, DN hw_trap `0x9234c04c`, **UP sw_fwd `0x9234c054`**, UP hw_fwd `0x9234c05c`, UP
+  hw_trap `0x9234c060`.
+- **Stock fns:** `tm_pon_tm_qmg_initial` (tm:42624) `qmg_set_dn_ram_thd(0x1fa0)`+
+  `qmg_set_up_ram_thd(0x50)` (gated on lan_up==1); `qmg_get_statistics` (tm:33061) labels
+  reg6=0xd3011=**DN sw_fwd**, reg9=0xd3015=UP sw_fwd. (`pipeline_counter_map.md` mislabeled 0x44
+  generic; corrected in `dn_ring_dsch_drain_re.md` — CPU→LAN egress is DOWNSTREAM → 0x9234c044 is
+  the right counter.)
+- **Init / live values:** `0x9234c000=0x03f40050` (up_thd 0x50 | dn_thd 0x1fa0) — mainline link-up
+  writes EXACT match (main:4097). Stock: while egressing 0x257 frames out MAC2, sw_fwd climbs but
+  **hw_fwd=0 and hw_trap=0** on BOTH stock and mainline.
+- **Verified/ruled out:** ✅ CPU frame is **software-forwarded, not trapped** (hw_trap=0); "sw_fwd
+  vs hw_fwd" is a dead end. ram_thd matches stock — not the gate. The frame reaches sw_fwd then
+  fails to reach SOPC (drop at DSCH (now fixed) or never queued to egress).
+
+## 3.11 TM-ring — UP+DN DMA descriptor rings  ✅
+**Base tm_base+0x10000 = 0x92350000.** Role: the REAL TM TX descriptor rings (UP + DN).
+**Write-only doorbells** (read back 0/garbage). ⚠ **base-gotcha epicenter.**
+- **Key regs:** UP base `0x92350050` / **kick `0x92350054`** / consume `0x92350058` / cursor
+  `0x9235005c`; DN base `0x92350060` / **kick `0x92350064`** / consume `0x92350068` / cursor
+  `0x9235006c`. (mainline `tm_write(0x10054/64)` lands here.)
+- **Stock fns:** `pon_tm_net_tx` (plat:6719) → `pon_tm_data_raw_send(skb,desc,dir)` →
+  `soft_insert_tx_1desc`. kotrace (`stock_egress_fn_trace_re.md`) shows the **DN ring kick
+  `*(tm_base+0x10064)=1`** per ping reply. DN desc format: desc[0]=0x80, desc[3]=3, desc+2 =
+  `(lan_up_port+0x28)&0x3f<<4` (=0x2c0 for port4), bp idx packed, len at desc+0xc, desc+0xb|=0x20.
+- **Mainline vs stock:** old `zx_sw_xmit` kicked the **UP** ring (0x10054, desc[0]=0xc9) → reached
+  QMG, died at SOPC. Stock uses **DN** ring (0x10064, desc[0]=0x80). A DN attempt saw "0x10068
+  high16 grows but never drains."
+- **Verified/ruled out:** ⚠ **CONTRADICTION (UNRESOLVED):** the live stock egress *oracle*
+  (`stock_live_egress_oracle_re.md`) read **all ring counters 0** while egressing 0x257 frames
+  (→ "fabric software-forward, ring untouched"), but the **kotrace + decomp** show
+  `soft_insert_tx_1desc` kicking 0x10064 every frame. Reconciliation in
+  `idm_cpuport_fabric_forward_re.md` Q3 + `ADDRESS_MAP_ERROR_tm_ring`: the oracle was a different
+  (slot-B factory) boot and/or read a stale/aliased SMCT address (npp+0x10000=0x921d0054, NOT
+  tm+0x10000=0x92350054). **Flag for re-measure** at the CORRECT phys (0x92350064/68 DN) during a
+  real egress before trusting either. This is exactly the kind of address-map error that has bitten
+  us before.
+
+## 3.12 SCH/DSCH — token-bucket shaper / scheduler  ✅
+**Base 0x92354000.** Role: per-queue & per-tcont token-bucket shaper + DWRR, aging; one HW
+scheduler with **separate UP and DN indirect-RAM tables** selected by RAMID.
+- **Key regs:** enables `0x92354000` (que_sharp/dwrr/age bits), hw_age_time `0x92354004`,
+  **indirect CMD `0x92354014` / DONE `0x92354018` (bit0) / DATA `0x9235401c`** (3 words),
+  spend_byte `0x92354024`, shp_fill_time `0x92354028`.
+- **CMD encoding:** `addr[8:0] | ramid[?]<<22 | indRwEn<<27 | incrEn<<31` (tm:29690). RAMID map:
+  2=UP pq fill-rate, 3=UP pq bucket-cap, 5=UP tcont fill, 6=UP tcont cap, **0xb=DN que SP/DWRR,
+  0xc=DN que WRR weight, 0xe=DN tcont fill, 0xf=DN tcont cap**. DN pq fill/cap are STUBS (return 0).
+- **Stock fns / init:** `tm_pon_tm_sch_initial` (tm:47025) loops 0x20 units × 8 queues writing
+  **UP only** (RAMID 2/3/5/6, fill=1600000=0x186A00, cap=`tm_getFillcap(1600000)`=200000=0x30D40).
+  The **DN tcont** shaper (RAMID 0xe/0xf) is NEVER programmed by tm.ko — filled later by cspd/rootfs
+  QoS (`tm_port_egress_traffic_sharp_set` tm:45453). DN default = fill=cap=0 = zero credit.
+- **Mainline vs stock:** `zx_sch_init` (main:2574) replays the **UP** RAMID 2/3/5/6 loop faithfully
+  (the SCH fix, `sch_init_fix_impl.md`) — replaced 3 garbage indirect-port writes that had left
+  bucket-caps at 0 (DSCH dropped every CPU→LAN frame). DN RAMID 0xb/0xc/0xe/0xf **NOT** programmed.
+- **Verified/ruled out:** ✅ UP-path DSCH drop FIXED (drop_DSCH stopped). 🟡 **`dn_ring_dsch_drain_re.md`:**
+  for downstream (CPU→LAN) the DN tcont credit (RAMID 0xe/0xf) is 0 forever in mainline (no cspd) →
+  DN scheduler tcont has zero credit → never dequeues → drop_DSCH. **Untested poke:** program DN
+  tcont credit for all 8 LAN tconts (sweep units 0..7) — highest-confidence single next change on
+  the DN path.
+
+## 3.13 RED — random-early-detect / congestion  🟡 (thin)
+**Base 0x92344000** (`zx_redregtable` base 0x92344004). Role: probabilistic drop near buffer-full;
+share-max, color-trap, FEC; indirect RAM.
+- **Key regs:** cfg_enable `0x92344004`, indirect CMD `0x92344014` / DONE `0x92344018` / DATA
+  `0x9234401c`, in_share_max `0x92344040`, fec_enable `0x9234406c`, up_out_share_max `0x92344074`.
+  Counters fwd/trap/drop in+out at `0x92344204..0x92344218`.
+- **Stock fns:** `red_set_queue_cfg` (indirect), `red_set_cfg_enable`. RED drops only when buffers
+  wedge.
+- **Verified/ruled out:** 🟢 LOW priority for the egress gate (only fires on sustained buffer-full,
+  not low-rate ping). Counters available for tracing (`pipeline_counter_map.md` stage 1).
+
+## 3.14 PP_BRG / SBRAG — bridge: FDB / VLAN / flood  ✅ (rich)
+**Base 0x92388000** (`zx_sbragregtable` base 0x92388004). Role: FDB learn/age, VLAN check,
+flood/bcast/mcast, isolation, mirror; two indirect FDB tables.
+- **Key regs:** transfer_en/age `0x92388004`, vl-chk `0x92388008` (b0-7 in, b8-15 out),
+  FDB indirect CMD `0x92388014` / DONE `0x92388018` / DATA `0x9238801c..`; learn-mode
+  **`0x923881c4=0x5555`** (2b/port, mode 1); smac_look `0x923881c0`; da_lookup `0x923882c0`;
+  bcast flood/fwd `0x92388300/04`; **unknown-unicast fwd `0x92388340`**; isolation
+  `0x923883c0+port*4`; FDB-A shadow `0x923880a8..0xb0`.
+- **Two HW FDBs:** **FDB-A** = PP_BRG_RAM hashed (CMD `0x92388014`, payload `0x9238801c..24`;
+  auto-learn target; readable shadow at `0x923880a8`); **FDB-B** = sbrag indirect secondary
+  (`sbrg_add_mactable` tm:10706; mainline `zx_sbrag_add_mac` main:670, unused). Hash = crc16(MAC)
+  & (buckets-1); bucket-size sel `0x92388184` (live=1=512), aging `0x92388188` (live=0x211b00).
+- **Stock fns / init:** `pon_pp_brg_init` (plat:5379), `tm_pon_pp_brg_initial` (tm:43596),
+  `sbrg_set_pt_learn_mode(1,port)`×8 (tm:5770→`0x923881c4=0x5555`), `pon_pp_add_mac` (plat:4750,
+  FDB-A), `pon_pp_port_isolate` (plat:4606). Isolation live `0x923883c0..dc`={fe,fd,fb,f7,ef,df,ff,ff}.
+- **Init / live values:** learn-mode `0x5555` ✅ (mainline main:2360 matches); transfer_en `0xff`,
+  smac_look `0xff`, da_lookup `0xff` (all matched); aging `0x211b00` (mainline main:2401 matches).
+- **Mainline vs stock / verified:** ✅ FDB learning enabled (host MAC learns on phys port 3 = MAC2),
+  isolation matches, flood/VLAN verified stock-faithful — **not the gate**. ⚠ **Two real drifts
+  flagged:** (1) `fdb_learning_enable_re.md` Q6: unknown-unicast fwd `0x92388340` mainline=0xff5555ff
+  (flood-all) vs **stock 0x015555ff (CPU-only)** — single most-actionable FDB fix, matches the
+  loopback symptom; (2) vl-chk `0x92388008` mainline=0xff00 vs stock-runtime 0xdfdf (cspd-set);
+  (3) mcast vl-trans `0x9238863c` mainline=0xaaaaaaaa vs stock 0 (`sopc_egress_port_gate_re.md`).
+  Even after flood-bitmap fix → broadcast still didn't egress (session handoff "ruled out" for the
+  fundamental gate, but the flood-policy drift is genuine and worth landing).
+
+## 3.15 SADM — subscriber admission / policing  🟡 (thin)
+**Base 0x92384000.** Role: per-flow policing, token bucket, PPS limits; indirect RAM.
+- **Key regs:** adm_en `0x92384000`, bps_th `0x92384004`, indirect CMD `0x92384014` / DONE
+  `0x92384018` / DATA `0x9238401c`, bucket cfgs `0x92384028/2c/30/34`, per-port PPS
+  `0x92384080+i*4` / `0x923840a8+i*4`. SADM pass/drop counters `0x92384200..0x923842b4`.
+- **Stock fns:** `sadm_ram_set/get` (indirect), `sadm_set_brgunsapt_pps_en` (bridge-unicast-unknown
+  PPS gate). 
+- **Verified/ruled out:** 🟡 MEDIUM (HW_BLOCKS_INVENTORY): a PPS gate defaulted to 0 *could*
+  silence a path, but not specifically implicated; not yet swept live. Semantics decomp-inferred.
+
+## 3.16 ADM — admission / policing + protocol counters  🟡 (thin)
+**Base 0x92394000.** Role: turn-on/color/bucket-fill, protocol pkt pass/drop counters; indirect RAM.
+- **Key regs:** turnon `0x92394000`, bucket_fill `0x92394004`, indirect CMD `0x92394014` / DONE
+  `0x92394018` / DATA `0x9239401c`, protocol-map `0x92394040/44`, pass/drop counters
+  `0x92394100..0x923941c0` (per-proto, x9), aggregate `0x9239422c/230`.
+- **Stock fns:** `adm_get_*_pass/drop_protocal_packtcnt(proto)` (proto 0=ARP, 5=ICMP). ADM drop
+  counter at `0x9239422c` is in the egress trace (`pipeline_counter_map.md`).
+- **Verified/ruled out:** 🟢 not implicated; counters useful for tracing. Semantics 🟡 inferred.
+
+## 3.17 DPA — downstream packet analysis  🟡 (thin)
+**Base 0x92398000.** Role: protocol-analysis enable, cpu-pps gate, default pri, tpid select.
+- **Key regs:** unknown enables `0x92398000` (bits 6-12), **protocol_cpu_pps_en `0x92398014`**,
+  pon_default_pri `0x92398038`, tpid-sel `0x92398080..`. dpa fwd/drp/cpy/trp counter `0x9239810c`.
+- **Stock fns:** `dpa_set_protocol_cpu_pps_en(en)` (the CPU-punt gate), `dpa_set_protocol_pkt_aly_en`.
+- **Verified/ruled out:** 🟡 flagged in HW_BLOCKS_INVENTORY as a possible "gate OFF" for CPU punt
+  (ALTO), but RX-to-CPU works → the punt gate is effectively on for RX. Not swept for the egress
+  direction. Semantics 🟡 inferred.
+
+## 3.18 PP_PM — PP port-mapper  ❓ (thin)
+**Base 0x9239c000** (`zx_pppmregtable` base 0x9239c014). Role: PP port-mapper cfg — **semantics
+largely unknown**.
+- **Key regs:** unknown CMD-like `0x9239c014`, `0x9239c018`, data `0x9239c01c..` / `0x9239c100..`,
+  `0x9239c034`. All ❓ (structure from table, no decomp-named setter resolved).
+- **Verified/ruled out:** ❓ no findings touch it; not implicated. Documented for completeness.
+
+## 3.19 SMAC[N] — per-port ethernet MAC  ✅ (rich)
+**Base 0x92200000 + N*0x40000** (MAC0=0x92200000 … **MAC2/host=0x92280000** … MAC4=0x92300000).
+Role: per-port MAC: ctrl/cfg, enable, IPG, flow-ctrl, statistics. **Host is cabled on MAC2.**
+- **Key regs (per MAC, shown for MAC2):** CTRL `0x92280000` (bit0/1=rx/tx-en, bit13=speed,
+  bit15=static-cfg/link; stock host=0xBA6003); IRQ/feature MASK `0x92280004` (stock 0xffff/0x3fff);
+  ENABLE `0x92280008` (bit31=master enable; stock 0x80000001); **iface/PHY word `0x922800e0`**
+  (stock 0x00011200 — write-once, reads back 0); TX-bytes `0x92280714`, **TX-frames `0x92280718`**
+  (host-egress witness, stays 0 when gate shut), RX-frames `0x92280780`, RX-bytes `0x92280784`.
+- **Stock fns / init:** `smac_init(port)` (plat:2272) writes ctrl/mask/en + `+0xE0=0x00011200`;
+  `pon_npp_smac_init` (plat:3273) loops smac_init + `npp[(N+1)*0x40000]|=2` (per-port fabric
+  enable); per-link: `pon_reset(1<<(p+6)); smac_init(p); config_speed_duplex; smac_sopc_mode_switch;
+  enable_part_3 (|3)`. Counters via `smac_get_statistics` (stride 0x40000, plain readl).
+- **Init / live values (MAC2):** ctrl `0xBA6003` (mainline `adjust_link` writes — correct);
+  **mask=0, en=0, +0xE0=0 (WIPED)** in mainline live; stock should hold mask 0x3FFF, en 0x80000001,
+  +0xE0 consumed (reads 0 on BOTH — write-once). MAC0/1/3/4 ctrl=0 (down).
+- **Mainline vs stock:** ⚠ **INIT-ORDER WIPE** (`init_order_egress_re.md`): mainline runs
+  `zx_smac_init_port` at probe step 3 (BEFORE `pon_reset(0xffffffff)` at step 5) → pon_reset clears
+  every MAC block; `adjust_link` only re-writes ctrl=0xBA6003, **never re-runs full smac_init** →
+  mask/en/+0xE0 stay 0. Stock ALWAYS re-runs full smac_init after any reset pulse.
+- **Verified/ruled out:** ✅ host is on MAC2 (only MAC2 has ctrl=0xBA6003 + RX counting). 🟡
+  MEDIUM-HIGH: with en set but +0xE0=0, the MAC serializer isn't bonded to the PHY → frames loop
+  internally = the STORM seen when `en` alone was forced. `hw_write_lock_pattern_re.md`: the
+  "writes don't stick" for +0xE0/+0x70/+0xB4 is **expected & benign** (W1C/consumed-by-HW; stock has
+  the same symptom and works). **Fix:** `adjust_link` must call full `zx_smac_init_port` (mask+en+0xE0)
+  on link-up, mirroring stock order; and reorder probe so smac_init runs AFTER pon_reset.
+
+## 3.20 ETH_TM2 / PON-PP — U-Boot direct-egress mux + PON_PP_TM_CFG  ✅/❓
+**Base 0x923a0000.** Role: U-Boot's **direct-egress mux** (bypasses the fabric) + the
+`PON_PP_TM_CFG` CPU/WAN→TM forwarding gate. **Clock-gated under kmod/mainline.**
+- **Key regs:** **mux `0x923a00e0`** (U-Boot=0x11; reads 0 / writes don't latch under kmod);
+  MAC slots `0x923a0078/7c`; **PON_PP_TM_CFG `0x923a001c`** (stock-live 0x21200000, boot transitions
+  →0x23200000; **bit29 = `1<<(lan_up_port+0x19)` = CPU/WAN→TM accept** for lan_up_port=4); `0x923a0004=1`.
+- **Stock fns:** `tm_set_pp_wan_cfg(port)` (tm:35962) `fpga_write_reg(0xe8007, …|1<<(port+0x19))`;
+  driven by `sw_set_p2pmode`/`sw_set_uni_as_wan` (switch.ko). The init_module tail also does
+  `pp[0x2c] |= 1<<(lan_up_port+0x19)` (plat:8938) but that bit reads 0 live (transient/write-lock).
+- **Mainline vs stock:** mainline **never writes `0x923a001c`** (commented away as "not the boot
+  path" at main:1082/1296 — wrong for the H3600 which is lan_up=1). U-Boot mux path (`0x923a00e0`)
+  also unused.
+- **Verified/ruled out:** ✅ `0x923a001c=0x21200000` live (bit29 set on stock). 🟡 mainline-poke of
+  `0x923a001c=0x23200000` was tried → "already set (0x21200000)" per session handoff "ruled out";
+  bit29 was effectively present. ❓ ETH_TM2 mux (`0x923a00e0`) is **clock-gated** (writes don't
+  latch; TOPCRM[0x08] edge + [0x0c] re-assert didn't ungate) — Option B (U-Boot direct mux) is a
+  separate, bigger-change architecture. NB: SOPC (0x921d9xxx) and MAC2 RX are clocked fine, so the
+  *fabric* egress path is NOT obviously clock-gated — only the ETH_TM2 *direct-mux* block is.
+
+## 3.21 UOPC — upstream OPC / tcont  🟡 (thin, PON-only)
+**Base 0x921d8000.** Role: tcont num/sync/active, mac_ept_resume (GPON upstream). Copper board
+has no optical → **dead path**.
+- **Key regs:** tcont_num `0x921d8000`, tcont_sch_active `0x921d8004`, mac_ept_resume `0x921d8008`,
+  tcont_syn `0x921d802c`. All 🟡 (table-inferred).
+- **Verified/ruled out:** 🟢 N/A for copper LAN egress (PON physical-layer control). Documented for
+  completeness; vendor brief confirms ponserdes/GPON path is dead on this board.
+
+## 3.22 PON-PP / PON-TM — PON packet-proc / traffic-mgr cfg  ❓ (thin, PON-context)
+**PON-PP base 0x923a0000** (`zx_ponppregtable`, overlaps ETH_TM2 window), **PON-TM base
+0x92340000** (`zx_pontmregtable`, overlaps tm_base low). Role: PON-side packet-processor /
+traffic-manager configuration. Most fields ❓ (structure from table, no decomp-named setters
+resolved). `0x923a001c` (PON_PP_TM_CFG) is the one load-bearing reg here (see §3.20).
+- **Verified/ruled out:** ❓ semantics largely unknown; copper-irrelevant except PON_PP_TM_CFG.
+
+## 3.23 TOP_CRM — SoC clock / reset  ✅ (rich, out-of-dump)
+**Base 0x94000000** (`zte,topcrm` syscon; of_iomap idx1 of the pon node). Role: PON
+sub-clock/reset, PLL. **NOT in the 2MiB dump; cannot poke** (poke range is [0x921c0000,0x923c0000)).
+- **Key regs:** `0x94000008` (b4/b5 = SERDES/PON sub-clock + reset-deassert pulse), **`0x9400000c`
+  (bits5-8=0x1e0 = PON-subsystem datapath clocks incl. egress/SOPC side)**, `0x94000018` (per-PHY
+  ref-clock PLL divider, U-Boot only), `0x94000050/54` (ref_clk PLL), `0x9400004c` (misc gate,
+  mainline writes 0x0003cfff).
+- **Stock fns:** `zx_pon_clk_reset_init(1)` (plat:8266, TOPCRM+0xc|=0x1e0 FIRST, pre-datapath);
+  `ref_clk_set` (plat:8202); **`zx_pon_clk_reset()` (plat:8337) = literally `TOPCRM+0xc |= 0x1e0`**
+  re-asserted AFTER all TM/PP/NPP datapath init + the CPU-FWD enable, lan_up-only (plat:8941).
+- **Mainline vs stock:** mainline replicates the bulk tree (`zx_eth_init_topcrm` main:4636,
+  `zx-pon-plat.c`): TOPCRM[0x08] b4/b5 pulse, ref_clk PLL, serdes band cal, sys_ctrl bit,
+  pon_reset(0xffffffff), TOPCRM+0xc|=0x1e0 — but **only BEFORE the datapath replay**. **Mainline
+  never does the SECOND, post-datapath `zx_pon_clk_reset()` re-assert.**
+- **Verified/ruled out:** ✅ clock tree fully mapped/diffed (HIGH). 🟡 MEDIUM: the single missing
+  op is the **post-datapath `TOPCRM+0xc|=0x1e0` re-assert** (terminal, lan-only). Fits the
+  egress-only symptom (bits 5-8 = PON datapath clocks; RX uses ingress half already clocked). But
+  it's a re-assert of bits mainline already set once — if the replay never clears them it's a no-op.
+  **Untested** (requires source change + rebuild; out of poke range). Recommend landing it together
+  with the per-port SMAC re-init (§3.19).
+
+---
+
+## Diagram 1 — Clock/reset tree from TOP_CRM (PON datapath)
+```mermaid
+flowchart TB
+  XTAL["25 MHz XTAL"] --> PLL
+  subgraph TOPCRM["TOP_CRM @ 0x94000000 (syscon zte,topcrm — OUT of 2MiB dump, not poke-able)"]
+    PLL["ref_clk PLL<br/>0x94000050/54 (ref_clk_set)<br/>0x94000018 PLL divider (U-Boot only, per-PHY) ❓"]
+    REG08["0x94000008 b4/b5<br/>SERDES/PON sub-clock + reset-deassert pulse<br/>(clear b4+b5 → set b5 → cfg → set b4)"]
+    REG0C["0x9400000c bits5-8 = 0x1e0<br/>PON-subsystem DATAPATH clocks (incl. egress/SOPC side)"]
+    REG4C["0x9400004c misc gate<br/>mainline writes 0x0003cfff"]
+  end
+  PLL --> REG08
+  REG08 -->|"gates apb (b4) + lane (b5)"| SERDES["ponserdes (dead — copper board)"]
+  REG0C -->|"clocks"| DATAPATH["PON datapath: TM / PP / NPP / SOPC / SMAC egress half"]
+  PONRST["pon_base+8 = 0x92000008<br/>per-block reset (pon_reset mask)<br/>0xffffffff=all; bit(port+6)=per-MAC<br/>below poke floor; pulsed in adjust_link"] --> DATAPATH
+
+  subgraph SEQ["zx_pon_clk_reset / _init sequence"]
+    direction TB
+    S1["zx_pon_clk_reset_init(1) @plat:8266<br/>TOPCRM+0xc |= 0x1e0 — FIRST (pre-datapath) ✅ mainline does this"]
+    S2["…TM/PP/NPP datapath bring-up + CPU-FWD enable…"]
+    S3["zx_pon_clk_reset() @plat:8337<br/>TOPCRM+0xc |= 0x1e0 — SECOND re-assert (post-datapath, lan-only)<br/>❓ MAINLINE OMITS THIS — egress-gate candidate (MEDIUM)"]
+    S1 --> S2 --> S3
+  end
+  REG0C -.->|"re-asserted by"| SEQ
+```
+**Uncertain (❓):** the 0x94000018 PLL divider role (U-Boot-only/PHY path); whether the missing
+SECOND `TOPCRM+0xc|=0x1e0` is actually load-bearing (it re-asserts bits already set once — no-op
+if the replay never clears them). HIGH confidence on the tree mapping itself.
+
+## Diagram 2 — Init sequence: stock vs mainline (side by side)
+```mermaid
+flowchart TB
+  subgraph STOCK["STOCK init_module / pon_init @ plat:8891"]
+    direction TB
+    K0["pon_reset(0xffffffff); msleep(10)"]
+    K1["pon_base+0x40018 = 2  (⚠ mainline missing)"]
+    K2["zx_pon_clk_reset_init(1) → TOPCRM+0xc |= 0x1e0  (FIRST)"]
+    K3["register_pon_int(); pon+0x40044=0xffffff7f (⚠ missing); pon+0x4001c=0xf"]
+    K4["tm_pon_tm_init()  (BMU·RED·DMA·IRQ)"]
+    K5["tm_pon_pp_init()  (bridge·classifier·CLA)"]
+    K6["tm_pon_npp_init()  (greg·SPA·PM·SOPC·per-MAC smac_init)"]
+    K7["if lan_up: pp+0x2c |= bit(lan_up_port+0x19); zx_pon_clk_reset()<br/>TOPCRM+0xc |= 0x1e0  SECOND ❓"]
+    K0-->K1-->K2-->K3-->K4-->K5-->K6-->K7
+  end
+  subgraph MAIN["MAINLINE zx_eth_probe @ main:4683"]
+    direction TB
+    M0["zx_eth_init_topcrm @4748 → TOPCRM+0xc|=0x1e0 (once, pre-datapath)"]
+    M1["zx_pp_init @4752  (apply stock_table.h — incl. MAC writes)"]
+    M2["zx_npp_init @4753  (NPP globals + zx_smac_init_port — BEFORE pon_reset!)"]
+    M3["zx_eth_init_pon_chip @4763 → zx_pon_reset (pon_reset 0xffffffff — WIPES MACs)"]
+    M4["zx_eth_apply_stock_init @4765  (stock_table replay)"]
+    M5["zx_eth_probe_port @4786 (per-port)"]
+    M6["zx_eth_init_tm_subsystem @4803<br/>(zx_pp_brg_init · zx_tm_bmu_init/enable · zx_sch_init · zx_eth_init_chip_tm)"]
+    M7["zx_pm_spa_init @4810  (PM/SPA direct pokes — added, didn't fix)"]
+    M8["❓ NO second TOPCRM re-assert; ❌ adjust_link never re-runs full smac_init"]
+    M0-->M1-->M2-->M3-->M4-->M5-->M6-->M7-->M8
+  end
+  K6 -. "stock re-inits MACs AFTER reset; mainline inits BEFORE → wiped" .- M2
+  K7 -. "stock 2nd clk re-assert; mainline omits" .- M8
+```
+Key divergences: (a) mainline smac_init runs **before** pon_reset → MAC mask/en/+0xE0 wiped
+(`init_order_egress_re.md`); (b) mainline omits the post-datapath TOPCRM re-assert
+(`eth_egress_clock_reset_re.md`); (c) mainline omits SPA match-RAM + originally the PM block
+(added late via zx_pm_spa_init); (d) mainline missing `pon+0x40018=2` / `pon+0x40044=0xffffff7f`.
+
+## Diagram 3 — RX path (the working path)
+```mermaid
+flowchart LR
+  RJ["RJ45 (host)"] --> PHY["GePHY (mdio@9a101000 addr 10-13)"]
+  PHY -->|"RGMII/MII"| MAC2["SMAC MAC2 0x92280000<br/>RX-ok 0x92280780 counts host ✅"]
+  MAC2 -->|"SOPC bridge 0x921d9068"| SPA["SPA classify 0x921d4000<br/>+ SDET frame validate 0x921c4000"]
+  SPA --> CLA["CLA classify 0x9238c000<br/>protocol→CPU-queue (RAM-7)<br/>trap cnt 0x9238c3c4 ✅"]
+  CLA --> SADM["SADM/ADM admit 0x92384000/0x92394000"]
+  SADM --> RED["RED 0x92344000"]
+  RED --> QMG["QMG 0x9234c000<br/>UP hw_trap 0x9234c060 ✅<br/>(== MAC RX-ok count, proven)"]
+  QMG --> RXRING["TM RX desc ring TM+0xf0<br/>+ IRQ TM+0x100 (GIC 36)"]
+  RXRING --> CPU["CPU (NAPI poll) → netdev ✅"]
+```
+Proven end-to-end on the live device: MAC2 RX-ok (0x92280780) == QMG UP hw_trap (0x9234c060) ==
+0x5b4 in the stock dump (`mac_to_cpu_path_re.md` Q3). ARP→CPU queue 1.
+
+## Diagram 4 — Indirect-RAM access protocol (cmd/done/data port pattern)
+Shared by SCH (0x92354014/18/1c), SPA (0x921d4014/18/1c), PM (0x921e0014/18/1c),
+CLA (0x9238c014/18/1c), RED/SADM/ADM/SBRAG (same shape). RAM is **invisible to a flat MMIO dump**.
+CMD-word encoding: `addr[21:0] | ram_id[26:22] | rw_en[27] | incr[31]` (SPA tm:25957;
+SCH tm:29690). rw_en=1 read-prefetch, 0 write-commit. RAMID picks the table (SCH 2/3/5/6 UP,
+0xe/0xf DN). Read-modify-write is needed when 4 rules pack one 6-word line (SPA match-RAM).
+
+```mermaid
+sequenceDiagram
+  participant SW as CPU driver
+  participant CMD as CMD port 0x..4014
+  participant DONE as DONE 0x..4018 bit0
+  participant DATA as DATA 0x..401c+
+  participant RAM as indirect RAM
+  Note over SW,RAM: WRITE one entry
+  SW->>DONE: poll idle bit0 up to 0x13 tries
+  SW->>CMD: write addr + ramid + READ bit
+  SW->>DONE: poll idle
+  RAM-->>DATA: HW loads 6 words
+  SW->>DATA: read words then merge sub-field
+  SW->>CMD: write addr + ramid + WRITE bit
+  SW->>DATA: write 6 words
+  DATA->>RAM: HW commits line
+```
+SCH leftover: none readable. SPA leftover CMD `0x921d4014=0x01400007` decodes to rw=0(write),
+ram_id=5(hash), addr=7 = last hash-RAM write — confirms the field layout. `_LANCHOR1`/`DAT_0004eee4`
+(SPA match-RAM payload) live in tm.ko .rodata, **NOT** in the MMIO dump.
+
+---
+
+## PART 3 contradictions / flags found (re-verify before acting)
+1. **TM ring counters: oracle (all 0) vs kotrace/decomp (DN kick 0x10064 every frame)** — §3.11.
+   Likely the oracle read the wrong phys (npp+0x10000=SMCT, not tm+0x10000=ring) and/or was a
+   slot-B boot. RE-MEASURE at 0x92350064/68 during real egress. (`ADDRESS_MAP_ERROR_tm_ring`,
+   `idm_cpuport_fabric_forward_re.md` Q3.)
+2. **greg port-state address** — `sopc_egress_port_gate_re.md:131` said 0x9238c14c; **WRONG**,
+   corrected to 0x921c0044 (`port_stp_state_re.md`). Conflated greg with a PP offset.
+3. **SPA 0x921d4120/4124** — `cpu_source_port_egress_re.md` called it "device MAC in match-RAM";
+   **WRONG**, it's the DIRECT ONU-MAC table reg22/23, already written by mainline
+   (`pm_spa_init_recipe_re.md` §C).
+4. **PM ctrl 0x921e0054 bit6 (0x40)** — stock-live 0xc0 but `pm_initial` only produces 0x80; bit6
+   origin UNRESOLVED (power-on default or another writer). Write literal 0xc0 to be faithful.
+5. **Unknown-unicast fwd 0x92388340** — mainline 0xff5555ff (flood-all) vs stock 0x015555ff
+   (CPU-only); mainline comment claims 0xff5555ff is "stock-matching" — empirically false
+   (`fdb_learning_enable_re.md` Q6). Genuine drift; broadcast still didn't egress after fixing it,
+   so not the sole gate but worth landing.
+6. **NPP+8 / +0xC write VALUES** — stock writes max-bits (0xFFFFFF/0xFFFFF, then HW snaps back);
+   mainline writes the readback (0 / 0x3FFFF). `hw_write_lock_pattern_re.md` argues writing 0 may
+   leave NPP partially reset. Unconfirmed.
+7. **PP[0xc080]** — `mac_to_cpu_path_re.md` Q4(c): decomp writes 0x1000, stock-live=0x600; possible
+   CLA-config drift affecting ARP/ICMP trap. Needs live mainline-vs-stock diff (MEDIUM).

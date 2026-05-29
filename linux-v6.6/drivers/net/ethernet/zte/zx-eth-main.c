@@ -1728,7 +1728,14 @@ static int zx_tm_alloc_pools(struct zx_eth *e)
 	 */
 	memset_io(base + CARVED_ACL_OFF, 0, CARVED_ACL_SIZE);
 	memset_io(base + CARVED_FLOW_OFF, 0, CARVED_FLOW_SIZE);
-	dev_info(e->dev, "carved: zeroed ACL RAM (4 MiB @+0x%lx) + Flow RAM (1 MiB @+0x%lx)\n",
+	/* [egress fix 2026-05-29] Zero the TX UP+DN descriptor rings (64 KiB each).
+	 * Without this, stale DDR content with leftover VALID bits sits in the rings;
+	 * HW auto-fetches those phantom descriptors and its DN produce pointer desyncs
+	 * (observed tm[0x10068] high16 stuck at 0x13, never draining our real desc at
+	 * slot 0). Stock's ring starts clean. */
+	memset_io(base + CARVED_TXUP_OFF, 0, 0x10000);
+	memset_io(base + CARVED_TXDN_OFF, 0, 0x10000);
+	dev_info(e->dev, "carved: zeroed ACL RAM (4 MiB @+0x%lx) + Flow RAM (1 MiB @+0x%lx) + TX UP/DN rings\n",
 		 CARVED_ACL_OFF, CARVED_FLOW_OFF);
 
 	/* Pool entity layout: cpu (virt) = base + off; dma (phys) = CARVED + off. */
@@ -2099,12 +2106,21 @@ static int zx_table_write(struct zx_eth *e,
  */
 static int zx_tm_port_isolate_set(struct zx_eth *e, u32 port, u32 mask)
 {
+	/* Stock tm_port_isolate_set remaps the logical port to its physical
+	 * sbragRegTable index before writing (decomp_all_tm.c:36297 switch):
+	 * 0->1 1->2 2->3 3->4 4->5 5->0 6->6 7->7. Omitting this remap was the
+	 * iter34 TX-hairpin root cause: the CPU port (logical 5) wrote index 5,
+	 * leaving PP[0x83d4]=0xfe (blocks port 0) instead of 0xdf (blocks self),
+	 * so the CPU port never blocked its own egress and CPU-TX looped back.
+	 * See tx_hairpin_persists_after_8340_fix_re.md.
+	 */
+	static const u8 port_remap[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
 	u32 inv = ~mask;
 	u32 hw  = ((inv >> 5) & 1u)
 		| ((inv << 1) & 0x3eu)
 		| (inv       & 0xc0u);
 	return zx_table_write(e, zx_sbragregtable,
-			      ZX_SBRAGREGTABLE_COUNT, 57, hw, port);
+			      ZX_SBRAGREGTABLE_COUNT, 57, hw, port_remap[port & 7]);
 }
 
 /* Stock spa_set_enty_pktdeal_cfg(port, proto, action) →
@@ -2150,25 +2166,33 @@ static void zx_chip_tm_init_pro_action(struct zx_eth *e)
 		 ok, fail, ZX_PP_PRO_ACTION_COUNT);
 }
 
-/* Replay chip_tm_init's per-port isolation loop.
- * Masks observed in kotrace trace, one per port (sw_init_switch boot path):
- *   port 0 → 0xff01    port 4 → 0xff10
- *   port 1 → 0xff02    port 5 → 0xff20 (extrapolated)
- *   port 2 → 0xff04    port 6 → 0xff40 (extrapolated)
- *   port 3 → 0xff08    port 7 → 0xff80 (extrapolated)
- * Each port masks ITSELF off the destination set — standard ONT.
+/* chip_tm_init's per-port isolation loop. mask = ports each port may NOT
+ * forward to. Ports 0..5 isolate themselves (mask 1<<p); the two internal
+ * ports 6,7 isolate nothing (mask 0). Combined with the logical->physical
+ * remap in zx_tm_port_isolate_set this lands the stock-live table
+ * {0xfe,0xfd,0xfb,0xf7,0xef,0xdf,0xff,0xff} at PP[0x83c0..0x83dc] — idx5
+ * (CPU port) = 0xdf = blocks self, which stops the CPU-TX hairpin.
+ * Ports 6,7 masks were 0xff40/0xff80 (extrapolated) before; stock-live has
+ * 0xff there (mask 0). See tx_hairpin_persists_after_8340_fix_re.md.
  */
 static void zx_chip_tm_init_isolate(struct zx_eth *e)
 {
+	static const u8 self_mask[8] = { 1u << 0, 1u << 1, 1u << 2, 1u << 3,
+					 1u << 4, 1u << 5, 0, 0 };
+	void __iomem *pp = e->base + PP_OFF;
 	int p;
 
 	for (p = 0; p < 8; p++) {
-		int rc = zx_tm_port_isolate_set(e, p, 0xffffff00u | (1u << p));
+		int rc = zx_tm_port_isolate_set(e, p, 0xffffff00u | self_mask[p]);
 
 		if (rc)
 			dev_warn(e->dev, "isolate port %d: %d\n", p, rc);
 	}
-	dev_info(e->dev, "port isolation programmed (sbragRegTable[57] x 8)\n");
+	dev_info(e->dev, "isolate PP[0x83c0..dc] = %#x %#x %#x %#x %#x %#x %#x %#x\n",
+		 readl(pp + PP_BRG_ISOLATE(0)) & 0xff, readl(pp + PP_BRG_ISOLATE(1)) & 0xff,
+		 readl(pp + PP_BRG_ISOLATE(2)) & 0xff, readl(pp + PP_BRG_ISOLATE(3)) & 0xff,
+		 readl(pp + PP_BRG_ISOLATE(4)) & 0xff, readl(pp + PP_BRG_ISOLATE(5)) & 0xff,
+		 readl(pp + PP_BRG_ISOLATE(6)) & 0xff, readl(pp + PP_BRG_ISOLATE(7)) & 0xff);
 }
 
 static void zx_chip_tm_init_trap_queues(struct zx_eth *e)
@@ -2341,10 +2365,32 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	dev_dbg(e->dev, "  PP[0x8344]=%08x  [0x8380]=%08x  [0x863c]=%08x\n",
 		 readl(pp + 0x8344), readl(pp + 0x8380), readl(pp + 0x863c));
 
-	writel(0x020000ff, pp + 0x8004);
-	writel(0xff5555ff, pp + 0x8340);
-	writel(0x0000001e, pp + 0x8344);
-	writel(0x0000001f, pp + 0x8380);
+	/* PP[0x8004] = bridge control. Stock-live 0x040200ff: bit 17
+	 * macaddr_age_en + bit 26 macaddr_exchange_md (sbrg_set_macaddr_age_en(1)
+	 * + sbrg_set_macaddr_exchange_md(1) in tm_pon_pp_brg_initial,
+	 * decomp_all_tm.c:43606). Without the aging FSM the HW IGNORES learned
+	 * FDB entries on the egress DA-lookup, so a learned host MAC reads as
+	 * unknown-unicast → floods CPU-only (PP[0x8340]) → CPU-TX hairpins back
+	 * to CPU. Was 0x020000ff (bit 25 set, wrong). See fdb_learn_commit_re.md.
+	 */
+	writel(0x040200ff, pp + 0x8004);
+	/* PP[0x8340] = PKTDEAL(0x5555) + unknown-unicast FWD bitmap[31:24].
+	 * Stock LIVE = 0x015555ff (FWD only to internal port 0 = CPU). 0xff
+	 * floods all 8 ports → every CPU TX with unknown DA hairpins back to
+	 * the CPU as loopback (the iter34 wedge). See fdb_learning_enable_re.md
+	 * Q6. NB: CPU is internal port 0 = bit 0x01 (port-5→0 remap), not 0x20.
+	 */
+	writel(0x015555ff, pp + 0x8340);
+	/* Broadcast / unknown-flood gates. Stock DISABLES forced flooding here:
+	 * broadcast egress is governed only by VLAN-0 membership minus port
+	 * isolation (which excludes the CPU source port → no hairpin). Stock-live
+	 * (regs/stock_eth_2mib.txt): PP[0x8300/0x8304/0x8344]=0, PP[0x8380]=0x01
+	 * (pt_tls = CPU port only, sbrg_set_pt_tls(0,1) in tm_pon_pp_brg_initial).
+	 * Forcing these (0x1e/0x1f/0xffff) flooded the device's OWN broadcasts
+	 * back to the CPU = the residual hairpin. See cpu_lan_egress_gate_re.md.
+	 */
+	writel(0x00000000, pp + 0x8344);	/* unknown-unicast flood portmask: off */
+	writel(0x00000001, pp + 0x8380);	/* pt_tls: CPU port only (was 0x1f) */
 	writel(0xaaaaaaaa, pp + 0x863c);
 
 	/* SMAC_LOOK_EN — 1 bit per port. Phase 50 (PING BIDI WORKS) had all
@@ -2358,10 +2404,11 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	writel(ZX_ALL_PORTS_BITMAP, pp + 0x81c0);
 
 	writel(0x00005555, pp + 0x81c4);
-	writel(0x0013f434, pp + 0x8188);
+	writel(0x00000001, pp + 0x8184);	/* tm_mac_ramaddr_sel_set(1): FDB RAM addr/size select (stock) */
+	writel(0x00211b00, pp + 0x8188);	/* aging-cycle blob, stock-live (was 0x0013f434 — clobbered zx_pp_init) */
 	writel(0x000000ff, pp + 0x82c0);
-	writel(0x0000ffff, pp + 0x8300);
-	writel(0x020000ff, pp + 0x8304);
+	writel(0x00000000, pp + 0x8300);	/* sbrg_set_brdcst_fld_en: OFF (stock=0; was 0xffff = the broadcast hairpin gate) */
+	writel(0x00000000, pp + 0x8304);	/* broadcast flood portmask: off (stock=0) */
 	writel(0xfffffffa, pp + 0x8050);
 	writel(0x0000ff00, pp + 0x8008);
 	dev_dbg(e->dev, "PP_BRG post-init: SMAC_LOOK_EN=%02x (CPU port 5 disabled)\n",
@@ -2455,6 +2502,107 @@ static void zx_tm_post_bmu(struct zx_eth *e)
 	tm_write(e, 0xC008, 0);
 }
 
+/* SCH (downstream scheduler) indirect-RAM access port — TM[0x14014/18/1c].
+ *
+ * The SCH block's per-queue token-bucket shaper tables (fill-rate, bucket-cap)
+ * live in indirect RAM, written through a command/data/done port — NOT by
+ * direct register writes. The stock tm.ko populates them in tm_pon_tm_sch_initial
+ * (decomp_all_tm.c:47025). Mainline previously wrote garbage straight to the
+ * indirect port, leaving every per-queue bucket-cap at 0 → no queue ever has
+ * credit → DSCH drops every CPU→LAN egress frame (drop_DSCH++). See
+ * findings/dsch_drop_cpu_egress_re.md and pipeline_trace_dies_at_dsch.md.
+ *
+ * Register map (zx_schregtable[], zx-fpga-reg-tables.h:152-154; base word
+ * 0x000d5000 == TM[0x14000]):
+ *   reg_id 13 -> TM[0x14014] = indirect RW command  (mask 0x8fcfffff)
+ *   reg_id 14 -> TM[0x14018] = ind-acc done  (RO, bit0 = idle/ready)
+ *   reg_id 15 -> TM[0x1401c] = ind-acc data
+ *
+ * Command encoding (sch_set_indirect_rw_cmd, decomp_all_tm.c:29690):
+ *   cmd = RAMAddr | (RAMID<<22) | (indRwEn<<27) | (incrEn<<31)
+ *   indRwEn: 0=write, 1=read.  RAMID<0x10, RAMAddr<0x200.
+ */
+#define ZX_SCH_REG_CMD		0x14014
+#define ZX_SCH_REG_DONE		0x14018
+#define ZX_SCH_REG_DATA		0x1401c
+
+/* Poll the ind-acc DONE bit (mirrors sch_get_ind_acc_done @29725 + the ~0x14-try
+ * poll loops in the shaper setters, e.g. sch_set_up_pq_sharp_fill_rate @30465). */
+static void zx_sch_wait_done(struct zx_eth *e)
+{
+	int t = 0x14;		/* stock loops up to 0x14 (=20) tries */
+
+	while (t-- && !(tm_read(e, ZX_SCH_REG_DONE) & 1))
+		udelay(2);
+	if (t < 0)
+		dev_warn_ratelimited(e->dev, "SCH indirect access timeout\n");
+}
+
+/* One indirect WRITE: poll-done -> CMD(incrEn=0, indRwEn=0=write, ramid, addr)
+ * -> DATA. CMD-before-DATA, no trailing poll — exactly as the stock single-value
+ * setters do (sch_set_up_pq_sharp_fill_rate @30481-30483, ..._bucket_cap
+ * @30647-30649, ..._tcont_sharp_fill_rate @30807-30809). */
+static void zx_sch_indirect_write(struct zx_eth *e, u32 ramid, u32 addr, u32 val)
+{
+	zx_sch_wait_done(e);
+	tm_write(e, ZX_SCH_REG_CMD, (addr & 0x1ff) | ((ramid & 0xf) << 22));
+	tm_write(e, ZX_SCH_REG_DATA, val);
+}
+
+/* zx_sch_init — replay stock tm_pon_tm_sch_initial's per-queue shaper RAM init
+ * (decomp_all_tm.c:47025). The stock loop runs 0x20 units (tcont) x 8 queues,
+ * each unit calling:
+ *   tm_tcont_sharp_set(unit, 1600000)        (@45564)
+ *   tm_tcont_que_sharp_set(unit, que, 1600000) for que 0..7  (@45535)
+ *
+ * tm_tcont_que_sharp_set -> sch_set_up_pq_sharp_fill_rate(unit,que,1600000)
+ *                             = RAMID 2, addr = que + unit*8, val = 1600000
+ *                        -> sch_set_up_pq_sharp_bucket_cap(unit,que,getFillcap)
+ *                             = RAMID 3, addr = que + unit*8, val = getFillcap()
+ * tm_tcont_sharp_set     -> sch_set_up_tcont_sharp_fill_rate(unit,1600000)
+ *                             = RAMID 5, addr = unit, val = 1600000   (@30808)
+ *                        -> sch_set_up_tcont_sharp_bucket_cap(unit,getFillcap)
+ *                             = RAMID 6, addr = unit, val = getFillcap() (@30955)
+ *
+ * fill-rate value: 1600000 = 0x186A00 (< 0x200000 limit, fits cmd data).
+ * bucket-cap value: tm_getFillcap(1600000). The getFillcap table (tm.ko .rodata,
+ *   verified via objdump) tops out at threshold 20480; 1600000 exceeds all 10
+ *   thresholds so it falls to tm_getFillcap_part_44 (@42422): (1600000>>8)=6250,
+ *   which is < 199999 so it clamps to 200000 = 0x30D40 (< 0x400000 limit). */
+#define ZX_SCH_FILL_RATE	1600000		/* 0x186A00 */
+#define ZX_SCH_BUCKET_CAP	200000		/* tm_getFillcap(1600000) = 0x30D40 */
+#define ZX_SCH_UNITS		0x20		/* tcont count, stock loop @47057 */
+#define ZX_SCH_QUEUES		8		/* queues/tcont, stock loop @47055 */
+#define ZX_SCH_RAMID_PQ_FILL	2		/* per-queue fill-rate  @30482 */
+#define ZX_SCH_RAMID_PQ_CAP	3		/* per-queue bucket-cap @30648 */
+#define ZX_SCH_RAMID_TCONT_FILL	5		/* tcont fill-rate      @30808 */
+#define ZX_SCH_RAMID_TCONT_CAP	6		/* tcont bucket-cap     @30955 */
+
+static void zx_sch_init(struct zx_eth *e)
+{
+	u32 unit, que;
+
+	for (unit = 0; unit < ZX_SCH_UNITS; unit++) {
+		/* tcont-level shaper (RAMID 5/6, addr = unit) */
+		zx_sch_indirect_write(e, ZX_SCH_RAMID_TCONT_FILL, unit,
+				      ZX_SCH_FILL_RATE);
+		zx_sch_indirect_write(e, ZX_SCH_RAMID_TCONT_CAP, unit,
+				      ZX_SCH_BUCKET_CAP);
+
+		/* per-queue shaper (RAMID 2/3, addr = que + unit*8) */
+		for (que = 0; que < ZX_SCH_QUEUES; que++) {
+			u32 addr = que + unit * 8;
+
+			zx_sch_indirect_write(e, ZX_SCH_RAMID_PQ_FILL, addr,
+					      ZX_SCH_FILL_RATE);
+			zx_sch_indirect_write(e, ZX_SCH_RAMID_PQ_CAP, addr,
+					      ZX_SCH_BUCKET_CAP);
+		}
+	}
+	dev_info(e->dev, "SCH shaper RAM init: %u units x %u queues, rate=%u cap=%u\n",
+		 ZX_SCH_UNITS, ZX_SCH_QUEUES, ZX_SCH_FILL_RATE, ZX_SCH_BUCKET_CAP);
+}
+
 /* pon_tm_dma_init equivalent — values from stock_eth.bin live dump. */
 static void zx_tm_dma_init(struct zx_eth *e)
 {
@@ -2477,7 +2625,9 @@ static void zx_tm_dma_init(struct zx_eth *e)
 	 * findings/tm_rx_path_bench_validation_2026-05-27.md.
 	 */
 	tm_write(e, TM_REG_DMA_TX_UP_BASE, e->txdesc_dma);
-	tm_write(e, TM_REG_DMA_TX_DN_BASE, e->dndesc_dma);
+	/* [egress-port test] SHARED ring: DN base = UP base = txdesc_dma so the dual-kick
+	 * in zx_sw_xmit drives both rings off the one desc (QMG-reaching config). */
+	tm_write(e, TM_REG_DMA_TX_DN_BASE, e->txdesc_dma);
 	tm_write(e, TM_REG_DMA_REG388,     0x131217);
 	tm_write(e, TM_REG_DMA_REG3C,      0x400040);
 
@@ -2545,14 +2695,21 @@ static void zx_tm_dma_init(struct zx_eth *e)
 	 * 0,1,2,4,6,7,8,9 enabled). Without this, TM dispatches but PP never
 	 * receives because the scheduler doesn't run. CRITICAL for TX→PP handoff.
 	 */
-	tm_write(e, 0x14000, 0x000003d7);	/* per-port SCH enable mask */
-	tm_write(e, 0x14004, 0x0d1cef00);
-	tm_write(e, 0x14014, 0x03c00006);
-	tm_write(e, 0x14018, 0x00000001);	/* SCH global enable? */
-	tm_write(e, 0x1401c, 0x0003e800);
-	tm_write(e, 0x14024, 0x00000014);
-	tm_write(e, 0x14028, 0x00001869);
-	tm_write(e, 0x14040, 0x00000249);
+	tm_write(e, 0x14000, 0x000003d7);	/* per-port SCH enable mask (KEEP).
+						 * bit0 = que_sharp_enable (sch_set_que_sharp_enable,
+						 * SchRegTable reg_id 0 @ zx-fpga-reg-tables.h:139)
+						 * — required for the per-queue shaper to take effect. */
+	tm_write(e, 0x14004, 0x0d1cef00);	/* KEEP (stock dump) */
+	/* 0x14014/0x14018/0x1401c are the SCH indirect-access CMD/DONE/DATA port,
+	 * NOT config words. Previously this code wrote three garbage values
+	 * straight to them (CMD=0x03c00006 => RAMID 0xF invalid; DONE is RO; DATA
+	 * with no valid command behind it), so the per-queue shaper RAM stayed 0
+	 * and the DSCH dropped every CPU egress frame. Replace with a proper
+	 * indirect-RAM init that replays stock tm_pon_tm_sch_initial. */
+	zx_sch_init(e);
+	tm_write(e, 0x14024, 0x00000014);	/* spend_byte (KEEP; sch_set_spend_byte 0x14) */
+	tm_write(e, 0x14028, 0x00001869);	/* shp_fill_time (KEEP; sch_set_shp_fill_time 0x1869) */
+	tm_write(e, 0x14040, 0x00000249);	/* KEEP (stock dump) */
 
 	/* QMG (queue manager) at TM[0xC000+] — per QmgRegTable + stock dump */
 	tm_write(e, 0xC000, 0x01f40fa0);
@@ -3074,6 +3231,15 @@ static int zx_bmu_free_bp(struct zx_eth *e, u16 bp_idx, u8 is_pon)
 			 (e)->tm_tx_count, stage, __func__, ##__VA_ARGS__); \
 } while (0)
 
+/* [egress fix 2026-05-29] DN egress-port hint. Stock DN desc encodes the
+ * FDB-resolved egress port as ((port+0x28)&0x3f)<<4 in desc bytes[2:3]
+ * (decomp pon_tm_net_tx plat:6848). Host is on MAC2; the exact port index
+ * (2/3/4) is swept at runtime via /sys/module/zx279128_eth/parameters/zx_eg_port
+ * to nail which value routes to MAC2 without a rebuild. */
+static unsigned int zx_eg_port = 4;
+module_param(zx_eg_port, uint, 0644);
+MODULE_PARM_DESC(zx_eg_port, "DN egress port index for the host MAC (desc hint (port+0x28)<<4)");
+
 static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 {
 	struct zx_eth *e = *(struct zx_eth **)netdev_priv(ndev);
@@ -3082,11 +3248,21 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	u8 *bp_buf;
 	u8 *desc;
 
+	/* CPU→LAN egress: submit on the TM UP DMA ring (kick TM[0x10054]). Live
+	 * oracles proved stock uses NO DMA ring (UP/DN/IDM consume counters all 0)
+	 * — it software-forwards straight to QMG sw_fwd. We can't yet replicate that
+	 * exact no-ring inject, but the UP ring is the path that DOES reach QMG
+	 * sw_fwd on mainline (the furthest we get); the remaining gate is QMG
+	 * sw_fwd → SOPC send2smac2 (SOPC never fires for the CPU-sourced frame).
+	 * Keeping the UP ring as the QMG-reaching baseline while we crack SOPC.
+	 * (IDM-ring attempt reverted: HW consumed descs but frame never reached
+	 * QMG — see idm_ring_xmit_test_result + stock_{idm,dn}_ring_usage_oracle.)
+	 */
 	TXCP(e, 1, "enter skb=%p len=%u dev=%s tx_head=%u",
 	     skb, skb->len, ndev->name, e->tx_head);
 
-	if (!e->bp_cpu || !e->txdesc_cpu) {
-		TXCP(e, -1, "DROP: bp_cpu=%p txdesc_cpu=%p", e->bp_cpu, e->txdesc_cpu);
+	if (!e->bp_cpu || !e->dndesc_cpu) {
+		TXCP(e, -1, "DROP: bp_cpu=%p dndesc_cpu=%p", e->bp_cpu, e->dndesc_cpu);
 		goto drop;
 	}
 
@@ -3136,14 +3312,14 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	TXCP(e, 3, "BMU alloc OK: bp=%u bp_buf=%p, copied %u bytes from skb (frame at +16)",
 	     bp, bp_buf, len);
 
-	/* [Iter 34] REVERT Iter 32. Per agent 12 RE (tx_consume_engine_re.md):
-	 * Stock pon_tm_net_tx for "sw" netdev (LAN-only mode, param_1=0)
-	 * takes the lan_up==1 branch and calls pon_tm_data_raw_send(skb,
-	 * desc, 0) → soft_insert_tx_1desc(desc, 0) which kicks UP ring
-	 * (TM[0x10054]), NOT DN. The 315 "loopback drops" in iter31 were
-	 * FDB-miss flooding hairpin, not ring direction misuse.
+	/* [Restore working dual-kick from commit 2ad931ed8 — the last on-wire-verified
+	 * CPU→LAN TX before refactor #38 (host tcpdump saw device-originated ICMP/ARP
+	 * replies). Mechanism: ONE shared ring (UP_BASE=DN_BASE=txdesc_dma), desc in
+	 * txdesc_cpu, desc[0]=0xc9, egress port=0, and DUAL-KICK both TM[0x10054]+
+	 * TM[0x10064]. The commit's note: single-kick (UP-only OR DN-only) = 100% loss
+	 * → fetched-but-not-drained; dual-kick = egress. See old_working_tx_commit_re.md.
 	 */
-	desc = (u8 *)e->txdesc_cpu + e->tx_head * TM_TX_DESC_SIZE;
+	desc = (u8 *)e->txdesc_cpu + e->tx_head * TM_TX_DESC_SIZE;	/* [egress-port test] UP ring (reaches QMG) */
 	memset(desc, 0, TM_TX_DESC_SIZE);
 	TXCP(e, 4, "desc[%u]=%p prepared (memset done, BP_SIZE=%u)", e->tx_head, desc, TM_BP_SIZE);
 	/* Stock TX desc format (Ghidra decomp of pon_tm_net_tx + pon_tm_data_raw_send,
@@ -3154,17 +3330,11 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	 *   desc[8..11]= 0x21 at byte 11 (VALID|0x20), bp_idx + len<<9 in low bits
 	 *   desc[12..13] = (desc[12..13] & 3) | (len << 2).
 	 */
-	desc[0]  = 0xc9;
+	desc[0]  = 0xc9;	/* [egress-port test] UP-ring marker (QMG-reaching path) */
 	desc[1]  = 0x00;
-	/* desc[2..3] encodes egress port hint: ((lan_up_port+0x28) & 0x3f) << 4.
-	 * Stock uses lan_up_port=4 per zx_pon_init flow doc (line 8909:
-	 * "lan_up=1, lan_up_port=4"). Previous mainline hardcoded 0 → encoded
-	 * 0x280; stock encodes 0x2c0. Testing if matching stock fixes TX wire.
-	 */
-	{
-		u32 port = 4;	/* lan_up_port for H3600 LAN-only config */
-		*(__le16 *)(desc + 2) = cpu_to_le16(((port + 0x28) & 0x3f) << 4);
-	}
+	/* desc[2..3] = egress-port hint ((port+0x28)&0x3f)<<4. THE verified fix: was
+	 * hardcoded 0 (no destination → SOPC never picked a MAC). zx_eg_port to find MAC2. */
+	*(__le16 *)(desc + 2) = cpu_to_le16(((zx_eg_port + 0x28) & 0x3f) << 4);
 	*(u32 *)(desc + 4) = cpu_to_le32(0x00010000);
 	/* desc[11] = 0x21 (bit 0 VALID + bit 5 format), not 0x01 — stock decomp
 	 * pon_tm_data_raw_send does desc[11] = (desc[11]&1) | 0x20.
@@ -3173,7 +3343,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 					 ((len & 0x3fff) << 9) |
 					 (0x21U << 24));
 	desc[7]  = (bp & 0x7f) << 1;
-	/* bytes 12-13 = len encoding (parallel to bits[22:9] above) */
+	/* bytes 12-13 = len encoding (UP path, working-commit form) */
 	if (len < 64)
 		*(__le16 *)(desc + 12) = cpu_to_le16((len & 0x3fff) | 0x100);
 	else
@@ -3186,15 +3356,10 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	e->tx_head = (e->tx_head + 1) & (TM_TX_RING_SIZE - 1);
 	TXCP(e, 6, "tx_head=%u (post-incr); about to kick TM[0x10054]=1, TM[0x10064]=1", e->tx_head);
 
-	/* Stock soft_insert_tx_1desc (per stock decomp) kicks ONE reg (UP=0x10054 or
-	 * DN=0x10064) by direction. Tested single-kick (UP only) on top of fixed
-	 * desc[11]=0x21: 100% loss vs dual-kick's 60% loss + DUPs. So switch needs
-	 * BOTH rings populated to actually move packets to the wire in our setup
-	 * (likely because we don't have GPON DN traffic but switch routing expects
-	 * activity on DN side too). Keep dual-kick.
-	 */
-	/* UP kick per stock soft_insert_tx_1desc(desc, dir=0). */
-	tm_write(e, 0x10054, 1);
+	/* [egress-port test] DUAL kick on the shared ring (the QMG-reaching config from
+	 * commit 2ad931ed8). Testing the verified egress-port fix on this proven path. */
+	tm_write(e, 0x10054, 1);	/* upstream kick */
+	tm_write(e, 0x10064, 1);	/* downstream kick */
 
 	/* Post-kick desc invalidation:
 	 * pcap data showed HW emitting the SAME TX desc multiple times — host
@@ -3307,15 +3472,11 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 		int rc = zx_fdb_add(e, ndev->dev_addr, 0, 1);
 
 		netdev_info(ndev, "HW FDB seed (PP_BRG_RAM): self MAC port=1 rc=%d\n", rc);
-		/* DO NOT call zx_sbrg_set_unknown_unicast_flood_policy(e, 0x20).
-		 * Evidence (Agent 1 RE + git blame): an earlier init at L1831
-		 * already writes PP[0x8340] = 0xff5555ff which is the CORRECT
-		 * stock-matching state: PKTDEAL=1 (normal lookup) for ALL ports
-		 * + FWD enabled on ALL ports + reserved low byte. Disabling FWD
-		 * on LAN ports (the 0x20 = CPU-only bitmap) breaks lookup on
-		 * those ports → every unicast falls through to fallback action
-		 * (drop/flood depending on cla_set_dn_unknown_da_action_cfg).
-		 * Observed: tx_done counter stays at 0, ping 100% loss.
+		/* Unknown-unicast FWD bitmap is configured in zx_pp_brg_init
+		 * (PP[0x8340] = 0x015555ff, CPU-only) to match stock LIVE. An
+		 * earlier attempt with bitmap 0x20 gave tx_done=0 / 100% loss,
+		 * but 0x20 was the WRONG bit: stock's port-5→internal-0 remap
+		 * makes the CPU bit 0x01, not 0x20. See fdb_learning_enable_re.md Q6.
 		 */
 	}
 	return 0;
@@ -3555,6 +3716,144 @@ static const struct file_operations zx_mem_fops = {
 	.llseek = default_llseek,
 };
 
+/* regdump: hex-TEXT dump of forwarding-relevant register windows, one
+ * "<phys> <value>" line per u32 (phys = 0x921c0000 + e->base offset).
+ * Robust over the glitchy UART (a corrupt line is detectable/discardable,
+ * unlike the raw binary `mem` file). Diff vs regs/stock_eth_2mib.txt.
+ */
+static const struct { u32 off, len; } zx_regdump_wins[] = {
+	{ 0x000100, 0x040 },	/* TM IRQ / queue-enable */
+	{ 0x008000, 0x0e0 },	/* TM BMU */
+	{ 0x00c000, 0x120 },	/* TM QMG / CLA handoff */
+	{ 0x010000, 0x120 },	/* TM DMA / per-queue */
+	{ 0x040000, 0x040 },	/* MAC0 ctrl */
+	{ 0x080000, 0x040 },	/* MAC1 ctrl */
+	{ 0x0c0000, 0x040 },	/* MAC2 ctrl (host port) */
+	{ 0x100000, 0x040 },	/* MAC3 ctrl */
+	{ 0x140000, 0x040 },	/* MAC4 ctrl */
+	{ 0x1c0000, 0x060 },	/* PP ctrl */
+	{ 0x1c8000, 0x700 },	/* PP_BRG: flood/lookup/isolate/FDB/VLAN */
+};
+
+static int zx_regdump_show(struct seq_file *s, void *_unused)
+{
+	struct zx_eth *e = s->private;
+	size_t i;
+	u32 o;
+
+	for (i = 0; i < ARRAY_SIZE(zx_regdump_wins); i++) {
+		u32 base = zx_regdump_wins[i].off;
+		u32 len  = zx_regdump_wins[i].len;
+
+		for (o = 0; o < len; o += 4)
+			seq_printf(s, "%08x %08x\n",
+				   0x921c0000u + base + o,
+				   readl(e->base + base + o));
+	}
+	return 0;
+}
+
+static int zx_regdump_open(struct inode *inode, struct file *f)
+{
+	return single_open(f, zx_regdump_show, inode->i_private);
+}
+
+static const struct file_operations zx_regdump_fops = {
+	.owner   = THIS_MODULE,
+	.open    = zx_regdump_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+/* poke: live register write for reflash-free experiments. Write "<phys> <val>"
+ * (hex), e.g.  sh -c "echo '92280008 80000001' > /sys/kernel/debug/zx_eth/poke"
+ * phys must be in [0x921c0000, 0x923c0000) (the e->base MMIO window) and 4-aligned.
+ * Pairs with memdump/regdump for peeks. DEBUG ONLY.
+ */
+static ssize_t zx_poke_write(struct file *f, const char __user *ubuf,
+			     size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[64];
+	u32 phys, val, off;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (sscanf(buf, "%x %x", &phys, &val) != 2)
+		return -EINVAL;
+	if (phys < 0x921c0000u || phys >= 0x921c0000u + 0x200000u || (phys & 3))
+		return -EINVAL;
+	off = phys - 0x921c0000u;
+	writel(val, e->base + off);
+	pr_info("[ZXETH] poke 0x%08x = 0x%08x (readback 0x%08x)\n",
+		phys, val, readl(e->base + off));
+	return count;
+}
+
+static const struct file_operations zx_poke_fops = {
+	.owner  = THIS_MODULE,
+	.open   = simple_open,
+	.write  = zx_poke_write,
+	.llseek = default_llseek,
+};
+
+/* txtest: inject N known TX frames straight through zx_sw_xmit — isolates the
+ * TX/egress path (no ARP/RX/ping involved). Frame: dst = host MAC (FDB-resolved
+ * to internal port 3 / MAC[2]), src = device MAC, ethertype 0x88b5 (local
+ * experimental, so it isn't mistaken for ARP/IP if it loops back), payload
+ * "ZXTX"+seq. Read the pipeline counters before/after to see where it dies.
+ *   sh -c "echo 5 > /sys/kernel/debug/zx_eth/txtest"
+ */
+static ssize_t zx_txtest_write(struct file *f, const char __user *ubuf,
+			       size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	static const u8 host_mac[6] = { 0xc8, 0xa3, 0x62, 0xe9, 0x59, 0x00 };
+	char buf[16];
+	unsigned int n = 1, i;
+
+	if (!e->sw_dev)
+		return -ENODEV;
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (kstrtouint(buf, 0, &n) || n == 0)
+		n = 1;
+	if (n > 64)
+		n = 64;
+
+	for (i = 0; i < n; i++) {
+		struct sk_buff *skb = netdev_alloc_skb(e->sw_dev, 64);
+		u8 *p;
+
+		if (!skb)
+			break;
+		p = skb_put(skb, 64);
+		memset(p, 0, 64);
+		memcpy(p, host_mac, 6);
+		memcpy(p + 6, e->sw_dev->dev_addr, 6);
+		p[12] = 0x88; p[13] = 0xb5;
+		p[14] = 'Z'; p[15] = 'X'; p[16] = 'T'; p[17] = 'X'; p[18] = (u8)i;
+		skb->dev = e->sw_dev;
+		zx_sw_xmit(skb, e->sw_dev);
+	}
+	pr_info("[ZXETH] txtest: injected %u known frames (dst=host, ethertype 0x88b5)\n", i);
+	return count;
+}
+
+static const struct file_operations zx_txtest_fops = {
+	.owner  = THIS_MODULE,
+	.open   = simple_open,
+	.write  = zx_txtest_write,
+	.llseek = default_llseek,
+};
+
 /* ============================================================
  *   pipeline_stats — mirror stock /sys/devices/platform/tm/tmTest/{tmup,tmdn}
  *
@@ -3686,7 +3985,10 @@ static void zx_debugfs_init(struct zx_eth *e)
 	debugfs_create_file("mem",   0444, zx_debugfs_root, e, &zx_mem_fops);
 	debugfs_create_file("pipeline_stats", 0444, zx_debugfs_root, e,
 			    &zx_pipeline_stats_fops);
-	dev_info(e->dev, "debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem,pipeline_stats}\n");
+	debugfs_create_file("regdump", 0444, zx_debugfs_root, e, &zx_regdump_fops);
+	debugfs_create_file("poke", 0644, zx_debugfs_root, e, &zx_poke_fops);
+	debugfs_create_file("txtest", 0644, zx_debugfs_root, e, &zx_txtest_fops);
+	dev_info(e->dev, "debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem,pipeline_stats,regdump,poke,txtest}\n");
 }
 
 static void zx_debugfs_exit(void)
@@ -3784,8 +4086,19 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 			writel(v | mask, e->pon_early + 8);
 		}
 
-		writel(now ? MAC_CTRL_LINK_UP : MAC_CTRL_LINK_DOWN,
-		       e->base + mac_off(i, MAC_REG_CONTROL));
+		/* [lead #1 fix 2026-05-29] The probe-time global pon_reset(0xffffffff)
+		 * AND the per-port pon_reset pulse just above WIPE the MAC block —
+		 * MASK, ENABLE and the +0xe0 serializer bond all go to 0, so MAC[N]
+		 * is not truly live and SOPC never issues send2smacN (CPU->LAN egress
+		 * dies before the wire; live-confirmed MAC2 MASK/EN/iface=0). The old
+		 * code only re-wrote CTRL here. Stock ALWAYS re-runs the full smac_init
+		 * after a reset pulse — mirror that so the MAC comes back fully live
+		 * (CTRL+MASK+ENABLE+iface+NPP enable). */
+		if (now)
+			zx_smac_init_port(e, i);
+		else
+			writel(MAC_CTRL_LINK_DOWN,
+			       e->base + mac_off(i, MAC_REG_CONTROL));
 
 		/* [Iter 28] Stock sw_port_alarm_kthread writes fpga[0xd3000]
 		 * on link state change. The reg is TM[0xc000] (= phys
@@ -4030,6 +4343,45 @@ static void zx_eth_apply_stock_init(struct zx_eth *eth)
  *      pool, not the stock-DDR addresses left by the replay.
  *      Mandatory — without this RX delivers from un-mapped memory.
  */
+/* PM (G.988 Port-Mapper) + SPA source-port classifier init. Stock runs this via
+ * tm_pon_npp_pm_initial / tm_pon_npp_spa_initial (decomp_all_tm.c:43376/43271); mainline
+ * omitted it entirely (only the bare NPP_REG_SPA_INIT=0 in zx_npp_init). This is the
+ * source→allowed-egress AUTHORIZER: without it the switch fabric loops CPU-sourced frames
+ * back to the CPU (ingress=2) instead of egressing to a physical MAC — the live-confirmed
+ * "QMG sw_fwd ticks but SOPC send2smac never fires, 0 on wire (even broadcast)" symptom.
+ * Direct-register recipe (values cross-checked vs stock dump regs/stock_eth_2mib.txt). The
+ * SPA match-RAM (indirect, ram_id 0) is NOT populated here yet — if egress still fails,
+ * that table is the next piece. See pm_spa_init_recipe_re.md + cpu_source_port_egress_re.md.
+ * Must run LAST in init so the bulk stock replay doesn't clobber 0x921e00xx.
+ */
+static void zx_pm_spa_init(struct zx_eth *e)
+{
+	int i;
+
+	/* SPA up/dn packet-enable + match mode */
+	npp_write(e, 0x14000, 0xffffffff);
+	npp_write(e, 0x14004, 0xffffffff);
+	npp_write(e, 0x14008, 0x00003fff);
+	npp_write(e, 0x14040, 0xffffffff);
+	npp_write(e, 0x14044, 0xffffffff);
+	npp_write(e, 0x14048, 0x0007ffff);
+	npp_write(e, 0x14054, readl(e->base + 0x14054) | 0x03000000);
+	npp_write(e, 0x1407c, 0x00000001);		/* SPA match_mode = 1 */
+
+	/* PM in-port rule table (logical port i → entry i), 0..7 */
+	for (i = 0; i < 8; i++)
+		npp_write(e, 0x20180 + i * 4, i);
+
+	/* PM G.988 modes (pm_set_g988_mode 1→1, 2→3) */
+	npp_write(e, 0x20058, 0x00000001);
+	npp_write(e, 0x2005c, 0x00000003);
+
+	/* PM out-port rule idx0 valid (phys port0) + ctrl: inport_equal_outport_staen=1,
+	 * cpu_not_drop_staen=0 (stock-live 0x921e0054=0xc0). Ctrl last. */
+	npp_write(e, 0x201a0, 0x00000008);
+	npp_write(e, 0x20054, 0x000000c0);
+}
+
 static int zx_eth_init_tm_subsystem(struct zx_eth *eth,
 				    struct platform_device *pdev)
 {
@@ -4159,9 +4511,9 @@ static void zx_eth_repoint_tm_descriptors(struct zx_eth *eth)
 		TM_NUM_INSTANCES, &eth->rxdesc_dma);
 
 	tm_write(eth, TM_REG_DMA_TX_UP_BASE, eth->txdesc_dma);
-	tm_write(eth, TM_REG_DMA_TX_DN_BASE, eth->dndesc_dma);
-	dev_dbg(dev, "Re-wrote TM TX_UP=%pad DN=%pad\n",
-		&eth->txdesc_dma, &eth->dndesc_dma);
+	/* [egress-port test] SHARED ring (DN=UP=txdesc_dma) for the dual-kick path. */
+	tm_write(eth, TM_REG_DMA_TX_DN_BASE, eth->txdesc_dma);
+	dev_dbg(dev, "Re-wrote TM TX_UP=DN(shared)=%pad\n", &eth->txdesc_dma);
 }
 
 /*
@@ -4324,7 +4676,19 @@ static int zx_eth_init_topcrm(struct zx_eth *eth)
 		readl(eth->topcrm + TOPCRM_REG_PON_CLK));
 
 	writel(0x0003cfff, eth->topcrm + 0x4c);
-	writel(0x1ff7ffff, eth->topcrm + 0x08);
+	/* TOPCRM[0x08] = PON-domain reset/clock control. Stock + U-Boot do a
+	 * reset-deassert EDGE on bits 4,5 (clear 0x30 → set 0x20 → set 0x10), NOT
+	 * a single slam — the falling edge is what actually un-resets the egress
+	 * sub-block (ETH_TM2 mux @0x923a0000, the SOPC egress). Slamming the final
+	 * value left the block in its power-up reset state, silently dropping
+	 * writes (0x923a00e0 read back 0; SMAC TX never incremented). See
+	 * fpga_access_and_egress_clock_re.md + U-Boot FUN_40e4fc7c.
+	 */
+	writel(0x1ff7ffff & ~0x30u, eth->topcrm + 0x08);        /* deassert: clear reset bits 4,5 */
+	udelay(100);
+	writel((0x1ff7ffff & ~0x30u) | 0x20u, eth->topcrm + 0x08); /* set bit 5 */
+	udelay(100);
+	writel(0x1ff7ffff, eth->topcrm + 0x08);                 /* set bit 4 → final stock value, edge complete */
 	dev_dbg(dev, "TOPCRM[0x4c]=%#x [0x08]=%#x (stock-match)\n",
 		readl(eth->topcrm + 0x4c), readl(eth->topcrm + 0x08));
 
@@ -4415,6 +4779,10 @@ static int zx_eth_probe(struct platform_device *pdev)
 
 	zx_eth_apply_stock_init(eth);
 
+	/* [egress-port test] SHARED ring (DN=UP=txdesc_dma) for the dual-kick path. */
+	tm_write(eth, TM_REG_DMA_TX_UP_BASE, eth->txdesc_dma);
+	tm_write(eth, TM_REG_DMA_TX_DN_BASE, eth->txdesc_dma);
+
 	dev_dbg(dev, "PP[0x2c] (CPU_FWD) = %#x, IDM[0x8000] CTRL = %#x\n",
 		 readl(eth->base + PP_OFF + PP_REG_CPU_FWD),
 		 readl(eth->base + IDM_REG_CONTROL));
@@ -4447,6 +4815,22 @@ static int zx_eth_probe(struct platform_device *pdev)
 	err = zx_eth_init_tm_subsystem(eth, pdev);
 	if (err)
 		goto err_napi;
+
+	/* Source→egress authorizer (PM/SPA) — stock runs it, mainline omitted it. Runs
+	 * after the bulk replay + TM subsystem so 0x921e00xx isn't clobbered. Without this
+	 * CPU-sourced frames loop back to the CPU instead of egressing a physical MAC. */
+	zx_pm_spa_init(eth);
+
+	/* Re-assert the PON-subsystem clocks AFTER the datapath replay. Stock's
+	 * pon_init (lan_up mode) calls zx_pon_clk_reset() (TOPCRM[0x0c] |= 0x1e0)
+	 * as its TERMINAL step — after tm/pp/npp init — to re-bless the egress
+	 * half, which the bulk replay can leave gated. Mainline only asserted it
+	 * once in probe (zx_eth_init_topcrm), before the datapath. See
+	 * eth_egress_clock_reset_re.md.
+	 */
+	if (eth->topcrm)
+		writel(readl(eth->topcrm + TOPCRM_REG_PON_CLK) | TOPCRM_PON_CLK_BITS,
+		       eth->topcrm + TOPCRM_REG_PON_CLK);
 
 	/* [A07] Register PON aggregate IRQ — stock's register_pon_int
 	 * equivalent. Mainline previously fetched irq_pon from DT but

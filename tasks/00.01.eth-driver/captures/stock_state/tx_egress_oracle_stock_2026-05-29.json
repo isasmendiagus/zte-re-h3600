@@ -1,0 +1,193 @@
+{
+  "kind": "stock_tx_egress_oracle",
+  "date": "2026-05-29 09:34:58",
+  "kernel": "4.1.25 stock",
+  "dev_mac": "f4:f6:47:0f:42:64",
+  "ping_count": 200,
+  "ping_result": "200 packets transmitted, 200 received",
+  "wire_frames": 200,
+  "config": {
+    "0x92280000": {
+      "label": "MAC2 CTRL",
+      "value": "0x00ba6003"
+    },
+    "0x92280004": {
+      "label": "MAC2 MASK",
+      "value": "0x00003fff"
+    },
+    "0x92280008": {
+      "label": "MAC2 ENABLE",
+      "value": "0x80000001"
+    },
+    "0x922800e0": {
+      "label": "MAC2 iface(+0xe0)",
+      "value": "0x00000000"
+    },
+    "0x921e0054": {
+      "label": "PM ctrl",
+      "value": "0x000000c0"
+    },
+    "0x921e01a0": {
+      "label": "PM out_port_rule",
+      "value": "0x00000008"
+    },
+    "0x921d407c": {
+      "label": "SPA match_mode",
+      "value": "0x00000001"
+    },
+    "0x9234c000": {
+      "label": "QMG thresholds",
+      "value": "0x01f40fa0"
+    },
+    "0x923881c4": {
+      "label": "BRG learn_mode",
+      "value": "0x00005555"
+    },
+    "0x92388340": {
+      "label": "BRG unk_unicast_fwd",
+      "value": "0x015555ff"
+    },
+    "0x92388008": {
+      "label": "BRG vl_chk",
+      "value": "0x0000dfdf"
+    },
+    "0x9238863c": {
+      "label": "BRG mcast_vltrans",
+      "value": "0x00000000"
+    },
+    "0x923a001c": {
+      "label": "PON_PP_TM_CFG",
+      "value": "0x21200000"
+    },
+    "0x921cc000": {
+      "label": "SIPC ctrl",
+      "value": "0x00000011"
+    },
+    "0x92354000": {
+      "label": "SCH enables",
+      "value": "0x000003d7"
+    },
+    "0x9238002c": {
+      "label": "PP CPU_fwd",
+      "value": "0x00000106"
+    },
+    "0x921d4120": {
+      "label": "SPA onu_mac_lo",
+      "value": "0x470f4264"
+    },
+    "0x921d4124": {
+      "label": "SPA onu_mac_hi",
+      "value": "0x0000f4f6"
+    }
+  },
+  "counters": {
+    "0x9234c044": {
+      "label": "QMG sw_fwd",
+      "before": "0x000003f4",
+      "during": "0x0000051d",
+      "delta": 297
+    },
+    "0x9234c048": {
+      "label": "QMG hw_fwd",
+      "before": "0x00000000",
+      "during": "0x00000000",
+      "delta": 0
+    },
+    "0x9234c04c": {
+      "label": "QMG hw_trap",
+      "before": "0x00000000",
+      "during": "0x00000000",
+      "delta": 0
+    },
+    "0x92344204": {
+      "label": "RED fwd in",
+      "before": "0x000003fa",
+      "during": "0x00000523",
+      "delta": 297
+    },
+    "0x92344210": {
+      "label": "RED fwd out",
+      "before": "0x000003fc",
+      "during": "0x00000525",
+      "delta": 297
+    },
+    "0x92354200": {
+      "label": "DSCH in_que >>24",
+      "before": "0xfe0000fe",
+      "during": "0x27000027",
+      "delta": 687865641
+    },
+    "0x923541fc": {
+      "label": "DSCH out_que",
+      "before": "0x00000000",
+      "during": "0x00002900",
+      "delta": 10496
+    },
+    "0x921d915c": {
+      "label": "SOPC send2smac0",
+      "before": "0x00000000",
+      "during": "0x00000000",
+      "delta": 0
+    },
+    "0x921d9160": {
+      "label": "SOPC send2smac1",
+      "before": "0x00000000",
+      "during": "0x00000000",
+      "delta": 0
+    },
+    "0x921d9164": {
+      "label": "SOPC send2smac2",
+      "before": "0x0000041d",
+      "during": "0x00000545",
+      "delta": 296
+    },
+    "0x921d9168": {
+      "label": "SOPC send2smac3",
+      "before": "0x00000000",
+      "during": "0x00000000",
+      "delta": 0
+    },
+    "0x921d916c": {
+      "label": "SOPC send2smac4",
+      "before": "0x00000000",
+      "during": "0x00000000",
+      "delta": 0
+    },
+    "0x92280714": {
+      "label": "MAC2 TX_bytes",
+      "before": "0x0002ad5c",
+      "during": "0x000335e8",
+      "delta": 34956
+    },
+    "0x92280718": {
+      "label": "MAC2 TX_frames",
+      "before": "0x00000425",
+      "during": "0x0000054d",
+      "delta": 296
+    },
+    "0x92280780": {
+      "label": "MAC2 RX_frames",
+      "before": "0x00000aed",
+      "during": "0x00000c46",
+      "delta": 345
+    },
+    "0x921da040": {
+      "label": "drop_PP",
+      "before": "0x00000000",
+      "during": "0x00000000",
+      "delta": 0
+    },
+    "0x921da044": {
+      "label": "drop_RED",
+      "before": "0x00000000",
+      "during": "0x00000000",
+      "delta": 0
+    },
+    "0x921da04c": {
+      "label": "drop_DSCH",
+      "before": "0x00000000",
+      "during": "0x00000000",
+      "delta": 0
+    }
+  }
+}
