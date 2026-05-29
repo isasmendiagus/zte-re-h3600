@@ -1,0 +1,755 @@
+
+Boot SPI NAND
+start read bootheader
+start read secondboot
+non secure boot 
+Jump
+
+enter bootloader...
+crpm init enter
+crpm init done
+5ddr init done 
+serial init start 
+serial init done 
+SPI NAND
+non secure uboot 
+backup header!!
+Jump
+
+
+U-Boot 2013.04 (Oct 28 2021 - 12:09:15)
+
+CPU  : ZX279128S@A9,1000MHZ
+Board: ZTE zx279128sevb
+I2C:   ready
+5DRAM:  256 MiB
+5,10000000,50000000
+product_vid = 32
+vid=32-h1600
+input gpio:5
+input gpio:15
+input gpio:47
+output gpio:41,value:1
+output gpio:8,value:1
+output gpio:50,value:1
+output gpio:48,value:1
+output gpio:49,value:1
+output gpio:1,value:1
+output gpio:38,value:1
+output gpio:39,value:0
+output gpio:13,value:1
+output gpio:28,value:1
+output gpio:29,value:1
+input gpio:2
+input gpio:12
+input gpio:60
+input gpio:3
+output gpio:20,value:1
+output gpio:40,value:1
+output gpio:53,value:0
+output gpio:55,value:0
+bootsel=3
+NAND:  manuid=c8,1
+
+Manu ID: 0xc8, Chip ID: 0x01 (ESMT SPI NAND F50L1G41LB 128MiB 3,3V)
+128 MiB
+<nand_read_skip_bad_,386>!mtdpart=0x1,offset=0x0,mtdpartoffset=0xc0000,mtdPartsize=0x40000,length=0x20000
+In:    serial
+Out:   serial
+Err:   serial
+clk_pll env is not setted, core clk won't change
+Net:   enter ref_clk_set.. mode = 0 .
+enter pll_cfg_fractional
+ref_clk_set success!
+gpon serdes init 
+rxpll_ready
+addr 0x9400004c before value is 38000
+addr 0x9400004c after value is 381ff
+eth0
+pdt_cspboot_init:787 Start to initialize cspboot...
+zteboot_info_default_init:1074 zboot info inited
+pdt_cspboot_info_init:766 memtop:42000000 entry:40008000
+pdt_cspboot_init:821 Cspboot initialization is done.
+*** Press 1 means entering boot mode***
+ 0 
+cspboot:1279 Entering boot mode ...
+*** Please input bootmode password: ***
+**********
+
+Hit 1 to upgrade software version
+Hit any key to stop autoboot:  3  2  1  0 
+Unknown command 'autorun' - try 'help'
+=> 
+=> setenv serverip 192.168.1.50
+=> setenv ipaddr 192.168.1.1
+=> setenv tftpblocksize 1468
+=> tftp 0x42000000 zImage_dtb.uimg
+mac 0 phy status changed: 1000M full-duplex
+-----smac_init
+Using eth0 device
+TFTP from server 192.168.1.50; our IP address is 192.168.1.1
+Filename 'zImage_dtb.uimg'.
+Load address: 0x42000000
+Loading: *#################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 ################
+	 141.6 KiB/s
+done
+Bytes transferred = 11676733 (b22c3d hex)
+=> setenv bootargs 'pci=nomsi pcie_aspm=off rdinit=/init console=ttyAMA0,115200n8 earlycon=pl011,0x94404000 earlyprintk ignore_loglevel keep_bootcon cma=16M@0x4e800000'
+=> bootm 0x42000000
+## Booting kernel from Legacy Image at 42000000 ...
+   Image Name:   
+   Image Type:   ARM Linux Kernel Image (uncompressed)
+   Data Size:    11676669 Bytes = 11.1 MiB
+   Load Address: 42000000
+   Entry Point:  42000040
+   Verifying Checksum ... OK
+   XIP Kernel Image ... OK
+OK
+----------------------
+|-->setup versioninfo tag...
+
+Starting kernel ...
+
+BCEFGHIJKLMNO[    0.000000] Booting Linux on physical CPU 0x0
+[    0.000000] Linux version 6.6.0-dirty (ubuntu@pc-work) (arm-linux-gnueabi-gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, GNU ld (GNU Binutils for Ubuntu) 2.42) #94 Fri May 22 14:50:55 UTC 2026
+[    0.000000] CPU: ARMv7 Processor [414fc091] revision 1 (ARMv7), cr=18c5387d
+[    0.000000] CPU: PIPT / VIPT nonaliasing data cache, VIPT aliasing instruction cache
+[    0.000000] OF: fdt: Machine model: ZTE H3600 (ZX279128S) — first boot
+[    0.000000] earlycon: pl11 at MMIO 0x94404000 (options '')
+[    0.000000] printk: bootconsole [pl11] enabled
+[    0.000000] printk: bootconsole [earlycon0] enabled
+[    0.000000] printk: debug: ignoring loglevel setting.
+[    0.000000] printk: debug: skip boot console de-registration.
+[    0.000000] Memory policy: Data cache writeback
+[    0.000000] cma: Reserved 16 MiB at 0x4e800000 on node -1
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000040000000-0x000000004fffffff]
+[    0.000000]   Normal   empty
+[    0.000000]   HighMem  empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000040000000-0x000000004fffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000040000000-0x000000004fffffff]
+[    0.000000] CPU: All CPU(s) started in SVC mode.
+[    0.000000] pcpu-alloc: s0 r0 d32768 u32768 alloc=1*32768
+[    0.000000] pcpu-alloc: [0] 0 
+[    0.000000] Kernel command line: pci=nomsi pcie_aspm=off rdinit=/init console=ttyAMA0,115200n8 earlycon=pl011,0x94404000 earlyprintk ignore_loglevel keep_bootcon cma=16M@0x4e800000; U-Boot V1.0.0 20211028123000 0x700000 0x0 0xaf 0xa3
+[    0.000000] PCIe ASPM is disabled
+[    0.000000] Unknown kernel command line parameters "U-Boot 20211028123000 0x700000 0x0 0xaf 0xa3", will be passed to user space.
+[    0.000000] Dentry cache hash table entries: 32768 (order: 5, 131072 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 16384 (order: 4, 65536 bytes, linear)
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 65024
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] Memory: 215952K/262144K available (14336K kernel code, 2457K rwdata, 6256K rodata, 3072K init, 399K bss, 29808K reserved, 16384K cma-reserved, 0K highmem)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] trace event string verifier disabled
+[    0.000000] NR_IRQS: 16, nr_irqs: 16, preallocated irqs: 16
+[    0.000000] GIC: PPI11 is secure or misconfigured
+[    0.000039] sched_clock: 64 bits at 12MHz, resolution 83ns, wraps every 4398046511096ns
+[    0.166258] clocksource: arm_global_timer: mask: 0xffffffffffffffff max_cycles: 0x2c47f4ee7, max_idle_ns: 440795202497 ns
+[    0.394319] GIC: PPI11 is secure or misconfigured
+[    0.491743] Switching to timer-based delay loop, resolution 83ns
+[    0.628118] Console: colour dummy device 80x30
+[    0.710291] Calibrating delay loop (skipped), value calculated using timer frequency.. 24.00 BogoMIPS (lpj=120000)
+[    0.924207] CPU: Testing write buffer coherency: ok
+[    1.025418] CPU0: Spectre v2: using BPIALL workaround
+[    1.130228] pid_max: default: 32768 minimum: 301
+[    1.229380] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    1.378399] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    1.585658] Setting up static identity map for 0x40300000 - 0x403000bc
+[    1.719142] devtmpfs: initialized
+[    1.797300] VFP support v0.3: not present
+[    1.856873] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+[    2.055961] futex hash table entries: 256 (order: -1, 3072 bytes, linear)
+[    2.237786] pinctrl core: initialized pinctrl subsystem
+[    2.381701] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    2.522762] DMA: preallocated 256 KiB pool for atomic coherent allocations
+[    2.680634] thermal_sys: Registered thermal governor 'step_wise'
+[    2.681765] cpuidle: using governor menu
+[    2.870078] No ATAGs?
+[    2.906050] hw-breakpoint: found 5 (+1 reserved) breakpoint and 1 watchpoint registers.
+[    3.071974] hw-breakpoint: maximum watchpoint size is 4 bytes.
+[    3.244054] Serial: AMBA PL011 UART driver
+[    3.373326] 94404000.serial: ttyAMA0 at MMIO 0x94404000 (irq = 17, base_baud = 0) is a PL011 rev0
+[    3.529962] printk: console [ttyAMA0] enabled
+[    3.529962] printk: console [ttyAMA0] enabled
+[    3.978908] iommu: Default domain type: Translated
+[    3.978908] iommu: Default domain type: Translated
+[    4.149268] iommu: DMA domain TLB invalidation policy: strict mode
+[    4.149268] iommu: DMA domain TLB invalidation policy: strict mode
+[    4.428590] SCSI subsystem initialized
+[    4.428590] SCSI subsystem initialized
+[    4.817389] libata version 3.00 loaded.
+[    4.817389] libata version 3.00 loaded.
+[    4.956942] usbcore: registered new interface driver usbfs
+[    4.956942] usbcore: registered new interface driver usbfs
+[    5.178165] usbcore: registered new interface driver hub
+[    5.178165] usbcore: registered new interface driver hub
+[    5.400703] usbcore: registered new device driver usb
+[    5.400703] usbcore: registered new device driver usb
+[    5.633482] pps_core: LinuxPPS API ver. 1 registered
+[    5.633482] pps_core: LinuxPPS API ver. 1 registered
+[    5.817906] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    5.817906] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    6.200074] PTP clock support registered
+[    6.200074] PTP clock support registered
+[    6.368168] EDAC MC: Ver: 3.0.0
+[    6.368168] EDAC MC: Ver: 3.0.0
+[    6.997310] scmi_core: SCMI protocol bus registered
+[    6.997310] scmi_core: SCMI protocol bus registered
+[    7.333741] vgaarb: loaded
+[    7.333741] vgaarb: loaded
+[    7.490497] clocksource: Switched to clocksource arm_global_timer
+[    7.490497] clocksource: Switched to clocksource arm_global_timer
+[    9.188096] NET: Registered PF_INET protocol family
+[    9.188096] NET: Registered PF_INET protocol family
+[    9.367581] IP idents hash table entries: 4096 (order: 3, 32768 bytes, linear)
+[    9.367581] IP idents hash table entries: 4096 (order: 3, 32768 bytes, linear)
+[    9.682752] tcp_listen_portaddr_hash hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    9.682752] tcp_listen_portaddr_hash hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[   10.017941] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[   10.017941] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[   10.341738] TCP established hash table entries: 2048 (order: 1, 8192 bytes, linear)
+[   10.341738] TCP established hash table entries: 2048 (order: 1, 8192 bytes, linear)
+[   10.661813] TCP bind hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[   10.661813] TCP bind hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[   10.960641] TCP: Hash tables configured (established 2048 bind 2048)
+[   10.960641] TCP: Hash tables configured (established 2048 bind 2048)
+[   11.227617] UDP hash table entries: 256 (order: 0, 4096 bytes, linear)
+[   11.227617] UDP hash table entries: 256 (order: 0, 4096 bytes, linear)
+[   11.498537] UDP-Lite hash table entries: 256 (order: 0, 4096 bytes, linear)
+[   11.498537] UDP-Lite hash table entries: 256 (order: 0, 4096 bytes, linear)
+[   11.793744] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[   11.793744] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[   12.984856] RPC: Registered named UNIX socket transport module.
+[   12.984856] RPC: Registered named UNIX socket transport module.
+[   13.203239] RPC: Registered udp transport module.
+[   13.203239] RPC: Registered udp transport module.
+[   13.400103] RPC: Registered tcp transport module.
+[   13.400103] RPC: Registered tcp transport module.
+[   13.596509] RPC: Registered tcp-with-tls transport module.
+[   13.596509] RPC: Registered tcp-with-tls transport module.
+[   13.825661] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[   13.825661] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[   14.095015] PCI: CLS 0 bytes, default 64
+[   14.095015] PCI: CLS 0 bytes, default 64
+[   14.296174] Initialise system trusted keyrings
+[   14.296174] Initialise system trusted keyrings
+[   14.901311] workingset: timestamp_bits=30 max_order=16 bucket_order=0
+[   14.901311] workingset: timestamp_bits=30 max_order=16 bucket_order=0
+[   15.152601] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[   15.152601] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[   15.833270] NFS: Registering the id_resolver key type
+[   15.833270] NFS: Registering the id_resolver key type
+[   16.016546] Key type id_resolver registered
+[   16.016546] Key type id_resolver registered
+[   16.190916] Key type id_legacy registered
+[   16.190916] Key type id_legacy registered
+[   16.359392] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[   16.359392] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[   16.638819] nfs4flexfilelayout_init: NFSv4 Flexfile Layout Driver Registering...
+[   16.638819] nfs4flexfilelayout_init: NFSv4 Flexfile Layout Driver Registering...
+[   16.948527] ntfs: driver 2.1.32 [Flags: R/O].
+[   16.948527] ntfs: driver 2.1.32 [Flags: R/O].
+[   17.947084] Key type asymmetric registered
+[   17.947084] Key type asymmetric registered
+[   18.089141] Asymmetric key parser 'x509' registered
+[   18.089141] Asymmetric key parser 'x509' registered
+[   18.295321] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 246)
+[   18.295321] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 246)
+[   18.602736] io scheduler mq-deadline registered
+[   18.602736] io scheduler mq-deadline registered
+[   18.791878] io scheduler kyber registered
+[   18.791878] io scheduler kyber registered
+[   18.960964] io scheduler bfq registered
+[   18.960964] io scheduler bfq registered
+[   33.549515] Serial: 8250/16550 driver, 5 ports, IRQ sharing enabled
+[   33.549515] Serial: 8250/16550 driver, 5 ports, IRQ sharing enabled
+[   34.163621] SuperH (H)SCI(F) driver initialized
+[   34.163621] SuperH (H)SCI(F) driver initialized
+[   34.347200] msm_serial: driver initialized
+[   34.347200] msm_serial: driver initialized
+[   34.495642] STMicroelectronics ASC driver initialized
+[   34.495642] STMicroelectronics ASC driver initialized
+[   34.731431] STM32 USART driver initialized
+[   34.731431] STM32 USART driver initialized
+[   36.549952] brd: module loaded
+[   36.549952] brd: module loaded
+[   37.338018] loop: module loaded
+[   37.338018] loop: module loaded
+[   37.812004] CAN device driver interface
+[   37.812004] CAN device driver interface
+[   37.969519] bgmac_bcma: Broadcom 47xx GBit MAC driver loaded
+[   37.969519] bgmac_bcma: Broadcom 47xx GBit MAC driver loaded
+[   38.213904] e1000e: Intel(R) PRO/1000 Network Driver
+[   38.213904] e1000e: Intel(R) PRO/1000 Network Driver
+[   38.391845] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
+[   38.391845] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
+[   38.640978] igb: Intel(R) Gigabit Ethernet Network Driver
+[   38.640978] igb: Intel(R) Gigabit Ethernet Network Driver
+[   38.864866] igb: Copyright (c) 2007-2014 Intel Corporation.
+[   38.864866] igb: Copyright (c) 2007-2014 Intel Corporation.
+[   39.216769] pegasus: Pegasus/Pegasus II USB Ethernet driver
+[   39.216769] pegasus: Pegasus/Pegasus II USB Ethernet driver
+[   39.422205] usbcore: registered new interface driver pegasus
+[   39.422205] usbcore: registered new interface driver pegasus
+[   39.658352] usbcore: registered new interface driver asix
+[   39.658352] usbcore: registered new interface driver asix
+[   39.884367] usbcore: registered new interface driver ax88179_178a
+[   39.884367] usbcore: registered new interface driver ax88179_178a
+[   40.139217] usbcore: registered new interface driver cdc_ether
+[   40.139217] usbcore: registered new interface driver cdc_ether
+[   40.383434] usbcore: registered new interface driver smsc75xx
+[   40.383434] usbcore: registered new interface driver smsc75xx
+[   40.623889] usbcore: registered new interface driver smsc95xx
+[   40.623889] usbcore: registered new interface driver smsc95xx
+[   40.864261] usbcore: registered new interface driver net1080
+[   40.864261] usbcore: registered new interface driver net1080
+[   41.101646] usbcore: registered new interface driver cdc_subset
+[   41.101646] usbcore: registered new interface driver cdc_subset
+[   41.348581] usbcore: registered new interface driver zaurus
+[   41.348581] usbcore: registered new interface driver zaurus
+[   41.582427] usbcore: registered new interface driver cdc_ncm
+[   41.582427] usbcore: registered new interface driver cdc_ncm
+[   42.077339] i2c_dev: i2c /dev entries driver
+[   42.077339] i2c_dev: i2c /dev entries driver
+[   42.801145] sdhci: Secure Digital Host Controller Interface driver
+[   42.801145] sdhci: Secure Digital Host Controller Interface driver
+[   43.029922] sdhci: Copyright(c) Pierre Ossman
+[   43.029922] sdhci: Copyright(c) Pierre Ossman
+[   43.272840] Synopsys Designware Multimedia Card Interface Driver
+[   43.272840] Synopsys Designware Multimedia Card Interface Driver
+[   43.554160] sdhci-pltfm: SDHCI platform and OF driver helper
+[   43.554160] sdhci-pltfm: SDHCI platform and OF driver helper
+[   43.854983] ledtrig-cpu: registered to indicate activity on CPUs
+[   43.854983] ledtrig-cpu: registered to indicate activity on CPUs
+[   44.127959] usbcore: registered new interface driver usbhid
+[   44.127959] usbcore: registered new interface driver usbhid
+[   44.331598] usbhid: USB HID core driver
+[   44.331598] usbhid: USB HID core driver
+[   44.711512] NET: Registered PF_INET6 protocol family
+[   44.711512] NET: Registered PF_INET6 protocol family
+[   47.178798] Segment Routing with IPv6
+[   47.178798] Segment Routing with IPv6
+[   47.304702] In-situ OAM (IOAM) with IPv6
+[   47.304702] In-situ OAM (IOAM) with IPv6
+[   47.469223] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[   47.469223] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[   47.732754] NET: Registered PF_PACKET protocol family
+[   47.732754] NET: Registered PF_PACKET protocol family
+[   47.926366] can: controller area network core
+[   47.926366] can: controller area network core
+[   48.109702] NET: Registered PF_CAN protocol family
+[   48.109702] NET: Registered PF_CAN protocol family
+[   48.308902] can: raw protocol
+[   48.308902] can: raw protocol
+[   48.433059] can: broadcast manager protocol
+[   48.433059] can: broadcast manager protocol
+[   48.608190] can: netlink gateway - max_hops=1
+[   48.608190] can: netlink gateway - max_hops=1
+[   48.801799] Key type dns_resolver registered
+[   48.801799] Key type dns_resolver registered
+[   48.977266] ThumbEE CPU extension supported.
+[   48.977266] ThumbEE CPU extension supported.
+[   49.148526] Registering SWP/SWPB emulation handler
+[   49.148526] Registering SWP/SWPB emulation handler
+[   50.002208] Loading compiled-in X.509 certificates
+[   50.002208] Loading compiled-in X.509 certificates
+[   54.137073] clk: Disabling unused clocks
+[   54.137073] clk: Disabling unused clocks
+[   54.374544] Freeing unused kernel image (initmem) memory: 3072K
+[   54.374544] Freeing unused kernel image (initmem) memory: 3072K
+[   54.599547] Run /init as init process
+[   54.599547] Run /init as init process
+[   54.746267]   with arguments:
+[   54.746267]   with arguments:
+[   54.870264]     /init
+[   54.870264]     /init
+[   54.965185]     U-Boot
+[   54.965185]     U-Boot
+[   55.063726]     20211028123000
+[   55.063726]     20211028123000
+[   55.191556]     0x700000
+[   55.191556]     0x700000
+[   55.297341]     0x0
+[   55.297341]     0x0
+[   55.384999]     0xaf
+[   55.384999]     0xaf
+[   55.476178]     0xa3
+[   55.476178]     0xa3
+[   55.567861]   with environment:
+[   55.567861]   with environment:
+[   55.699104]     HOME=/
+[   55.699104]     HOME=/
+[   55.797718]     TERM=linux
+[   55.797718]     TERM=linux
+[   55.968269] [INIT] ==== C init alive ====
+[   55.968269] [INIT] ==== C init alive ====
+[   56.106866] [INIT] insmod zx279128-eth.ko
+[   56.106866] [INIT] insmod zx279128-eth.ko
+[   56.413831] zx279128_eth: loading out-of-tree module taints kernel.
+[   56.413831] zx279128_eth: loading out-of-tree module taints kernel.
+[   56.696163] zx279128-eth 921c0000.ethernet: replay zx-replay/stock.bin: 22363 entries (178912 bytes)
+[   56.696163] zx279128-eth 921c0000.ethernet: replay zx-replay/stock.bin: 22363 entries (178912 bytes)
+[   57.056654] zx279128-eth 921c0000.ethernet: replay zx-replay/cla.bin: 780 entries (59288 bytes)
+[   57.056654] zx279128-eth 921c0000.ethernet: replay zx-replay/cla.bin: 780 entries (59288 bytes)
+[   57.420083] zx279128-eth 921c0000.ethernet: replay zx-replay/pm.bin: 1025 entries (41008 bytes)
+[   57.420083] zx279128-eth 921c0000.ethernet: replay zx-replay/pm.bin: 1025 entries (41008 bytes)
+[   57.777310] zx279128-eth 921c0000.ethernet: TOPCRM[0x0C] = 0x5179e0 (PON clocks enabled)
+[   57.777310] zx279128-eth 921c0000.ethernet: TOPCRM[0x0C] = 0x5179e0 (PON clocks enabled)
+
+[zxdbg] probe [   58.257549] zx279128-eth 921c0000.ethernet: replayed 22363 stock regs (13844 PON-early + 8519 NPP+)
+[   58.257549] zx279128-eth 921c0000.ethernet: replayed 22363 stock regs (13844 PON-early + 8519 NPP+)
+[   58.606340] zx279128-eth 921c0000.ethernet: PP[0x2c] (CPU_FWD) = 0x106, IDM[0x8000] CTRL = 0x20f6766
+[   58.606340] zx279128-eth 921c0000.ethernet: PP[0x2c] (CPU_FWD) = 0x106, IDM[0x8000] CTRL = 0x20f6766
+[   58.988964] zx279128-eth 921c0000.ethernet: VLAN setup: 16/16 port-vlan entries OK
+[   58.988964] zx279128-eth 921c0000.ethernet: VLAN setup: 16/16 port-vlan entries OK
+[   59.304442] zx279128-eth 921c0000.ethernet: isolate ports 6,7 = 0xff, 0xff
+[   59.304442] zx279128-eth 921c0000.ethernet: isolate ports 6,7 = 0xff, 0xff
+[   59.738827] zx279128-eth 921c0000.ethernet idm0: registered (MAC 02:2c:3f:9f:e4:00)
+[   59.738827] zx279128-eth 921c0000.ethernet idm0: registered (MAC 02:2c:3f:9f:e4:00)
+[   60.047714] zx279128-eth 921c0000.ethernet idm1: registered (MAC 02:b2:fc:0f:c6:01)
+[   60.047714] zx279128-eth 921c0000.ethernet idm1: registered (MAC 02:b2:fc:0f:c6:01)
+[   60.397056] zx279128-eth 921c0000.ethernet: TM pools: bppe=0x4e847000 (512 B), bp=0x4e900000 (589824 B), rxdesc=0x4e880000 (262144 B)
+[   60.397056] zx279128-eth 921c0000.ethernet: TM pools: bppe=0x4e847000 (512 B), bp=0x4e900000 (589824 B), rxdesc=0x4e880000 (262144 B)
+[   60.869660] zx279128-eth 921c0000.ethernet: TM DMA init: ctrl=0x3f6564, timeout=50000
+[   60.869660] zx279128-eth 921c0000.ethernet: TM DMA init: ctrl=0x3f6564, timeout=50000
+[   61.196606] zx279128-eth 921c0000.ethernet: TM BMU init: pool_size=256, bp_size=2304, bppe@0x4e847000
+[   61.196606] zx279128-eth 921c0000.ethernet: TM BMU init: pool_size=256, bp_size=2304, bppe@0x4e847000
+[   61.582370] zx279128-eth 921c0000.ethernet: rxdesc canaries planted at 0x4e880000 (TM[0xF0]=0x4e880000, first w[0]=0xdead0000)
+[   61.582370] zx279128-eth 921c0000.ethernet: rxdesc canaries planted at 0x4e880000 (TM[0xF0]=0x4e880000, first w[0]=0xdead0000)
+[   62.057699] zx279128-eth 921c0000.ethernet: TM BMU enabled: tm[0x8000]=0x1 0x8058=0x101 0x8048=0x90 0x8090=0x3e4a
+[   62.057699] zx279128-eth 921c0000.ethernet: TM BMU enabled: tm[0x8000]=0x1 0x8058=0x101 0x8048=0x90 0x8090=0x3e4a
+[   62.504580] zx279128-eth 921c0000.ethernet sw: sw registered (MAC f4:f6:47:0f:42:64)
+[   62.504580] zx279128-eth 921c0000.ethernet sw: sw registered (MAC f4:f6:47:0f:42:64)
+[   62.812096] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[0] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   62.812096] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[0] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   63.250900] zx279128-eth 921c0000.ethernet: CPU MAC slot[0] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   63.250900] zx279128-eth 921c0000.ethernet: CPU MAC slot[0] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   63.639467] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[1] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   63.639467] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[1] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   64.079172] zx279128-eth 921c0000.ethernet: CPU MAC slot[1] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   64.079172] zx279128-eth 921c0000.ethernet: CPU MAC slot[1] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   64.468089] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[2] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   64.468089] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[2] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   64.907653] zx279128-eth 921c0000.ethernet: CPU MAC slot[2] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   64.907653] zx279128-eth 921c0000.ethernet: CPU MAC slot[2] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   65.296427] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[3] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   65.296427] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[3] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   65.735876] zx279128-eth 921c0000.ethernet: CPU MAC slot[3] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   65.735876] zx279128-eth 921c0000.ethernet: CPU MAC slot[3] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   66.124874] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[16] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   66.124874] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[16] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   66.568146] zx279128-eth 921c0000.ethernet: CPU MAC slot[16] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   66.568146] zx279128-eth 921c0000.ethernet: CPU MAC slot[16] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   66.960733] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[17] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   66.960733] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[17] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   67.403770] zx279128-eth 921c0000.ethernet: CPU MAC slot[17] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   67.403770] zx279128-eth 921c0000.ethernet: CPU MAC slot[17] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   67.796436] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[18] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   67.796436] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[18] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   68.239641] zx279128-eth 921c0000.ethernet: CPU MAC slot[18] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   68.239641] zx279128-eth 921c0000.ethernet: CPU MAC slot[18] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   68.632067] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[19] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   68.632067] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[19] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   69.075146] zx279128-eth 921c0000.ethernet: CPU MAC slot[19] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   69.075146] zx279128-eth 921c0000.ethernet: CPU MAC slot[19] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   69.467630] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[32] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   69.467630] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[32] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   69.911178] zx279128-eth 921c0000.ethernet: CPU MAC slot[32] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   69.911178] zx279128-eth 921c0000.ethernet: CPU MAC slot[32] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   70.303697] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[33] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   70.303697] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[33] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   70.746705] zx279128-eth 921c0000.ethernet: CPU MAC slot[33] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   70.746705] zx279128-eth 921c0000.ethernet: CPU MAC slot[33] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   71.139110] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[34] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   71.139110] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[34] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   71.582456] zx279128-eth 921c0000.ethernet: CPU MAC slot[34] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   71.582456] zx279128-eth 921c0000.ethernet: CPU MAC slot[34] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   71.974936] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[35] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   71.974936] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[35] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   72.418132] zx279128-eth 921c0000.ethernet: CPU MAC slot[35] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   72.418132] zx279128-eth 921c0000.ethernet: CPU MAC slot[35] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   72.810751] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[48] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   72.810751] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[48] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   73.253803] zx279128-eth 921c0000.ethernet: CPU MAC slot[48] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   73.253803] zx279128-eth 921c0000.ethernet: CPU MAC slot[48] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   73.646366] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[49] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   73.646366] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[49] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   74.089477] zx279128-eth 921c0000.ethernet: CPU MAC slot[49] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   74.089477] zx279128-eth 921c0000.ethernet: CPU MAC slot[49] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   74.481947] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[50] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   74.481947] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[50] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   74.925091] zx279128-eth 921c0000.ethernet: CPU MAC slot[50] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   74.925091] zx279128-eth 921c0000.ethernet: CPU MAC slot[50] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   75.317596] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[51] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   75.317596] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[51] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   75.760800] zx279128-eth 921c0000.ethernet: CPU MAC slot[51] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   75.760800] zx279128-eth 921c0000.ethernet: CPU MAC slot[51] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   76.153316] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[64] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   76.153316] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[64] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   76.596500] zx279128-eth 921c0000.ethernet: CPU MAC slot[64] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   76.596500] zx279128-eth 921c0000.ethernet: CPU MAC slot[64] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   76.989066] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[65] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   76.989066] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[65] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   77.432464] zx279128-eth 921c0000.ethernet: CPU MAC slot[65] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   77.432464] zx279128-eth 921c0000.ethernet: CPU MAC slot[65] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   77.824883] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[66] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   77.824883] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[66] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   78.268059] zx279128-eth 921c0000.ethernet: CPU MAC slot[66] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   78.268059] zx279128-eth 921c0000.ethernet: CPU MAC slot[66] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   78.660803] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[67] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   78.660803] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[67] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   79.103731] zx279128-eth 921c0000.ethernet: CPU MAC slot[67] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   79.103731] zx279128-eth 921c0000.ethernet: CPU MAC slot[67] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   79.496416] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[80] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   79.496416] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[80] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   79.939553] zx279128-eth 921c0000.ethernet: CPU MAC slot[80] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   79.939553] zx279128-eth 921c0000.ethernet: CPU MAC slot[80] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   80.332022] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[81] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   80.332022] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[81] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   80.775098] zx279128-eth 921c0000.ethernet: CPU MAC slot[81] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   80.775098] zx279128-eth 921c0000.ethernet: CPU MAC slot[81] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   81.167555] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[82] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   81.167555] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[82] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   81.611004] zx279128-eth 921c0000.ethernet: CPU MAC slot[82] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   81.611004] zx279128-eth 921c0000.ethernet: CPU MAC slot[82] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   82.003464] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[83] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   82.003464] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[83] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   82.446713] zx279128-eth 921c0000.ethernet: CPU MAC slot[83] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   82.446713] zx279128-eth 921c0000.ethernet: CPU MAC slot[83] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   82.839089] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[96] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   82.839089] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[96] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   83.282405] zx279128-eth 921c0000.ethernet: CPU MAC slot[96] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   83.282405] zx279128-eth 921c0000.ethernet: CPU MAC slot[96] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   83.674731] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[97] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   83.674731] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[97] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   84.117922] zx279128-eth 921c0000.ethernet: CPU MAC slot[97] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   84.117922] zx279128-eth 921c0000.ethernet: CPU MAC slot[97] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   84.510791] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[98] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   84.510791] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[98] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   84.953564] zx279128-eth 921c0000.ethernet: CPU MAC slot[98] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   84.953564] zx279128-eth 921c0000.ethernet: CPU MAC slot[98] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   85.346373] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[99] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   85.346373] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[99] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   85.789468] zx279128-eth 921c0000.ethernet: CPU MAC slot[99] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   85.789468] zx279128-eth 921c0000.ethernet: CPU MAC slot[99] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   86.181880] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[112] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   86.181880] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[112] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   86.628654] zx279128-eth 921c0000.ethernet: CPU MAC slot[112] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   86.628654] zx279128-eth 921c0000.ethernet: CPU MAC slot[112] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   87.024703] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[113] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   87.024703] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[113] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   87.471566] zx279128-eth 921c0000.ethernet: CPU MAC slot[113] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   87.471566] zx279128-eth 921c0000.ethernet: CPU MAC slot[113] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   87.867863] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[114] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   87.867863] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[114] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   88.314825] zx279128-eth 921c0000.ethernet: CPU MAC slot[114] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   88.314825] zx279128-eth 921c0000.ethernet: CPU MAC slot[114] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   88.710924] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[115] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   88.710924] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[115] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   89.157566] zx279128-eth 921c0000.ethernet: CPU MAC slot[115] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   89.157566] zx279128-eth 921c0000.ethernet: CPU MAC slot[115] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   89.553792] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[128] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   89.553792] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[128] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   90.000695] zx279128-eth 921c0000.ethernet: CPU MAC slot[128] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   90.000695] zx279128-eth 921c0000.ethernet: CPU MAC slot[128] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   90.396716] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[129] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   90.396716] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[129] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   90.843733] zx279128-eth 921c0000.ethernet: CPU MAC slot[129] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   90.843733] zx279128-eth 921c0000.ethernet: CPU MAC slot[129] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   91.239817] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[130] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   91.239817] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[130] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   91.686630] zx279128-eth 921c0000.ethernet: CPU MAC slot[130] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   91.686630] zx279128-eth 921c0000.ethernet: CPU MAC slot[130] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   92.082728] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[131] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   92.082728] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[131] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   92.529558] zx279128-eth 921c0000.ethernet: CPU MAC slot[131] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   92.529558] zx279128-eth 921c0000.ethernet: CPU MAC slot[131] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   92.925611] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[144] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   92.925611] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[144] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   93.372403] zx279128-eth 921c0000.ethernet: CPU MAC slot[144] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   93.372403] zx279128-eth 921c0000.ethernet: CPU MAC slot[144] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   93.768649] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[145] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   93.768649] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[145] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   94.215457] zx279128-eth 921c0000.ethernet: CPU MAC slot[145] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   94.215457] zx279128-eth 921c0000.ethernet: CPU MAC slot[145] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   94.611596] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[146] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   94.611596] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[146] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   95.058381] zx279128-eth 921c0000.ethernet: CPU MAC slot[146] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   95.058381] zx279128-eth 921c0000.ethernet: CPU MAC slot[146] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   95.454548] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[147] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   95.454548] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[147] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   95.901286] zx279128-eth 921c0000.ethernet: CPU MAC slot[147] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   95.901286] zx279128-eth 921c0000.ethernet: CPU MAC slot[147] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   96.297628] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[160] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   96.297628] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[160] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   96.744373] zx279128-eth 921c0000.ethernet: CPU MAC slot[160] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   96.744373] zx279128-eth 921c0000.ethernet: CPU MAC slot[160] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[   97.140728] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[161] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   97.140728] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[161] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[   97.587326] zx279128-eth 921c0000.ethernet: CPU MAC slot[161] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   97.587326] zx279128-eth 921c0000.ethernet: CPU MAC slot[161] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[   97.983316] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[162] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   97.983316] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[162] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[   98.430160] zx279128-eth 921c0000.ethernet: CPU MAC slot[162] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   98.430160] zx279128-eth 921c0000.ethernet: CPU MAC slot[162] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[   98.826066] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[163] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   98.826066] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[163] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[   99.273187] zx279128-eth 921c0000.ethernet: CPU MAC slot[163] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   99.273187] zx279128-eth 921c0000.ethernet: CPU MAC slot[163] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[   99.669213] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[176] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[   99.669213] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[176] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[  100.115948] zx279128-eth 921c0000.ethernet: CPU MAC slot[176] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[  100.115948] zx279128-eth 921c0000.ethernet: CPU MAC slot[176] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[  100.512100] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[177] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[  100.512100] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[177] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[  100.958900] zx279128-eth 921c0000.ethernet: CPU MAC slot[177] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[  100.958900] zx279128-eth 921c0000.ethernet: CPU MAC slot[177] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[  101.355010] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[178] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[  101.355010] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[178] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[  101.801709] zx279128-eth 921c0000.ethernet: CPU MAC slot[178] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[  101.801709] zx279128-eth 921c0000.ethernet: CPU MAC slot[178] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[  102.198027] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[179] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[  102.198027] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[179] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[  102.644873] zx279128-eth 921c0000.ethernet: CPU MAC slot[179] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[  102.644873] zx279128-eth 921c0000.ethernet: CPU MAC slot[179] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[  103.040867] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[192] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[  103.040867] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[192] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[  103.487731] zx279128-eth 921c0000.ethernet: CPU MAC slot[192] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[  103.487731] zx279128-eth 921c0000.ethernet: CPU MAC slot[192] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[  103.883740] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[193] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[  103.883740] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[193] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[  104.330807] zx279128-eth 921c0000.ethernet: CPU MAC slot[193] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[  104.330807] zx279128-eth 921c0000.ethernet: CPU MAC slot[193] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[  104.726571] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[194] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[  104.726571] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[194] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[  105.173609] zx279128-eth 921c0000.ethernet: CPU MAC slot[194] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[  105.173609] zx279128-eth 921c0000.ethernet: CPU MAC slot[194] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[  105.569809] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[195] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[  105.569809] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[195] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[  106.016636] zx279128-eth 921c0000.ethernet: CPU MAC slot[195] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[  106.016636] zx279128-eth 921c0000.ethernet: CPU MAC slot[195] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[  106.412698] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[208] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[  106.412698] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[208] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[  106.859418] zx279128-eth 921c0000.ethernet: CPU MAC slot[208] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[  106.859418] zx279128-eth 921c0000.ethernet: CPU MAC slot[208] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[  107.255571] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[209] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[  107.255571] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[209] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[  107.702302] zx279128-eth 921c0000.ethernet: CPU MAC slot[209] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[  107.702302] zx279128-eth 921c0000.ethernet: CPU MAC slot[209] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[  108.098633] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[210] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[  108.098633] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[210] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[  108.545508] zx279128-eth 921c0000.ethernet: CPU MAC slot[210] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[  108.545508] zx279128-eth 921c0000.ethernet: CPU MAC slot[210] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[  108.941570] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[211] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[  108.941570] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[211] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[  109.388374] zx279128-eth 921c0000.ethernet: CPU MAC slot[211] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[  109.388374] zx279128-eth 921c0000.ethernet: CPU MAC slot[211] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[  109.784443] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[224] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[  109.784443] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[224] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[  110.231245] zx279128-eth 921c0000.ethernet: CPU MAC slot[224] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[  110.231245] zx279128-eth 921c0000.ethernet: CPU MAC slot[224] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[  110.627594] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[225] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[  110.627594] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[225] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[  111.074409] zx279128-eth 921c0000.ethernet: CPU MAC slot[225] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[  111.074409] zx279128-eth 921c0000.ethernet: CPU MAC slot[225] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[  111.470770] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[226] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[  111.470770] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[226] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[  111.917247] zx279128-eth 921c0000.ethernet: CPU MAC slot[226] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[  111.917247] zx279128-eth 921c0000.ethernet: CPU MAC slot[226] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[  112.313439] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[227] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[  112.313439] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[227] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[  112.760203] zx279128-eth 921c0000.ethernet: CPU MAC slot[227] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[  112.760203] zx279128-eth 921c0000.ethernet: CPU MAC slot[227] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[  113.156136] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[240] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[  113.156136] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[240] = f4:f6:47:0f:42:64 (data1=0xf4f6 data0=0x470f4264)
+[  113.603289] zx279128-eth 921c0000.ethernet: CPU MAC slot[240] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[  113.603289] zx279128-eth 921c0000.ethernet: CPU MAC slot[240] = f4:f6:47:0f:42:64 (spa+pp_pm registered)
+[  113.999384] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[241] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[  113.999384] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[241] = f4:f6:47:0f:42:65 (data1=0xf4f6 data0=0x470f4265)
+[  114.446181] zx279128-eth 921c0000.ethernet: CPU MAC slot[241] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[  114.446181] zx279128-eth 921c0000.ethernet: CPU MAC slot[241] = f4:f6:47:0f:42:65 (spa+pp_pm registered)
+[  114.842222] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[242] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[  114.842222] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[242] = f4:f6:47:0f:42:66 (data1=0xf4f6 data0=0x470f4266)
+[  115.289057] zx279128-eth 921c0000.ethernet: CPU MAC slot[242] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[  115.289057] zx279128-eth 921c0000.ethernet: CPU MAC slot[242] = f4:f6:47:0f:42:66 (spa+pp_pm registered)
+[  115.685057] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[243] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[  115.685057] zx279128-eth 921c0000.ethernet: pp_pm CPU MAC ram[243] = f4:f6:47:0f:42:67 (data1=0xf4f6 data0=0x470f4267)
+[  116.131851] zx279128-eth 921c0000.ethernet: CPU MAC slot[243] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[  116.131851] zx279128-eth 921c0000.ethernet: CPU MAC slot[243] = f4:f6:47:0f:42:67 (spa+pp_pm registered)
+[  116.707193] zx279128-eth 921c0000.ethernet: CLA replay: 1804 ok, 0 fail (780 snapshot + ram=7 0..1023)
+[  116.707193] zx279128-eth 921c0000.ethernet: CLA replay: 1804 ok, 0 fail (780 snapshot + ram=7 0..1023)
+[  117.125780] zx279128-eth 921c0000.ethernet: pp_pm replay: 1025 ok, 0 fail (1025 total)
+[  117.125780] zx279128-eth 921c0000.ethernet: pp_pm replay: 1025 ok, 0 fail (1025 total)
+[  117.427064] zx279128-eth 921c0000.ethernet: TM ready: IRQ=20, sw netdev up, CPU MAC + CLA + pp_pm replay done
+[  117.427064] zx279128-eth 921c0000.ethernet: TM ready: IRQ=20, sw netdev up, CPU MAC + CLA + pp_pm replay done
+[  117.841164] zx279128-eth 921c0000.ethernet: ZX279128S ethernet ready (IRQ=18, base=[mem 0x921c0000-0x923bffff], CPU_PORT=5)
+[  117.841164] zx279128-eth 921c0000.ethernet: ZX279128S ethernet ready (IRQ=18, base=[mem 0x921c0000-0x923bffff], CPU_PORT=5)
+[  118.306846] zx279128-eth 921c0000.ethernet: debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem}
+[  118.306846] zx279128-eth 921c0000.ethernet: debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem}
+[  118.734636] [INIT] ip link set sw up
+[  118.734636] [INIT] ip link set sw up
+[  118.949835] zx279128-eth 921c0000.ethernet sw: sw open
+[  118.949835] zx279128-eth 921c0000.ethernet sw: sw open
+[  119.135778] zx279128-eth 921c0000.ethernet sw: sw open: TM IRQ_MASK now 0xfffffffc (was 0xFFFFFFFF)
+[  119.135778] zx279128-eth 921c0000.ethernet sw: sw open: TM IRQ_MASK now 0xfffffffc (was 0xFFFFFFFF)
+[  119.529407] [INIT] ip addr add 192.168.1.99/24 dev sw
+[  119.529407] [INIT] ip addr add 192.168.1.99/24 dev sw
+[  119.727940] [ZXETH] BMU alloc OK #1: bp=0 len=90 (8090=0x3e4a)
+[  119.727940] [ZXETH] BMU alloc OK #1: bp=0 len=90 (8090=0x3e4a)
+[  119.969714] [ZXETH] TM TX #1 OK: bp=0 len=90 head=1
+[  119.969714] [ZXETH] TM TX #1 OK: bp=0 len=90 head=1
+[  120.297082] [INIT] === entering REPL on /dev/console ===
+[  120.297082] [INIT] === entering REPL on /dev/console ===
+[  120.496665] uart-pl011 94404000.serial: no DMA platform data
+[  120.496665] uart-pl011 94404000.serial: no DMA platform data
+[  120.729309] [ZXETH] TM TX #2 OK: bp=1 len=86 head=2
+[  120.729309] [ZXETH] TM TX #2 OK: bp=1 len=86 head=2
+
+=== C-init REPL ready on UART ===
+ 
+# [  121.172118] [ZXETH] TM TX #3 OK: bp=2 len=90 head=3
+[  121.172118] [ZXETH] TM TX #3 OK: bp=2 len=90 head=3
+[  149.651369] zx279128-eth 921c0000.ethernet: === BMU STATE DUMP (delayed 30s after sw open) ===
+[  149.651369] zx279128-eth 921c0000.ethernet: === BMU STATE DUMP (delayed 30s after sw open) ===
+[  149.981842] zx279128-eth 921c0000.ethernet:   tm[0x8000]=0x00000001 BMU_CFG
+[  149.981842] zx279128-eth 921c0000.ethernet:   tm[0x8000]=0x00000001 BMU_CFG
+[  150.272925] zx279128-eth 921c0000.ethernet:   tm[0x8004]=0x0104c040 BPP_CFG
+[  150.272925] zx279128-eth 921c0000.ethernet:   tm[0x8004]=0x0104c040 BPP_CFG
+[  150.563800] zx279128-eth 921c0000.ethernet:   tm[0x8008]=0x0104c040 BPP_CFG2
+[  150.563800] zx279128-eth 921c0000.ethernet:   tm[0x8008]=0x0104c040 BPP_CFG2
+[  150.858440] zx279128-eth 921c0000.ethernet:   tm[0x800c]=0x00000000 SW_ALLOC_BP (result)
+[  150.858440] zx279128-eth 921c0000.ethernet:   tm[0x800c]=0x00000000 SW_ALLOC_BP (result)
+[  151.196420] zx279128-eth 921c0000.ethernet:   tm[0x8014]=0x00000000 SW_ALLOC_CFG
+[  151.196420] zx279128-eth 921c0000.ethernet:   tm[0x8014]=0x00000000 SW_ALLOC_CFG
+[  151.505418] zx279128-eth 921c0000.ethernet:   tm[0x8040]=0x00b2004a BPPI_PTR
+[  151.505418] zx279128-eth 921c0000.ethernet:   tm[0x8040]=0x00b2004a BPPI_PTR
+[  151.799863] zx279128-eth 921c0000.ethernet:   tm[0x8048]=0x00000090 BPPE_PTR (pool_size<<16)
+[  151.799863] zx279128-eth 921c0000.ethernet:   tm[0x8048]=0x00000090 BPPE_PTR (pool_size<<16)
+[  152.152303] zx279128-eth 921c0000.ethernet:   tm[0x8058]=0x00000101 POOL_SIZE_M1
+[  152.152303] zx279128-eth 921c0000.ethernet:   tm[0x8058]=0x00000101 POOL_SIZE_M1
+[  152.461368] zx279128-eth 921c0000.ethernet:   tm[0x8080]=0x00000770 BPPE_BPCNT (bufs available)
+[  152.461368] zx279128-eth 921c0000.ethernet:   tm[0x8080]=0x00000770 BPPE_BPCNT (bufs available)
+[  152.824683] zx279128-eth 921c0000.ethernet:   tm[0x8088]=0x00000068 BPPI_BPCNT
+[  152.824683] zx279128-eth 921c0000.ethernet:   tm[0x8088]=0x00000068 BPPI_BPCNT
+[  153.126356] zx279128-eth 921c0000.ethernet:   tm[0x8090]=0x00003e4a ALLOC_BPCNT (allocs done)
+[  153.126356] zx279128-eth 921c0000.ethernet:   tm[0x8090]=0x00003e4a ALLOC_BPCNT (allocs done)
+[  153.482564] zx279128-eth 921c0000.ethernet:   tm[0x8098]=0x00003e62 RLS_BPCNT
+[  153.482564] zx279128-eth 921c0000.ethernet:   tm[0x8098]=0x00003e62 RLS_BPCNT
+[  153.780766] zx279128-eth 921c0000.ethernet:   tm[0x80dc]=0x50000111 BP_STAT
+[  153.780766] zx279128-eth 921c0000.ethernet:   tm[0x80dc]=0x50000111 BP_STAT
+[  154.071388] zx279128-eth 921c0000.ethernet:   tm_tx_count=9  tm_tx_dropped=0
+[  154.071388] zx279128-eth 921c0000.ethernet:   tm_tx_count=9  tm_tx_dropped=0

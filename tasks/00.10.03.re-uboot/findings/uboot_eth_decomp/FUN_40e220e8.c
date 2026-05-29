@@ -1,0 +1,15 @@
+/* ===== FUN FUN_40e220e8 @ 40e220e8 =====
+ * callers: 40e245a8:FUN_40e245a8, 40e2fa24:FUN_40e2fa24, 40e46958:FUN_40e46958
+ * callees: 40e21040:FUN_40e21040, 40e21eb4:FUN_40e21eb4, 40e2a184:FUN_40e2a184, 40e45a90:FUN_40e45a90
+ */
+
+
+undefined4 FUN_40e220e8(void)
+
+{
+  FUN_40e2a184(DAT_40e22110/*=0x47f35e06*/);
+  FUN_40e45a90(50000);
+  FUN_40e21eb4();
+  FUN_40e21040(0);
+  return 0;
+}

@@ -1,4 +1,4 @@
-# CLAUDE.md — Project conventions for the ZTE H3600 reverse-engineering work
+# CLAUDE.md — Project conventions for the ZTE H3600 reverse-engineering work. (GPL code that company didn't reply my emails) 
 
 This file tells Claude (and humans) how to organize new code and where to
 put things. **Read this before creating new files.**
@@ -11,6 +11,23 @@ put things. **Read this before creating new files.**
 preexisting code; migrate opportunistically as you edit. The goal is a
 gradual consolidation into the structure below without a disruptive
 big-bang refactor.
+
+---
+
+## Key reference docs (don't lose these)
+
+- **`tasks/00.10.02.re-stock-kmods/findings/DATASHEET.md`** — homemade ZX279128S
+  ethernet/switch datasheet. Part 1 = block/memory map (DT windows, the **base-gotcha**
+  npp_base 0x921c0000 vs tm_base 0x92340000, egress pipeline, what's NOT dumped); Part 2 =
+  per-register reference (623+ RE'd registers: phys, bit-field, R/W, semantic name,
+  confidence). **Start here for any register/address question.** Respect the base-gotcha —
+  it caused ~6 wasted iterations.
+- **`STATE.md`** — live device state + journey log (#1–#20); the chronology of what was
+  tried/ruled out for the TX-egress hunt.
+- **`tasks/00.10.02.re-stock-kmods/findings/session_2026-05-28_tx_egress_state.md`** —
+  TX-egress handoff: current gate, ruled-out list, remaining hypotheses, methodology.
+- **`tasks/00.10.02.re-stock-kmods/findings/`** — all RE findings (`*_re.md`); the decomp
+  itself is `decomp_all_*.c` there.
 
 ---
 

@@ -868,8 +868,6 @@ Estamos yenbdo por option A
   1. Mandás un request HTTP separado (POST normal) cuyo body contiene tu struct cruda. El httpd cachea el body en un buffer global de .bss (g_pPostBody o similar) en una address fija (sabés cuál con nm httpd | grep
    -i "body\|content\|buf" | grep " B ").
   2. Acto seguido,
-  ⎿  API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Please double press esc to edit your last message or start a new
-     session for Claude Code to assist with a different task. If you are seeing this refusal repeatedly, try running /model claude-sonnet-4-20250514 to switch models.
 
 ✻ Brewed for 1m 49s
 
@@ -890,8 +888,6 @@ Estamos yenbdo por option A
        0x00144000      1024 B  g_sLineBuffer
      … +34 lines (ctrl+o to expand)
   ⎿  Shell cwd was reset to /home/ubuntu/Projects/MYSELF/ZTE/linux
-  ⎿  API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Please double press esc to edit your last message or start a new
-     session for Claude Code to assist with a different task. If you are seeing this refusal repeatedly, try running /model claude-sonnet-4-20250514 to switch models.
 
 ✻ Churned for 40s
 
@@ -1589,6 +1585,4 @@ Stack overflow en cspd donde el handler de setinst (que SÍ recibe nuestros byte
      3. ¿Tenés acceso al binario o a la libc?                                                                                                                                                                                            
         → Lo necesitás para gadgets y para conocer offsets                                                                                                                                                                               
         → si es firmware embebido, extrael                                                                                                                                                                                               
-  ⎿  API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Please double press esc to edit your last message or start a new session for Claude   
-     Code to assist with a different task. If you are seeing this refusal repeatedly, try running /model claude-sonnet-4-20250514 to switch models.                                                                                      
                                                                         

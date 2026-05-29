@@ -1,0 +1,405 @@
+● Buena idea. Lanzo agente para confirmar approach vs stock, mientras probamos tcpdump:
+
+● Agent(Verify NAPI scan vs stock)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+● Tasks cleaned. Continúo con TX path investigation mientras agent y user prueban Iter 31:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      # tcpdump on host while we ping — verify TX wire-level…)
+  ⎿  --- 192.168.1.99 ping statistics ---
+     10 packets transmitted, 0 received, +5 errors, 100% packet loss, time 3516ms
+     pipe 6
+     … +18 lines (ctrl+o to expand)
+
+● 🚀 tm_rx_count=144! Plus device DID send 1 frame to wire. Check what it was + why ping still fails:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      cat /tmp/dev_tx.log…)
+  ⎿  ---
+     --- 192.168.1.99 ping statistics ---
+     5 packets transmitted, 0 received, 100% packet loss, time 826ms
+     … +6 lines (ctrl+o to expand)
+
+● Host sends ARP, device sends ZERO replies. Driver receives but doesn't reply. Check IP config:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      { printf '/sbin/ip addr show sw 2>&1 || /bin/busybox ip addr show sw 2>&1\n'; sleep 1; } | timeout 5 nc 127.0.0.1
+      9999 2>&1…)
+  ⎿  /sbin/ip addr show sw 2>&1 || /bin/busybox ip addr show sw 2>&1
+     /sbin/ip addr show sw 2>&1 || /bin/busybox ip addr show sw 2>&1
+     [exit=4]
+     … +7 lines (ctrl+o to expand)
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      { printf 'which ip ifconfig && ls /sbin/ /bin/ | grep -E "ip$|ifconfig"\n'; sleep 1; } | timeout 5 nc 127.0.0.1
+      9999 2>&1 |…)
+  ⎿  which ip ifconfig && ls /sbin/ /bin/ | grep -E "ip$|ifconfig"
+     which ip ifconfig && ls /sbin/ /bin/ | grep -E "ip$|ifconfig"
+     [exit=4]
+     … +7 lines (ctrl+o to expand)
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      { printf 'cat /proc/net/route && echo --- && cat /proc/net/arp && echo --- && cat /sys/class/net/sw/address\n';
+      sleep 1; } |…)
+  ⎿  cat /proc/net/route && echo --- && cat /proc/net/arp && echo --- && cat /sys/class/net/sw/address
+     cat /proc/net/route && echo --- && cat /proc/net/arp && echo --- && cat /sys/class/net/sw/address
+     Iface      Destination     Gateway         Flags   RefCnt  Use     Metric  Mask            MTU     Window  IRTT
+     … +11 lines (ctrl+o to expand)
+
+● Device ARP table tiene host MAC! Device received + learned. Kernel should reply. Test TX directly from device:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      # Capture both directions…)
+  ⎿  ping -c 5 -W 1 192.168.1.50 2>&1 | tail -4
+     ping -c 5 -W 1 192.168.1.50 2>&1 | tail -4
+     [exit=4]
+     … +25 lines (ctrl+o to expand)
+
+● TX wedge confirmed: tm_tx_count 27→31 (+4 driver TXs) but tcpdump shows ZERO from device. Stock TX path RE needed:
+
+● Agent(RE TX consume engine wedge)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+● 2 agents running (NAPI verify + TX path). 13+ commits this overnight. RX works (tm_rx_count=144), TX wedged. Wake en
+  ~30min o cuando agentes terminen. 🌙
+
+✻ Brewed for 11m 7s
+
+● Agent "Verify NAPI scan vs stock" completed · 4m 16s
+
+● Agent 11 dice scan-forward es arquitecturalmente incorrecto pero funcional. Stock usa advance-by-1 con cursor
+  persistente + DOS rings (UP+DN) por queue. Para overnight progress, mantengo scan-forward (works). TX wedge sigue
+  siendo el blocker. Continúo esperando agent TX:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      # While waiting for TX agent, inspect current TX state + send some pings to verify status…)
+  ⎿  /bin/memdump 0x92350058 4 && /bin/memdump 0x92350068 4 && /bin/memdump 0x92350054 4 && /bin/memdump 0x92350064
+      4 && cat /sys/kernel/debug/zx_eth/pipeline_stats 2>/dev/null | tail -10
+     92350058 00000000
+     … +16 lines (ctrl+o to expand)
+
+● Hallazgo critical: TM[0x10054]/0x10064 = 1 (kick stuck). 315 loopback drops = driver TX IS happening but switch fabric
+   loops back to CPU instead of egressing to wire. Switch routing issue. Commit + wait TX agent:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      git add tasks/00.10.02.re-stock-kmods/findings/napi_rxdesc_layout_verify.md…)
+  ⎿  [main e14f4b482] findings: NAPI verify — scan-forward works but stock uses advance-by-1
+      1 file changed, 260 insertions(+)
+      create mode 100644 tasks/00.10.02.re-stock-kmods/findings/napi_rxdesc_layout_verify.md
+
+● Check if mainline kicks UP or DN ring for TX (stock uses DN=0x10064):
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE/linux-v6.6/drivers/net/ethernet/zte
+      grep -nE "0x10054\|0x10064\|TM_REG_TX_KICK\|TM_KICK\|TX_UP_KICK\|TX_DN_KICK" zx-eth-main…)
+  ⎿  ---
+     2889:      tx_kick    = tm_read(e, 0x10054);
+     3066: *    5. kick HW: tm[0x10054] = 1  (upstream queue 0)
+     … +6 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+● 🎯 Mainline kicks UP (TM[0x10054]) for TX! Per stock pattern that's wrong — CPU→wire TX = DN direction (TM[0x10064]).
+  Our TX descs go into UP ring → HW treats as switch→CPU → loopback. Let me look + fix:
+
+  Read 1 file (ctrl+o to expand)
+
+● Identified bug: mainline TX writes to UP ring + UP kick. CPU→wire = DN direction. Fix:
+
+● Update(linux-v6.6/drivers/net/ethernet/zte/zx-eth-main.c)
+  ⎿  Added 8 lines, removed 1 line
+      3136    TXCP(e, 3, "BMU alloc OK: bp=%u bp_buf=%p, copied %u bytes from skb (frame at +16)",
+      3137         bp, bp_buf, len);
+      3138  
+      3139 -  desc = (u8 *)e->txdesc_cpu + e->tx_head * TM_TX_DESC_SIZE;                                         
+      3139 +  /* [Iter 32] Write to DN ring (CPU→switch direction), not UP.                                      
+      3140 +   * Stock soft_insert_tx_1desc(desc, dir=1) writes to DN ring base                                  
+      3141 +   * (TM[0x10060]) for CPU TX. UP ring is switch→CPU (RX-side).                                      
+      3142 +   * Mainline previously wrote to UP ring → HW treated as RX-side                                    
+      3143 +   * payload → switch loopback'd back to CPU instead of egressing to                                 
+      3144 +   * wire (= 315 tm_rx_loopback_drops in iter 31 test).                                              
+      3145 +   */                                                                                                
+      3146 +  desc = (u8 *)e->dndesc_cpu + e->tx_head * TM_TX_DESC_SIZE;                                         
+      3147    memset(desc, 0, TM_TX_DESC_SIZE);
+      3148    TXCP(e, 4, "desc[%u]=%p prepared (memset done, BP_SIZE=%u)", e->tx_head, desc, TM_BP_SIZE);
+      3149    /* Stock TX desc format (Ghidra decomp of pon_tm_net_tx + pon_tm_data_raw_send,
+
+● Update(linux-v6.6/drivers/net/ethernet/zte/zx-eth-main.c)
+  ⎿  Added 2 lines, removed 2 lines
+      3193     * (likely because we don't have GPON DN traffic but switch routing expects
+      3194     * activity on DN side too). Keep dual-kick.
+      3195     */
+      3196 -  tm_write(e, 0x10054, 1);  /* upstream kick */                                                        
+      3197 -  /* tm_write(e, 0x10064, 1); */    /* downstream kick — disabled */                                     
+      3196 +  /* DN kick (CPU→switch) per stock soft_insert_tx_1desc dir=1. */                                   
+      3197 +  tm_write(e, 0x10064, 1);                                                                           
+      3198  
+      3199    /* Post-kick desc invalidation:
+      3200     * pcap data showed HW emitting the SAME TX desc multiple times — host
+
+● Also update the post-kick desc-invalidation to point to dndesc:
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(linux-v6.6/drivers/net/ethernet/zte/zx-eth-main.c)
+  ⎿  Added 1 line, removed 1 line
+      3210     */
+      3211    {
+      3212      u32 prev = (e->tx_head - 1) & (TM_TX_RING_SIZE - 1);
+      3213 -    u8 *pdesc = (u8 *)e->txdesc_cpu + prev * TM_TX_DESC_SIZE;                                        
+      3213 +    u8 *pdesc = (u8 *)e->dndesc_cpu + prev * TM_TX_DESC_SIZE;                                        
+      3214  
+      3215      pdesc[11] &= ~0x20;
+      3216      dma_wmb();
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      make -C linux-v6.6 ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- O=../build zImage modules -j$(nproc) 2>&1 | tail -1…)
+  ⎿  make: Leaving directory '/home/ubuntu/Projects/MYSELF/ZTE/linux-v6.6'
+       python3 tasks/00.01.eth-driver/scripts/tftp_boot_mainline.py
+     # [flash_image_to_ram] bootm sent — waiting up to 120s for marker 'REPL ready'
+     … +34 lines (ctrl+o to expand)
+
+● Loopback drops 315 → 35! TX goes to DN now. Pero wire still 0 outgoing. Check DN consume:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      { printf '/bin/memdump 0x92350068 4 && /bin/memdump 0x92350058 4 && /bin/memdump 0x92350064 4 && /bin/memdump
+      0x92350054 4 &…)
+  ⎿  92350058 00000000
+     92350064 00000001
+     92350054 00000000
+     … +7 lines (ctrl+o to expand)
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      { printf '/bin/memdump 0x92350050 4 && /bin/memdump 0x92350060 4 && /bin/memdump 0x92350068 4\n'; sleep 1; } |
+      timeout 5 nc…)
+  ⎿  92350060 4ffef000
+     92350068 001b0000
+     [exit=0]
+     … +2 lines (ctrl+o to expand)
+
+● TM[0x10068] HIGH16: 7→27 (+20 pending) — DN ring queues TX but HW doesn't consume. Our post-kick pdesc[11] &= ~0x20
+  may be clearing VALID before HW can read it. Remove that:
+
+● Update(linux-v6.6/drivers/net/ethernet/zte/zx-eth-main.c)
+  ⎿  Added 7 lines, removed 7 lines
+      3208     * reads desc asynchronously (after kick returns), we'd break TX —
+      3209     * in which case revert and implement a NAPI-driven reclaim instead.
+      3210     */
+      3211 -  {                                                                                                  
+      3212 -    u32 prev = (e->tx_head - 1) & (TM_TX_RING_SIZE - 1);                                             
+      3213 -    u8 *pdesc = (u8 *)e->dndesc_cpu + prev * TM_TX_DESC_SIZE;                                        
+      3211 +  /* [Iter 33] Removed post-kick desc invalidation. Was clearing                                     
+      3212 +   * desc[11] VALID bit (0x20) immediately after kick to prevent HW                                  
+      3213 +   * re-emitting (UP-ring era artifact). On DN ring, HW reads desc                                   
+      3214 +   * asynchronously and we may clear VALID before HW reads → HW skips                                
+      3215 +   * desc → TX never consumed (TM[0x10068] HIGH16 grows but never                                    
+      3216 +   * drains). Let HW manage the valid bit naturally.                                                 
+      3217 +   */                                                                                                
+      3218  
+      3215 -    pdesc[11] &= ~0x20;                                                                              
+      3216 -    dma_wmb();                                                                                       
+      3217 -  }                                                                                                  
+      3218 -                                                                                                     
+      3219    TXCP(e, 7, "kick done; TM[0x10058]=%#x (UP cnt) TM[0x10068]=%#x (DN cnt)",
+      3220         tm_read(e, 0x10058), tm_read(e, 0x10068));
+      3221  
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      make -C linux-v6.6 ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- O=../build zImage modules -j$(nproc) 2>&1 | tail -1…)
+  ⎿  make: Leaving directory '/home/ubuntu/Projects/MYSELF/ZTE/linux-v6.6'
+       python3 tasks/00.01.eth-driver/scripts/tftp_boot_mainline.py
+     # [flash_image_to_ram] bootm sent — waiting up to 120s for marker 'REPL ready'
+     … +22 lines (ctrl+o to expand)
+
+● Agent "RE TX consume engine wedge" completed · 9m 3s
+
+❯ lanza agente se necesitas 
+
+● Agent 12 dice Iter 32 fue regresión — stock SÍ usa UP ring + UP kick. Revert + agregar PP fix:
+
+● Update(linux-v6.6/drivers/net/ethernet/zte/zx-eth-main.c)
+  ⎿  Added 7 lines, removed 7 lines
+      3136    TXCP(e, 3, "BMU alloc OK: bp=%u bp_buf=%p, copied %u bytes from skb (frame at +16)",
+      3137         bp, bp_buf, len);
+      3138  
+      3139 -  /* [Iter 32] Write to DN ring (CPU→switch direction), not UP.                                      
+      3140 -   * Stock soft_insert_tx_1desc(desc, dir=1) writes to DN ring base                                  
+      3141 -   * (TM[0x10060]) for CPU TX. UP ring is switch→CPU (RX-side).                                      
+      3142 -   * Mainline previously wrote to UP ring → HW treated as RX-side                                    
+      3143 -   * payload → switch loopback'd back to CPU instead of egressing to                                 
+      3144 -   * wire (= 315 tm_rx_loopback_drops in iter 31 test).                                              
+      3139 +  /* [Iter 34] REVERT Iter 32. Per agent 12 RE (tx_consume_engine_re.md):                            
+      3140 +   * Stock pon_tm_net_tx for "sw" netdev (LAN-only mode, param_1=0)                                  
+      3141 +   * takes the lan_up==1 branch and calls pon_tm_data_raw_send(skb,                                  
+      3142 +   * desc, 0) → soft_insert_tx_1desc(desc, 0) which kicks UP ring                                    
+      3143 +   * (TM[0x10054]), NOT DN. The 315 "loopback drops" in iter31 were                                  
+      3144 +   * FDB-miss flooding hairpin, not ring direction misuse.                                           
+      3145     */
+      3146 -  desc = (u8 *)e->dndesc_cpu + e->tx_head * TM_TX_DESC_SIZE;                                         
+      3146 +  desc = (u8 *)e->txdesc_cpu + e->tx_head * TM_TX_DESC_SIZE;                                         
+      3147    memset(desc, 0, TM_TX_DESC_SIZE);
+      3148    TXCP(e, 4, "desc[%u]=%p prepared (memset done, BP_SIZE=%u)", e->tx_head, desc, TM_BP_SIZE);
+      3149    /* Stock TX desc format (Ghidra decomp of pon_tm_net_tx + pon_tm_data_raw_send,
+
+● Update(linux-v6.6/drivers/net/ethernet/zte/zx-eth-main.c)
+  ⎿  Added 2 lines, removed 2 lines
+      3193     * (likely because we don't have GPON DN traffic but switch routing expects
+      3194     * activity on DN side too). Keep dual-kick.
+      3195     */
+      3196 -  /* DN kick (CPU→switch) per stock soft_insert_tx_1desc dir=1. */                                   
+      3197 -  tm_write(e, 0x10064, 1);                                                                           
+      3196 +  /* UP kick per stock soft_insert_tx_1desc(desc, dir=0). */                                         
+      3197 +  tm_write(e, 0x10054, 1);                                                                           
+      3198  
+      3199    /* Post-kick desc invalidation:
+      3200     * pcap data showed HW emitting the SAME TX desc multiple times — host
+
+● Build + test:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      make -C linux-v6.6 ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- O=../build zImage modules -j$(nproc) 2>&1 | tail -1…)
+  ⎿  make: Leaving directory '/home/ubuntu/Projects/MYSELF/ZTE/linux-v6.6'
+       python3 tasks/00.01.eth-driver/scripts/tftp_boot_mainline.py
+     # [flash_image_to_ram] bootm sent — waiting up to 120s for marker 'REPL ready'
+     … +19 lines (ctrl+o to expand)
+
+● Commit + check UP ring state:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      git add linux-v6.6/drivers/net/ethernet/zte/zx-eth-main.c \…)
+  ⎿  [main 3eed85050] eth: Iter 33+34 — revert TX to UP ring, drop post-kick desc invalidation
+      2 files changed, 359 insertions(+), 9 deletions(-)
+      create mode 100644 tasks/00.10.02.re-stock-kmods/findings/tx_consume_engine_re.md
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      echo "=== UP ring state ==="…)
+  ⎿  === UP ring state ===
+     92350054 00000001
+     92350050 4ffdf000
+     … +12 lines (ctrl+o to expand)
+
+● PP[0x1a01c] HW-locked (familiar pattern). Read more TM TX state to find missing init:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      { printf '/bin/memdump 0x92350040 4 && /bin/memdump 0x92350044 4 && /bin/memdump 0x92350048 4 && /bin/memdump
+      0x9235004c 4 &…)
+  ⎿  92350044 00000000
+     92350048 00000010
+     9235004c 00000000
+     … +6 lines (ctrl+o to expand)
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      # tx_head ~17. Read desc[0..18] in UP ring (txdesc @ 0x4FFDF000)…)
+  ⎿  /bin/memdump 0x4ffdf000 c0
+     /bin/memdump 0x4ffdf000 c0
+     4ffdf000 02c000c9
+     … +50 lines (ctrl+o to expand)
+
+● TM[0x1005c] = 0x001a001a (HIGH=LOW=26) → HW thinks 26 transmits CONSUMED. But host wire shows 0. Switch fabric routes
+  CPU-TX back to CPU instead of egress to wire. Same wedge — frames consumed but no egress.
+
+  Commit + status doc:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      git add linux-v6.6/drivers/net/ethernet/zte/zx-eth-main.c…)
+  ⎿  Error: Exit code 1
+     On branch main
+     Changes not staged for commit:
+       (use "git add/rm <file>..." to update what will be committed)
+       (use "git restore <file>..." to discard changes in working directory)
+        deleted:    tasks/00.10.03.re-uboot/ghidra/h3600_uboot.rep/idata/00/~00000000.db/db.9.gbf
+        modified:   tftp/header_A_modified.bin
+        modified:   tftp/slotA.bin
+        modified:   tftp/zImage_dtb.bin
+        modified:   tftp/zImage_dtb.uimg
+     … +59 lines (ctrl+o to expand)
+
+● No driver changes desde Iter 33+34 commit. Escribo finding doc en lugar:
+
+● Write(tasks/00.01.eth-driver/findings/iter34_tx_consumed_but_loops_back.md)
+  ⎿  Wrote 77 lines to tasks/00.01.eth-driver/findings/iter34_tx_consumed_but_loops_back.md
+       1 # [Iter 34] TX descs consumed by HW, frames loop back to CPU (no egress)
+       2
+       3 Post-iter34 bench (revert Iter 32 + Iter 33 drop post-kick clear):
+       4
+       5 ## Counters
+       6
+       7 ```
+       8 TM[0x10054] UP kick    = 1 (stuck — HW never clears)
+       9 TM[0x10050] UP base    = 0x4FFDF000 ✓ (carved match)
+      10 TM[0x1005c] UP cursor  = 0x001A001A (HIGH=write_ptr=26, LOW=read_ptr=26)
+     … +67 lines (ctrl+o to expand)
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      git add tasks/00.01.eth-driver/findings/iter34_tx_consumed_but_loops_back.md…)
+  ⎿  [main ab2eae4b5] findings: Iter 34 — TX HW consumes desc but switch loops to CPU
+      1 file changed, 77 insertions(+)
+      create mode 100644 tasks/00.01.eth-driver/findings/iter34_tx_consumed_but_loops_back.md
+
+● User said launch agent if needed — yes for CPU-egress routing:
+
+● Agent(RE CPU-egress switch routing)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+● Agent 13 corriendo (CPU-egress routing). 16 commits overnight, RX solid, TX wedged solo en switch fabric routing. Wake
+   ~30min. 🌙
+
+✻ Churned for 17m 40s
+
+● Agent "RE CPU-egress switch routing" completed · 10m 4s
+
+● Agent 13 confirma arch correcto. Pero loopback drops persisten. Verifico estado limpio post-Iter34 (current build):
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      # Reset bench — make sure current Iter 34 boot…)
+  ⎿  # [flash_image_to_ram] bootm sent — waiting up to 120s for marker 'REPL ready'
+     >>> [flash_image_to_ram] kernel up — 'REPL ready' observed
+     --- 192.168.1.99 ping statistics ---
+     … +18 lines (ctrl+o to expand)
+
+● Add PP[0x1c01c] |= BIT(29) (agent 13 suggested, low confidence but cheap):
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      # First runtime test…)
+  ⎿  9239c01c fc000000
+     9239c01c 20000000
+     [exit=0]
+     … +6 lines (ctrl+o to expand)
+
+● PP[0x1c01c] write stuck but ping doesn't change. Wedge elsewhere. Maybe kernel net stack isn't generating ARP replies.
+   Check kernel-side state:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      # Send ARP from host, check kernel state on device…)
+  ⎿  cat /proc/net/arp && echo --- && cat /proc/net/snmp | grep -A 1 Ip: | tail -2 && echo --- && cat /sys/class/ne
+     t/sw/statistics/tx_packets && cat /sys/class/net/sw/statistics/rx_packets && cat /sys/class/net/sw/statistics/
+     tx_errors
+     … +18 lines (ctrl+o to expand)
+
+● Agent 12 vs 13 dieron different addrs. Real one (from fpga[0xe8007]) = 0x9239a01c. Try that:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      # Try PP+0x1a01c = 0x9239a01c…)
+  ⎿  9239a01c 00000000
+     9239a01c 00000000
+     [exit=0]
+     … +7 lines (ctrl+o to expand)
+
+● PP[0x1a01c] HW-locked. Wedge persists. Solid status: RX perfect, TX consumed but hairpin to CPU. Sin más insights
+  immediately, commit + sleep until next agent or user wake:
+
+● Bash(cd /home/ubuntu/Projects/MYSELF/ZTE
+      git add tasks/00.10.02.re-stock-kmods/findings/cpu_egress_routing_re.md…)
+  ⎿  [main 6bf45c063] findings: agent 13 confirms TX arch correct — wedge in HW dispatch
+      1 file changed, 434 insertions(+)
+      create mode 100644 tasks/00.10.02.re-stock-kmods/findings/cpu_egress_routing_re.md
+
+● Launch agent 14 — FDB learning enable angle (last untouched):
+
+● Agent(RE FDB learning enable)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+● Agent 14 corriendo (FDB learning). 17+ commits overnight. RX perfect, TX wedge solo en switch fabric FDB-miss action.
+  Wake ~30min. 🌙
+
+

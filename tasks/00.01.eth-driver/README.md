@@ -4,19 +4,64 @@
 **Parent**: [00 openwrt-port](../00.openwrt-port/)
 **Children**: [00.01.01.fix-lief-rel-sections](../00.01.01.fix-lief-rel-sections/) (LIEF upstream fix), [kotrace/](kotrace/) (loader-notifier RAM-patch tracer, working)
 **TaskList items**: #53, #87, #89, #90, #91, #92, #93, #103, #104
-**Status**: ACTIVE — RX path dead (`research/rx_path_dead.md`); TX intermittent. Init-sequence trace tooling working (see [findings/idea_a_kotrace.md](findings/idea_a_kotrace.md)) — first switch.ko init trace captured 2026-05-23.
+**Status (2026-05-28)**: RX works end-to-end. TX: CPU→LAN frames pass QMG + DSCH
+(the DSCH shaper-credit drop is **FIXED** via `zx_sch_init`) but die at the **SOPC
+egress** stage — the frame never reaches a physical MAC (SMAC TX stays 0). Live
+debug toolkit (poke/regdump/mem/txtest) built — see "Live debug toolkit" below.
+Current frontier docs in `../00.10.02.re-stock-kmods/findings/`:
+`session_2026-05-28_tx_egress_state.md`, `eth_pipeline_architecture_2026-05-28.md`,
+`txtest_clean_trace_dsch_fixed.md`.
 
 **Goal**: port the ZTE-proprietary ethernet stack (Traffic Manager + Switch +
 PP packet processor + CLA + IDM CPU port + BMU buffer manager) to a clean
 upstream Linux 6.6 driver, so we can run a normal kernel and toolchain on
 the H3600 instead of the stock 4.1.25.
 
-**Status**: TX path partially working (zx_sw_xmit baseline ships packets;
-TM forwarding gate still under investigation — task #91). RX path with
-NAPI was implemented (task #55) but `rx_packets=0` in practice — see
-`research/rx_path_dead.md` for the open investigation.
-
 For driver internals, see `ETHERNET_DRIVER_DESIGN.md` (141 KB, ground truth).
+
+## Live debug toolkit + build/flash loop ⭐ (2026-05-28)
+
+### Build + RAM-boot (no NAND write) — the fast iter loop
+- **One-shot**: `bash tasks/00.01.eth-driver/scripts/refactor_test_cycle.sh`
+  (regen → build → DTR-reset boot → watch UART log ~180s).
+- **Or split**:
+  1. `python3 tasks/00.01.eth-driver/scripts/build_slotA.py`
+     → builds the driver + zImage, wraps `tftp/zImage_dtb.uimg`.
+  2. `python3 tasks/00.01.eth-driver/scripts/tftp_boot_mainline.py`
+     → DTR relay reset → drive U-Boot → TFTP to RAM 0x42000000 → `bootm`.
+     RAM-only; next power-cycle returns to whatever's on NAND.
+- NAND-persistent flash (only when shipping): `scripts/flash_mainline.py`
+  — read `tasks/00.04.flash-tool/README.md` FIRST.
+- Pre-flight (`STATE.md`): TFTP serving from `zxic/tftp`, no stale `uart.py`
+  holding the port, `uart_bridge.py` running.
+
+### Live register debug — reflash-free, via the UART bridge socket `localhost:9999`
+The bridge exposes the device REPL on TCP **9999** (commands) + **9998** (DTR/reset).
+The REPL execs ONE busybox applet per line (no `;`/`|`/redirect directly), BUT
+`sh -c "..."` works and gives redirects. Mount once per boot:
+`mount -t debugfs none /sys/kernel/debug`.
+
+Driver debugfs `/sys/kernel/debug/zx_eth/` (added this session):
+
+| file | how | what |
+|---|---|---|
+| `stats` | `cat` | driver counters (tm_rx_count, tm_rx_loopback_drops, tm_tx_count, TM[0x10054/58]…) |
+| `regdump` | `cat` | hex-TEXT `<phys> <val>` of forwarding windows — robust over the glitchy UART (vs binary `mem`) |
+| `mem` | binary | 2 MiB dump of `e->base+0..0x200000` |
+| `poke` | `sh -c "echo '<phys> <val>' > .../poke"` | **live register WRITE**; phys in [0x921c0000,0x923c0000), 4-aligned |
+| `txtest` | `sh -c "echo N > .../txtest"` | inject N KNOWN TX frames via `zx_sw_xmit` (dst=host MAC, ethertype 0x88b5) — isolates the TX path, no ARP/ping/storm |
+| `memdump <hexphys> <hexlen>` | busybox bin in `/bin` | hex peek by physical address |
+
+Addressing: **phys = 0x921c0000 + e->base offset.** PP at +0x1c0000, MAC[i] at
++(i+1)*0x40000 (MAC2/host = 0x92280000), TM at low offsets.
+Full tool doc: `../00.10.02.re-stock-kmods/findings/live_poke_peek_tool.md`.
+Pipeline stage-by-stage counter map (find where a frame dies):
+`../00.10.02.re-stock-kmods/findings/pipeline_counter_map.md`.
+Host capture (no sudo — tcpdump has `cap_net_raw`):
+`tcpdump -i enxc8a362e95900 -e -nn 'ether host f4:f6:47:0f:42:64 or arp'`.
+
+> NOTE: `poke`/`regdump`/`txtest` are DEBUG-only (in `zx-eth-main.c`
+> `zx_poke_*`/`zx_regdump_*`/`zx_txtest_*`); strip before upstreaming.
 
 ## Tracing the stock driver — current state (2026-05-26)
 
