@@ -93,5 +93,41 @@ must: TX read tag[1]→desc egress port, copy frame[4:] to BP (drop tag); RX pre
 2. runtime link-change detection didn't fire on other PHYs → phylink polls all (P2).
 3. egress hardcoded to one port → per-frame DSA tag = the dest port (P1).
 
-## Status
-P0 starting. Branch `eth-dsa`. Conduit/HW-init reuse from zx-eth-main.c.
+## Status / progress log (branch `eth-dsa`)
+- **2026-05-30 iter1 (commit cec0d44d9):** P0 skeleton — tag_zte tagger +
+  DSA_TAG_PROTO_ZTE enum + include/linux/dsa/zte.h + zx-dsa.c (dsa_switch_ops:
+  get_tag_protocol→ZTE, stub setup/port_enable/phylink_get_caps) + Kconfig/Makefile.
+  Both tag_zte.o and zx-dsa.o COMPILE. NOT wired to probe; HW ops are stubs.
+- **NEXT (P0 cont.):** DT node `zte,zx279128-switch` + conduit (`sw` netdev)
+  relationship (ports{ lan0..3 + cpu `ethernet=<&sw>` }) so dsa_register_switch
+  probes and the 4 `lanN` netdevs appear. Then P1: conduit TX reads the 4-byte
+  internal tag → desc[2:3] egress port + copies frame[4:] to BP; conduit RX
+  prepends {0x5a, desc[6] ingress port} before netif_receive_skb.
+- **2026-05-30 iter2 (commit df7b5b401):** P3 partial — port_enable/disable
+  (greg port_closed @npp+0x4c) + port_stp_state_set (greg STP @npp+0x44 + stp_en
+  @npp+0x40, BR_STATE_*→chip map) with real register writes; probe ioremaps the
+  NPP greg window (non-exclusive, shared w/ conduit for now). Compiles; NOT
+  HW-verified. zx_phys_port() = identity stub (CPU/remap TODO).
+- **NEXT options:** continue P3 (port_bridge_join/leave via isolation
+  sbragRegTable[0x39]@0x923883c0+port*4; port_fdb_add/del — FIX +0x800 addr bug,
+  port real sbrg_hash; port_vlan_add mem_id=4) — all compile-checkable + later
+  memdump-verifiable; OR the DT node + conduit relationship so it probes (P0 cont).
+- **2026-05-30 iter3 (commit 0d1a14bac):** P3 partial — SBRAG FDB add/del +
+  indirect plumbing (PP window 0x92388000, CORRECT offsets 0x14/18/1c/20/24 —
+  fixed the +0x800 bug). Entry layout per stock; status=0xF. Compiles; HASH is a
+  PLACEHOLDER (real sbrg_hash being RE'd by a parallel agent) → entries mis-slot
+  until ported. Launched agent afcf41fea (sbrg_hash RE).
+- **NEXT:** drop in the real sbrg_hash when the agent returns; then port_vlan_add
+  (SBRAG mem_id=4, 2b/port) + port_bridge_join/leave (isolation @pp+0x3c0+port*4).
+  Then the bigger integration: DT node + conduit relationship so it PROBES
+  (P0 cont/P1) — needed before any HW (memdump) verification.
+- **2026-05-30 iter4 (commit c2d85d9b1):** P3 partial — VLAN add/del (SBRAG
+  mem_id=4 RMW of 2-bit/port membership in D0) + zx_sbrag_read_entry (rw=1
+  prefetch); generalized write_entry to take mem_id. Compiles; VLAN attr encoding
+  is best-effort placeholder (TODO). sbrg_hash agent (afcf41fea) still pending.
+- **NEXT:** port_bridge_join/leave via isolation (sbragRegTable[0x39]
+  @pp+0x3c0+port*4, allow-bitmap, stored complemented; needs per-bridge member
+  tracking in priv) + port_fast_age. Integrate the real sbrg_hash when the agent
+  returns. Then the big one: DT node + conduit relationship so it PROBES (P0
+  cont/P1) — the gate to any HW (memdump) verification.
+- Reuse switch HW-init + register helpers from zx-eth-main.c.
