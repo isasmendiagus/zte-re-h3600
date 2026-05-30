@@ -413,6 +413,36 @@ static void zx_dsa_port_bridge_leave(struct dsa_switch *ds, int port,
 	zx_recompute_isolation(priv);
 }
 
+/* port_fast_age: flush DYNAMIC (learned) FDB entries on a port (STP topology
+ * change). Best-effort SW sweep: iterate the unicast hash slots, zero entries
+ * whose port matches and whose status nibble is present-but-not-static (0xF =
+ * static, kept). The HW may also expose an age/flush command — TODO RE. NOT
+ * HW-verified. Slot count follows the live table-sel width. */
+static void zx_dsa_port_fast_age(struct dsa_switch *ds, int port)
+{
+	struct zx_dsa_priv *priv = ds->priv;
+	int p = zx_phys_port(port);
+	u32 nslots, slot;
+
+	switch (readl(priv->pp_regs + ZX_SBRAG_TABLE_SEL) & 0x3) {
+	case 1:		nslots = 0x100; break;
+	case 2:		nslots = 0x200; break;
+	default:	nslots = 0x400; break;
+	}
+
+	for (slot = 0; slot < nslots; slot++) {
+		u32 d0, d1, d2, status;
+
+		if (zx_sbrag_read_entry(priv, ZX_SBRAG_MEMID_UC, slot,
+					&d0, &d1, &d2))
+			continue;
+		status = (d1 >> 4) & 0xf;
+		if (status && status != 0xf && (d2 & 0xff) == (u32)p)
+			zx_sbrag_write_entry(priv, ZX_SBRAG_MEMID_UC, slot,
+					     0, 0, 0);
+	}
+}
+
 static const struct dsa_switch_ops zx_dsa_switch_ops = {
 	.get_tag_protocol	= zx_dsa_get_tag_protocol,
 	.setup			= zx_dsa_setup,
@@ -426,8 +456,10 @@ static const struct dsa_switch_ops zx_dsa_switch_ops = {
 	.port_fdb_del		= zx_dsa_port_fdb_del,
 	.port_vlan_add		= zx_dsa_port_vlan_add,
 	.port_vlan_del		= zx_dsa_port_vlan_del,
-	/* TODO P3: port_fast_age (FDB flush). VLAN attr 2-bit encoding still a
-	 * placeholder. ALL ops compile but are NOT HW-verified — see dsa_driver_plan.md. */
+	.port_fast_age		= zx_dsa_port_fast_age,
+	/* All per-port switch ops implemented. VLAN attr 2-bit encoding + the HW
+	 * age/flush command are best-effort/TODO. ALL ops compile but are NOT
+	 * HW-verified (driver doesn't probe yet) — see dsa_driver_plan.md. */
 };
 
 static int zx_dsa_probe(struct platform_device *pdev)
