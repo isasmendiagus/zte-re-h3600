@@ -161,4 +161,11 @@ must: TX read tag[1]→desc egress port, copy frame[4:] to BP (drop tag); RX pre
   warns (block comments need trailing */ on own line). NEXT safe iteration =
   checkpatch cleanup across both files (upstream-prep, non-invasive). Then
   MAINTAINERS entry. After that, only the conduit refactor remains (needs user).
+- **2026-05-30 LOOP WIND-DOWN (14 commits on eth-dsa):** all safe compile-verifiable
+  autonomous work DONE — P0+P3 (review-fixed FDB byte-order bug), real hash,
+  isolation, DT binding, MAINTAINERS, checkpatch 0/0 (3 files), full-build validated,
+  conduit-refactor guide (dsa_conduit_refactor_guide.md). The ONLY remaining step is
+  the P1 conduit refactor (invasive + needs HW + user decision) — see the guide.
+  Loop slowed to a heartbeat; remaining safe prep ticks: a HW-verify test script for
+  the per-port ops (memdump-readback), upstream patch-series prep.
 - Reuse switch HW-init + register helpers from zx-eth-main.c.
