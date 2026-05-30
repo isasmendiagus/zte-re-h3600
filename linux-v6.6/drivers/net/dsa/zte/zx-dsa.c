@@ -33,7 +33,8 @@
 
 /* 4 user LAN ports (0..3) + CPU port (5). Port 4 is the unused RGMII WAN MAC on
  * the H3600; sized to cover the CPU port index. Refined when the DT/port map is
- * wired (P0 cont.). */
+ * wired (P0 cont.).
+ */
 #define ZX_DSA_NUM_PORTS	6
 #define ZX_DSA_USER_PORTS	4	/* lan0..3 */
 #define ZX_DSA_CPU_PORT		5
@@ -41,12 +42,14 @@
 /* Port isolation (SBRAG reg 0x39 @ PP 0x83c0 + regport*4, 1 byte/port).
  * Stored byte = allow-bitmap in REGPORT bit-space (set bit = may forward there).
  * Both the slot index and the bit positions are remapped logical->regport via
- * this table (RE'd from tm_port_isolate_set, decomp_all_tm.c:36297-36328). */
+ * this table (RE'd from tm_port_isolate_set, decomp_all_tm.c:36297-36328).
+ */
 #define ZX_ISOLATE_BASE		0x3c0	/* PP window offset (phys 0x923883c0) */
 static const u8 zx_regport[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
 
 /* NPP register window base (greg per-port control lives here). TODO: obtain
- * from DT reg / share with the conduit (zx-eth) instead of hardcoding. */
+ * from DT reg / share with the conduit (zx-eth) instead of hardcoding.
+ */
 #define ZX_NPP_PHYS		0x921c0000UL
 #define ZX_NPP_SIZE		0x1000
 
@@ -56,7 +59,8 @@ static const u8 zx_regport[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
 
 /* SBRAG indirect FDB protocol (offsets from PP base; memory zte-dsa-foundation).
  * NOTE: the CORRECT offsets are 0x14/18/1c/20/24 — the legacy zx-eth-main.c
- * constants were +0x800 too high (0x388814...). We use the right ones here. */
+ * constants were +0x800 too high (0x388814...). We use the right ones here.
+ */
 #define ZX_SBRAG_CMD		0x14	/* ram_addr | mem_id<<22 | rw<<27 | mode<<31 */
 #define ZX_SBRAG_BUSY		0x18	/* bit0 == 1 -> access complete */
 #define ZX_SBRAG_D0		0x1c	/* commit register (write last) */
@@ -94,7 +98,8 @@ static void zx_greg_rmw(struct zx_dsa_priv *priv, u32 off, u32 mask, u32 val)
 
 /* DSA port -> chip phys port. For the 4 LAN user ports (0..3) this is identity;
  * the CPU/other ports use the stock getPort remap (0..4->0..4, 6->5, 7->6).
- * TODO: full remap when CPU-port ops are wired. */
+ * TODO: full remap when CPU-port ops are wired.
+ */
 static inline int zx_phys_port(int port)
 {
 	return port;
@@ -112,7 +117,8 @@ static int zx_dsa_setup(struct dsa_switch *ds)
 	struct zx_dsa_priv *priv = ds->priv;
 
 	/* TODO P1: drive the switch-fabric init (reuse zx-eth init helpers),
-	 * mark the CPU port, set up the conduit relationship. Stub for now. */
+	 * mark the CPU port, set up the conduit relationship. Stub for now.
+	 */
 	dev_info(priv->dev, "zx-dsa: setup (skeleton) — %d ports, CPU port %d\n",
 		 ds->num_ports, ZX_DSA_CPU_PORT);
 	return 0;
@@ -153,7 +159,8 @@ static void zx_dsa_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
 	u32 hw, shift;
 
 	/* Map Linux BR_STATE_* -> chip STP encoding (zte-dsa-foundation):
-	 * 0=Disabled 1=Blocking 2=Listening 3=Learning 4=Forwarding. */
+	 * 0=Disabled 1=Blocking 2=Listening 3=Learning 4=Forwarding.
+	 */
 	switch (state) {
 	case BR_STATE_DISABLED:
 		hw = 0;
@@ -177,7 +184,8 @@ static void zx_dsa_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
 	}
 
 	/* enable STP for this port, then write the 3-bit state field. NOT yet
-	 * HW-verified (writes are spec-backed; confirm via memdump-readback). */
+	 * HW-verified (writes are spec-backed; confirm via memdump-readback).
+	 */
 	zx_greg_rmw(priv, ZX_GREG_STP_EN, BIT(p), BIT(p));
 	shift = p * 3;
 	zx_greg_rmw(priv, ZX_GREG_STP_STATE, 0x7u << shift, hw << shift);
@@ -198,7 +206,8 @@ static int zx_sbrag_wait(struct zx_dsa_priv *priv)
 }
 
 /* Commit one entry at table slot `addr` in memory `mem_id` (rw=0 write).
- * Write order D2 -> D1 -> D0 (D0 commits), matching stock sbrg_set_indreg_wr. */
+ * Write order D2 -> D1 -> D0 (D0 commits), matching stock sbrg_set_indreg_wr.
+ */
 static int zx_sbrag_write_entry(struct zx_dsa_priv *priv, u32 mem_id, u16 addr,
 				u32 d0, u32 d1, u32 d2)
 {
@@ -243,7 +252,8 @@ static int zx_sbrag_read_entry(struct zx_dsa_priv *priv, u32 mem_id, u16 addr,
  * CRC-16/CCITT (poly 0x1021, init 0, MSB-first, no final xor) over the 8 bytes
  * {vlan_hi, vlan_lo, MAC0..MAC5} (VLAN folded only if hash_mode set), then
  * masked to the table-sel width. crc_itu_t() is exactly this CRC. The width +
- * hash_mode are read live from the PP regs so we match whatever the HW uses. */
+ * hash_mode are read live from the PP regs so we match whatever the HW uses.
+ */
 static u16 zx_sbrag_hash(struct zx_dsa_priv *priv, const unsigned char *mac,
 			 u16 vid)
 {
@@ -280,7 +290,8 @@ static int zx_dsa_port_fdb_add(struct dsa_switch *ds, int port,
 	/* Entry layout (stock sbrg_add_mactable, memory zte-dsa-foundation):
 	 *  D0 = mac_low4>>24 | mac_high2<<8 | vlan<<24
 	 *  D1 = (status&0xf)<<4 | (vlan>>8)&0xf | smac_ctrl<<8 | dmac_ctrl<<9
-	 *  D2 = port_id | mac_low4<<8 ;  status=0xF = static present. */
+	 *  D2 = port_id | mac_low4<<8 ;  status=0xF = static present.
+	 */
 	d0 = (mac_low4 >> 24) | ((u32)vid << 24) | ((u32)mac_high2 << 8);
 	d1 = (0xFu << 4) | ((vid >> 8) & 0xf);
 	d2 = (p & 0xff) | (mac_low4 << 8);
@@ -297,7 +308,8 @@ static int zx_dsa_port_fdb_del(struct dsa_switch *ds, int port,
 	struct zx_dsa_priv *priv = ds->priv;
 
 	/* First approximation: zero the hash slot. Proper delete is
-	 * lookup-then-zero (match {mac,vlan,status!=0}); TODO with the real hash. */
+	 * lookup-then-zero (match {mac,vlan,status!=0}); TODO with the real hash.
+	 */
 	return zx_sbrag_write_entry(priv, ZX_SBRAG_MEMID_UC,
 				    zx_sbrag_hash(priv, addr, vid),
 				    0, 0, 0);
@@ -317,7 +329,8 @@ static int zx_dsa_port_vlan_add(struct dsa_switch *ds, int port,
 
 	/* attr: 2-bit per-port membership/tag mode (stock tm_vlantable_add_set
 	 * 0..3). Best-effort mapping pending RE of the exact encoding (TODO):
-	 * untagged member vs tagged member. */
+	 * untagged member vs tagged member.
+	 */
 	attr = (vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED) ? 2 : 3;
 
 	ret = zx_sbrag_read_entry(priv, ZX_SBRAG_MEMID_VLAN, vlan->vid,
@@ -357,7 +370,8 @@ static int zx_dsa_port_vlan_del(struct dsa_switch *ds, int port,
 
 /* Write port P's allow-set (LOGICAL bit-space, set bit = may forward to that
  * logical port) into the isolation register, permuting logical->regport for
- * both the slot and the bits (RE'd transform, see zx_regport). RMW the low byte. */
+ * both the slot and the bits (RE'd transform, see zx_regport). RMW the low byte.
+ */
 static void zx_isolate_set(struct zx_dsa_priv *priv, int logical_port,
 			   u32 allow_logical)
 {
@@ -376,7 +390,8 @@ static void zx_isolate_set(struct zx_dsa_priv *priv, int logical_port,
 /* Recompute every user port's isolation. DSA semantics: standalone ports talk
  * only to the CPU (isolated from each other); bridged ports may forward to
  * co-members of the same bridge + CPU. (Stock's default is allow-all; DSA wants
- * isolated-until-bridged.) NOT yet HW-verified. */
+ * isolated-until-bridged.) NOT yet HW-verified.
+ */
 static void zx_recompute_isolation(struct zx_dsa_priv *priv)
 {
 	int p, q;
@@ -427,7 +442,8 @@ static void zx_dsa_port_bridge_leave(struct dsa_switch *ds, int port,
  * change). Best-effort SW sweep: iterate the unicast hash slots, zero entries
  * whose port matches and whose status nibble is present-but-not-static (0xF =
  * static, kept). The HW may also expose an age/flush command — TODO RE. NOT
- * HW-verified. Slot count follows the live table-sel width. */
+ * HW-verified. Slot count follows the live table-sel width.
+ */
 static void zx_dsa_port_fast_age(struct dsa_switch *ds, int port)
 {
 	struct zx_dsa_priv *priv = ds->priv;
@@ -475,7 +491,8 @@ static const struct dsa_switch_ops zx_dsa_switch_ops = {
 	.port_fast_age		= zx_dsa_port_fast_age,
 	/* All per-port switch ops implemented. VLAN attr 2-bit encoding + the HW
 	 * age/flush command are best-effort/TODO. ALL ops compile but are NOT
-	 * HW-verified (driver doesn't probe yet) — see dsa_driver_plan.md. */
+	 * HW-verified (driver doesn't probe yet) — see dsa_driver_plan.md.
+	 */
 };
 
 static int zx_dsa_probe(struct platform_device *pdev)
@@ -496,7 +513,8 @@ static int zx_dsa_probe(struct platform_device *pdev)
 
 	/* NPP greg window for per-port control. Non-exclusive ioremap because the
 	 * conduit (zx-eth) also maps this space — sharing is intentional until the
-	 * register access is unified (TODO: get the base from DT reg / conduit). */
+	 * register access is unified (TODO: get the base from DT reg / conduit).
+	 */
 	priv->regs = devm_ioremap(&pdev->dev, ZX_NPP_PHYS, ZX_NPP_SIZE);
 	if (!priv->regs)
 		return -ENOMEM;
