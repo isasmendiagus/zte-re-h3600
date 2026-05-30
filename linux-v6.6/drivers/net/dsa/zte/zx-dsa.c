@@ -35,7 +35,15 @@
  * the H3600; sized to cover the CPU port index. Refined when the DT/port map is
  * wired (P0 cont.). */
 #define ZX_DSA_NUM_PORTS	6
+#define ZX_DSA_USER_PORTS	4	/* lan0..3 */
 #define ZX_DSA_CPU_PORT		5
+
+/* Port isolation (SBRAG reg 0x39 @ PP 0x83c0 + regport*4, 1 byte/port).
+ * Stored byte = allow-bitmap in REGPORT bit-space (set bit = may forward there).
+ * Both the slot index and the bit positions are remapped logical->regport via
+ * this table (RE'd from tm_port_isolate_set, decomp_all_tm.c:36297-36328). */
+#define ZX_ISOLATE_BASE		0x3c0	/* PP window offset (phys 0x923883c0) */
+static const u8 zx_regport[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
 
 /* NPP register window base (greg per-port control lives here). TODO: obtain
  * from DT reg / share with the conduit (zx-eth) instead of hardcoding. */
@@ -71,6 +79,8 @@ struct zx_dsa_priv {
 	struct device		*dev;
 	void __iomem		*regs;	/* NPP window (greg) — see TODO above */
 	void __iomem		*pp_regs; /* PP/SBRAG window (FDB, isolation) */
+	u8			bridged;  /* bitmap of user ports in a bridge */
+	int			br_num[ZX_DSA_NUM_PORTS]; /* dsa_bridge.num per port */
 	/* TODO P0/P1: conduit (sw netdev) ref for the datapath/tag */
 };
 
@@ -333,6 +343,76 @@ static int zx_dsa_port_vlan_del(struct dsa_switch *ds, int port,
 				    d0, d1, d2);
 }
 
+/* --- Port isolation / bridge membership --------------------------------- */
+
+/* Write port P's allow-set (LOGICAL bit-space, set bit = may forward to that
+ * logical port) into the isolation register, permuting logical->regport for
+ * both the slot and the bits (RE'd transform, see zx_regport). RMW the low byte. */
+static void zx_isolate_set(struct zx_dsa_priv *priv, int logical_port,
+			   u32 allow_logical)
+{
+	u32 stored = 0, off, v;
+	int b;
+
+	for (b = 0; b < 8; b++)
+		if (allow_logical & BIT(b))
+			stored |= BIT(zx_regport[b]);
+
+	off = ZX_ISOLATE_BASE + zx_regport[logical_port] * 4;
+	v = readl(priv->pp_regs + off);
+	writel((v & ~0xffu) | (stored & 0xff), priv->pp_regs + off);
+}
+
+/* Recompute every user port's isolation. DSA semantics: standalone ports talk
+ * only to the CPU (isolated from each other); bridged ports may forward to
+ * co-members of the same bridge + CPU. (Stock's default is allow-all; DSA wants
+ * isolated-until-bridged.) NOT yet HW-verified. */
+static void zx_recompute_isolation(struct zx_dsa_priv *priv)
+{
+	int p, q;
+
+	for (p = 0; p < ZX_DSA_USER_PORTS; p++) {
+		u32 allow = BIT(ZX_DSA_CPU_PORT);	/* always reach the CPU */
+
+		if (priv->bridged & BIT(p)) {
+			for (q = 0; q < ZX_DSA_USER_PORTS; q++)
+				if ((priv->bridged & BIT(q)) &&
+				    priv->br_num[q] == priv->br_num[p])
+					allow |= BIT(q);
+		}
+		allow &= ~BIT(p);			/* never self */
+		zx_isolate_set(priv, p, allow);
+	}
+}
+
+static int zx_dsa_port_bridge_join(struct dsa_switch *ds, int port,
+				   struct dsa_bridge bridge,
+				   bool *tx_fwd_offload,
+				   struct netlink_ext_ack *extack)
+{
+	struct zx_dsa_priv *priv = ds->priv;
+
+	if (port >= ZX_DSA_USER_PORTS)
+		return -EINVAL;
+
+	priv->bridged |= BIT(port);
+	priv->br_num[port] = bridge.num;
+	zx_recompute_isolation(priv);
+	return 0;
+}
+
+static void zx_dsa_port_bridge_leave(struct dsa_switch *ds, int port,
+				     struct dsa_bridge bridge)
+{
+	struct zx_dsa_priv *priv = ds->priv;
+
+	if (port >= ZX_DSA_USER_PORTS)
+		return;
+
+	priv->bridged &= ~BIT(port);
+	zx_recompute_isolation(priv);
+}
+
 static const struct dsa_switch_ops zx_dsa_switch_ops = {
 	.get_tag_protocol	= zx_dsa_get_tag_protocol,
 	.setup			= zx_dsa_setup,
@@ -340,12 +420,14 @@ static const struct dsa_switch_ops zx_dsa_switch_ops = {
 	.port_enable		= zx_dsa_port_enable,
 	.port_disable		= zx_dsa_port_disable,
 	.port_stp_state_set	= zx_dsa_port_stp_state_set,
+	.port_bridge_join	= zx_dsa_port_bridge_join,
+	.port_bridge_leave	= zx_dsa_port_bridge_leave,
 	.port_fdb_add		= zx_dsa_port_fdb_add,
 	.port_fdb_del		= zx_dsa_port_fdb_del,
 	.port_vlan_add		= zx_dsa_port_vlan_add,
 	.port_vlan_del		= zx_dsa_port_vlan_del,
-	/* TODO P3: port_bridge_join/leave (isolation), port_fast_age.
-	 * FDB hash + VLAN attr encoding are placeholders — see dsa_driver_plan.md. */
+	/* TODO P3: port_fast_age (FDB flush). VLAN attr 2-bit encoding still a
+	 * placeholder. ALL ops compile but are NOT HW-verified — see dsa_driver_plan.md. */
 };
 
 static int zx_dsa_probe(struct platform_device *pdev)
