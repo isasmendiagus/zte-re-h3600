@@ -138,6 +138,10 @@ static int zx_dsa_port_enable(struct dsa_switch *ds, int port,
 	struct zx_dsa_priv *priv = ds->priv;
 	int p = zx_phys_port(port);
 
+	/* greg has no slot for the CPU port (logical 5); skip it. */
+	if (port >= ZX_DSA_USER_PORTS)
+		return 0;
+
 	/* greg port_closed bit(p) = 0 -> open. NOT yet HW-verified. */
 	zx_greg_rmw(priv, ZX_GREG_PORT_CLOSED, BIT(p), 0);
 	return 0;
@@ -148,6 +152,10 @@ static void zx_dsa_port_disable(struct dsa_switch *ds, int port)
 	struct zx_dsa_priv *priv = ds->priv;
 	int p = zx_phys_port(port);
 
+	/* greg has no slot for the CPU port (logical 5); skip it. */
+	if (port >= ZX_DSA_USER_PORTS)
+		return;
+
 	/* greg port_closed bit(p) = 1 -> closed. */
 	zx_greg_rmw(priv, ZX_GREG_PORT_CLOSED, BIT(p), BIT(p));
 }
@@ -157,6 +165,10 @@ static void zx_dsa_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
 	struct zx_dsa_priv *priv = ds->priv;
 	int p = zx_phys_port(port);
 	u32 hw, shift;
+
+	/* greg STP has no slot for the CPU port (logical 5); it's SW-handled. */
+	if (port >= ZX_DSA_USER_PORTS)
+		return;
 
 	/* Map Linux BR_STATE_* -> chip STP encoding (zte-dsa-foundation):
 	 * 0=Disabled 1=Blocking 2=Listening 3=Learning 4=Forwarding.
@@ -283,8 +295,11 @@ static int zx_dsa_port_fdb_add(struct dsa_switch *ds, int port,
 {
 	struct zx_dsa_priv *priv = ds->priv;
 	int p = zx_phys_port(port);
-	u32 mac_low4 = addr[0] | addr[1] << 8 | addr[2] << 16 | addr[3] << 24;
-	u16 mac_high2 = addr[4] | addr[5] << 8;
+	/* HW splits the MAC OUI-first: high2 = MAC[0..1], low4 = MAC[2..5],
+	 * big-endian-packed (stock sbrg_add_mactable, decomp_all_tm.c:10706+).
+	 */
+	u16 mac_high2 = addr[0] << 8 | addr[1];
+	u32 mac_low4 = addr[2] << 24 | addr[3] << 16 | addr[4] << 8 | addr[5];
 	u32 d0, d1, d2;
 
 	/* Entry layout (stock sbrg_add_mactable, memory zte-dsa-foundation):
