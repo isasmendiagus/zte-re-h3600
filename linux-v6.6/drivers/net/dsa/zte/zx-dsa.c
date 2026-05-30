@@ -20,6 +20,7 @@
  */
 
 #include <linux/dsa/zte.h>
+#include <linux/crc-itu-t.h>
 #include <linux/delay.h>
 #include <linux/etherdevice.h>
 #include <linux/io.h>
@@ -214,19 +215,36 @@ static int zx_sbrag_read_entry(struct zx_dsa_priv *priv, u32 mem_id, u16 addr,
 	return 0;
 }
 
-/* PLACEHOLDER hash. The chip uses sbrg_hash(mac,vlan) masked to the table-sel
- * width (RE pending — see dsa_driver_plan.md / a parallel RE task). With a wrong
- * hash, entries land in the wrong slot so HW lookups/deletes will MISS. This
- * compiles + exercises the protocol but is NOT functionally correct until the
- * real sbrg_hash is ported. TODO. */
-static u16 zx_sbrag_hash_placeholder(const unsigned char *mac, u16 vid)
-{
-	u16 h = vid;
-	int i;
+/* SBRAG hash mode/width registers (PP window offsets). */
+#define ZX_SBRAG_HASH_MODE	0x180	/* bit3: fold VLAN into the hash */
+#define ZX_SBRAG_TABLE_SEL	0x184	/* [1:0]: 0=10bit 1=8bit 2=9bit */
 
-	for (i = 0; i < ETH_ALEN; i++)
-		h = (u16)((h << 1) ^ mac[i]);
-	return h & 0x1ff;
+/* Real stock sbrg_hash (RE'd from tm.ko sbrg_hash @decomp_all_tm.c:8204):
+ * CRC-16/CCITT (poly 0x1021, init 0, MSB-first, no final xor) over the 8 bytes
+ * {vlan_hi, vlan_lo, MAC0..MAC5} (VLAN folded only if hash_mode set), then
+ * masked to the table-sel width. crc_itu_t() is exactly this CRC. The width +
+ * hash_mode are read live from the PP regs so we match whatever the HW uses. */
+static u16 zx_sbrag_hash(struct zx_dsa_priv *priv, const unsigned char *mac,
+			 u16 vid)
+{
+	u8 buf[8];
+	u16 h;
+
+	if (readl(priv->pp_regs + ZX_SBRAG_HASH_MODE) & BIT(3)) {
+		buf[0] = (vid >> 8) & 0xff;	/* vlan_hi */
+		buf[1] = vid & 0xff;		/* vlan_lo */
+	} else {
+		buf[0] = 0;
+		buf[1] = 0;
+	}
+	memcpy(&buf[2], mac, ETH_ALEN);		/* MAC0..MAC5, OUI first */
+
+	h = crc_itu_t(0, buf, sizeof(buf)) & 0x3ff;	/* 10-bit raw */
+	switch (readl(priv->pp_regs + ZX_SBRAG_TABLE_SEL) & 0x3) {
+	case 1:		return h & 0x0ff;	/* 256 buckets (live default) */
+	case 2:		return h & 0x1ff;	/* 512 */
+	default:	return h & 0x3ff;	/* 1024 */
+	}
 }
 
 static int zx_dsa_port_fdb_add(struct dsa_switch *ds, int port,
@@ -248,7 +266,7 @@ static int zx_dsa_port_fdb_add(struct dsa_switch *ds, int port,
 	d2 = (p & 0xff) | (mac_low4 << 8);
 
 	return zx_sbrag_write_entry(priv, ZX_SBRAG_MEMID_UC,
-				    zx_sbrag_hash_placeholder(addr, vid),
+				    zx_sbrag_hash(priv, addr, vid),
 				    d0, d1, d2);
 }
 
@@ -261,7 +279,7 @@ static int zx_dsa_port_fdb_del(struct dsa_switch *ds, int port,
 	/* First approximation: zero the hash slot. Proper delete is
 	 * lookup-then-zero (match {mac,vlan,status!=0}); TODO with the real hash. */
 	return zx_sbrag_write_entry(priv, ZX_SBRAG_MEMID_UC,
-				    zx_sbrag_hash_placeholder(addr, vid),
+				    zx_sbrag_hash(priv, addr, vid),
 				    0, 0, 0);
 }
 

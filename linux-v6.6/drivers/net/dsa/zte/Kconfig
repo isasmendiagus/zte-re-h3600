@@ -3,6 +3,7 @@ config NET_DSA_ZTE_ZX279128
 	tristate "ZTE ZX279128S on-chip switch support"
 	depends on NET_DSA
 	select NET_DSA_TAG_ZTE
+	select CRC_ITU_T
 	help
 	  This enables support for the ZTE ZX279128S SoC's on-chip 4-port
 	  ethernet switch, using DSA. The CPU-port conduit is the zx279128
