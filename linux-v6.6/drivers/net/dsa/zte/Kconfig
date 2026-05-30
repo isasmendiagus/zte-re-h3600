@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config NET_DSA_ZTE_ZX279128
+	tristate "ZTE ZX279128S on-chip switch support"
+	depends on NET_DSA
+	select NET_DSA_TAG_ZTE
+	help
+	  This enables support for the ZTE ZX279128S SoC's on-chip 4-port
+	  ethernet switch, using DSA. The CPU-port conduit is the zx279128
+	  ethernet driver; the switch port is carried out-of-band in the
+	  CPU<->fabric DMA descriptor (see the zte tag driver).
