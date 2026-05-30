@@ -111,24 +111,33 @@ Mermaid auto-routes edges, so positions approximate the brief; nesting/containme
 - This is an **ONU die** (fiber-capable) but this board has **no optical** — ponserdes/GPON-MAC
   path is dead; only PP↔SW↔copper is active. Confirms: ignore all GPON/fiber config.
 
-## Our RE'd ethernet datapath + where egress dies
+## Our RE'd ethernet datapath — ✅ CPU→LAN TX EGRESS SOLVED (2026-05-30)
 ```mermaid
 flowchart LR
   CPU["CPU / sw netdev<br/>via SW_AXI/APB"] -->|inject| ING["CPU-port ingress<br/>SIPC 0x921cc000 · SMCT 0x921d0000 · IDM 0x921c8000"]
   subgraph PPF["PP fabric (npp/tm windows)"]
     ING --> QMG["QMG sw_fwd<br/>0x9234c044 ✅ ticks"]
-    QMG --> DSCH["SCH/DSCH shaper<br/>0x92354000 ✅ credit fixed"]
-    DSCH --> SOPC["SOPC send2smac2<br/>0x921d9164 ✅ FIRES (egress-port hint fix 2026-05-29)"]
+    QMG --> DSCH["SCH/DSCH shaper<br/>0x92354000 ✅ no drop (eg_port=2)"]
+    DSCH --> SOPC["SOPC send2smac2<br/>0x921d9164 ✅ FIRES (+N)"]
   end
-  SOPC -->|"PP→SW handoff ✅"| MAC2["SW MAC2<br/>0x92280000 · ctrl 0xbae003<br/>TX-ok 0x92280718 ✅ +N (counts TX)"]
-  MAC2 -. "✗ MII TX not driving copper = FINAL GAP" .-> PHY["GEPHY"] --> RJ["RJ45 (host)"]
+  SOPC -->|"PP→SW handoff ✅"| MAC2["SW MAC2<br/>0x92280000 · ctrl 0xbae003<br/>TX-ok 0x92280718 ✅ +N"]
+  MAC2 -- "✅ copper driven (TX-DAC force-drive)" --> PHY["GEPHY"] --> RJ["RJ45 (host)"]
   RJ -. "RX path WORKS" .-> MAC2 -. "→ CLA → QMG → CPU ✅" .-> QMG
 ```
-RX works fully. CPU→LAN egress now traverses the WHOLE fabric (QMG→RED→DSCH→SOPC send2smac2→
-MAC2 TX counter) — the fabric gate is **CRACKED** via the TX-descriptor **egress-port hint**
-(`desc[2:3]=((port+0x28)&0x3f)<<4`; mainline had hardcoded 0). **Final gap: MAC2→PHY→copper** —
-MAC2 counts TX but the GePHY doesn't drive the wire (host sees nothing, no errors). See
-`session_2026-05-29_egress_fabric_cracked.md`.
+✅ **WORKS end-to-end (2026-05-30):** `ping -c5 192.168.1.99` = 5/5, 0% loss; txtest 16 →
+send2smac2 +16, MAC2 TX +16, drop_DSCH **+0**, host tcpdump 16/16 on wire. RX unaffected.
+**Two root-cause fixes** (commit `1c7af7d6c`), both required:
+1. **Egress-port hint `zx_eg_port` 4→2.** `desc[2:3]=((port+0x28)&0x3f)<<4` (decomp plat:6848).
+   Default 4 = a **no-link port** → DSCH refused to schedule it → dropped EVERY frame (the
+   long-hunted "dies at DSCH" wall — it was never a scheduler-config bug). Port 2 = the cabled
+   MAC2 jack → 0 drops. (Live sweep: eg_port=2→drop+0/send2smac2+16; =4→drop+16; =3→drop+6.)
+2. **GePHY TX-DAC force-drive pattern** (`b676/b677=3, b6c2/b6c1=3, b678=0xf`; was the weak
+   `param_2==1` set with b678=0), applied even when U-Boot pre-armed the LDO. Without it MAC2
+   counts TX but the copper pair isn't driven (wire=0, no CRC errors). With it → wire=16.
+⚠️ The 2026-05-29 "fabric CRACKED / reaches MAC2 / only copper left" claim was a **misdiagnosis**
+(eg_port was 4, frames never cleanly reached MAC2 on a clean boot — both the crack commit and
+HEAD drop at DSCH). See [[zte-tx-egress-blocker]]. Limitation: eg_port=2 is a single-port bench
+constant; correct behavior is per-frame FDB-resolved egress port (follow-up).
 
 ---
 
@@ -181,13 +190,13 @@ and wrongly concluded "ring unused." The REAL ring is tm_base+0x10000 (0x9235005
 | SIPC | 0x921cc000 | ctrl **0x921cc000=0x11** (cpu_up_en) | CPU↔fabric credit/mailbox bridge (NOT a ring) | ✅ |
 | SMCT | 0x921d0000 | init 0x921d0000=0xB, 0x921d0010=0x3810, free-gauge **0x921d0040**, free-doorbell 0x921d004c | CPU-port multi-channel transfer; gauges move during egress | 🟡 |
 | SPA (stream parser) | 0x921d4000 | match_mode **0x921d407c**, pkt-en 0x921d4000/04/08/40/44/48, indirect CMD **0x921d4014**/DONE 0x921d4018/DATA 0x921d401c–30, ONU-MAC tbl 0x921d4120/24 (=device MAC, mainline writes it) | source-port classifier; **match-RAM (ram_id0, 11 ent) is INDIRECT — not in flat dump** | ✅ |
-| SOPC (NPP) | 0x921d9000 | send2smac0..4 0x921d915c..**0x921d9164**(smac2)..916c | egress crossbar → physical MAC[N]. **Never fires for CPU frames = the GATE.** | ✅ |
+| SOPC (NPP) | 0x921d9000 | send2smac0..4 0x921d915c..**0x921d9164**(smac2)..916c | egress crossbar → physical MAC[N]. ✅ **send2smac2 +N once eg_port=2 (was 0 with the dead-port hint).** | ✅ |
 | drop counters | 0x921da000 | drop_PP 0x921da040, drop_RED 0x921da044, drop_DSCH 0x921da04c | per-stage drop counters | ✅ |
 | PM (G.988 port-mapper) | 0x921e0000 | ctrl **0x921e0054** (stock=0xc0: inport_eq_outport+cpu_not_drop), out-port rule **0x921e01a0=0x08**, in-port rules 0x921e0180+i*4 | source→allowed-egress authorizer. Mainline omits → `zx_pm_spa_init()` added (didn't fix). | ✅ |
 | SMAC[i] (MACs) | npp+(i+1)*0x40000 | per-MAC: ctrl +0x00, IRQ_MASK +0x04, ENABLE +0x08, iface +0xe0, TX-byte +0x714, **TX-ok +0x718**, **RX-ok +0x780** | per-port ethernet MAC | ✅ |
 | → MAC0 | 0x92200000 | ctrl=0 (down) | | ✅ |
 | → MAC1 | 0x92240000 | ctrl=0 (down) | | ✅ |
-| → **MAC2** | **0x92280000** | ctrl=**0xba6003** (tx/rx-en+link), RX-ok counts host, **TX-ok=0** | **HOST is cabled here.** Same ctrl as stock (which egresses) → MAC2 TX HW is fine. | ✅ |
+| → **MAC2** | **0x92280000** | ctrl=**0xba6003** (tx/rx-en+link), RX-ok counts host, ✅ **TX-ok +N (egresses to wire)** | **HOST is cabled here = switch port 2 (`zx_eg_port=2`).** | ✅ |
 | → MAC3 | 0x922c0000 | ctrl=0 | | ✅ |
 | → MAC4 | 0x92300000 | ctrl=0 | | ✅ |
 | PP ctrl | 0x92380000 | CPU-fwd **0x9238002c** (pp[0x2c]; bit (lan_up_port+0x19); high bits not CPU-writable) | packet-processor control | ✅ |
@@ -202,14 +211,15 @@ and wrongly concluded "ring unused." The REAL ring is tm_base+0x10000 (0x9235005
 | SCH/DSCH shaper | 0x92354000 | indirect CMD **0x92354014** / DONE 0x92354018 / DATA 0x9235401c | downstream token-bucket shaper (RAMID per-queue/tcont). `zx_sch_init` fixed the UP-path credit. | ✅ |
 | RED | ~0x92344000 | — | random-early-detect / congestion | ❓ |
 
-## Egress pipeline (CPU→LAN), and where it dies
+## Egress pipeline (CPU→LAN) — ✅ WORKS end-to-end (2026-05-30)
 ```
-CPU frame → IDM/SMCT or TM ring → QMG (sw_fwd 0x9234c044 ✅ ticks)
-  → [DSCH shaper credit ✅ fixed] → SOPC send2smacN (0x921d9164 ✗ NEVER fires)
-  → SMAC[N] TX (MAC2 0x92280718 ✗ stays 0) → wire (✗ 0 packets, even broadcast)
+CPU frame → TM ring → QMG (sw_fwd 0x9234c044 ✅ +N)
+  → DSCH (drop_DSCH 0x921da04c ✅ +0, eg_port=2) → SOPC send2smac2 (0x921d9164 ✅ +N)
+  → MAC2 TX (0x92280718 ✅ +N) → GePHY (TX-DAC force-drive) → wire ✅ (host tcpdump +N)
 ```
-Observed instead: the frame returns as **TM RX ingress=2 "delivered"** = loops to CPU.
-RX path (wire→PHY→MAC2→CLA→QMG→CPU) works fully.
+Fixed by (1) egress-port hint `zx_eg_port` 4→2 (was a no-link port → DSCH dropped all) and
+(2) GePHY TX-DAC force-drive pattern (was weak → copper not driven). `ping` = 0% loss. RX
+path (wire→PHY→MAC2→CLA→QMG→CPU) works fully and is unaffected.
 
 ## What the 2MiB dump does NOT cover (so "config matches stock" is INCOMPLETE)
 1. **`pon` window 0x92000000–0x921bffff** (PON-MAC/GPON; copper-irrelevant but unverified).
@@ -225,17 +235,23 @@ RX path (wire→PHY→MAC2→CLA→QMG→CPU) works fully.
 ## IRQs (GIC SPI)
 tm=36 (CPU↔switch ⭐), npp=35, idm=38, pon=66, pp=37.
 
-## Egress status (journey #21, 2026-05-29) — FABRIC GATE CRACKED
-The fabric gate is SOLVED. CPU→LAN frames now traverse QMG→RED→DSCH→SOPC send2smac2→MAC2 TX
-(routed only to MAC2, zero drops). **The missing piece was the TX-descriptor egress-port hint**
-`desc[2:3]=((port+0x28)&0x3f)<<4` (decomp plat:6848) — mainline hardcoded 0 → fabric had no
-destination → SOPC never selected a MAC. Plus a MAC init-order-wipe fix (adjust_link now
-re-runs full smac_init on link-up). The earlier "loops to CPU / ring-less" reads were the
-address-map error (read SMCT 0x921d00xx, not the real TM ring 0x9235xxxx) — stock DOES use the
-DN ring; QMG sw_fwd is the egress signal, not a ticking ring counter.
-**Remaining (only) gap: MAC2→PHY→copper.** MAC2 counts TX (TX_frames/bytes +N) but the GePHY
-doesn't drive the wire (host NIC sees nothing AND no errors → not bad-CRC). MAC↔PHY MII TX
-config suspect (MAC2 +0xc20/+0xc50/+0xb00 partial). See `session_2026-05-29_egress_fabric_cracked.md`.
+## Egress status — ✅ SOLVED 2026-05-30 (commit 1c7af7d6c)
+CPU→LAN TX egress works end-to-end: `ping -c5 192.168.1.99` = 5/5, 0% loss; txtest → send2smac2
++N, MAC2 TX +N, drop_DSCH +0, frames on wire. RX unaffected. **Two root-cause fixes, both
+required:**
+1. **Egress-port hint `zx_eg_port` 4→2.** `desc[2:3]=((port+0x28)&0x3f)<<4` (decomp plat:6848).
+   The default 4 pointed at a **no-link port**, so the DSCH scheduler dropped every frame
+   (`drop_DSCH 0x921da04c` +N) — this was the entire "dies at DSCH" wall, never a scheduler-config
+   bug. Port 2 = cabled MAC2 → 0 drops. Proven by live runtime sweep (eg_port 2/3/4).
+2. **GePHY TX-DAC force-drive pattern** (`b676/b677=3, b6c2/b6c1=3, b678=0xf`; was weak set with
+   b678=0), applied even when U-Boot pre-armed the LDO. Without it MAC2 counted TX but copper
+   wasn't driven (wire=0, no errors); with it → wire=N.
+⚠️ The 2026-05-29 "FABRIC GATE CRACKED / reaches MAC2 / only MAC2→PHY copper gap left" claim was a
+**MISDIAGNOSIS** (retracted): with eg_port=4, frames never cleanly reached MAC2 on a clean boot —
+both the crack commit `dc706eae9` and HEAD drop at DSCH. The "MAC↔PHY MII (+0xc20/+0xc50/+0xb00)"
+suspects were also wrong (those read back stock values live). The real copper gap was purely the
+TX-DAC drive strength. The earlier address-map note (SMCT 0x921d00xx vs real TM ring 0x9235xxxx)
+stands. See [[zte-tx-egress-blocker]] for the full ruled-out list.
 
 
 ---
@@ -1293,8 +1309,27 @@ now fires once the TX desc carries the egress-port hint `desc[2:3]=((port+0x28)&
   real determinant is the **TX-descriptor egress-port hint** (`desc[2:3]=((port+0x28)&0x3f)<<4`,
   decomp plat:6848): with it set (mainline had 0), SOPC routes the frame to the correct
   send2smacN. The egress port comes from the desc/upstream forwarding decision, not a SOPC knob.
-  `0x921d91c8=0x1f` / `0x191cc..dc` are read-only status. **FIXED 2026-05-29** — send2smac2 fires;
-  the frame reaches MAC2 TX. (Final gap moved downstream to MAC2→PHY MII — see §3.19.)
+  `0x921d91c8=0x1f` / `0x191cc..dc` are read-only status.
+- **⚠️ CORRECTION 2026-05-29 (later session) — NOT fixed; gate re-localized to the OPC ISSUE stage:**
+  the egress-port-hint "fix" got `send2smac2` to fire only ONCE (the good boot with a live ping);
+  on every clean cold boot since, `send2smac2`=0 deterministically (3/3 trials), 0 on wire. The
+  drop counter **`0x921da04c` is decomp-grounded as the OPC "DSCH DROP" counter** =
+  `fpga_read_reg(0x76813)` (stats dumper tm:46478-46490) — it lives in the SAME OPC block as
+  `send2smacN` (0x76457+) and `tcont_sch_active_ena` (0x76001=`0x921d8004`). So the frame **IS**
+  dequeued by DSCH and reaches the **OPC issue stage**, which **drops it (drop@0x921da04c +1 per
+  frame) instead of emitting `send2smac[port]`**. This is one stage LATER than the DSCH scheduler.
+  - **Ruled out as the cause:** `tcont_sch_active_ena 0x921d8004` already reads 0x1 on mainline
+    (=stock). A full live-mainline-vs-stock-2MiB-dump diff of the whole OPC/SOPC block
+    (0x921d8000-0x921da0ff) shows ALL **writable** OPC config (tcont_num, active_ena, crc_pad,
+    sp_rr) MATCHES stock; the only diffs are per-port COUNTERS (stock ran traffic) and **read-only
+    OPC pipeline-state** regs `0x921d80a8=3 / 0x921d830c=1 / 0x921d8310=0x20000000` that DON'T
+    LATCH on poke and are written by NO decomp fn → RO state, not config.
+  - **So the OPC drop is DYNAMIC, not a missing static config write.** Reconciles with the good
+    boot (send2smac2 + MAC2 TX climbed after a live ping). Open candidates: (1) SMAC/MAC2-TX-side
+    readiness — `sopc_set_smac_ready_mode`/`half_mode`/`smac_delay_cnt` (distinct from the
+    ruled-out 0x19068 bridge); (2) a DA/FDB resolution the OPC consults to pick the smac (the
+    live ping would have populated it). Decisive next: capture stock OPC/SMAC regs DURING a
+    working egress vs mainline mid-txtest to see which dynamic reg flips. See [[zte-tx-egress-blocker]].
 
 ## 3.8 PM — G.988 source→allowed-egress authorizer  ✅
 **Base 0x921e0000** (`zx_pmregtable` base 0x921e0014). Role: per-source `(in_port,out_port)`
@@ -1518,13 +1553,29 @@ Role: per-port MAC: ctrl/cfg, enable, IPG, flow-ctrl, statistics. **Host is cabl
   separate, bigger-change architecture. NB: SOPC (0x921d9xxx) and MAC2 RX are clocked fine, so the
   *fabric* egress path is NOT obviously clock-gated — only the ETH_TM2 *direct-mux* block is.
 
-## 3.21 UOPC — upstream OPC / tcont  🟡 (thin, PON-only)
-**Base 0x921d8000.** Role: tcont num/sync/active, mac_ept_resume (GPON upstream). Copper board
-has no optical → **dead path**.
-- **Key regs:** tcont_num `0x921d8000`, tcont_sch_active `0x921d8004`, mac_ept_resume `0x921d8008`,
-  tcont_syn `0x921d802c`. All 🟡 (table-inferred).
-- **Verified/ruled out:** 🟢 N/A for copper LAN egress (PON physical-layer control). Documented for
-  completeness; vendor brief confirms ponserdes/GPON path is dead on this board.
+## 3.21 (U)OPC — output-processor / tcont issue stage  🔴 (THE current egress gate, NOT dead)
+**Base 0x921d8000.** ⚠️ **Previously mis-tagged "PON-only / dead path" — WRONG.** This OPC block
+is the **last TM stage before the MAC** and is exactly where CPU→LAN egress dies (2026-05-29):
+the **OPC "DSCH DROP" counter `0x921da04c`** (`fpga_read_reg(0x76813)`, stats dumper tm:46478-90),
+`send2smacN` (0x76457+ = `0x921d915c..`), and `tcont_sch_active_ena` (`0x921d8004`) all live in
+this one OPC hardware unit. A dequeued frame reaching the OPC issue stage is DROPPED here (drop
++1/frame) instead of emitting send2smac → the live-confirmed deterministic egress failure.
+- **Key regs:** tcont_num `0x921d8000` (live=stock 0x124), **tcont_sch_active_ena `0x921d8004`
+  (live=0x1=stock — already set, NOT the gap)**, `0x921d8008`=1, `0x921d800c`=0xf, tcont_syn
+  `0x921d802c`=1, `0x921d8040`=0x1e0, `0x921d80a8`/`0x921d80ac`/`0x921d80b0` + the `0x921d8300`
+  sub-block (`8300`=1,`830c`=1,`8310`=0x20000000 on stock) = **read-only pipeline-state** (don't
+  latch on write; written by no decomp fn; read 0 on idle mainline because no egress in flight).
+- **Verified/ruled out:** all WRITABLE OPC config matches stock (full block diff vs stock_eth_2mib).
+  The OPC drop is **dynamic** — not a missing static reg.
+- **✅ RESOLVED 2026-05-30 — the OPC/DSCH drop was the WRONG EGRESS PORT, not an OPC config gap.**
+  `0x921da04c` incremented because `zx_sw_xmit` stamped the egress-port hint with `zx_eg_port=4`,
+  a **no-link port**: the scheduler/OPC will not issue a frame to a down port, so it dropped
+  every one. Setting `zx_eg_port=2` (the cabled MAC2 jack) → `0x921da04c`+0, `send2smac2`+N,
+  MAC2 TX+N, frames on wire. Confirmed by live runtime sweep (eg_port 2/3/4). So this OPC block
+  is healthy; it was correctly *refusing* to issue to a dead destination. The earlier "dynamic /
+  SMAC-ready / DA-FDB" candidates were red herrings — none was the cause. See §"datapath SOLVED"
+  at top + commit `1c7af7d6c` + [[zte-tx-egress-blocker]]. (The optical/GPON *physical* layer is
+  still dead on copper; this OPC packet-issue block is shared and LIVE for LAN egress.)
 
 ## 3.22 PON-PP / PON-TM — PON packet-proc / traffic-mgr cfg  ❓ (thin, PON-context)
 **PON-PP base 0x923a0000** (`zx_ponppregtable`, overlaps ETH_TM2 window), **PON-TM base
