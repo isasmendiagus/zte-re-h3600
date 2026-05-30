@@ -130,4 +130,35 @@ must: TX read tag[1]→desc egress port, copy frame[4:] to BP (drop tag); RX pre
   tracking in priv) + port_fast_age. Integrate the real sbrg_hash when the agent
   returns. Then the big one: DT node + conduit relationship so it PROBES (P0
   cont/P1) — the gate to any HW (memdump) verification.
+- **2026-05-30 iter5/6 (commits b314b5477, 987b11d25):** real sbrg_hash
+  (CRC-16/CCITT via crc_itu_t, reads mode+width live) + DT binding doc. **FULL
+  IMAGE BUILD exit 0; tag_zte.ko (5.5K) + zx-dsa.ko (10K) both build** — all
+  P0+P3 pieces integrate end-to-end (modpost OK), not just isolated .o.
+- **State of P3 (all COMPILE, NONE HW-verified — driver doesn't probe yet):**
+  port_enable/disable, STP, FDB add/del (real hash), VLAN add/del. Remaining P3:
+  bridge_join/leave (isolation — fiddly port remap + complement, risky blind),
+  port_fast_age (needs FDB-flush RE).
+- **THE GATE for any HW verification = the DT/conduit integration (P0 cont/P1):
+  make `sw` a DSA conduit + the zx-dsa platform device probe.** This is invasive
+  (touches the working zx-eth driver) and best done with the user / HW in the
+  loop, not blind overnight. The autonomous loop has built+validated all the
+  compile-checkable, spec-backed pieces; the next steps need HW verification or a
+  design decision on the conduit refactor.
+- **2026-05-30 iter7/8 (commits 3306c0562, 36d2e5ab3):** bridge_join/leave
+  (isolation, RE'd remap+permute) + port_fast_age (SW FDB flush). **P3 COMPLETE
+  — all per-port dsa_switch_ops implemented + compile + build into zx-dsa.ko.**
+- **AUTONOMOUS-SAFE COMPILE WORK IS NOW EXHAUSTED.** Everything spec-backed +
+  compile-verifiable is done (P0 skeleton, tagger, all P3 ops, real hash, DT
+  binding, full-build validated). NONE is HW-verified because the driver doesn't
+  probe yet.
+- **THE remaining step = conduit refactor (P1): make zx-eth `sw` a DSA conduit +
+  zx-dsa platform device probe. INVASIVE (touches the working egress driver),
+  needs HW verification + a user design decision — NOT to be done blind
+  overnight.** Loop should now do only safe upstream-prep (checkpatch, MAINTAINERS,
+  commit hygiene) and flag the user for the conduit refactor.
+- **checkpatch (2026-05-30):** tag_zte.c = 1 warn (filename-in-header). zx-dsa.c
+  = 8 errors (switch-case one-liners `case X: stmt; break;` → split lines) + 18
+  warns (block comments need trailing */ on own line). NEXT safe iteration =
+  checkpatch cleanup across both files (upstream-prep, non-invasive). Then
+  MAINTAINERS entry. After that, only the conduit refactor remains (needs user).
 - Reuse switch HW-init + register helpers from zx-eth-main.c.
