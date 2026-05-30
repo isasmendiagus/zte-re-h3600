@@ -3281,12 +3281,14 @@ static int zx_bmu_free_bp(struct zx_eth *e, u16 bp_idx, u8 is_pon)
 			 (e)->tm_tx_count, stage, __func__, ##__VA_ARGS__); \
 } while (0)
 
-/* [egress fix 2026-05-29] DN egress-port hint. Stock DN desc encodes the
+/* [egress fix 2026-05-30] DN egress-port hint. Stock DN desc encodes the
  * FDB-resolved egress port as ((port+0x28)&0x3f)<<4 in desc bytes[2:3]
- * (decomp pon_tm_net_tx plat:6848). Host is on MAC2; the exact port index
- * (2/3/4) is swept at runtime via /sys/module/zx279128_eth/parameters/zx_eg_port
- * to nail which value routes to MAC2 without a rebuild. */
-static unsigned int zx_eg_port = 4;
+ * (decomp pon_tm_net_tx plat:6848). LIVE-PROVEN on the H3600: port=2 routes a
+ * CPU->LAN frame to MAC2 (the cabled host port) with ZERO DSCH drops —
+ * send2smac2 + MAC2 TX climb. The old default 4 directed frames to a no-link
+ * port, so DSCH dropped every frame (the long-hunted "dies at DSCH" wall).
+ * Still a module param (0644) so other cablings can be swept at runtime. */
+static unsigned int zx_eg_port = 2;
 module_param(zx_eg_port, uint, 0644);
 MODULE_PARM_DESC(zx_eg_port, "DN egress port index for the host MAC (desc hint (port+0x28)<<4)");
 

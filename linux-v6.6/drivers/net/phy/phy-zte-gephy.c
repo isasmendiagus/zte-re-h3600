@@ -65,14 +65,23 @@ struct zte_gephy_ext_init {
 	u16 val;
 };
 
+/*
+ * [2026-05-30] FORCE-DRIVE pattern (stock gephy_tx_dac_drv_force_enable
+ * param_2==0, decomp plat-zxylzb_9128S.c:2378-2393). The previous table here
+ * was the param_2==1 *reduced* pattern (b676/b677=0, b6c2/b6c1=2/1, b678=0) —
+ * which links + RXes but leaves the copper TX driver weak/off, matching the
+ * observed "MAC2 counts TX, host sees nothing, zero CRC errors" (un-driven
+ * line, not garbled). The force pattern fully enables the copper TX DAC:
+ * b676/b677=3, b6c2/b6c1=3, and crucially b678=0xf (was 0).
+ */
 static const struct zte_gephy_ext_init zte_gephy_tx_dac_init[] = {
-	{ 0xb676, 0x0000 },
-	{ 0xb677, 0x0000 },
+	{ 0xb676, 0x0003 },
+	{ 0xb677, 0x0003 },
 	{ 0xb667, 0x0003 },
 	{ 0xb668, 0x0003 },
-	{ 0xb6c2, 0x0002 },
-	{ 0xb6c1, 0x0001 },
-	{ 0xb678, 0x0000 },
+	{ 0xb6c2, 0x0003 },
+	{ 0xb6c1, 0x0003 },
+	{ 0xb678, 0x000f },
 	{ 0xb669, 0x0000 },
 };
 
@@ -117,9 +126,17 @@ static int zte_gephy_config_init(struct phy_device *phydev)
 	 */
 	ldo_state = zte_gephy_ext_read(phydev, ZTE_GEPHY_EXT_LDO_ARM);
 	if (ldo_state == ZTE_GEPHY_EXT_LDO_ENABLE) {
-		phydev_info(phydev, "config_init: LDO already armed (ext 0xb640=0x%04x) — skipping disruptive writes\n",
+		/* [2026-05-29] LDO already armed by U-Boot. SKIP the disruptive LDO
+		 * re-arm (avoids the PHY-analog power-cycle / RGMII glitch that wedges
+		 * the MAC TX FIFO — Iter 23), but STILL apply the TX-DAC drive enable.
+		 * The TX-DAC drives the COPPER TX pair: if U-Boot armed the LDO but did
+		 * NOT enable the TX-DAC, the PHY links + RX works but cannot DRIVE TX onto
+		 * copper → exactly the observed "RX works, 0 TX egress" symptom. The
+		 * TX-DAC writes are non-disruptive (no power-cycle), so applying them when
+		 * already-armed is safe. */
+		phydev_info(phydev, "config_init: LDO armed (ext 0xb640=0x%04x) — keeping LDO, applying TX-DAC drive\n",
 			    ldo_state);
-		return 0;
+		goto tx_dac;
 	}
 
 	phydev_info(phydev, "config_init: arming LDO + TX DAC drive (prior state 0x%04x)\n",
@@ -136,6 +153,7 @@ static int zte_gephy_config_init(struct phy_device *phydev)
 	if (ret < 0)
 		return ret;
 
+tx_dac:
 	/* (2) TX-DAC drive enable — eight extended-register writes. */
 	for (i = 0; i < ARRAY_SIZE(zte_gephy_tx_dac_init); i++) {
 		ret = zte_gephy_ext_write(phydev,
