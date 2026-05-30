@@ -20,6 +20,8 @@
  */
 
 #include <linux/dsa/zte.h>
+#include <linux/delay.h>
+#include <linux/etherdevice.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -39,6 +41,20 @@
 #define ZX_NPP_PHYS		0x921c0000UL
 #define ZX_NPP_SIZE		0x1000
 
+/* PP/SBRAG register window (FDB MAC table + port isolation). */
+#define ZX_PP_PHYS		0x92388000UL
+#define ZX_PP_SIZE		0x1000
+
+/* SBRAG indirect FDB protocol (offsets from PP base; memory zte-dsa-foundation).
+ * NOTE: the CORRECT offsets are 0x14/18/1c/20/24 — the legacy zx-eth-main.c
+ * constants were +0x800 too high (0x388814...). We use the right ones here. */
+#define ZX_SBRAG_CMD		0x14	/* ram_addr | mem_id<<22 | rw<<27 | mode<<31 */
+#define ZX_SBRAG_BUSY		0x18	/* bit0 == 1 -> access complete */
+#define ZX_SBRAG_D0		0x1c	/* commit register (write last) */
+#define ZX_SBRAG_D1		0x20
+#define ZX_SBRAG_D2		0x24
+#define ZX_SBRAG_MEMID_UC	0	/* unicast MAC table */
+
 /* greg per-port control (memory zte-dsa-foundation):
  *   STP state  @+0x44, 3 bits/port (shift = phys_port*3): HW 0=Dis 1=Blk 2=Lis 3=Lrn 4=Fwd
  *   STP enable @+0x40 (must be set for the STP state field to take effect)
@@ -52,6 +68,7 @@ struct zx_dsa_priv {
 	struct dsa_switch	*ds;
 	struct device		*dev;
 	void __iomem		*regs;	/* NPP window (greg) — see TODO above */
+	void __iomem		*pp_regs; /* PP/SBRAG window (FDB, isolation) */
 	/* TODO P0/P1: conduit (sw netdev) ref for the datapath/tag */
 };
 
@@ -144,6 +161,87 @@ static void zx_dsa_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
 	zx_greg_rmw(priv, ZX_GREG_STP_STATE, 0x7u << shift, hw << shift);
 }
 
+/* --- SBRAG FDB (unicast MAC table) -------------------------------------- */
+
+static int zx_sbrag_wait(struct zx_dsa_priv *priv)
+{
+	int i;
+
+	for (i = 0; i < 100; i++) {
+		if (readl(priv->pp_regs + ZX_SBRAG_BUSY) & 1)
+			return 0;
+		udelay(2);
+	}
+	return -ETIMEDOUT;
+}
+
+/* Commit one FDB entry at hash slot `addr` (mem_id=unicast, rw=0 write).
+ * Write order D2 -> D1 -> D0 (D0 commits), matching stock sbrg_set_indreg_wr. */
+static int zx_sbrag_write_entry(struct zx_dsa_priv *priv, u16 addr,
+				u32 d0, u32 d1, u32 d2)
+{
+	int ret = zx_sbrag_wait(priv);
+
+	if (ret)
+		return ret;
+
+	writel((addr & 0xfff) | (ZX_SBRAG_MEMID_UC << 22),
+	       priv->pp_regs + ZX_SBRAG_CMD);
+	writel(d2, priv->pp_regs + ZX_SBRAG_D2);
+	writel(d1, priv->pp_regs + ZX_SBRAG_D1);
+	writel(d0, priv->pp_regs + ZX_SBRAG_D0);
+	return 0;
+}
+
+/* PLACEHOLDER hash. The chip uses sbrg_hash(mac,vlan) masked to the table-sel
+ * width (RE pending — see dsa_driver_plan.md / a parallel RE task). With a wrong
+ * hash, entries land in the wrong slot so HW lookups/deletes will MISS. This
+ * compiles + exercises the protocol but is NOT functionally correct until the
+ * real sbrg_hash is ported. TODO. */
+static u16 zx_sbrag_hash_placeholder(const unsigned char *mac, u16 vid)
+{
+	u16 h = vid;
+	int i;
+
+	for (i = 0; i < ETH_ALEN; i++)
+		h = (u16)((h << 1) ^ mac[i]);
+	return h & 0x1ff;
+}
+
+static int zx_dsa_port_fdb_add(struct dsa_switch *ds, int port,
+			       const unsigned char *addr, u16 vid,
+			       struct dsa_db db)
+{
+	struct zx_dsa_priv *priv = ds->priv;
+	int p = zx_phys_port(port);
+	u32 mac_low4 = addr[0] | addr[1] << 8 | addr[2] << 16 | addr[3] << 24;
+	u16 mac_high2 = addr[4] | addr[5] << 8;
+	u32 d0, d1, d2;
+
+	/* Entry layout (stock sbrg_add_mactable, memory zte-dsa-foundation):
+	 *  D0 = mac_low4>>24 | mac_high2<<8 | vlan<<24
+	 *  D1 = (status&0xf)<<4 | (vlan>>8)&0xf | smac_ctrl<<8 | dmac_ctrl<<9
+	 *  D2 = port_id | mac_low4<<8 ;  status=0xF = static present. */
+	d0 = (mac_low4 >> 24) | ((u32)vid << 24) | ((u32)mac_high2 << 8);
+	d1 = (0xFu << 4) | ((vid >> 8) & 0xf);
+	d2 = (p & 0xff) | (mac_low4 << 8);
+
+	return zx_sbrag_write_entry(priv, zx_sbrag_hash_placeholder(addr, vid),
+				    d0, d1, d2);
+}
+
+static int zx_dsa_port_fdb_del(struct dsa_switch *ds, int port,
+			       const unsigned char *addr, u16 vid,
+			       struct dsa_db db)
+{
+	struct zx_dsa_priv *priv = ds->priv;
+
+	/* First approximation: zero the hash slot. Proper delete is
+	 * lookup-then-zero (match {mac,vlan,status!=0}); TODO with the real hash. */
+	return zx_sbrag_write_entry(priv, zx_sbrag_hash_placeholder(addr, vid),
+				    0, 0, 0);
+}
+
 static const struct dsa_switch_ops zx_dsa_switch_ops = {
 	.get_tag_protocol	= zx_dsa_get_tag_protocol,
 	.setup			= zx_dsa_setup,
@@ -151,8 +249,10 @@ static const struct dsa_switch_ops zx_dsa_switch_ops = {
 	.port_enable		= zx_dsa_port_enable,
 	.port_disable		= zx_dsa_port_disable,
 	.port_stp_state_set	= zx_dsa_port_stp_state_set,
-	/* TODO P3: port_bridge_join/leave (isolation), port_fdb_add/del,
-	 * port_vlan_add/del, port_fast_age — see dsa_driver_plan.md. */
+	.port_fdb_add		= zx_dsa_port_fdb_add,
+	.port_fdb_del		= zx_dsa_port_fdb_del,
+	/* TODO P3: port_bridge_join/leave (isolation), port_vlan_add/del,
+	 * port_fast_age — see dsa_driver_plan.md. FDB hash is a placeholder. */
 };
 
 static int zx_dsa_probe(struct platform_device *pdev)
@@ -176,6 +276,10 @@ static int zx_dsa_probe(struct platform_device *pdev)
 	 * register access is unified (TODO: get the base from DT reg / conduit). */
 	priv->regs = devm_ioremap(&pdev->dev, ZX_NPP_PHYS, ZX_NPP_SIZE);
 	if (!priv->regs)
+		return -ENOMEM;
+
+	priv->pp_regs = devm_ioremap(&pdev->dev, ZX_PP_PHYS, ZX_PP_SIZE);
+	if (!priv->pp_regs)
 		return -ENOMEM;
 
 	ds->dev = &pdev->dev;
