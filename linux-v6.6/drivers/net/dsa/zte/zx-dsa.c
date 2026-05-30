@@ -20,11 +20,13 @@
  */
 
 #include <linux/dsa/zte.h>
+#include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <net/dsa.h>
+#include <uapi/linux/if_bridge.h>
 
 /* 4 user LAN ports (0..3) + CPU port (5). Port 4 is the unused RGMII WAN MAC on
  * the H3600; sized to cover the CPU port index. Refined when the DT/port map is
@@ -32,11 +34,42 @@
 #define ZX_DSA_NUM_PORTS	6
 #define ZX_DSA_CPU_PORT		5
 
+/* NPP register window base (greg per-port control lives here). TODO: obtain
+ * from DT reg / share with the conduit (zx-eth) instead of hardcoding. */
+#define ZX_NPP_PHYS		0x921c0000UL
+#define ZX_NPP_SIZE		0x1000
+
+/* greg per-port control (memory zte-dsa-foundation):
+ *   STP state  @+0x44, 3 bits/port (shift = phys_port*3): HW 0=Dis 1=Blk 2=Lis 3=Lrn 4=Fwd
+ *   STP enable @+0x40 (must be set for the STP state field to take effect)
+ *   port_closed@+0x4c, 1 bit/port (1 = disabled)
+ */
+#define ZX_GREG_STP_EN		0x40
+#define ZX_GREG_STP_STATE	0x44
+#define ZX_GREG_PORT_CLOSED	0x4c
+
 struct zx_dsa_priv {
 	struct dsa_switch	*ds;
 	struct device		*dev;
-	/* TODO P0/P1: conduit (sw netdev) ref + switch register access handle */
+	void __iomem		*regs;	/* NPP window (greg) — see TODO above */
+	/* TODO P0/P1: conduit (sw netdev) ref for the datapath/tag */
 };
+
+static void zx_greg_rmw(struct zx_dsa_priv *priv, u32 off, u32 mask, u32 val)
+{
+	u32 v = readl(priv->regs + off);
+
+	v = (v & ~mask) | (val & mask);
+	writel(v, priv->regs + off);
+}
+
+/* DSA port -> chip phys port. For the 4 LAN user ports (0..3) this is identity;
+ * the CPU/other ports use the stock getPort remap (0..4->0..4, 6->5, 7->6).
+ * TODO: full remap when CPU-port ops are wired. */
+static inline int zx_phys_port(int port)
+{
+	return port;
+}
 
 static enum dsa_tag_protocol zx_dsa_get_tag_protocol(struct dsa_switch *ds,
 						     int port,
@@ -67,13 +100,48 @@ static void zx_dsa_phylink_get_caps(struct dsa_switch *ds, int port,
 static int zx_dsa_port_enable(struct dsa_switch *ds, int port,
 			      struct phy_device *phy)
 {
-	/* TODO P3: greg port_closed @0x921c004c bit(port) = 0 (open). */
+	struct zx_dsa_priv *priv = ds->priv;
+	int p = zx_phys_port(port);
+
+	/* greg port_closed bit(p) = 0 -> open. NOT yet HW-verified. */
+	zx_greg_rmw(priv, ZX_GREG_PORT_CLOSED, BIT(p), 0);
 	return 0;
 }
 
 static void zx_dsa_port_disable(struct dsa_switch *ds, int port)
 {
-	/* TODO P3: greg port_closed bit(port) = 1 (closed). */
+	struct zx_dsa_priv *priv = ds->priv;
+	int p = zx_phys_port(port);
+
+	/* greg port_closed bit(p) = 1 -> closed. */
+	zx_greg_rmw(priv, ZX_GREG_PORT_CLOSED, BIT(p), BIT(p));
+}
+
+static void zx_dsa_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
+{
+	struct zx_dsa_priv *priv = ds->priv;
+	int p = zx_phys_port(port);
+	u32 hw, shift;
+
+	/* Map Linux BR_STATE_* -> chip STP encoding (zte-dsa-foundation):
+	 * 0=Disabled 1=Blocking 2=Listening 3=Learning 4=Forwarding. */
+	switch (state) {
+	case BR_STATE_DISABLED:		hw = 0; break;
+	case BR_STATE_BLOCKING:		hw = 1; break;
+	case BR_STATE_LISTENING:	hw = 2; break;
+	case BR_STATE_LEARNING:		hw = 3; break;
+	case BR_STATE_FORWARDING:	hw = 4; break;
+	default:
+		dev_warn(priv->dev, "unsupported STP state %u on port %d\n",
+			 state, port);
+		return;
+	}
+
+	/* enable STP for this port, then write the 3-bit state field. NOT yet
+	 * HW-verified (writes are spec-backed; confirm via memdump-readback). */
+	zx_greg_rmw(priv, ZX_GREG_STP_EN, BIT(p), BIT(p));
+	shift = p * 3;
+	zx_greg_rmw(priv, ZX_GREG_STP_STATE, 0x7u << shift, hw << shift);
 }
 
 static const struct dsa_switch_ops zx_dsa_switch_ops = {
@@ -82,7 +150,8 @@ static const struct dsa_switch_ops zx_dsa_switch_ops = {
 	.phylink_get_caps	= zx_dsa_phylink_get_caps,
 	.port_enable		= zx_dsa_port_enable,
 	.port_disable		= zx_dsa_port_disable,
-	/* TODO P3: port_stp_state_set, port_bridge_join/leave, port_fdb_add/del,
+	.port_stp_state_set	= zx_dsa_port_stp_state_set,
+	/* TODO P3: port_bridge_join/leave (isolation), port_fdb_add/del,
 	 * port_vlan_add/del, port_fast_age — see dsa_driver_plan.md. */
 };
 
@@ -101,6 +170,13 @@ static int zx_dsa_probe(struct platform_device *pdev)
 
 	priv->dev = &pdev->dev;
 	priv->ds = ds;
+
+	/* NPP greg window for per-port control. Non-exclusive ioremap because the
+	 * conduit (zx-eth) also maps this space — sharing is intentional until the
+	 * register access is unified (TODO: get the base from DT reg / conduit). */
+	priv->regs = devm_ioremap(&pdev->dev, ZX_NPP_PHYS, ZX_NPP_SIZE);
+	if (!priv->regs)
+		return -ENOMEM;
 
 	ds->dev = &pdev->dev;
 	ds->num_ports = ZX_DSA_NUM_PORTS;
