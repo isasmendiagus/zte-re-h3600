@@ -155,11 +155,21 @@ static void zx_dsa_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
 	/* Map Linux BR_STATE_* -> chip STP encoding (zte-dsa-foundation):
 	 * 0=Disabled 1=Blocking 2=Listening 3=Learning 4=Forwarding. */
 	switch (state) {
-	case BR_STATE_DISABLED:		hw = 0; break;
-	case BR_STATE_BLOCKING:		hw = 1; break;
-	case BR_STATE_LISTENING:	hw = 2; break;
-	case BR_STATE_LEARNING:		hw = 3; break;
-	case BR_STATE_FORWARDING:	hw = 4; break;
+	case BR_STATE_DISABLED:
+		hw = 0;
+		break;
+	case BR_STATE_BLOCKING:
+		hw = 1;
+		break;
+	case BR_STATE_LISTENING:
+		hw = 2;
+		break;
+	case BR_STATE_LEARNING:
+		hw = 3;
+		break;
+	case BR_STATE_FORWARDING:
+		hw = 4;
+		break;
 	default:
 		dev_warn(priv->dev, "unsupported STP state %u on port %d\n",
 			 state, port);
@@ -425,9 +435,15 @@ static void zx_dsa_port_fast_age(struct dsa_switch *ds, int port)
 	u32 nslots, slot;
 
 	switch (readl(priv->pp_regs + ZX_SBRAG_TABLE_SEL) & 0x3) {
-	case 1:		nslots = 0x100; break;
-	case 2:		nslots = 0x200; break;
-	default:	nslots = 0x400; break;
+	case 1:
+		nslots = 0x100;
+		break;
+	case 2:
+		nslots = 0x200;
+		break;
+	default:
+		nslots = 0x400;
+		break;
 	}
 
 	for (slot = 0; slot < nslots; slot++) {

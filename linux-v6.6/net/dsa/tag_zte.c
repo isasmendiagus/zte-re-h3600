@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * net/dsa/tag_zte.c - tag handling for the ZTE ZX279128S on-chip switch
+ * Tag handling for the ZTE ZX279128S on-chip switch.
  *
  * The ZX279128S conveys the switch port OUT-OF-BAND, in the CPU<->fabric DMA
  * descriptor (TX egress port in desc word3 bits[9:4]; RX ingress port in
