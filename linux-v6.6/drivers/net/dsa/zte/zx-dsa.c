@@ -54,6 +54,7 @@
 #define ZX_SBRAG_D1		0x20
 #define ZX_SBRAG_D2		0x24
 #define ZX_SBRAG_MEMID_UC	0	/* unicast MAC table */
+#define ZX_SBRAG_MEMID_VLAN	4	/* VLAN table */
 
 /* greg per-port control (memory zte-dsa-foundation):
  *   STP state  @+0x44, 3 bits/port (shift = phys_port*3): HW 0=Dis 1=Blk 2=Lis 3=Lrn 4=Fwd
@@ -175,9 +176,9 @@ static int zx_sbrag_wait(struct zx_dsa_priv *priv)
 	return -ETIMEDOUT;
 }
 
-/* Commit one FDB entry at hash slot `addr` (mem_id=unicast, rw=0 write).
+/* Commit one entry at table slot `addr` in memory `mem_id` (rw=0 write).
  * Write order D2 -> D1 -> D0 (D0 commits), matching stock sbrg_set_indreg_wr. */
-static int zx_sbrag_write_entry(struct zx_dsa_priv *priv, u16 addr,
+static int zx_sbrag_write_entry(struct zx_dsa_priv *priv, u32 mem_id, u16 addr,
 				u32 d0, u32 d1, u32 d2)
 {
 	int ret = zx_sbrag_wait(priv);
@@ -185,11 +186,31 @@ static int zx_sbrag_write_entry(struct zx_dsa_priv *priv, u16 addr,
 	if (ret)
 		return ret;
 
-	writel((addr & 0xfff) | (ZX_SBRAG_MEMID_UC << 22),
-	       priv->pp_regs + ZX_SBRAG_CMD);
+	writel((addr & 0xfff) | (mem_id << 22), priv->pp_regs + ZX_SBRAG_CMD);
 	writel(d2, priv->pp_regs + ZX_SBRAG_D2);
 	writel(d1, priv->pp_regs + ZX_SBRAG_D1);
 	writel(d0, priv->pp_regs + ZX_SBRAG_D0);
+	return 0;
+}
+
+/* Prefetch + read one entry (rw=1). */
+static int zx_sbrag_read_entry(struct zx_dsa_priv *priv, u32 mem_id, u16 addr,
+			       u32 *d0, u32 *d1, u32 *d2)
+{
+	int ret = zx_sbrag_wait(priv);
+
+	if (ret)
+		return ret;
+
+	writel((addr & 0xfff) | (mem_id << 22) | (1u << 27),
+	       priv->pp_regs + ZX_SBRAG_CMD);	/* rw=1 prefetch */
+	ret = zx_sbrag_wait(priv);
+	if (ret)
+		return ret;
+
+	*d0 = readl(priv->pp_regs + ZX_SBRAG_D0);
+	*d1 = readl(priv->pp_regs + ZX_SBRAG_D1);
+	*d2 = readl(priv->pp_regs + ZX_SBRAG_D2);
 	return 0;
 }
 
@@ -226,7 +247,8 @@ static int zx_dsa_port_fdb_add(struct dsa_switch *ds, int port,
 	d1 = (0xFu << 4) | ((vid >> 8) & 0xf);
 	d2 = (p & 0xff) | (mac_low4 << 8);
 
-	return zx_sbrag_write_entry(priv, zx_sbrag_hash_placeholder(addr, vid),
+	return zx_sbrag_write_entry(priv, ZX_SBRAG_MEMID_UC,
+				    zx_sbrag_hash_placeholder(addr, vid),
 				    d0, d1, d2);
 }
 
@@ -238,8 +260,59 @@ static int zx_dsa_port_fdb_del(struct dsa_switch *ds, int port,
 
 	/* First approximation: zero the hash slot. Proper delete is
 	 * lookup-then-zero (match {mac,vlan,status!=0}); TODO with the real hash. */
-	return zx_sbrag_write_entry(priv, zx_sbrag_hash_placeholder(addr, vid),
+	return zx_sbrag_write_entry(priv, ZX_SBRAG_MEMID_UC,
+				    zx_sbrag_hash_placeholder(addr, vid),
 				    0, 0, 0);
+}
+
+/* --- VLAN table (SBRAG mem_id=4; 2 bits/port membership in D0) ----------- */
+
+static int zx_dsa_port_vlan_add(struct dsa_switch *ds, int port,
+				const struct switchdev_obj_port_vlan *vlan,
+				struct netlink_ext_ack *extack)
+{
+	struct zx_dsa_priv *priv = ds->priv;
+	int p = zx_phys_port(port);
+	u32 d0, d1, d2, shift = p * 2 + 1;
+	u32 attr;
+	int ret;
+
+	/* attr: 2-bit per-port membership/tag mode (stock tm_vlantable_add_set
+	 * 0..3). Best-effort mapping pending RE of the exact encoding (TODO):
+	 * untagged member vs tagged member. */
+	attr = (vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED) ? 2 : 3;
+
+	ret = zx_sbrag_read_entry(priv, ZX_SBRAG_MEMID_VLAN, vlan->vid,
+				  &d0, &d1, &d2);
+	if (ret)
+		return ret;
+
+	d0 = (d0 & ~(0x3u << shift)) | (attr << shift);
+	d0 |= 1;	/* bit0: row has at least one member */
+
+	return zx_sbrag_write_entry(priv, ZX_SBRAG_MEMID_VLAN, vlan->vid,
+				    d0, d1, d2);
+}
+
+static int zx_dsa_port_vlan_del(struct dsa_switch *ds, int port,
+				const struct switchdev_obj_port_vlan *vlan)
+{
+	struct zx_dsa_priv *priv = ds->priv;
+	int p = zx_phys_port(port);
+	u32 d0, d1, d2, shift = p * 2 + 1;
+	int ret;
+
+	ret = zx_sbrag_read_entry(priv, ZX_SBRAG_MEMID_VLAN, vlan->vid,
+				  &d0, &d1, &d2);
+	if (ret)
+		return ret;
+
+	d0 &= ~(0x3u << shift);		/* clear this port's membership */
+	if (!(d0 & ~1u))		/* no members left -> clear valid bit */
+		d0 = 0;
+
+	return zx_sbrag_write_entry(priv, ZX_SBRAG_MEMID_VLAN, vlan->vid,
+				    d0, d1, d2);
 }
 
 static const struct dsa_switch_ops zx_dsa_switch_ops = {
@@ -251,8 +324,10 @@ static const struct dsa_switch_ops zx_dsa_switch_ops = {
 	.port_stp_state_set	= zx_dsa_port_stp_state_set,
 	.port_fdb_add		= zx_dsa_port_fdb_add,
 	.port_fdb_del		= zx_dsa_port_fdb_del,
-	/* TODO P3: port_bridge_join/leave (isolation), port_vlan_add/del,
-	 * port_fast_age — see dsa_driver_plan.md. FDB hash is a placeholder. */
+	.port_vlan_add		= zx_dsa_port_vlan_add,
+	.port_vlan_del		= zx_dsa_port_vlan_del,
+	/* TODO P3: port_bridge_join/leave (isolation), port_fast_age.
+	 * FDB hash + VLAN attr encoding are placeholders — see dsa_driver_plan.md. */
 };
 
 static int zx_dsa_probe(struct platform_device *pdev)
