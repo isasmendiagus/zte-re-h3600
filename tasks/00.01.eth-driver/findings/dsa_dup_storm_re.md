@@ -445,3 +445,21 @@ fabric doesn't deliver port1 ingress to CPU. Uniform per-port config ruled in (i
 pro_action/trap_queue all loop 0..7). Live STP read (offset-uncertain due to base-gotcha)
 hinted port2=Forwarding / port1=Disabled. RE agent running to resolve base aliasing + nail
 the exact ingress→CPU gate + give the poke/fix. Next: apply agent's recipe, test ping on jack2.
+
+## RESOLVED DIAGNOSIS 2026-05-31 (RE agent + live poke): port1 SOPC ingress bridge never bonds
+RE agent (general-purpose) proved e->base = 0x921c0000 (NOT 0x92000000 — the boot-log
+"base=[mem 0x92000000..]" prints resource[0]="pon", not e->base="npp"@0x921c0000, zx-eth-main.c:4938,5095).
+=> The earlier "CORRECTION: base-gotcha invalidated QMG read" is ITSELF wrong: mem off 0x18c060
+   = real QMG hw_trap 0x9234c060 = 0 (VALID). MAC1 RX-ok mem off 0x80780 = 0x92240780 = 110 (VALID).
+   poke writes the LITERAL phys (off=phys-0x921c0000, writel(e->base+off), e->base=0x921c0000) — no aliasing.
+CONFIRMED GATE: SOPC↔SMAC ingress bridge at NPP[0x19068]. Live read = 0x00000000 (no port has
+ready bit(p+5) NOR enable bit(p)). Poke 0x921d9068=0x42 → readback 0x02: enable(bit1) latches,
+READY(bit6) does NOT (HW status, transient). With enable=0x02 set, tm_rx_count STILL 0 → enable
+alone insufficient; HW needs READY concurrently bonded. The keepalive worker zx_mac_keepalive_fn
+(zx-eth-main.c:3090) already loops all 4 ports re-asserting this, but never catches port1's READY
+=> port1's MAC↔SOPC serializer does not bond (READY never asserts), unlike port2 (which works).
+Toggling lan1 down/up only cycles the DSA slave phylink (fixed-link), NOT the real GePHY
+adjust_link, so it doesn't re-run the serializer bring-up. Same family as the egress blocker
+(solved for port2 via eg_port=2 + TX-DAC force). NOT pokeable — needs RE of port1's serializer
+bring-up (FUN_40e50c40 / smac_init params, per-port PHY TX-DAC/RGMII) to make READY assert.
+NEXT: compare port2 vs port1 serializer bond conditions; consider per-port smac re-init or holding READY.
