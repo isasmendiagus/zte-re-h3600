@@ -240,3 +240,24 @@ work at all (single-kick=100% loss) but may re-inject/replay frames. Next: compa
 stock's CPU-egress inject (QMG sw_fwd, software-forward, no DMA ring per egress
 notes) vs mainline's dual-ring DMA inject; test single-kick / ring-cleanup variants.
 NOTE: reg_diff mislabels 0x921c8000 as BMU; it's IDM CTRL (=0x020f6766).
+
+## UPDATE 2026-05-31 (ROOT CAUSE FULLY RE'd via stock egress-inject registers)
+Captured stock egress-inject path idle-vs-ping (400 pings) via /bin/fpga -r:
+  TM[0x10054] UP kick   : FLAT 0        TM[0x10058] UP count : FLAT 0
+  TM[0x10064] DN kick   : FLAT 1        TM[0x10068] DN count : FLAT 1
+  QMG sw_fwd (0x9234c044): +151   SOPC send2smac2 (0x921d9164): +156   MAC2 TX-OK (0x92280718): +161
+⇒ STOCK injects CPU egress straight into QMG sw_fwd (software-forward); the TM
+UP and DN DMA rings are UNUSED (flat). QMG->SOPC->MAC2 run 1:1 — no replication.
+MAINLINE instead injects via the TM UP ring + DUAL-KICKS the DN ring per frame
+(zx_sw_xmit, TM[0x10054]+TM[0x10064], same txdesc base) → that DMA-ring path
+REPLAYS/replicates ~82x at MAC2 = the dup storm. This is the FULL root cause and
+matches the old egress note ("stock uses NO DMA ring — sw-forwards to QMG sw_fwd").
+
+### FIX DIRECTION (mainline-side, next session)
+Option A (match stock, correct): inject CPU egress into QMG sw_fwd directly (no TM
+DMA ring) — RE the stock sw_fwd inject (decomp pon_tm_data_raw_send / the sw_fwd
+write) and replicate it; retire the dual-kick UP/DN ring path.
+Option B (patch the ring): make the ring send EXACTLY ONCE — single-kick + proper
+tx desc ownership/advance + don't leave the DN ring re-fetching. The dual-kick was
+added because single-kick gave 100% loss ("fetched-but-not-drained"); the real fix
+is correct desc ownership/drain, not dual-kick. Verify: MAC2 TX delta == ping count.
