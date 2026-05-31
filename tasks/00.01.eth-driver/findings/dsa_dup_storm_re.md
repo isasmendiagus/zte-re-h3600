@@ -569,3 +569,23 @@ and confirm port2 STILL pings with this exact build (rules out non-determinism v
   gate (and the fix is to write the correct per-port pktdeal). zx_chip_tm_init_pro_action writes
   action_pp0 for ALL ports — suspect port0/1 need a different action than port2. Safe: read-only hook,
   won't touch egress fix.
+
+## REGISTER-DIFF APPROACH EXHAUSTED 2026-05-31 — the nail: port1 SPA pktdeal == port2's
+mainline SPA pktdeal (0x921d4300 + port*0x14, 5 regs/port):
+  port0: 55555555 05555545 10544414 55555555 00000555
+  port1: 55555555 05555545 10544414 55555555 00000000
+  port2: 55555555 05555545 10544414 55555555 00000000   <- IDENTICAL to port1
+port1 and port2 have BYTE-IDENTICAL SPA pktdeal, yet port2 forwards ingress to CPU and port1 does
+not. => the per-port classify action is NOT the differentiator. Combined with everything else
+(SOPC=0, STP=0, ISO match, MAC match, QMG cfg match, broadcast flood no-effect, FDB no-effect,
+CLA replay 0-fail, SIPC config match, eg_port uses DSA tag), the register-diff/poke approach is
+DEFINITIVELY EXHAUSTED: no readable per-port register or table distinguishes working port2 from
+failing port0/port1.
+The difference is in NON-REGISTER fabric state: frames reach SIPC (counters move) but the SIPC→QMG
+drain backs up (cc008=0xfff000 saturated vs stock ~0x777) and never traps. This is the same
+backpressure family as the (port2-solved) egress DSCH gate, and appears coupled to the port2-specific
+datapath bring-up that the months-long egress work tuned ONLY for port2 (eg_port=2 + TX-DAC + priming).
+CONCLUSION: multi-port needs a fundamentally different approach than register diffing — a kotrace of
+stock's full per-port ingress+egress bring-up for a fresh (non-port2) port (the proven method, cf.
+kotrace_egress_capture.py), OR accept single-port (port2/jack3) DSA which works cleanly. Register
+poking is proven futile here.
