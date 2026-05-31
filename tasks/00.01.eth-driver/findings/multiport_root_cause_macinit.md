@@ -148,3 +148,18 @@ port3 ALL cabled and up on ONE boot, after traffic:
   same boot, identical config. port1 is genuinely, reproducibly broken — not a test artifact/topology.
 This gives a LIVE per-port discriminator tool: poke something for port1 and watch rx_per_ingress[port1]
 (the "port1" column) — if it climbs, the fix worked. Next experiments can use this for fast feedback.
+
+## Live hunt 2026-05-31: SILENT drop at MAC1→fabric (clean RX, no drop counter)
+Using the rx_per_ingress live tool + SIPC/MAC counters (3 cables up, port1/2/3):
+- SIPC drop counters 0x921cc004 = 0, cc008 = 0 → NO drop registered at the SIPC→CPU stage.
+- MAC1 vs MAC2 RX counter block (0x780..0x79c): MAC1 RXok=88, MAC2 RXok=55, both with byte/frame
+  counters consistent and ALL error counters (+0x794/+0x798/+0x79c) = 0 on BOTH → MAC1 receives
+  CLEAN frames (no CRC/align errors), same as MAC2.
+=> port1's drop is SILENT and BEFORE the SIPC: MAC1 receives 88 clean frames and forwards 0 to the
+   fabric/CPU, while MAC2 receives 55 clean and forwards 9. No counter anywhere registers the drop.
+Live experiments tried this session, all negative: SIPC gauge poke/toggle (cc008), SIPC drop
+counter (0), MAC RX-error check (clean). The drop is a silent, config-invisible, per-port MAC1→fabric
+forwarding failure — identical config to the working ports, not HW (stock works), no error counter.
+This is beyond register inspection/poking. Remaining deep paths: decode the CLA ram1 TCAM for a
+per-ingress-port rule missing for port1 (needs the TCAM key field spec), or kotrace stock's port1
+ingress. Multi-port DSA functional on 3/4 ports + hotplug; port1 deeply characterized but uncracked.
