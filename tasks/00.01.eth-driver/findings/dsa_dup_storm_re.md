@@ -313,3 +313,32 @@ may also need the ring producer/consumer/size registers set so HW stops at the
 produced count (kick value = count). Inspect TM ring ptr/size regs vs stock.
 NOTE: committed eth-dsa code is still the dual-kick; the single-UP edit is the
 current (uncommitted) experiment in the booted image.
+
+## UPDATE 2026-05-31 (NEGATIVE RESULT — TX-ring hypothesis is WRONG)
+Tested split-base (DN=dndesc_dma, distinct from UP) + single-UP-kick on HW:
+- STILL replicates: smac2 TX +9776 / 10 pings (~977x), dups GROW (+60→+198→+288).
+- lan2 RX +372/10 (~37x over-delivery), lan2 TX +98, smac2 TX +9776.
+⇒ Splitting the ring base did NOT help. Combined with the hard fact that **`main`
+(no DSA) is CLEAN with the SAME TX-ring code (shared base + dual-kick + VALID never
+cleared)**, this RULES OUT the TX-ring config as the cause. The agent's "shared
+base / consumer-cursor" theory and my single-kick theory are both DISPROVEN by HW.
+Reverted the experiments (back to committed dual-kick).
+
+### TRUE state of the problem (honest):
+The dup storm is **DSA-path-specific** — `main`/legacy is clean, eth-dsa storms,
+identical TX ring. There are TWO DSA-specific amplifications, mechanism uncracked:
+  (a) RX over-delivery: lan2 RX ~37x/ping (the CPU receives each REQUEST ~37x).
+  (b) egress replication: smac2 TX ~10-100x the conduit lan2 TX.
+Neither is explained by the TX ring (main shares it, clean). Suspects not yet
+isolated: zx-dsa's setup() changing switch forwarding vs the conduit RX/TX tag
+hooks vs the lanN ports' existence changing flood/forwarding. loopback_drops=0
+(over-delivered frames are src=host REQUESTS, not reply-hairpins).
+
+### NEXT ANGLE (need a different approach — blind ring tweaks are exhausted):
+1. Bisect DSA-enable: boot eth-dsa with `&switch_dsa` DISABLED (= legacy on the same
+   kernel). If clean → the bug is zx-dsa setup() or the conduit DSA hooks; then
+   neutralize the conduit RX/TX tag hooks (keep lanN) to split setup-vs-datapath.
+2. Live-diff eth-dsa(dirty) vs main(clean) switch FORWARDING regs (QMG/flood/FDB/
+   isolation) — find what zx-dsa's setup() changed that main doesn't.
+3. Instrument zx_tm_napi_poll: log BMU/desc index per RX delivery — is the SAME
+   desc/BP re-processed (driver) or are there 37 distinct deliveries (switch)?
