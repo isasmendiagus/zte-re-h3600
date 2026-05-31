@@ -504,3 +504,17 @@ Best method: bulk-dump the NPP ingress region 0x921c0000..0x921d9000 from stock 
 mainline (mem debugfs) with port1 cabled+active in both, diff → find the one port-1 reg mainline
 doesn't set. (Same approach as the egress diff harness.) The static config is a dead end; the
 gate is a per-port ingress-classify/detect enable not yet in our register map.
+
+## INGRESS REGISTER DIFF EXHAUSTED 2026-05-31 — all plain regs match stock
+Compared SIPC (0x921cc000-0x48) + SMCT (0x921d0000) stock-vs-mainline (port1 active both).
+The apparent SIPC "diffs" (cc004/cc008/cc018/cc01c/cc020/cc044) CHANGE between consecutive
+stock reads (cc004: 0x50000→0xe0000, cc008: 0x9aa→0x777) => they are LIVE COUNTERS, not config.
+Stable SIPC config (cc000=0x11, cc038/cc03c=0x318, cc040=0x01980000) MATCHES mainline.
+Cumulative result: EVERY plain ingress register compared (SOPC, STP, SPA, ISO, MAC, QMG, SIPC,
+SMCT) matches stock. Yet stock forwards port1→CPU and mainline does not. => the gate is NOT a
+plain per-port register. It is almost certainly an INDIRECT RAM TABLE (CLA classify / FDB / VLAN
+PVID per ingress port) or a dynamic/stateful difference (FDB learning of host MAC, ingress-port
+PVID→VLAN-member-set incl CPU). NEXT APPROACH (heavier): dump+diff the CLA classify RAM and the
+FDB/VLAN BRG_RAM per ingress port stock-vs-mainline, OR check the per-ingress-port PVID/default-VLAN
+assignment (does port1's ingress get a VLAN whose member set includes the CPU port?). The plain
+register-diff approach is exhausted.
