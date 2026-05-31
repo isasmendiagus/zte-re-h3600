@@ -50,6 +50,8 @@
 
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
+#include <linux/dsa/zte.h>
+#include <net/dsa.h>
 
 /* Descriptor tables decoded from stock tm.ko's *RegTable symbols
  * (zx-fpga-reg-tables.h) and an older curated subset (zx_reg_tables.h);
@@ -3299,6 +3301,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	u32 bp, len;
 	u8 *bp_buf;
 	u8 *desc;
+	u8 eg = zx_eg_port;	/* egress switch port for the desc hint */
 
 	/* CPU→LAN egress: submit on the TM UP DMA ring (kick TM[0x10054]). Live
 	 * oracles proved stock uses NO DMA ring (UP/DN/IDM consume counters all 0)
@@ -3316,6 +3319,18 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	if (!e->bp_cpu || !e->dndesc_cpu) {
 		TXCP(e, -1, "DROP: bp_cpu=%p dndesc_cpu=%p", e->bp_cpu, e->dndesc_cpu);
 		goto drop;
+	}
+
+	/* [P1 conduit/DSA] When this netdev is a DSA conduit, frames arrive from
+	 * tag_zte with a 4-byte internal tag prepended ({0x5a, egress_port, 0, 0}).
+	 * Consume the egress port and skb_pull the tag so the rest of the path sees
+	 * the bare frame (the tag never reaches the wire). Dormant until a DSA
+	 * switch binds to this conduit (netdev_uses_dsa == false otherwise), so the
+	 * standalone egress path is unaffected. See dsa_conduit_refactor_guide.md. */
+	if (netdev_uses_dsa(ndev) && skb->len >= ZTE_TAG_LEN &&
+	    skb->data[0] == ZTE_TAG_MARK) {
+		eg = skb->data[1];
+		skb_pull(skb, ZTE_TAG_LEN);
 	}
 
 	len = skb->len;
@@ -3386,7 +3401,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	desc[1]  = 0x00;
 	/* desc[2..3] = egress-port hint ((port+0x28)&0x3f)<<4. THE verified fix: was
 	 * hardcoded 0 (no destination → SOPC never picked a MAC). zx_eg_port to find MAC2. */
-	*(__le16 *)(desc + 2) = cpu_to_le16(((zx_eg_port + 0x28) & 0x3f) << 4);
+	*(__le16 *)(desc + 2) = cpu_to_le16(((eg + 0x28) & 0x3f) << 4);
 	*(u32 *)(desc + 4) = cpu_to_le32(0x00010000);
 	/* desc[11] = 0x21 (bit 0 VALID + bit 5 format), not 0x01 — stock decomp
 	 * pon_tm_data_raw_send does desc[11] = (desc[11]&1) | 0x20.
