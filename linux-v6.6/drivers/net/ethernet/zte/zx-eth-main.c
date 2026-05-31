@@ -2871,12 +2871,18 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 					 * drop here (frees the bp) rather than black-hole it
 					 * in the tagger with no accounting. */
 					zx_bmu_free_bp(e, bppe_idx, 0);
-				} else if (!dsa && e->sw_dev &&
+				} else if (e->sw_dev &&
 					   !memcmp(src + 6, e->sw_dev->dev_addr, 6)) {
-					/* Standalone-only loopback suppression (our own TX
-					 * echoed back). With DSA the per-port netdevs + the
-					 * switch handle this; gating avoids dropping legitimately
-					 * bridged frames that share the conduit MAC. */
+					/* Loopback suppression: the switch fabric hairpins the
+					 * CPU's own egress back to the CPU RX path in BOTH
+					 * standalone and DSA modes (HW behaviour, not a forwarding
+					 * decision — confirmed 2026-05-31: isolating the fabric to
+					 * CPU<->lan2 only did NOT stop it). Without this drop the
+					 * hairpin amplifies into a DUP storm (host saw ~200 copies
+					 * per ICMP reply). A frame whose SRC MAC is our own conduit
+					 * MAC can only be our reflected TX — drop it. Bridge transit
+					 * frames keep the original end-host SRC MAC, so this never
+					 * drops legitimately forwarded traffic. */
 					e->tm_rx_loopback_drops++;
 					if (e->tm_rx_loopback_drops <= 5)
 						dev_info(e->dev, "LOOPBACK drop #%u src=%pM dst=%pM ethertype=%04x len=%u ingress=%d\n",
