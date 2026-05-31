@@ -81,3 +81,16 @@ ISOLATED issue (bench RJ45/connector/magnetics, or a port1 silicon/MAC quirk), N
 (1Gbps/FD/an_done) when cabled — so the link/autoneg path works; the failure is downstream
 (MAC1→fabric→CPU). To pin it: try jack2 with a DIFFERENT cable; if it still fails, it's jack2/port1
 hardware or a port1-specific silicon quirk — but multi-port DSA is functional (3/4 ports + hotplug).
+
+## CORRECTION 2026-05-31: port1 is NOT hardware — it's internal (user was right)
+Live proof: during a host ping to port1/jack2, MAC1 RX-ok climbed 0x14->0x1d (+9) — frames DO
+physically reach MAC1 (cable/RJ45/PHY1/magnetics all fine; link LED lights, PHY[1] 1Gbps/FD/an_done).
+But tm_rx_count stayed 0 → frames reach MAC1 and are NOT forwarded MAC1->fabric->CPU. So the failure
+is INTERNAL, not a bench hardware/cable issue. Retract the "likely bench HW" theory.
+BUT every readable per-port CONFIG register is IDENTICAL between port1 (fails) and the working ports:
+SPA pktdeal port1 == port3 BYTE-FOR-BYTE (55555555 05555545 10544414 55555555 00000000) yet port3
+pings and port1 doesn't; isolation/MAC ctrl+en/SOPC(0x19068=0)/STP all match the working pattern.
+So the discriminating "bit" is NOT in any per-port config register we can read. It must be in
+INDIRECT RAM (CLA classify trap entries, per (ptype,port)) or dynamic/learned state — needs an
+in-kernel CLA/FDB dump hook to compare port1 vs port3 trap entries (the wire-level indirect read is
+impractical). Status: multi-port DSA FUNCTIONAL on 3/4 ports (0,2,3) + hotplug; port1 isolated.
