@@ -15,10 +15,10 @@ We are currently in stages 2–4. OpenWrt comes last.
 
 ## Releases / tags
 
-Two milestone tags mark the two working states of the driver. `main` is kept at
-the stable single-port state; the DSA work lives on the `eth-dsa` branch (NOT
-merged into main, to preserve the proven egress path). Check out with
-`git checkout <tag>`.
+Two milestone tags mark the two working states of the driver. The DSA work has
+been **merged into `main`** (on top of the egress fix); the `v1.0-egress` tag
+preserves the pre-DSA single-port state if you need the simplest proven path.
+Check out a state with `git checkout <tag>`.
 
 | Tag | Base | What works | What it is |
 |-----|------|-----------|------------|
