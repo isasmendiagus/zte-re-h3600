@@ -402,3 +402,12 @@ dup storm (grows as ring is traversed). FIX: clear desc[12..13]=0 + dma_wmb afte
 consuming each descriptor (one line). HW VERIFIED: ping -c20 = 20/20, 0% loss, ZERO
 dups, stable, ~12ms; smac2 TX +31/20pings (was +14382/1ping); lan2 RX+30/TX+30 (1:1).
 All 9 prior suspects were red herrings. DSA datapath now works end-to-end on lan2.
+
+## MULTI-PORT GAP 2026-05-31 (lan1 cabled, doesn't ping)
+Cable moved jack3→jack1. PHY[1] link=1, MAC[1] fully inited (ctrl=0xbb6003,
+en=0x80000001), smac1 RX +9 (MAC1 receives). BUT sw RX +0 with .99 on lan1 →
+the SWITCH FABRIC does not forward port1-ingress to the CPU. Only port2 (jack3)
+has the ingress→CPU path working. So multi-port needs the per-port forwarding-to-
+CPU config (CLA trap / SPA source-port auth / PM in-port→CPU) for ports 0/1/3,
+not just MAC2. MAC init is per-port (adjust_link) and fine; the gap is the fabric
+trap-to-CPU per source port. lan2 (jack3) still pings clean (dup-fix verified).
