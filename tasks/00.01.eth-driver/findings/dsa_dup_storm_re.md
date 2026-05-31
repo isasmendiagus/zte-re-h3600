@@ -355,3 +355,23 @@ no longer drift on olddefconfig → builds are now incremental (skip the config 
 NEXT BISECT (now fast): (1) boot with &switch_dsa disabled → confirm clean (sanity);
 (2) keep DSA but no-op zx-dsa setup() → is it the switch setup or the conduit hooks;
 (3) neutralize the conduit RX tag-prepend path → does the 37x RX over-delivery stop.
+
+## UPDATE 2026-05-31 (single-ping BPDUMP — replication is at the CPU RX QUEUE / CLA):
+Disabling lan0/1/3 (cableless fixed-link ports) did NOT help (+36→+266) — ruled out.
+no set_rx_mode in driver — promisc ruled out. (8 hypotheses now disproven: FDB,
+isolation, flood-cfg, BMU, TX-ring, greg-port-ops, cableless-ports, promisc.)
+
+Single-ping (-c1) BPDUMP — the SHARPEST localization: each CPU-bound frame is
+delivered MULTIPLE times, as IDENTICAL copies, across MULTIPLE CPU RX queues:
+  - ICMP echo request (host→device): delivered on q=4 idx=0 AND q=5 idx=0.
+  - host's ARP reply: delivered ~5x across q=4 (idx 0,1,2) and q=5 (idx 0 repeatedly).
+  - all ingress=2, identical payloads.
+⇒ NOT a fabric L2 loop and NOT modifying — the switch CLA/queue-classifier COPIES
+each CPU-bound frame to MULTIPLE CPU RX queues (q4+q5...), and the driver's napi
+delivers every copy. q=5 idx stays 0 (re-read same desc); q=4 idx cycles. This is
+the DSA-path-specific replicator. main/legacy (same napi) is clean → the DSA enable
+changes the CLA/CPU-queue classification so frames are copied to multiple queues.
+NEXT: compare the CLA / CPU-queue classification config (PP_CLA + the per-queue
+CPU-copy/trap mask) eth-dsa-vs-main/stock; find why CPU-bound frames hit multiple
+queues. Likely a CLA "copy to all CPU queues" or trap-mask misconfig triggered by
+DSA. (Build-speed fixed; lan0/1/3 disabled + the no-op port-op bisect reverted.)
