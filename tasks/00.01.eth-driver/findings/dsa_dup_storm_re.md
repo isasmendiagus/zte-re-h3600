@@ -342,3 +342,16 @@ hooks vs the lanN ports' existence changing flood/forwarding. loopback_drops=0
    isolation) — find what zx-dsa's setup() changed that main doesn't.
 3. Instrument zx_tm_napi_poll: log BMU/desc index per RX delivery — is the SAME
    desc/BP re-processed (driver) or are there 37 distinct deliveries (switch)?
+
+## UPDATE 2026-05-31 (localized to QMG sw_fwd / RX over-delivery): 
+eth-dsa live deltas, 10 pings: QMG sw_fwd +370, smac2 TX +370 (EQUAL = 37x/ping),
+drop_DSCH +0, hw_fwd +0, drop_RED +1. So egress is NOT separately replicating —
+QMG sw-forwards the request to the CPU 37x/ping, the CPU replies to each, each
+egresses 1:1 (no DSCH drop). CORE BUG = the RX over-delivery (request reaches CPU
+~37x), a QMG/fabric behaviour on the DSA path (stock/main = 1x, same switch cfg).
+Mechanism (why the request is sw_fwd'd 37x on DSA but 1x on legacy) still uncracked.
+Build-speed fixed: disabled CONFIG_STACKPROTECTOR (parent) so GCC_PLUGINS/PER_TASK
+no longer drift on olddefconfig → builds are now incremental (skip the config step).
+NEXT BISECT (now fast): (1) boot with &switch_dsa disabled → confirm clean (sanity);
+(2) keep DSA but no-op zx-dsa setup() → is it the switch setup or the conduit hooks;
+(3) neutralize the conduit RX tag-prepend path → does the 37x RX over-delivery stop.
