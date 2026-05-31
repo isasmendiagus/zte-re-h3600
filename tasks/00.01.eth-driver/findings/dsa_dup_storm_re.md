@@ -393,3 +393,12 @@ when it's a DSA conduit, (c) a CLA "copy-to-CPU-queues" mask. Compare the CLA / 
 trap-queue config (PP_CLA + per-queue masks) and the napi queue set legacy-vs-DSA;
 or restrict the napi to the single primary CPU queue. Build-speed fixed; DT bisect
 reverted (switch_dsa re-enabled, lan0/1/3 still disabled per the prior commit).
+
+## ✅✅ RESOLVED 2026-05-31 (commit 7123d5fac) — RX-descriptor invalidation
+ROOT CAUSE: zx_tm_napi_poll scans the RX ring for valid descs via len=desc[12..13]>>2>0
+but NEVER cleared the len after consuming a desc → delivered descs stayed "valid" →
+re-found on ring-wrap/re-scan → SAME bppe re-delivered → CPU replies to each copy →
+dup storm (grows as ring is traversed). FIX: clear desc[12..13]=0 + dma_wmb after
+consuming each descriptor (one line). HW VERIFIED: ping -c20 = 20/20, 0% loss, ZERO
+dups, stable, ~12ms; smac2 TX +31/20pings (was +14382/1ping); lan2 RX+30/TX+30 (1:1).
+All 9 prior suspects were red herrings. DSA datapath now works end-to-end on lan2.
