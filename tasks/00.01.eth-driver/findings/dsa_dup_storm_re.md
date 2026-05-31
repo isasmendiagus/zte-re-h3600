@@ -411,3 +411,16 @@ has the ingress→CPU path working. So multi-port needs the per-port forwarding-
 CPU config (CLA trap / SPA source-port auth / PM in-port→CPU) for ports 0/1/3,
 not just MAC2. MAC init is per-port (adjust_link) and fine; the gap is the fabric
 trap-to-CPU per source port. lan2 (jack3) still pings clean (dup-fix verified).
+
+## MULTI-PORT GAP PINPOINTED 2026-05-31 (MAC1 RX clean, QMG no trap)
+With soft-float userland (ip/ping work now), measured via /sys/.../mem (head -c|tail -c, base e->base=0x921c0000):
+- MAC1 ctrl @0x80000 = 0xbb6003 (validated mapping)
+- MAC1 RX-ok @0x80780 = 0x6e (110) — MAC1 RECEIVES CLEAN host frames; RGMII RX on port1 is fine.
+- QMG hw_trap @0x18c060 = 0 — ZERO frames trapped to CPU.
+- tm_rx_count=0, tm_irq_count=0 (IP on conduit OR slave, same result).
+Datasheet proven for port2: MAC2 RX-ok == QMG hw_trap. For port1 the chain breaks
+between MAC1 (clean RX, counted) and the QMG trap-to-CPU. So the gap is the INGRESS
+CLASSIFICATION pipeline (SDET/SPA/CLA) between MAC and QMG — NOT rgmii, NOT MAC init,
+NOT isolation (port1 mask 0xfd incl CPU bit5), NOT broadcast flood (0xFF). Only port2's
+MAC-RX→QMG-trap path is configured. Next: RE the per-port SDET/SPA ingress-trap enable
+(0x14000 SPA pkt-enable, sdet uniN) vs stock where all ports trap.
