@@ -553,3 +553,19 @@ to prove/find the missing port1 classify rule; (B) re-capture cla.bin from stock
 and regenerate zx_cla_table.h; (C) RE the CLA TCAM entry format to find the ingress-port match field
 and synthesize port1 rules from port2's. Cheapest disambiguation (needs user): move cable to jack3
 and confirm port2 STILL pings with this exact build (rules out non-determinism vs true port-bias).
+
+## ITERATION 2026-05-31 (cont) — port0 also fails; eg_port ruled out; plan = SPA dump hook
+- Cable moved to jack1 = port0 (PHY[0]). port0 ingress also fails (tm_rx_count=0, 100% loss),
+  IDENTICAL to port1. So ports 0,1 BOTH fail; only port2 works. Clean "only-port2" pattern.
+- zx_sw_xmit (line 3391) DOES consume the DSA tag: for netdev_uses_dsa frames, eg = skb->data[1]
+  (the slave's port), NOT the global zx_eg_port=2. So DSA egress uses the per-packet tag port —
+  eg_port=2 is only the non-DSA default. eg_port RULED OUT as the port-specific cause.
+- CLA RAM = 780 entries (ram_id 1: 724 @ addr 0x2..0x3ff; ram_id 2: 56). Indirect read protocol:
+  CLA_REG_CMD=0x9238c014 (|1<<27 for read), DONE=0x9238c018, DATA0=0x9238c01c (17 words). Dumping
+  all 780 via devmem2 over the wire (~15k calls) is impractical.
+- DECIDED NEXT (practical): add a READ-ONLY debugfs hook that dumps the SPA pktdeal table per
+  (port,proto) in-kernel (read zx_sparegtable entries via fpga_base), so port2 vs port0/1 can be
+  compared WITHIN mainline (no stock reboot). If port2's pktdeal differs from port0/1 → that's the
+  gate (and the fix is to write the correct per-port pktdeal). zx_chip_tm_init_pro_action writes
+  action_pp0 for ALL ports — suspect port0/1 need a different action than port2. Safe: read-only hook,
+  won't touch egress fix.
