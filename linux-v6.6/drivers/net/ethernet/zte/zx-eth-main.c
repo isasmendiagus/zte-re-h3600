@@ -2873,10 +2873,26 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 							 ntohs(*(__be16 *)(src + 12)), len, ingress_port);
 					zx_bmu_free_bp(e, bppe_idx, 0);
 				} else {
-					struct sk_buff *skb = netdev_alloc_skb(e->sw_dev, len + 64);
+					bool dsa = netdev_uses_dsa(e->sw_dev);
+					struct sk_buff *skb =
+						netdev_alloc_skb(e->sw_dev,
+								 len + (dsa ? ZTE_TAG_LEN : 0) + 64);
 
 					if (skb) {
 						skb_reserve(skb, 32);
+						/* [P1 conduit/DSA] prepend the 4-byte internal tag
+						 * {0x5a, ingress_port,...} so tag_zte's rcv (reached via
+						 * the ETH_P_XDSA ptype after eth_type_trans) demuxes the
+						 * frame to the lan<ingress> netdev. Dormant until a DSA
+						 * switch binds (netdev_uses_dsa false otherwise). */
+						if (dsa) {
+							u8 *t = skb_put(skb, ZTE_TAG_LEN);
+
+							t[0] = ZTE_TAG_MARK;
+							t[1] = ingress_port & 0xff;
+							t[2] = 0;
+							t[3] = 0;
+						}
 						memcpy(skb_put(skb, len), src, len);
 						skb->protocol = eth_type_trans(skb, e->sw_dev);
 						e->sw_dev->stats.rx_packets++;

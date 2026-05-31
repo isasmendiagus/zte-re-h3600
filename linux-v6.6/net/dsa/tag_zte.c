@@ -50,17 +50,19 @@ static struct sk_buff *zte_tag_xmit(struct sk_buff *skb, struct net_device *dev)
 
 static struct sk_buff *zte_tag_rcv(struct sk_buff *skb, struct net_device *dev)
 {
-	int port;
-	u8 *tag;
+	/* The conduit calls eth_type_trans() before delivery, which pulls ETH_HLEN
+	 * and resets the MAC header to the frame start — i.e. to our prepended tag.
+	 * So read the tag at skb_mac_header(), NOT skb->data (which now sits
+	 * ETH_HLEN into the frame). Then skb_pull_rcsum(ZTE_TAG_LEN): combined with
+	 * dsa_switch_rcv's skb_push(ETH_HLEN), skb->data ends at the real eth header.
+	 * (Same pattern as tag_ar9331.)
+	 */
+	u8 *tag = skb_mac_header(skb);
+	int port = tag[1];
 
-	if (unlikely(!pskb_may_pull(skb, ZTE_TAG_LEN)))
-		return NULL;
-
-	tag = skb->data;
 	if (unlikely(tag[0] != ZTE_TAG_MARK))
 		return NULL;
 
-	port = tag[1];
 	skb->dev = dsa_master_find_slave(dev, 0, port);
 	if (!skb->dev)
 		return NULL;
