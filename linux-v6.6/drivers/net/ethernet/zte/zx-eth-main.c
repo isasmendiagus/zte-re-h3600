@@ -3671,6 +3671,16 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	seq_printf(s, "tm_irq_count      = %u\n", e->tm_irq_count);
 	seq_printf(s, "tm_napi_count     = %u\n", e->tm_napi_count);
 	seq_printf(s, "tm_rx_count       = %u\n", e->tm_rx_count);
+	/* Per-ingress-port RX-to-CPU histogram. slot[i] = ingress_port+1, so
+	 * port0=slot1 .. port7=slot8 (slot0 = invalid/-1). Shows WHICH ingress
+	 * port's frames actually reached the CPU — the live per-port discriminator
+	 * for the multi-port (port1) gap. */
+	seq_printf(s, "rx_per_ingress port0..7 = %u %u %u %u %u %u %u %u  (invalid=%u)\n",
+		   e->tm_rx_per_ingress[1], e->tm_rx_per_ingress[2],
+		   e->tm_rx_per_ingress[3], e->tm_rx_per_ingress[4],
+		   e->tm_rx_per_ingress[5], e->tm_rx_per_ingress[6],
+		   e->tm_rx_per_ingress[7], e->tm_rx_per_ingress[8],
+		   e->tm_rx_per_ingress[0]);
 	seq_printf(s, "tm_rx_loopback_drops = %u\n", e->tm_rx_loopback_drops);
 	seq_printf(s, "tm_tx_count       = %u\n", e->tm_tx_count);
 	seq_printf(s, "tm_tx_dropped     = %u\n", e->tm_tx_dropped);

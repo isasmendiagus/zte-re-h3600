@@ -138,3 +138,13 @@ is still unidentified. Static decomp analysis isn't pinning it; the next viable 
 side-by-side: plug TWO cables (a working jack + jack2) so port0 and port1 are both up on one boot,
 then compare their live pipeline counters (MAC RX, SIPC, QMG sw_fwd/hw_trap, RED) during ping to
 see exactly where port1 diverges from port0 in real time. Or a stock kotrace of port1 ingress.
+
+## ★★★ DEFINITIVE same-boot proof + live tool (2026-05-31)
+Added rx_per_ingress histogram to the `stats` debugfs (slot[i]=ingress_port+1). With port1, port2,
+port3 ALL cabled and up on ONE boot, after traffic:
+  rx_per_ingress port0..7 = 0 0 9 12 0 0 0 0
+  => port2=9, port3=12 reach the CPU; PORT1=0; port0=0 (no cable). All frames that arrive decode to
+  port2/port3, NONE to port1 or "invalid". So port1's ingress→CPU delivers ZERO while port2/3 work,
+  same boot, identical config. port1 is genuinely, reproducibly broken — not a test artifact/topology.
+This gives a LIVE per-port discriminator tool: poke something for port1 and watch rx_per_ingress[port1]
+(the "port1" column) — if it climbs, the fix worked. Next experiments can use this for fast feedback.
