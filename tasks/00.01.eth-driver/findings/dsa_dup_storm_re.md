@@ -518,3 +518,17 @@ PVID→VLAN-member-set incl CPU). NEXT APPROACH (heavier): dump+diff the CLA cla
 FDB/VLAN BRG_RAM per ingress port stock-vs-mainline, OR check the per-ingress-port PVID/default-VLAN
 assignment (does port1's ingress get a VLAN whose member set includes the CPU port?). The plain
 register-diff approach is exhausted.
+
+## GATE NARROWED to SIPC→QMG classification 2026-05-31
+On mainline (jack2/port1), mainline SIPC counters (0x921cc008/018/01c/044) DO move with host
+pings (cc008 0→0xfff000, cc018 0x10→0x70, cc044 0x77→0x88) => frames DO reach SIPC from MAC1.
+But QMG hw_trap stays 0 => the drop is BETWEEN SIPC and the QMG, in the SPA/CLA classification.
+Tested+RULED OUT (all poked, readback ok, ping still 100%/tm_rx_count=0): QMG cfg→stock golden,
+MAC1 ctrl bit16, SOPC bridge enable, broadcast flood 0x8300/0x8304→0xFF. None fix port1.
+cc008=0xfff000 on mainline vs ~0x777 stock — looks like a saturated SIPC output FIFO/drop counter
+(frames enter SIPC but don't drain downstream to SPA/CLA/QMG).
+=> The gate is the ingress CLASSIFICATION (SPA pktdeal / CLA action / CLA trap RAM) for port1.
+NEXT (heavy): dump+diff the CLA classify RAM (indirect via 0x9238c014/018/01c) and the SPA pktdeal
+table per (port,proto) stock-vs-mainline. The static SPA/CLA *config* regs match; the difference
+must be in the indirect RAM contents or a per-port classify result. Consider: zx_chip_tm_init_pro_action
+uses action_pp0 for ALL ports (proto 0x14 PP0=1/PP1=0) — verify port1 should use PP0 not PP1.
