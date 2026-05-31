@@ -2960,6 +2960,16 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 				 */
 				zx_bmu_free_bp(e, bppe_idx, 0);
 			}
+			/* [dup-fix 2026-05-31] INVALIDATE the consumed RX descriptor
+			 * (clear the len field desc[12..13] the scan keys on). The
+			 * scan re-finds any desc with len>0 as "valid"; without
+			 * clearing, a delivered desc stays valid and gets re-read on
+			 * ring-wrap / re-scan -> the same BP (bppe) is delivered again
+			 * (the lan2 dup storm: identical copies, same bppe, growing
+			 * over time). Stock invalidates each desc after consuming it.
+			 * dma_wmb so the HW sees it before re-filling the slot. */
+			*(__le16 *)(desc + 12) = 0;
+			dma_wmb();
 			e->rx_head[q] = (idx + 1) & (TM_RX_DESC_PER_Q - 1);
 			done++;
 			ack++;
