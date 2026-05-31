@@ -2004,6 +2004,25 @@ static int zx_cla_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 	return zx_cla_wait_done(e);
 }
 
+/* Indirect READ of one CLA RAM entry (17 words). Mirror of zx_cla_write_entry
+ * with the CLA_RAM_READ bit set: write the cmd (rw=1), wait done, read DATA0..16.
+ * Debug-only — used by the cladump/clapeek debugfs to compare per-port classify
+ * state (e.g. why port1 ingress isn't trapped to CPU while port0/2/3 are).
+ */
+static int zx_cla_read_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr, u32 data[17])
+{
+	int i;
+
+	if (zx_cla_wait_done(e))
+		return -EBUSY;
+	writel(ram_addr | ((u32)ram_id << 22) | CLA_RAM_READ, e->base + CLA_REG_CMD);
+	if (zx_cla_wait_done(e))
+		return -EBUSY;
+	for (i = 0; i < 17; i++)
+		data[i] = readl(e->base + CLA_REG_DATA0 + i * 4);
+	return 0;
+}
+
 /* CLA RAM init: walk a captured (ram_id, addr, 17-word payload) array
  * and write each one through the CLA command register sequence. Static
  * embedded data — no firmware_request — see zx_cla_table.h header for
@@ -3914,6 +3933,88 @@ static const struct file_operations zx_regdump_fops = {
 	.release = single_release,
 };
 
+/* cladump: dump the CLA ram7 (trap-queue) CPU-queue id for every (ptype, port)
+ * via the indirect read. Lets us diff the per-port trap config of a FAILING port
+ * (e.g. port1/jack2: MAC RX climbs but tm_rx_count=0) against a WORKING port
+ * (port0/2/3) on the same boot — the per-port plain registers are identical, so
+ * if the trap RAM differs that's the bit. Port 5 = CPU (skipped). */
+static int zx_cladump_show(struct seq_file *s, void *_unused)
+{
+	struct zx_eth *e = s->private;
+	u32 data[17];
+	int i, port;
+	static const u8 cols[7] = { 0, 1, 2, 3, 4, 6, 7 };
+
+	seq_puts(s, "CLA ram7 trap-queue qid0 per (ptype,port):\n");
+	seq_puts(s, "ptype  p0 p1 p2 p3 p4 p6 p7\n");
+	for (i = 0; i < ZX_DEF_PTL_PKT_MAP_COUNT; i++) {
+		u8 ptype = zx_def_ptl_pkt_map[i].ptype;
+
+		seq_printf(s, "0x%02x  ", ptype);
+		for (port = 0; port < 7; port++) {
+			u32 addr = ptype | zx_pkt_port_addr_offset[cols[port]];
+
+			if (zx_cla_read_entry(e, 7, addr, data) == 0)
+				seq_printf(s, " %02x", data[0] & 0xff);
+			else
+				seq_puts(s, " ??");
+		}
+		seq_puts(s, "\n");
+	}
+	return 0;
+}
+
+static int zx_cladump_open(struct inode *inode, struct file *f)
+{
+	return single_open(f, zx_cladump_show, inode->i_private);
+}
+
+static const struct file_operations zx_cladump_fops = {
+	.owner   = THIS_MODULE,
+	.open    = zx_cladump_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+/* clapeek: ad-hoc indirect read of any CLA entry. Write "<ram_id> <addr>" (hex),
+ * the 17 data words are printed to the kernel log (like poke's readback). */
+static ssize_t zx_clapeek_write(struct file *f, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[64];
+	u32 ram_id, addr, data[17];
+	int rc;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (sscanf(buf, "%x %x", &ram_id, &addr) != 2)
+		return -EINVAL;
+	rc = zx_cla_read_entry(e, ram_id & 0xff, addr, data);
+	if (rc) {
+		pr_info("[ZXETH] clapeek ram%u addr%#x: err %d\n", ram_id, addr, rc);
+		return rc;
+	}
+	pr_info("[ZXETH] clapeek ram%u addr%#x: %08x %08x %08x %08x %08x %08x %08x %08x %08x\n",
+		ram_id, addr, data[0], data[1], data[2], data[3], data[4],
+		data[5], data[6], data[7], data[8]);
+	pr_info("[ZXETH]   clapeek+:           %08x %08x %08x %08x %08x %08x %08x %08x\n",
+		data[9], data[10], data[11], data[12], data[13], data[14],
+		data[15], data[16]);
+	return count;
+}
+
+static const struct file_operations zx_clapeek_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_clapeek_write,
+	.llseek = default_llseek,
+};
+
 /* poke: live register write for reflash-free experiments. Write "<phys> <val>"
  * (hex), e.g.  sh -c "echo '92280008 80000001' > /sys/kernel/debug/zx_eth/poke"
  * phys must be in [0x921c0000, 0x923c0000) (the e->base MMIO window) and 4-aligned.
@@ -4170,6 +4271,8 @@ static void zx_debugfs_init(struct zx_eth *e)
 	debugfs_create_file("pipeline_stats", 0444, zx_debugfs_root, e,
 			    &zx_pipeline_stats_fops);
 	debugfs_create_file("regdump", 0444, zx_debugfs_root, e, &zx_regdump_fops);
+	debugfs_create_file("cladump", 0444, zx_debugfs_root, e, &zx_cladump_fops);
+	debugfs_create_file("clapeek", 0644, zx_debugfs_root, e, &zx_clapeek_fops);
 	debugfs_create_file("poke", 0644, zx_debugfs_root, e, &zx_poke_fops);
 	debugfs_create_file("fdbadd", 0644, zx_debugfs_root, e, &zx_fdbadd_fops);
 	debugfs_create_file("txtest", 0644, zx_debugfs_root, e, &zx_txtest_fops);

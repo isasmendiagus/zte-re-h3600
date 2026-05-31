@@ -94,3 +94,16 @@ So the discriminating "bit" is NOT in any per-port config register we can read. 
 INDIRECT RAM (CLA classify trap entries, per (ptype,port)) or dynamic/learned state — needs an
 in-kernel CLA/FDB dump hook to compare port1 vs port3 trap entries (the wire-level indirect read is
 impractical). Status: multi-port DSA FUNCTIONAL on 3/4 ports (0,2,3) + hotplug; port1 isolated.
+
+## cladump 2026-05-31: CLA trap-queue (ram7) is ALSO identical port1 vs working ports
+Added debugfs cladump (per-(ptype,port) ram7 qid via indirect CLA read) + clapeek (ad-hoc read).
+Result: for every ptype, columns p0=p1=p2=p3=p4=p6 are IDENTICAL (only p7, an internal port,
+differs occasionally). So port1's CLA trap-queue config == the working ports'. NOT the discriminator.
+CUMULATIVE: port1 is byte-identical to working ports in EVERY readable per-port config — SPA pktdeal,
+isolation, MAC ctrl/en, SOPC(0x19068), STP, AND CLA trap-queue ram7. The main CLA classify (ram1) is
+a global TCAM (addr=rule index, not per-ingress-port), so it can't discriminate port1 from port3 by
+config either. Conclusion: the port1 failure is NOT config — it's a DYNAMIC/internal state (the
+SIPC->QMG output FIFO was seen saturated for port1: cc008=0xfff000 vs stock ~0x777 → frames enter
+SIPC but don't drain to QMG; a backpressure/flow issue), or a port1 silicon quirk in the MAC->fabric
+path. Isolated to port1; not a driver bug (config uniform, 3/4 ports work). Multi-port DSA functional
+(3/4 ports + hotplug). Chasing port1 further needs flow-control/credit RE, low value given 3/4 work.
