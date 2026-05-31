@@ -589,3 +589,21 @@ CONCLUSION: multi-port needs a fundamentally different approach than register di
 stock's full per-port ingress+egress bring-up for a fresh (non-port2) port (the proven method, cf.
 kotrace_egress_capture.py), OR accept single-port (port2/jack3) DSA which works cleanly. Register
 poking is proven futile here.
+
+## ★ BREAKTHROUGH 2026-05-31 — jack1/port0 PINGS bidirectional; root cause = MAC-init-at-boot
+Rebooted mainline with the cable PHYSICALLY on jack1 (port0) AT BOOT. Result:
+  host->device ping: 14/15 (RTT ~12ms), device->host: 4/4 0% loss. tm_rx_count=49, tm_irq=45,
+  tm_tx_count=63. lan0 carries traffic. WORKS.
+=> The whole "only port2 forwards / register classification gate / register-diff exhausted"
+   conclusion was WRONG. The real root cause is far simpler:
+   **A port's MAC (smac_init) is only initialized if the port has PHY link AT BOOT (during probe).**
+   When the cable is moved to a different port POST-boot, the GePHY link-change path does NOT
+   run zx_smac_init_port for that MAC (MAC0 was ctrl=0/en=0 after hotplug, despite PHY[0] link=1),
+   so the port can't forward EITHER direction (ingress tm_rx_count=0 AND egress MAC TX=0).
+   ALL prior "port0/port1 fail" tests were on a HOTPLUGGED cable (MAC never inited) or after my
+   register pokes — not a clean boot-with-cable. With boot-with-cable, port0 works like port2.
+   (The earlier PHY-int panic in zte_gephy_handle_interrupt->mdiobus_read is in this same
+   link-change path — the hotplug MAC re-init is what's broken, NOT the switch classification.)
+REMAINING (minor): hotplug support — re-run smac_init when a GePHY link comes up post-boot
+(fix the link-change handler / GePHY irq), so moving the cable doesn't need a reboot. Multi-port
+DSA fundamentally WORKS (boot with the cable on the desired jack). Minor 1/15 loss to investigate.
