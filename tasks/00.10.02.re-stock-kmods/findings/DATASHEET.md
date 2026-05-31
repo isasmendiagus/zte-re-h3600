@@ -112,6 +112,23 @@ Mermaid auto-routes edges, so positions approximate the brief; nesting/containme
   path is dead; only PP↔SW↔copper is active. Confirms: ignore all GPON/fiber config.
 
 ## Our RE'd ethernet datapath — ✅ CPU→LAN TX EGRESS SOLVED (2026-05-30)
+
+> ⚠️ **WARNING — this diagram may be INCOMPLETE / partly wrong (flagged 2026-05-31).**
+> It predates the TX-ring + dup-storm RE done while bringing up DSA. Known gaps:
+> - **The TM TX DMA ring (`0x92350000`: UP base `+0x10050` / DN base `+0x10060`,
+>   kick `+0x10054/+0x10064`, consume `+0x10058/+0x10068`) is the CPU egress INJECT
+>   stage and is NOT shown** — the diagram jumps CPU→QMG. That ring is exactly where
+>   the lan2 DUP STORM lives: mainline shared the UP+DN base (`DN=UP=txdesc_dma`),
+>   aliasing the HW consumer pointer so it re-scans/re-emits every VALID desc
+>   (~82× at MAC2). Stock uses two DISTINCT bases 64 KiB apart.
+> - **BMU** (`0x921c8000`, BP buffer pool alloc/free) is in the block map but not in
+>   this egress flow; its free-credit interacts with the ring drain.
+> - **SCH/DSCH**: `zx_sch_init` programs the UP-path credit but originally OMITTED the
+>   **DN-tcont shaper (RAMID 0xe/0xf)** — relevant to whether a single DN kick drains.
+> - "EGRESS SOLVED (2026-05-30)" means a frame reaches the wire, but with the SHARED
+>   ring it also REPLICATES under load (the dup storm). A split-base + single-kick fix
+>   is under HW test (2026-05-31); diagram + this warning to be finalized once verified.
+
 ```mermaid
 flowchart LR
   CPU["CPU / sw netdev<br/>via SW_AXI/APB"] -->|inject| ING["CPU-port ingress<br/>SIPC 0x921cc000 · SMCT 0x921d0000 · IDM 0x921c8000"]
