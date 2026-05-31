@@ -1,0 +1,79 @@
+# DSA dup-storm on lan2 — what's fixed, what remains
+
+**Date:** 2026-05-31 · Branch: eth-dsa · Context: first end-to-end TX test of the
+DSA datapath (host = the build box itself, `enxc8a362e95900` = 192.168.1.50,
+cabled to jack3 = MAC2 = lan2).
+
+## Symptom
+`ping 192.168.1.99` from the host to the device (IP on lan2) returns the right
+replies but with a massive **DUPLICATE storm**: initially +761 dups per 5 pings,
+latency escalating to >1000ms. The legacy (non-DSA) path on `main` pings clean.
+
+## Fixed (commit 1c60a4b2c): CPU-egress hairpin
+The switch fabric hairpins the CPU's own egress back into the CPU RX path (HW
+behaviour — confirmed: isolating the SBRAG forwarding table to CPU<->lan2 only
+did NOT stop it). The standalone path drops these (`src MAC == our conduit MAC`)
+but the drop was gated `!dsa`. Re-enabling it in DSA mode cut the storm ~97%:
+fresh-boot rate +761/5 → +36/10, latency 1026ms → 13ms, 0% loss. **lan2 TX is
+thereby confirmed working** (replies reach the host).
+
+## REMAINS: a residual flood-loop that GROWS over time
+On a clean boot, no pokes, the dup count climbs across repeated ping rounds:
+round1 +36, round2 +129, round3 +270 (per 10 pings). Hard data for one 10-ping
+round: **CPU "sw"/lan2 RX +1023, TX +521**, host saw +314 dups. So each echo
+**request** (src = host MAC, dst = device MAC) is delivered to the CPU ~50-100×,
+and the CPU replies to every copy. The loopback-drop can't catch these (their src
+is the host MAC, not ours).
+
+### Experiments that did NOT fix it
+- **SBRAG isolation** (PP 0x923883c0+regport*4): poking it to CPU<->lan2-only
+  made dups WORSE (+180). Baseline is already `{fe,fd,fb,f7,ef,df,ff,ff}` =
+  each port blocks only itself (set by the self_mask loop at zx-eth-main.c:2174 —
+  NOT missing, contra one RE pass that only saw the ports-6/7 write at :2449).
+- **Downing the uncabled netdevs** (lan0/1/3): no effect (fixed-link likely keeps
+  the underlying switch ports forwarding regardless of netdev admin state).
+
+### Static RE (agent) — inconclusive
+Stock `tm_pon_pp_brg_initial` (decomp_all_tm.c:43628-43638) sets per-port
+`unknown_unicst_fwd=0` + `pt_tls=0` for all ports, then `=1` only for the CPU
+port (regport0). Mainline already writes the equivalent CPU-only bitmaps
+(0x92388340[31:24]=0x01, 0x92388380=0x01). So the obvious flood-control bits look
+correct. No single missing register identified.
+
+### Open mechanism question
+For a unicast frame (dst = device MAC, which IS FDB-seeded → CPU) to reach the
+CPU 50-100×, it must CIRCULATE in the fabric. Neither known-unicast (FDB→CPU
+once) nor unknown-unicast (flood→CPU once) explains 50× delivery. Something
+re-injects the frame. Candidates not yet ruled out:
+- the cableless `fixed-link` switch ports (lan0/1/3) wrapping TX→RX at the MAC
+  level (netdev admin-down doesn't disable the switch MAC; needs HW port_disable
+  / greg port_closed @npp+0x4c to truly close them);
+- a CPU-port copy/flood setting that re-queues;
+- stale/missing FDB causing repeated flood cycles (the documented "RUN1→RUN2
+  storm", zx-eth-main.c:2918).
+
+## The likely real answer: BRIDGE the ports
+This whole test is the UNBRIDGED standalone-port config (lan2 with a direct IP).
+Normal DSA usage bridges the user ports (`ip link add br0 type bridge; ip link
+set lan2 master br0; ...`), which enables FDB learning (host MAC learned → all
+traffic directed, no flood) and applies zx-dsa's bridge isolation. The residual
+flood-loop is plausibly an artifact of the unbridged config and may vanish under
+a bridge. **Cannot test here:** this C-init REPL's busybox `ip` has no `bridge`
+applet and no `ip link ... master` / `type bridge` support.
+
+## Recommendation / next steps (USER DECISION)
+1. Decide the target: bridged operation (the upstream-normal DSA case) vs.
+   unbridged standalone ports must work.
+2. To test bridging: boot with a fuller userland (iproute2 + bridge, or a small
+   initramfs with busybox configured with bridge), create br0, enslave lan2, and
+   re-ping — expect the dup storm to vanish once the host MAC is learned.
+3. If unbridged must work: deeper fabric RE on loop-prevention — specifically
+   HW-close the linkless ports (greg port_closed @npp+0x4c) so fixed-link doesn't
+   leave them looping, and trace where a unicast-to-CPU gets re-injected.
+
+## Status of lan2 (honest)
+- RX demux: ✅ VERIFIED.
+- TX to wire: ✅ VERIFIED (replies reach the host).
+- Clean bidirectional unicast: ❌ NOT yet — residual flood-loop in unbridged mode
+  (dups grow over time). Catastrophic hairpin storm is fixed; this is the smaller,
+  separate, pre-existing flood/FDB issue.
