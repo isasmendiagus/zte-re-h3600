@@ -172,4 +172,12 @@ config NET_DSA_TAG_XRS700X
 	  Say Y or M if you want to enable support for tagging frames for
 	  Arrow SpeedChips XRS700x switches that use a single byte tag trailer.
 
+config NET_DSA_TAG_ZTE
+	tristate "Tag driver for ZTE ZX279128S on-chip switch"
+	help
+	  Say Y or M if you want to enable support for tagging frames for the
+	  ZTE ZX279128S SoC's on-chip 4-port switch. The switch port is carried
+	  out-of-band in the CPU<->fabric DMA descriptor; this driver uses a
+	  small internal tag (stripped by the conduit before DMA) to convey it.
+
 endif

@@ -50,6 +50,8 @@
 
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
+#include <linux/dsa/zte.h>
+#include <net/dsa.h>
 
 /* Descriptor tables decoded from stock tm.ko's *RegTable symbols
  * (zx-fpga-reg-tables.h) and an older curated subset (zx_reg_tables.h);
@@ -619,10 +621,14 @@ static int zx_fdb_add(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 
 static int zx_sbrag_wait(struct zx_eth *e)
 {
-	int n = 10;
+	int n = 100;
 
+	/* BUSY bit0: 1 = operation in progress, 0 = idle/ready. Live-confirmed
+	 * 2026-05-31: the register reads 0 at idle, so the old "wait for bit0==1"
+	 * timed out immediately (returned -EBUSY before any write was issued) and
+	 * every FDB write silently failed. Wait for IDLE instead. */
 	while (n-- > 0) {
-		if (readl(e->fpga_base + ZX_SBRAG_BUSY) & 1)
+		if (!(readl(e->fpga_base + ZX_SBRAG_BUSY) & 1))
 			return 0;
 		udelay(2);
 	}
@@ -673,7 +679,18 @@ static int zx_sbrag_add_mac(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 	 */
 	ram_addr = zx_crc16(mac, 6) & 0xfff;
 
-	d2 = (u32)port | (mac_low_4 << 8);
+	/* D2[7:0] is a PORT BITMAP in REGPORT space, NOT a raw port number
+	 * (RE 2026-05-31 of stock sbrg_add_mactable + a live-learned entry whose
+	 * D2 low byte read back 0x08 = BIT(3) = regport 3 = logical port 2). The
+	 * logical DSA port must be remapped {0:1,1:2,2:3,3:4,4:5,5:0,6:6,7:7} and
+	 * then encoded as BIT(regport). Writing the raw port number left unicast
+	 * undirected → the switch kept flooding. */
+	{
+		static const u8 port_remap[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
+		u32 regport = port_remap[port & 7];
+
+		d2 = BIT(regport) | (mac_low_4 << 8);
+	}
 	d1 = ((status & 0xf) << 4)
 	   | ((vlan >> 8) & 0xf)
 	   | ((smac_ctrl & 1u) << 8)
@@ -682,19 +699,23 @@ static int zx_sbrag_add_mac(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 	   | ((u32)(vlan & 0xfff) << 24)
 	   | ((mac_high_2 & 0xffff) << 8);
 
-	rc = zx_sbrag_wait(e);
+	/* Write order RE-corrected 2026-05-31 via live poke + readback round-trip:
+	 * the DATA words go FIRST (D2→D1→D0), THEN the CMD register commits the
+	 * indirect write. The old order (CMD first, then data) did NOT store the
+	 * entry — a readback returned garbage; data-then-CMD round-trips exactly
+	 * (D2 read back the regport bitmap 0x08, etc.). */
+	rc = zx_sbrag_wait(e);		/* wait for idle (BUSY bit0 == 0) */
 	if (rc)
 		return rc;
-	rc = zx_sbrag_set_cmd(e, 0, 0, mem_id, ram_addr);
-	if (rc)
-		return rc;
-	rc = zx_sbrag_wait(e);
-	if (rc)
-		return rc;
-	/* D2 → D1 → D0 (D0 commits) */
 	writel(d2, e->fpga_base + ZX_SBRAG_D2);
 	writel(d1, e->fpga_base + ZX_SBRAG_D1);
 	writel(d0, e->fpga_base + ZX_SBRAG_D0);
+	rc = zx_sbrag_set_cmd(e, 0, 0, mem_id, ram_addr);	/* commit */
+	if (rc)
+		return rc;
+	rc = zx_sbrag_wait(e);		/* wait for completion */
+	if (rc)
+		return rc;
 	dev_dbg(e->dev, "SBRAG add: %pM vlan=%u port=%u → mem_id=%u ram_addr=%u\n",
 		 mac, vlan, port, mem_id, ram_addr);
 	return 0;
@@ -1983,6 +2004,25 @@ static int zx_cla_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 	return zx_cla_wait_done(e);
 }
 
+/* Indirect READ of one CLA RAM entry (17 words). Mirror of zx_cla_write_entry
+ * with the CLA_RAM_READ bit set: write the cmd (rw=1), wait done, read DATA0..16.
+ * Debug-only — used by the cladump/clapeek debugfs to compare per-port classify
+ * state (e.g. why port1 ingress isn't trapped to CPU while port0/2/3 are).
+ */
+static int zx_cla_read_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr, u32 data[17])
+{
+	int i;
+
+	if (zx_cla_wait_done(e))
+		return -EBUSY;
+	writel(ram_addr | ((u32)ram_id << 22) | CLA_RAM_READ, e->base + CLA_REG_CMD);
+	if (zx_cla_wait_done(e))
+		return -EBUSY;
+	for (i = 0; i < 17; i++)
+		data[i] = readl(e->base + CLA_REG_DATA0 + i * 4);
+	return 0;
+}
+
 /* CLA RAM init: walk a captured (ram_id, addr, 17-word payload) array
  * and write each one through the CLA command register sequence. Static
  * embedded data — no firmware_request — see zx_cla_table.h header for
@@ -2857,13 +2897,30 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 				 * arrived on.
 				 */
 				int ingress_port = ((desc[6] >> 3) & 0x1F) - 1;
+				bool dsa = netdev_uses_dsa(e->sw_dev);
 				/* Per-ingress counter for empirical CPU-loopback port id */
 				{
 					int slot = (ingress_port + 1) & 0x1F;
 
 					e->tm_rx_per_ingress[slot]++;
 				}
-				if (e->sw_dev && !memcmp(src + 6, e->sw_dev->dev_addr, 6)) {
+				if (dsa && ingress_port < 0) {
+					/* DSA: no user port to demux an invalid ingress to;
+					 * drop here (frees the bp) rather than black-hole it
+					 * in the tagger with no accounting. */
+					zx_bmu_free_bp(e, bppe_idx, 0);
+				} else if (e->sw_dev &&
+					   !memcmp(src + 6, e->sw_dev->dev_addr, 6)) {
+					/* Loopback suppression: the switch fabric hairpins the
+					 * CPU's own egress back to the CPU RX path in BOTH
+					 * standalone and DSA modes (HW behaviour, not a forwarding
+					 * decision — confirmed 2026-05-31: isolating the fabric to
+					 * CPU<->lan2 only did NOT stop it). Without this drop the
+					 * hairpin amplifies into a DUP storm (host saw ~200 copies
+					 * per ICMP reply). A frame whose SRC MAC is our own conduit
+					 * MAC can only be our reflected TX — drop it. Bridge transit
+					 * frames keep the original end-host SRC MAC, so this never
+					 * drops legitimately forwarded traffic. */
 					e->tm_rx_loopback_drops++;
 					if (e->tm_rx_loopback_drops <= 5)
 						dev_info(e->dev, "LOOPBACK drop #%u src=%pM dst=%pM ethertype=%04x len=%u ingress=%d\n",
@@ -2871,10 +2928,25 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 							 ntohs(*(__be16 *)(src + 12)), len, ingress_port);
 					zx_bmu_free_bp(e, bppe_idx, 0);
 				} else {
-					struct sk_buff *skb = netdev_alloc_skb(e->sw_dev, len + 64);
+					struct sk_buff *skb =
+						netdev_alloc_skb(e->sw_dev,
+								 len + (dsa ? ZTE_TAG_LEN : 0) + 64);
 
 					if (skb) {
 						skb_reserve(skb, 32);
+						/* [P1 conduit/DSA] prepend the 4-byte internal tag
+						 * {0x5a, ingress_port,...} so tag_zte's rcv (reached via
+						 * the ETH_P_XDSA ptype after eth_type_trans) demuxes the
+						 * frame to the lan<ingress> netdev. Dormant until a DSA
+						 * switch binds (netdev_uses_dsa false otherwise). */
+						if (dsa) {
+							u8 *t = skb_put(skb, ZTE_TAG_LEN);
+
+							t[0] = ZTE_TAG_MARK;
+							t[1] = ingress_port & 0xff;
+							t[2] = 0;
+							t[3] = 0;
+						}
 						memcpy(skb_put(skb, len), src, len);
 						skb->protocol = eth_type_trans(skb, e->sw_dev);
 						e->sw_dev->stats.rx_packets++;
@@ -2907,6 +2979,16 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 				 */
 				zx_bmu_free_bp(e, bppe_idx, 0);
 			}
+			/* [dup-fix 2026-05-31] INVALIDATE the consumed RX descriptor
+			 * (clear the len field desc[12..13] the scan keys on). The
+			 * scan re-finds any desc with len>0 as "valid"; without
+			 * clearing, a delivered desc stays valid and gets re-read on
+			 * ring-wrap / re-scan -> the same BP (bppe) is delivered again
+			 * (the lan2 dup storm: identical copies, same bppe, growing
+			 * over time). Stock invalidates each desc after consuming it.
+			 * dma_wmb so the HW sees it before re-filling the slot. */
+			*(__le16 *)(desc + 12) = 0;
+			dma_wmb();
 			e->rx_head[q] = (idx + 1) & (TM_RX_DESC_PER_Q - 1);
 			done++;
 			ack++;
@@ -3299,6 +3381,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	u32 bp, len;
 	u8 *bp_buf;
 	u8 *desc;
+	u8 eg = zx_eg_port;	/* egress switch port for the desc hint */
 
 	/* CPU→LAN egress: submit on the TM UP DMA ring (kick TM[0x10054]). Live
 	 * oracles proved stock uses NO DMA ring (UP/DN/IDM consume counters all 0)
@@ -3318,14 +3401,27 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 		goto drop;
 	}
 
-	len = skb->len;
-	if (len < 64) {
-		if (skb_padto(skb, 64)) {
-			TXCP(e, -1, "DROP: padto failed (orig_len=%u)", skb->len);
-			goto drop_noskb;
-		}
-		len = 64;
+	/* [P1 conduit/DSA] When this netdev is a DSA conduit, frames arrive from
+	 * tag_zte with a 4-byte internal tag prepended ({0x5a, egress_port, 0, 0}).
+	 * Consume the egress port and skb_pull the tag so the rest of the path sees
+	 * the bare frame (the tag never reaches the wire). Dormant until a DSA
+	 * switch binds to this conduit (netdev_uses_dsa == false otherwise), so the
+	 * standalone egress path is unaffected. See dsa_conduit_refactor_guide.md. */
+	if (netdev_uses_dsa(ndev) && skb->len >= ZTE_TAG_LEN + ETH_HLEN &&
+	    skb->data[0] == ZTE_TAG_MARK) {
+		eg = skb->data[1];
+		skb_pull(skb, ZTE_TAG_LEN);
 	}
+
+	/* skb_put_padto() pads to 64 AND advances skb->len (unlike skb_padto), and
+	 * COWs/expands the head if needed — so it is safe on the cloned/shared skbs
+	 * a DSA conduit can receive, and the memcpy below reads a consistent len.
+	 * Frees the skb on failure (-> drop_noskb). No-op when len >= 64. */
+	if (skb_put_padto(skb, 64)) {
+		TXCP(e, -1, "DROP: put_padto failed");
+		goto drop_noskb;
+	}
+	len = skb->len;
 	if (len > TM_BP_SIZE) {
 		TXCP(e, -1, "DROP: len %u > BP_SIZE %u", len, TM_BP_SIZE);
 		goto drop;
@@ -3386,7 +3482,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	desc[1]  = 0x00;
 	/* desc[2..3] = egress-port hint ((port+0x28)&0x3f)<<4. THE verified fix: was
 	 * hardcoded 0 (no destination → SOPC never picked a MAC). zx_eg_port to find MAC2. */
-	*(__le16 *)(desc + 2) = cpu_to_le16(((zx_eg_port + 0x28) & 0x3f) << 4);
+	*(__le16 *)(desc + 2) = cpu_to_le16(((eg + 0x28) & 0x3f) << 4);
 	*(u32 *)(desc + 4) = cpu_to_le32(0x00010000);
 	/* desc[11] = 0x21 (bit 0 VALID + bit 5 format), not 0x01 — stock decomp
 	 * pon_tm_data_raw_send does desc[11] = (desc[11]&1) | 0x20.
@@ -3496,6 +3592,24 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	if (!ndev)
 		return -ENOMEM;
 	SET_NETDEV_DEV(ndev, e->dev);
+	/* [P1 conduit/DSA] Bind the `sw` netdev to a UNIQUE DT node so a DSA
+	 * switch can select it as conduit unambiguously via
+	 * `ethernet = <&cpu_conduit>`. of_find_net_device_by_node() ->
+	 * of_dev_node_match() walks dev->parent, so binding sw to the shared eth
+	 * controller node would also match idm0/idm1 (same parent) and FIFO
+	 * registration order would pick idm0 (registered first) as the conduit
+	 * instead of sw — breaking the tagger datapath, whose hooks live in the
+	 * sw netdev path. Anchoring sw to the eth node's `conduit` child (which
+	 * idm0/idm1's parent-walk never reaches) makes sw the only match. Fall
+	 * back to the eth node itself when the child is absent (older DTBs). */
+	{
+		struct device_node *cnp =
+			of_get_child_by_name(e->dev->of_node, "conduit");
+
+		device_set_node(&ndev->dev,
+				cnp ? of_fwnode_handle(cnp)
+				    : dev_fwnode(e->dev));
+	}
 	*(struct zx_eth **)netdev_priv(ndev) = e;
 	ndev->netdev_ops = &zx_sw_netdev_ops;
 	ndev->watchdog_timeo = msecs_to_jiffies(5000);
@@ -3557,6 +3671,16 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	seq_printf(s, "tm_irq_count      = %u\n", e->tm_irq_count);
 	seq_printf(s, "tm_napi_count     = %u\n", e->tm_napi_count);
 	seq_printf(s, "tm_rx_count       = %u\n", e->tm_rx_count);
+	/* Per-ingress-port RX-to-CPU histogram. slot[i] = ingress_port+1, so
+	 * port0=slot1 .. port7=slot8 (slot0 = invalid/-1). Shows WHICH ingress
+	 * port's frames actually reached the CPU — the live per-port discriminator
+	 * for the multi-port (port1) gap. */
+	seq_printf(s, "rx_per_ingress port0..7 = %u %u %u %u %u %u %u %u  (invalid=%u)\n",
+		   e->tm_rx_per_ingress[1], e->tm_rx_per_ingress[2],
+		   e->tm_rx_per_ingress[3], e->tm_rx_per_ingress[4],
+		   e->tm_rx_per_ingress[5], e->tm_rx_per_ingress[6],
+		   e->tm_rx_per_ingress[7], e->tm_rx_per_ingress[8],
+		   e->tm_rx_per_ingress[0]);
 	seq_printf(s, "tm_rx_loopback_drops = %u\n", e->tm_rx_loopback_drops);
 	seq_printf(s, "tm_tx_count       = %u\n", e->tm_tx_count);
 	seq_printf(s, "tm_tx_dropped     = %u\n", e->tm_tx_dropped);
@@ -3819,6 +3943,88 @@ static const struct file_operations zx_regdump_fops = {
 	.release = single_release,
 };
 
+/* cladump: dump the CLA ram7 (trap-queue) CPU-queue id for every (ptype, port)
+ * via the indirect read. Lets us diff the per-port trap config of a FAILING port
+ * (e.g. port1/jack2: MAC RX climbs but tm_rx_count=0) against a WORKING port
+ * (port0/2/3) on the same boot — the per-port plain registers are identical, so
+ * if the trap RAM differs that's the bit. Port 5 = CPU (skipped). */
+static int zx_cladump_show(struct seq_file *s, void *_unused)
+{
+	struct zx_eth *e = s->private;
+	u32 data[17];
+	int i, port;
+	static const u8 cols[7] = { 0, 1, 2, 3, 4, 6, 7 };
+
+	seq_puts(s, "CLA ram7 trap-queue qid0 per (ptype,port):\n");
+	seq_puts(s, "ptype  p0 p1 p2 p3 p4 p6 p7\n");
+	for (i = 0; i < ZX_DEF_PTL_PKT_MAP_COUNT; i++) {
+		u8 ptype = zx_def_ptl_pkt_map[i].ptype;
+
+		seq_printf(s, "0x%02x  ", ptype);
+		for (port = 0; port < 7; port++) {
+			u32 addr = ptype | zx_pkt_port_addr_offset[cols[port]];
+
+			if (zx_cla_read_entry(e, 7, addr, data) == 0)
+				seq_printf(s, " %02x", data[0] & 0xff);
+			else
+				seq_puts(s, " ??");
+		}
+		seq_puts(s, "\n");
+	}
+	return 0;
+}
+
+static int zx_cladump_open(struct inode *inode, struct file *f)
+{
+	return single_open(f, zx_cladump_show, inode->i_private);
+}
+
+static const struct file_operations zx_cladump_fops = {
+	.owner   = THIS_MODULE,
+	.open    = zx_cladump_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+/* clapeek: ad-hoc indirect read of any CLA entry. Write "<ram_id> <addr>" (hex),
+ * the 17 data words are printed to the kernel log (like poke's readback). */
+static ssize_t zx_clapeek_write(struct file *f, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[64];
+	u32 ram_id, addr, data[17];
+	int rc;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (sscanf(buf, "%x %x", &ram_id, &addr) != 2)
+		return -EINVAL;
+	rc = zx_cla_read_entry(e, ram_id & 0xff, addr, data);
+	if (rc) {
+		pr_info("[ZXETH] clapeek ram%u addr%#x: err %d\n", ram_id, addr, rc);
+		return rc;
+	}
+	pr_info("[ZXETH] clapeek ram%u addr%#x: %08x %08x %08x %08x %08x %08x %08x %08x %08x\n",
+		ram_id, addr, data[0], data[1], data[2], data[3], data[4],
+		data[5], data[6], data[7], data[8]);
+	pr_info("[ZXETH]   clapeek+:           %08x %08x %08x %08x %08x %08x %08x %08x\n",
+		data[9], data[10], data[11], data[12], data[13], data[14],
+		data[15], data[16]);
+	return count;
+}
+
+static const struct file_operations zx_clapeek_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_clapeek_write,
+	.llseek = default_llseek,
+};
+
 /* poke: live register write for reflash-free experiments. Write "<phys> <val>"
  * (hex), e.g.  sh -c "echo '92280008 80000001' > /sys/kernel/debug/zx_eth/poke"
  * phys must be in [0x921c0000, 0x923c0000) (the e->base MMIO window) and 4-aligned.
@@ -3851,6 +4057,42 @@ static const struct file_operations zx_poke_fops = {
 	.owner  = THIS_MODULE,
 	.open   = simple_open,
 	.write  = zx_poke_write,
+	.llseek = default_llseek,
+};
+
+/* fdbadd: seed one static HW (sbrag) FDB entry so the switch DIRECTS a unicast
+ * to <port> instead of flooding it. Write "<port> <aa:bb:cc:dd:ee:ff>", e.g.
+ *   echo '2 c8:a3:62:e9:59:00' > /sys/kernel/debug/zx_eth/fdbadd
+ * Proves the HW-FDB-learning hypothesis for the lan2 dup storm. DEBUG ONLY.
+ */
+static ssize_t zx_fdbadd_write(struct file *f, const char __user *ubuf,
+			       size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	unsigned int port, m[6];
+	char buf[64];
+	u8 mac[6];
+	int i, rc;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (sscanf(buf, "%u %x:%x:%x:%x:%x:%x", &port,
+		   &m[0], &m[1], &m[2], &m[3], &m[4], &m[5]) != 7)
+		return -EINVAL;
+	for (i = 0; i < 6; i++)
+		mac[i] = m[i] & 0xff;
+	rc = zx_sbrag_add_mac(e, mac, 0, port & 0xff);
+	pr_info("[ZXETH] fdbadd %pM -> port %u = %d\n", mac, port, rc);
+	return rc ? rc : count;
+}
+
+static const struct file_operations zx_fdbadd_fops = {
+	.owner  = THIS_MODULE,
+	.open   = simple_open,
+	.write  = zx_fdbadd_write,
 	.llseek = default_llseek,
 };
 
@@ -4039,7 +4281,10 @@ static void zx_debugfs_init(struct zx_eth *e)
 	debugfs_create_file("pipeline_stats", 0444, zx_debugfs_root, e,
 			    &zx_pipeline_stats_fops);
 	debugfs_create_file("regdump", 0444, zx_debugfs_root, e, &zx_regdump_fops);
+	debugfs_create_file("cladump", 0444, zx_debugfs_root, e, &zx_cladump_fops);
+	debugfs_create_file("clapeek", 0644, zx_debugfs_root, e, &zx_clapeek_fops);
 	debugfs_create_file("poke", 0644, zx_debugfs_root, e, &zx_poke_fops);
+	debugfs_create_file("fdbadd", 0644, zx_debugfs_root, e, &zx_fdbadd_fops);
 	debugfs_create_file("txtest", 0644, zx_debugfs_root, e, &zx_txtest_fops);
 	dev_info(e->dev, "debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem,pipeline_stats,regdump,poke,txtest}\n");
 }
@@ -4345,7 +4590,20 @@ static void zx_eth_init_phys(struct zx_eth *e)
 				continue;
 			}
 			phydev->adjust_link = zx_eth_adjust_link;
-			phy_request_interrupt(phydev);
+			/* Use phylib POLLING, not the per-PHY link IRQ. Live HW test
+			 * (2026-05-31): the GePHY link-change IRQs (GIC SPI 0x47..0x4a)
+			 * do NOT fire for the cabled ports — moving the cable jack1->jack2
+			 * left irq 18/19/20 at 0 and adjust_link never ran, so the new
+			 * port's MAC was never re-inited (dead port until reboot). Only the
+			 * unconnected PHY[3] spuriously storms its line (~650/s, ~30M total).
+			 * Stock doesn't rely on these IRQs either — it polls via
+			 * extphy_timer_func (decomp_all_plat_zxylzb_9128S.c:3137). PHY_POLL
+			 * makes phylib's state machine poll link (~1s) and call
+			 * zx_eth_adjust_link -> zx_smac_init_port on every change (hotplug
+			 * works without reboot), and disabling the PHY IRQ also stops the
+			 * PHY[3] storm. See findings/multiport_root_cause_macinit.md.
+			 */
+			phydev->irq = PHY_POLL;
 			phy_start(phydev);
 			e->gephy[i] = phydev;
 			e->phy_was_link[i] = false;

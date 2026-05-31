@@ -13,6 +13,21 @@ The path to get there:
 
 We are currently in stages 2–4. OpenWrt comes last.
 
+## Releases / tags
+
+Two milestone tags mark the two working states of the driver. `main` is kept at
+the stable single-port state; the DSA work lives on the `eth-dsa` branch (NOT
+merged into main, to preserve the proven egress path). Check out with
+`git checkout <tag>`.
+
+| Tag | Base | What works | What it is |
+|-----|------|-----------|------------|
+| **`v1.0-egress`** | `main` @1c4a971e2 | Host↔device **ping 5/5** on the cabled jack (RX + TX) | Single-port CPU↔LAN datapath. **Not** a DSA driver: the on-chip switch is driven as one CPU↔LAN path with the **egress port hardcoded** (module param `zx_eg_port=2`, the DN-descriptor egress-port hint) + GePHY TX-DAC force-drive. No multi-port / no DSA tagging / no hotplug — the cable must be on the hardcoded jack. The stable reference. |
+| **`v2.0-dsa`** | `eth-dsa` @f62301ac0 | **Ports 0/2/3 ping bidirectional** via DSA slaves `lan0/2/3`; **hotplug** (move cable, no reboot); soft-float `ip`/`ping`/`brctl` | Real Linux **DSA** driver (`tag_zte` tagger, conduit `sw` + `lan0..3`). Egress port comes from the per-packet DSA tag (not the v1 hardcode). Link detection via **PHY_POLL** (the GePHY link IRQ doesn't fire). **Known issue:** port1/jack2 ingress→CPU broken — a dynamic, config-invisible per-port drop in the MAC→SPA→SDET admit stage; **not** hardware (stock pings on jack2) and **not** a register bit (every per-port reg byte-identical to working ports). Documented in `tasks/00.01.eth-driver/findings/` (multiport_root_cause_macinit, port1_sdet_ingress_gate_re, port1_spa_admit_gate_re) + `tasks/00.10.02.re-stock-kmods/findings/cla_ram_layout_re`. Debug tools: debugfs `clapeek`/`cladump`/`rx_per_ingress`. |
+
+`v2.0-dsa` builds on `v1.0-egress` (same egress fabric fix + TX-DAC). Rebuild
+with `tasks/00.01.eth-driver/scripts/build_slotA.py` then `tftp_boot_mainline.py`.
+
 ## Origin story (so the project doesn't lose its shape)
 
 - Hardware: a ZTE H3600 GPON router we own (vendor stopped GPL distribution

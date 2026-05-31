@@ -23937,11 +23937,15 @@ ZTE ZXIC ZX279128S INTEGRATED ETHERNET
 M:	Agustin Isasmendi <infra@quecomere.com>
 L:	netdev@vger.kernel.org
 S:	Maintained
+F:	Documentation/devicetree/bindings/net/dsa/zte,zx279128.yaml
 F:	Documentation/devicetree/bindings/net/zte,zx279128s-eth.yaml
 F:	Documentation/devicetree/bindings/net/zte,zx279128s-mdio.yaml
-F:	drivers/net/ethernet/zte/zx279128-eth.c
+F:	drivers/net/dsa/zte/
+F:	drivers/net/ethernet/zte/zx-eth-main.c
 F:	drivers/net/mdio/mdio-zte.c
 F:	drivers/net/phy/phy-zte-gephy.c
+F:	include/linux/dsa/zte.h
+F:	net/dsa/tag_zte.c
 
 THE REST
 M:	Linus Torvalds <torvalds@linux-foundation.org>

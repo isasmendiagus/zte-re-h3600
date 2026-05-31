@@ -65,8 +65,7 @@ struct zte_gephy_ext_init {
 	u16 val;
 };
 
-/*
- * [2026-05-30] FORCE-DRIVE pattern (stock gephy_tx_dac_drv_force_enable
+/* [2026-05-30] FORCE-DRIVE pattern (stock gephy_tx_dac_drv_force_enable
  * param_2==0, decomp plat-zxylzb_9128S.c:2378-2393). The previous table here
  * was the param_2==1 *reduced* pattern (b676/b677=0, b6c2/b6c1=2/1, b678=0) —
  * which links + RXes but leaves the copper TX driver weak/off, matching the
@@ -133,7 +132,8 @@ static int zte_gephy_config_init(struct phy_device *phydev)
 		 * NOT enable the TX-DAC, the PHY links + RX works but cannot DRIVE TX onto
 		 * copper → exactly the observed "RX works, 0 TX egress" symptom. The
 		 * TX-DAC writes are non-disruptive (no power-cycle), so applying them when
-		 * already-armed is safe. */
+		 * already-armed is safe.
+		 */
 		phydev_info(phydev, "config_init: LDO armed (ext 0xb640=0x%04x) — keeping LDO, applying TX-DAC drive\n",
 			    ldo_state);
 		goto tx_dac;

@@ -112,6 +112,23 @@ Mermaid auto-routes edges, so positions approximate the brief; nesting/containme
   path is dead; only PP↔SW↔copper is active. Confirms: ignore all GPON/fiber config.
 
 ## Our RE'd ethernet datapath — ✅ CPU→LAN TX EGRESS SOLVED (2026-05-30)
+
+> ⚠️ **WARNING — this diagram may be INCOMPLETE / partly wrong (flagged 2026-05-31).**
+> It predates the TX-ring + dup-storm RE done while bringing up DSA. Known gaps:
+> - **The TM TX DMA ring (`0x92350000`: UP base `+0x10050` / DN base `+0x10060`,
+>   kick `+0x10054/+0x10064`, consume `+0x10058/+0x10068`) is the CPU egress INJECT
+>   stage and is NOT shown** — the diagram jumps CPU→QMG. That ring is exactly where
+>   the lan2 DUP STORM lives: mainline shared the UP+DN base (`DN=UP=txdesc_dma`),
+>   aliasing the HW consumer pointer so it re-scans/re-emits every VALID desc
+>   (~82× at MAC2). Stock uses two DISTINCT bases 64 KiB apart.
+> - **BMU** (`0x921c8000`, BP buffer pool alloc/free) is in the block map but not in
+>   this egress flow; its free-credit interacts with the ring drain.
+> - **SCH/DSCH**: `zx_sch_init` programs the UP-path credit but originally OMITTED the
+>   **DN-tcont shaper (RAMID 0xe/0xf)** — relevant to whether a single DN kick drains.
+> - "EGRESS SOLVED (2026-05-30)" means a frame reaches the wire, but with the SHARED
+>   ring it also REPLICATES under load (the dup storm). A split-base + single-kick fix
+>   is under HW test (2026-05-31); diagram + this warning to be finalized once verified.
+
 ```mermaid
 flowchart LR
   CPU["CPU / sw netdev<br/>via SW_AXI/APB"] -->|inject| ING["CPU-port ingress<br/>SIPC 0x921cc000 · SMCT 0x921d0000 · IDM 0x921c8000"]
@@ -234,6 +251,10 @@ path (wire→PHY→MAC2→CLA→QMG→CPU) works fully and is unaffected.
 
 ## IRQs (GIC SPI)
 tm=36 (CPU↔switch ⭐), npp=35, idm=38, pon=66, pp=37.
+Per-PHY GePHY link-change IRQs: GIC SPI **0x47..0x4a** (71..74) for gephy0..3. ⚠️ **2026-05-31: these IRQs do NOT fire on a cable link-change for the cabled ports** — live test, moving the cable left gephy irq counts at 0; only the unconnected PHY[3] spuriously storms its line (~30M). Stock doesn't rely on them either — it polls (`extphy_timer_func` decomp_all_plat:3137). The mainline DSA driver (eth-dsa branch) therefore uses **`PHY_POLL`** (phylib polling, ~1s) instead of `phy_request_interrupt`; this enables hotplug (move cable, no reboot → `adjust_link` re-runs `zx_smac_init_port`) AND kills the PHY[3] storm.
+
+## Multi-port / DSA ingress status (2026-05-31, eth-dsa branch)
+Ports 0/2/3 ping bidirectional via DSA slaves; **port1/jack2 ingress→CPU is broken** — a dynamic, config-invisible per-port drop in the **MAC→SPA→SDET** admit stage (SDET uni1 transport=2 vs uni2/3=229/230, drop=0; SIPC drop=0; MAC1 RX-ok climbs clean). NOT hardware (stock pings jack2), NOT a register bit (every per-port reg byte-identical to working ports + stock). Live debug tools added to the driver: debugfs `clapeek`/`cladump` (CLA indirect read) + `rx_per_ingress` (per-ingress-port RX-to-CPU histogram in `stats`) + SDET per-uni counters (0x921c4160+uni*4). Full writeup: `tasks/00.01.eth-driver/findings/{multiport_root_cause_macinit,port1_sdet_ingress_gate_re,port1_spa_admit_gate_re}.md`.
 
 ## Egress status — ✅ SOLVED 2026-05-30 (commit 1c7af7d6c)
 CPU→LAN TX egress works end-to-end: `ping -c5 192.168.1.99` = 5/5, 0% loss; txtest → send2smac2
@@ -386,10 +407,20 @@ absolute phys in the tables below — they were computed from `base_off*4` direc
 | `0x921c4200` | 15 | RW | [2:0] | smac_md_level (x6, +0x4/idx) | 🟡 |
 | `0x921c4220` | 16 | RW | [29:16] | down_maxframe_length | 🟡 |
 | `0x921c4224` | 17 | RW | [5:0] | soam_drop_en | 🟡 |
-| `0x921c4250` | 1 | RW | [13:0] | *semantics unknown* | ❓ |
-| `0x921c4250` | 2 | RW | [29:16] | *semantics unknown* | ❓ |
-| `0x921c4254` | 3 | RW | [13:0] | *semantics unknown* | ❓ |
-| `0x921c4254` | 4 | RW | [29:16] | *semantics unknown* | ❓ |
+| `0x921c4250` | 1 | RW | [13:0] | **maxframe_length[port1]** (stock 0x07cc) | ✅ |
+| `0x921c4250` | 2 | RW | [29:16] | **maxframe_length[port2]** (stock 0x07cc) | ✅ |
+| `0x921c4254` | 3 | RW | [13:0] | **maxframe_length[port3]** (stock 0x07cc) | ✅ |
+| `0x921c4254` | 4 | RW | [29:16] | **maxframe_length[port4]** (stock 0x07cc) | ✅ |
+
+**Decoded 2026-05-31** (stock `tm_pon_npp_sdet_initial` decomp_all_tm.c:43182 → `sdet_set_maxframe_length(port,0x3000)` :24470): per-port maxframe is INTERLEAVED in shared words — port0=0x921c4000[29:16], **port1=0x921c4250[13:0], port2=0x921c4250[29:16]** (same word!), port3=0x921c4254[13:0], port4=[29:16]. Live golden: 0x4000=`0x07cc000c`, 0x4250=`0x07cc07cc`, 0x4254=`0x07cc07cc`, c_tpid 0x40f0=`0x00008100`. ⚠️ **Mainline never inits SDET** (`zx_sdetgregtable` defined but unused) — values happen to read the stock value from reset/bootloader, but this block is the per-uni frame-admit stage between MAC-RX and the classifier. See `port1_sdet_ingress_gate_re.md`.
+
+### SDET per-uni transport/drop counters (the silent-drop oracle — was the port1 localizer)
+| phys | bits | semantic | conf |
+|---|---|---|---|
+| `0x921c4160` + uni*4 (uni0..3 = logical port 0..3; uni4 @0x921c4178) | [7:0] | **egress_transport_cnt** (frames that passed SDET to the classifier) | ✅ |
+| `0x921c4160` + uni*4 | [23:16] | **egress_drop_cnt** (SDET-dropped) | ✅ |
+
+Live 2026-05-31 (ports 1/2/3 cabled): uni1(port1)=transport **2**, uni2=229, uni3=230, drop=0 all → port1's frames (MAC1 RX-ok=88) don't REACH the SDET (lost upstream in MAC→SPA), SDET itself doesn't drop them. This counter is the live discriminator for the port1 ingress anomaly.
 
 ## SIPC (CPU<->fabric bridge)
 
@@ -399,6 +430,16 @@ absolute phys in the tables below — they were computed from `base_off*4` direc
 |---|---|---|---|---|---|
 | `0x921cc000` | 0 | RW | [0] | rx_en | ✅ |
 | `0x921cc000` | 1 | RW | [2] | cpu_up_en | ✅ |
+
+### SIPC→CPU drop/fill counters (decoded 2026-05-31, decomp_all_tm.c:46366-46369 up / :46597-46600 dn)
+| phys | bits (nibbles) | semantic | conf |
+|---|---|---|---|
+| `0x921cc004` | nibble fields | **cpu_short_drop / cpu_pkt_drop / sipc2cpu_aful_cnt / sipc2cpu_ful_cnt** (SIPC→CPU FIFO drop + almost-full/full alarms) | ✅ |
+| `0x921cc008` (+0x18/0x1c/0x20) | — | live FIFO-occupancy/credit GAUGES (wander up/down with flow, ~0x800 on stock; NOT config) | ✅ |
+| `0x921cc024` | — | sdet_shor_drop_cnt | 🟡 |
+| `0x921cc184` + uni*4 | — | **UNIn_DROP_HPMAU_CNT** (per-uni drop) | 🟡 |
+
+NOTE: SIPC is a SINGLE shared block (NOT per-port) — it cannot discriminate one ingress port by itself. Live: cc004=0 (no SIPC drop) and cc008 wanders — confirmed NOT the port1 gate (poke/toggle had no effect). See `port1_sdet_ingress_gate_re.md`.
 
 ## SMCT (CPU-port multi-channel xfer)
 
@@ -444,6 +485,8 @@ absolute phys in the tables below — they were computed from `base_off*4` direc
 ## SPA (stream/source-port classifier)
 
 **Block base ≈ `0x921d4000`** (zx_sparegtable). Role: source-port match classifier, trap, untag/VLAN, ONU-MAC, indirect match/hash RAM
+
+**2026-05-31 admit-stage notes** (MAC→SPA is the stage where port1 ingress dies): the up/dn receive admit is TWO per-ENTRY bitmaps — **pkt_en** (`0x14000`=ent0-0x1f / `0x14004`=0x20-0x3f / `0x14008`=0x40-0x4d) and **pps_en** (`0x1400c`=ent0-0x1f / `0x14010`=0x20-0x3d), dn mirrors at `0x4040/44/48` + `0x404c/4050`. These are per matched rule/ENTRY (78/62 bits), NOT per physical port — the entry is picked by the SPA match/hash RAM (portless byte-matcher, see [[zte-spa-matchram-not-gate]]). Live golden (all all-on): `0x14000/04=ffffffff`, `0x14008=00003fff`, `0x1400c=ffffffff`, `0x14010=3fffffff`, `0x404c/4050=ffffffff`, `0x14054=03ff05dc`. ⚠️ Mainline `zx_pm_spa_init` writes pkt_en+match but NOT pps_en — harmless because HW reset-default is all-on (verified live). Per-uni receive counters (sop/eop, byte-packed): **`0x921d45cc` + uni*4** (e.g. live 0xe5e5e6e6 = uni2/3 ≈ 229/230). NOT the port1 gate (admit all-on, port1 dies before/at SPA classification). See `port1_spa_admit_gate_re.md`.
 
 | phys (sub0) | reg_id | R/W | bits | semantic name | conf |
 |---|---|---|---|---|---|
@@ -720,6 +763,16 @@ absolute phys in the tables below — they were computed from `base_off*4` direc
 ## CLA (classifier/ACL)
 
 **Block base ≈ `0x9238c014`** (zx_claregtable). Role: L2/L3 flow defaults, MTU, mirror, trap-ACL, local IPv4/v6, hash, indirect RAM
+
+### CLA indirect-RAM banks (decoded 2026-05-31 — `cla_ram_layout_re.md`)
+One indirect iface: CMD `0x9238c014` (`cmd = addr | ram_id<<22 | rw<<27`, rw bit27=read), DONE `0x9238c018`, 17 DATA slots `0x9238c01c`. `ram_id` selects DIFFERENT tables/formats:
+| ram_id | stock fn (decomp_all_tm.c) | format | per-inport? |
+|---|---|---|---|
+| 0 | `cla_set_extra_index_table` :2650 | byte-extractor (extract_index0..15) | **No** (portless) |
+| 1 | `cla_set_extra_rule_table` :2870 | rule TCAM (winoffset/winmask0..19); byte0x39 bit5=`inport_mask` FLAG | flag only |
+| 2..6 | `cla_set_hash_table` :3366 | result/hash table — holds the **`inport` VALUE** `=(byte[0x0e]&0x3f)<<6\|(byte[0x0d]>>2)` + trap action `cpu_qid`(byte6)+`cpu_qid_rp_en` + valid_en/direct(byte0x10) | **Yes (keyed by inport)** |
+| 7 | `cla_set_cpu_queue_id` :3957 | per-(ptype,port) CPU trap-queue (data[0]=qid) | per-port |
+addr→bank: 0..0xff=ram2, 0x100..17f=ram3, 180..1bf=ram4, 1c0..1ff=ram5, 200..207=ram6. CLA inport = REGPORT (logical {0,1,2,3}→regport {1,2,3,4}). Driver debugfs `clapeek "<ram_id> <addr>"` reads an entry; `cladump` dumps ram7 per (ptype,port). **port1 verdict: regport2 entries are present + valid + identical-action to working regport3 (clapeek-verified live) → CLA is NOT the port1 gate** (the drop is upstream, MAC→SPA→SDET).
 
 | phys (sub0) | reg_id | R/W | bits | semantic name | conf |
 |---|---|---|---|---|---|

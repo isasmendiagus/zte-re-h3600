@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/dsa/zte,zx279128.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ZTE ZX279128S on-chip ethernet switch
+
+maintainers:
+  - Agustin Isasmendi <infra@quecomere.com>
+
+description:
+  The ZTE ZX279128S SoC integrates a 4-port ethernet switch. The CPU port is
+  reached through the on-chip TM/QMG fabric DMA path exposed by the zx279128
+  ethernet driver, which acts as the DSA conduit. The switch port is conveyed
+  out-of-band in the CPU<->fabric DMA descriptor (see the "zte" DSA tag).
+
+properties:
+  compatible:
+    const: zte,zx279128-switch
+
+  reg:
+    maxItems: 1
+    description: NPP/switch control register window.
+
+  ethernet-ports:
+    type: object
+    patternProperties:
+      "^port@[0-5]$":
+        $ref: dsa-port.yaml#
+        unevaluatedProperties: false
+
+allOf:
+  - $ref: dsa.yaml#
+
+required:
+  - compatible
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    switch {
+        compatible = "zte,zx279128-switch";
+        reg = <0x921c0000 0x1000>;
+
+        ethernet-ports {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            port@0 { reg = <0>; label = "lan0"; phy-handle = <&gephy0>; };
+            port@1 { reg = <1>; label = "lan1"; phy-handle = <&gephy1>; };
+            port@2 { reg = <2>; label = "lan2"; phy-handle = <&gephy2>; };
+            port@3 { reg = <3>; label = "lan3"; phy-handle = <&gephy3>; };
+
+            port@5 {
+                reg = <5>;
+                ethernet = <&sw>;   /* the zx279128 conduit netdev */
+                phy-mode = "internal";
+                fixed-link {
+                    speed = <1000>;
+                    full-duplex;
+                };
+            };
+        };
+    };
