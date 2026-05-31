@@ -477,3 +477,16 @@ cable on jack2 (port1), confirm stock forwards port1→CPU, and live-diff the in
 Also note (egress TODO): driver hardcodes zx_eg_port=2 — for DSA the tagger should drive the
 egress port per-packet from the slave dp->index (lan1→port1); verify the device's REPLY to a
 jack2 host actually egresses port1, not the hardcoded port2.
+
+## STOCK ORACLE on jack2/port1 2026-05-31 — stock forwards port1→CPU (host ping .1 = 4/4)
+Static per-port config IDENTICAL stock vs mainline: SOPC 0x19068=0 (CONFIRMS red herring),
+STP greg 0/0/0, SPA pkten=0xffffffff match=1, ISO p0-3=fe/fd/fb/f7, MAC1 en=0x80000001.
+DIFFS found:
+- MAC1 ctrl: stock 0xBA6003 vs mainline 0xBB6003 (mainline has extra bit16).
+- QMG cfg 0x9234c000: stock 0x01F40FA0 vs mainline link-up writes 0x03F40050 (zx-eth-main.c ~4324).
+Stock QMG golden block (devmem2, port1 active, actively trapping):
+  c000=0x01F40FA0 c004=0x2 c008=0 c00c=0x3FF c010=0xFAA c02c=0x1112
+  c044(swfwd)=0xEB↑ c060(hwtrap)=0x166↑  (counters climbing => QMG traps port1 to CPU)
+Mainline QMG hwtrap=0 (no trap). zx_pkt_port_addr_offset[1]=0x100,[2]=0x180 (uniform, not the bug).
+HYPOTHESIS TO TEST on mainline: poke QMG cfg 0x9234c000=0x01F40FA0 (+ c00c=0x3FF, c010=0xFAA,
+c02c=0x1112 if needed) and/or clear MAC1 ctrl bit16 → see if tm_rx_count starts climbing on jack2.
