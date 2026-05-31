@@ -434,3 +434,14 @@ Still SOLID: tm_rx_count=0, tm_irq_count=0 (port1→CPU RX ring gets nothing); a
 e->base+0x80780 (driver MAC1 region) climbs to 110 with host pings (MAC1 receives frames).
 The greg STP regs (DSA ZX_NPP_PHYS=0x921c0000) ARE in-window at mem offset 0x1c0040/44/4c.
 Open question for RE: exact per-port ingress→CPU gate (STP/VLAN/SDET/SPA/CLA) for port1 vs port2.
+
+## LOOP GOAL 2026-05-31: make jack2 (= physical port1, PHY[1]) ping with DSA
+User numbering: jackN → port(N-1). jack3=port2 (the committed dup-fix, worked).
+jack2 = port1 = where the cable is now (PHY[1] link=1). Goal: make port1 ingress
+reach the CPU so jack2 pings clean over its DSA slave (lan1).
+Status this session: userland soft-float FIXED (ip/ping/brctl work on-device, committed
+in tasks/00.01.eth-driver/userland/). port1 datapath: MAC1 RX climbs (110), tm_rx_count=0 —
+fabric doesn't deliver port1 ingress to CPU. Uniform per-port config ruled in (isolate/flood/
+pro_action/trap_queue all loop 0..7). Live STP read (offset-uncertain due to base-gotcha)
+hinted port2=Forwarding / port1=Disabled. RE agent running to resolve base aliasing + nail
+the exact ingress→CPU gate + give the poke/fix. Next: apply agent's recipe, test ping on jack2.
