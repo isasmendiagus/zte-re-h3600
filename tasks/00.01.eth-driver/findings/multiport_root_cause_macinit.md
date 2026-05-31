@@ -121,3 +121,20 @@ saturated, QMG hw_trap=0) while stock drains (QMG hw_trap climbs) and mainline's
 => port1 is a per-port DYNAMIC flow/credit issue (QMG/SIPC), not any config register — needs
 QMG/flow-control credit RE or stock-vs-mainline dynamic-counter tracing. Multi-port DSA functional
 on 3/4 ports + hotplug. This is the honest state: not HW, not config, dynamic, uncracked.
+
+## RE agent SIPC-gauge hypothesis TESTED → DISPROVEN (2026-05-31)
+RE agent hypothesized the zx_npp_twin_data.h snapshot replay (zx_npp_apply_pair @ zx-eth-main.c:864)
+clobbers SIPC FIFO/credit gauges at 0x921cc008/18/1c/20/04 with frozen capture values, saturating
+port1's drain. TESTED on HW:
+- cc008 (0x921cc008) read 0x00000000 BEFORE any poke this boot (NOT 0xfff000) — yet port1 still fails.
+  So the gauge value does not correlate with the failure.
+- Poked 0x921cc008/18/1c/20/04=0 + re-asserted 0x921cc000=0x11 → port1 still 100% loss, tm_rx_count=0.
+- Toggled SIPC rx_en (0x921cc000 0→0x11) to resync pointers → still 100% loss.
+=> SIPC gauge/ctrl is NOT the port1 gate. Also note SIPC at 0xc000 is a SINGLE shared block (not
+per-port-addressed), so it cannot by itself discriminate port1 from the working ports anyway.
+STATUS: port1 still uncracked. Confirmed NOT: hardware (stock pings), static config (all identical
+to port3+stock), CLA trap-queue, SIPC gauge/ctrl. It is a per-port DYNAMIC difference whose source
+is still unidentified. Static decomp analysis isn't pinning it; the next viable approach is a LIVE
+side-by-side: plug TWO cables (a working jack + jack2) so port0 and port1 are both up on one boot,
+then compare their live pipeline counters (MAC RX, SIPC, QMG sw_fwd/hw_trap, RED) during ping to
+see exactly where port1 diverges from port0 in real time. Or a stock kotrace of port1 ingress.
