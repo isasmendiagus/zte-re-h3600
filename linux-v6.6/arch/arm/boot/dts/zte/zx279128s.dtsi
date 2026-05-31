@@ -268,6 +268,58 @@
 			};
 		};
 
+		/* DSA view of the on-chip 4-port switch. The `eth` node above is the
+		 * DSA conduit (CPU-port DMA). DRAFT — disabled until the P1 conduit
+		 * refactor is HW-verified (probe ordering + the lanN bring-up need
+		 * bench testing). Enable per-board with `&switch_dsa { status="okay"; }`.
+		 * See tasks/00.01.eth-driver/findings/dsa_conduit_refactor_guide.md.
+		 */
+		switch_dsa: switch {
+			compatible = "zte,zx279128-switch";
+			reg = <0x921c0000 0x1000>;	/* NPP greg window (shared w/ conduit) */
+			status = "disabled";
+
+			ethernet-ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					label = "lan0";
+					phy-mode = "internal";
+					phy-handle = <&gephy0>;
+				};
+				port@1 {
+					reg = <1>;
+					label = "lan1";
+					phy-mode = "internal";
+					phy-handle = <&gephy1>;
+				};
+				port@2 {
+					reg = <2>;
+					label = "lan2";
+					phy-mode = "internal";
+					phy-handle = <&gephy2>;
+				};
+				port@3 {
+					reg = <3>;
+					label = "lan3";
+					phy-mode = "internal";
+					phy-handle = <&gephy3>;
+				};
+
+				port@5 {
+					reg = <5>;
+					phy-mode = "internal";
+					ethernet = <&eth>;	/* DSA conduit = the sw netdev */
+					fixed-link {
+						speed = <1000>;
+						full-duplex;
+					};
+				};
+			};
+		};
+
 		pcie1: pcie@f100000 {
 			compatible = "zte,zx279128s-pcie";
 			reg = <0x0f100000 0x4000>,

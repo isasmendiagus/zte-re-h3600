@@ -3527,6 +3527,11 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	if (!ndev)
 		return -ENOMEM;
 	SET_NETDEV_DEV(ndev, e->dev);
+	/* [P1 conduit/DSA] Bind the `sw` netdev to the eth DT node so a DSA switch
+	 * can find it as its conduit via `ethernet = <&eth>`
+	 * (of_find_net_device_by_node matches dev->of_node). Harmless when no DSA
+	 * switch references it. */
+	device_set_node(&ndev->dev, dev_fwnode(e->dev));
 	*(struct zx_eth **)netdev_priv(ndev) = e;
 	ndev->netdev_ops = &zx_sw_netdev_ops;
 	ndev->watchdog_timeo = msecs_to_jiffies(5000);
