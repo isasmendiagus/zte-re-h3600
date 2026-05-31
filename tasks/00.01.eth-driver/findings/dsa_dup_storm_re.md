@@ -261,3 +261,29 @@ Option B (patch the ring): make the ring send EXACTLY ONCE — single-kick + pro
 tx desc ownership/advance + don't leave the DN ring re-fetching. The dual-kick was
 added because single-kick gave 100% loss ("fetched-but-not-drained"); the real fix
 is correct desc ownership/drain, not dual-kick. Verify: MAC2 TX delta == ping count.
+
+## CORRECTION 2026-05-31 (decomp+kotrace agent): NOT sw_fwd — it's DN-ring dual-kick
+My "stock uses QMG sw_fwd, no DMA ring" conclusion was WRONG (confounded by:
+TM ring regs are WRITE-ONLY doorbells reading back constant 1 → "flat" ≠ unused;
++ base-gotcha). DEFINITIVE (decomp + live kotrace, fully cited in agent output):
+- 0x9234c044 (QMG sw_fwd) = READ-ONLY statistics counter, not an inject reg.
+- Stock TX = pdt_ethdrv_send → pon_tm_net_tx → pon_tm_data_raw_send(dir=1) →
+  soft_insert_tx_1desc(dir=1): the ONLY per-frame write is **0x92350064 = 1**
+  (DN-ring kick, ONE descriptor). desc[0]=0x80, desc[2] bits[9:4]=((port+0x28)&0x3f),
+  desc[0xb]|=0x20 VALID (LEFT SET — HW owns desc), reclaim via 0x92350068 consume.
+  DN ring base = tm_base+0x10060; cursor is SW (net_txq+0xc mod 0x400).
+- Single-kick "lost" on mainline ONLY because the DN-tcont SHAPER CREDIT (SCH
+  RAMID 0xe/0xf via 0x9235401c/0x92354014) is never programmed (cspd does it on
+  stock) → DSCH can't dequeue. Dual-kick brute-forced past that.
+MAINLINE BUG (zx_sw_xmit zx-eth-main.c:3441-3489): (1) dual-kick UP 0x10054 + DN
+0x10064 off SHARED desc base → frame presented 2x; (2) clears VALID post-kick →
+fights async HW; (3) DN shaper credit never set. → ~82x MAC2 replication.
+
+### FIX (concrete, agent recipe; HIGH conf on ring/kick/VALID, MED on shaper):
+1. desc[0]=0x80 (DN marker, not 0xc9). 2. kick ONLY 0x10064=1 (drop the UP kick).
+3. do NOT clear desc VALID after kick. 4. reclaim via 0x10068 consume counter.
+5. program DN-tcont shaper credit (RAMID 0xe fill @0x9235401c=0x186A00 +
+   0x92354014=0x03800000|unit; RAMID 0xf cap @0x9235401c=0x030D40 +
+   0x92354014=0x03C00000|unit; unit 3≈MAC2) so single-kick drains.
+VERIFY: MAC2 TX delta == ping count (no dups). Full citations in session log /
+the RE agent output.
