@@ -532,3 +532,24 @@ NEXT (heavy): dump+diff the CLA classify RAM (indirect via 0x9238c014/018/01c) a
 table per (port,proto) stock-vs-mainline. The static SPA/CLA *config* regs match; the difference
 must be in the indirect RAM contents or a per-port classify result. Consider: zx_chip_tm_init_pro_action
 uses action_pp0 for ALL ports (proto 0x14 PP0=1/PP1=0) — verify port1 should use PP0 not PP1.
+
+## ITERATION SUMMARY 2026-05-31 — exhaustive, jack2 still down; wall at CLA classify
+KEY: driver eth/dsa code is BYTE-IDENTICAL to the dup-fix commit (7123d5fac) that pinged port2
+20/20 — the 12 commits since are all docs + the soft-float userland. So port1-vs-port2 is genuinely
+port-specific with identical code. Stock forwards BOTH (port1: host ping .1 = 4/4).
+Ruled out this iteration:
+- pro_action SPA replay has 74 "fail" but they are -1/-3 (proto-out-of-table / high-port sub_idx>max),
+  benign + uniform, NOT port1-specific (sub_idx=1 is always valid). port2 worked with them.
+- fdbadd host_MAC->port1 (rc=0) does NOT help; device->host ping also 100% loss, tm_rx_count=0.
+- CLA classify table = 780 TCAM-style 17-word match rules (ram_id mostly 1); not obviously port-keyed
+  from inspection; CLA replay reported 1804 ok / 0 fail (table wrote fine).
+STATE: frame reaches MAC1 (RX++) + SIPC (counters move) but never traps to QMG; lost in SPA/CLA
+classify. Every plain reg matches stock; every poke tried (QMGcfg, MAC bit16, SOPC, bcast flood,
+fdb) fails to move tm_rx_count. LEADING HYPOTHESIS: the captured cla.bin/zx_cla_table was captured
+from stock with PORT2 active, so its TCAM classify rules cover port2 but not port1 (the egress fix +
+all captures were port2-centric). 
+REMAINING OPTIONS (all heavy/uncertain): (A) full CLA-RAM dump+diff stock(port1 active)-vs-mainline
+to prove/find the missing port1 classify rule; (B) re-capture cla.bin from stock with cable on jack2
+and regenerate zx_cla_table.h; (C) RE the CLA TCAM entry format to find the ingress-port match field
+and synthesize port1 rules from port2's. Cheapest disambiguation (needs user): move cable to jack3
+and confirm port2 STILL pings with this exact build (rules out non-determinism vs true port-bias).
