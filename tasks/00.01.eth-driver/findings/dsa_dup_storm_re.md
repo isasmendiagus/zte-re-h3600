@@ -424,3 +424,13 @@ CLASSIFICATION pipeline (SDET/SPA/CLA) between MAC and QMG — NOT rgmii, NOT MA
 NOT isolation (port1 mask 0xfd incl CPU bit5), NOT broadcast flood (0xFF). Only port2's
 MAC-RX→QMG-trap path is configured. Next: RE the per-port SDET/SPA ingress-trap enable
 (0x14000 SPA pkt-enable, sdet uniN) vs stock where all ports trap.
+
+## CORRECTION 2026-05-31: base-gotcha invalidated the QMG read
+e->base = 0x92000000 (boot log "base=[mem 0x92000000-0x921bffff]"), mem window 0x200000.
+The `mem` and `poke` debugfs both operate on offsets from e->base, NOT npp_base 0x921c0000.
+So my "QMG hw_trap @0x18c060 = 0" actually read phys 0x9218c060 (meaningless) — the REAL
+QMG (0x9234c000, tm_base) is OUTSIDE the mem window and NOT readable via mem/poke. CLAIM RETRACTED.
+Still SOLID: tm_rx_count=0, tm_irq_count=0 (port1→CPU RX ring gets nothing); and a counter at
+e->base+0x80780 (driver MAC1 region) climbs to 110 with host pings (MAC1 receives frames).
+The greg STP regs (DSA ZX_NPP_PHYS=0x921c0000) ARE in-window at mem offset 0x1c0040/44/4c.
+Open question for RE: exact per-port ingress→CPU gate (STP/VLAN/SDET/SPA/CLA) for port1 vs port2.

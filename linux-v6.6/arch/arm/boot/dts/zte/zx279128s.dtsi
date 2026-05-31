@@ -310,7 +310,6 @@
 					reg = <0>;
 					label = "lan0";
 					phy-mode = "internal";
-					status = "disabled";	/* [dup bisect] cableless — off to test fixed-link loop */
 					fixed-link {
 						speed = <1000>;
 						full-duplex;
@@ -320,7 +319,6 @@
 					reg = <1>;
 					label = "lan1";
 					phy-mode = "internal";
-					status = "disabled";	/* [dup bisect] cableless */
 					fixed-link {
 						speed = <1000>;
 						full-duplex;
@@ -339,7 +337,6 @@
 					reg = <3>;
 					label = "lan3";
 					phy-mode = "internal";
-					status = "disabled";	/* [dup bisect] cableless */
 					fixed-link {
 						speed = <1000>;
 						full-duplex;
