@@ -1,5 +1,36 @@
 # DSA dup-storm on lan2 — what's fixed, what remains
 
+## UPDATE 2026-05-31 (later): bridge test — root cause is HW FDB LEARNING
+Built CONFIG_BRIDGE=y + VLAN_8021Q (kernel had NO bridge support), added a static
+`mkbridge` helper (FAILED: built with the eabihf/hardfloat toolchain → SIGILL on
+this **no-VFP ARMv7 Cortex-A9**; the CPU `Features` line has no `vfp`/`neon`).
+Used busybox `brctl` instead — note it **does the operation but SIGILLs on exit**
+(no-VFP quirk), so it must be run on its OWN REPL line (a `;`-chain after it is
+aborted by the signal). Created br0, enslaved lan2, moved .99 to br0.
+
+RESULT: DSA bridge offload DID engage — CONFIG_NET_SWITCHDEV=y, and
+`port_bridge_join` reprogrammed the isolation live (regport3/lan2 0xf7 → 0x01 =
+forward to CPU only; non-bridged ports also recomputed). **But the dup storm
+PERSISTS and grows (+71→+189).** So isolation was never the cause (consistent
+with the earlier poke result). The HW switch keeps FLOODING because it never
+learns the host's MAC: the SW bridge learns in software, but that is NOT reaching
+the hardware FDB. Dynamic HW learning is DISABLED in the driver (zx-eth-main.c
+:2918 — it was writing the wrong table, PP_BRG/VLAN instead of the sbrag MAC FDB).
+
+### Conclusion: the residual flood needs HW FDB learning (or static HW FDB)
+The clean fix is to get the host MAC into the **sbrag MAC FDB** pointing at the
+ingress port, so the switch directs unicast instead of flooding. Two routes:
+1. Implement correct HW address learning on bridged ports (sbrag FDB, using the
+   verified zx_sbrag_add_mac path + zx_sbrg_hash) and wire DSA's switchdev FDB
+   sync (port_fdb_add) to it — so bridge-learned MACs program the HW FDB.
+2. Or seed a static FDB entry for the peer MAC -> port (test-only).
+Until then, lan2 unicast floods/loops in unbridged AND software-bridged modes.
+This is a substantial driver+RE item (the FDB MAC byte-order / wrong-table
+history makes it delicate). NOT a quick fix.
+
+---
+
+
 **Date:** 2026-05-31 · Branch: eth-dsa · Context: first end-to-end TX test of the
 DSA datapath (host = the build box itself, `enxc8a362e95900` = 192.168.1.50,
 cabled to jack3 = MAC2 = lan2).
