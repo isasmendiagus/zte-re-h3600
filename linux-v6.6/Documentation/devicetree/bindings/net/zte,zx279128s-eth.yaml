@@ -77,6 +77,20 @@ properties:
       status word from this region during probe.
     $ref: /schemas/types.yaml#/definitions/phandle
 
+  conduit:
+    type: object
+    additionalProperties: false
+    description: |
+      Anchor node for the CPU-side "sw" netdev. The controller registers
+      several netdevs (the switch CPU netdev plus the wifi-offload netdevs),
+      all parented to this controller node. of_find_net_device_by_node()
+      walks dev->parent, so referencing the controller node directly would
+      ambiguously match every one of them (and registration order, not
+      intent, would decide the winner). When the on-chip switch is used as
+      a DSA switch, its CPU port must reference THIS child node
+      (ethernet = <&conduit_label>); the driver sets only the "sw" netdev's
+      of_node to it, so it is the sole match.
+
 required:
   - compatible
   - reg
@@ -113,5 +127,8 @@ examples:
 
             zte,topcrm = <&topcrm>;
             local-mac-address = [00 11 22 33 44 55];
+
+            conduit {
+            };
         };
     };
