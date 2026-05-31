@@ -149,3 +149,23 @@ code, NOT a switch register.
 - SBRAG FDB write protocol: FIXED + verified by readback (c3fa24a0a).
 - lan2 RX ✅ and TX ✅ both verified on HW. Clean bidirectional unicast ❌
   (residual DSA-datapath dup-loop, root cause now correctly localized).
+
+## UPDATE 2026-05-31 (leading lead): egress replication at smac2 + BMU free failing
+debugfs pipeline_stats + stats under DSA-path ping:
+- `smac2 TX_pkts = 467826` while CPU `tm_tx_count = 6260` → the egress MAC for the
+  host port physically transmits ~75x more than the CPU injects. So the dup storm
+  is EGRESS-SIDE REPLICATION (DSCH/SCH/SOPC → smac2), not RX over-delivery.
+  (smac2 RX_pkts=302 is small → frames are not looping at ingress.)
+- `tm_bmu_free_fail = 25473` vs `tm_bmu_free_ok = 4274` (~85% fail), `bmu_free_credit
+  = 0`. The BMU buffer-free path is failing almost always. If TX/egress BP buffers
+  aren't recycled correctly, the egress scheduler may re-send/replicate them.
+- Only PHY[2] link=1 (host); PHY 0/1/3 link=0. MAC2 ctrl=00bb6003 en=80000001 (live).
+- All TOPCRM/PP/PM/SPA regs match stock (re-confirmed in this dump).
+
+⇒ NEXT (focused, this is the real lead): investigate (a) why smac2 egresses ~75x the
+CPU TX — the DSCH/SCH/SOPC egress path replicating CPU frames on the DSA path but
+not the legacy path; and (b) the BMU free-fail (zx_bmu_free_bp returning fail 85%
+of the time) — a TX/egress BP recycle bug would explain re-send/replication. Compare
+the egress + BMU-free behaviour DSA-path vs legacy-path (stock kprobe on
+pp_bmu_free_bp / the DSCH egress, or mainline instrumentation of zx_bmu_free_bp
+return + per-frame egress count). The fix is in the egress/BMU datapath.
