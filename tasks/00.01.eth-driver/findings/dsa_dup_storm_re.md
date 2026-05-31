@@ -287,3 +287,29 @@ fights async HW; (3) DN shaper credit never set. → ~82x MAC2 replication.
    0x92354014=0x03C00000|unit; unit 3≈MAC2) so single-kick drains.
 VERIFY: MAC2 TX delta == ping count (no dups). Full citations in session log /
 the RE agent output.
+
+## UPDATE 2026-05-31 (TX-fix attempt — replication is RING-DRAIN, not kick): 
+Implemented single-kick + DN-tcont shaper credit (RAMID 0xe/0xf). Results on HW:
+- single DN-kick (desc[0]=0x80): DN ring QUEUES but NEVER DRAINS — smac2 TX=0,
+  TM[0x10068] high16 grows / low16(consumed) flat, 100% loss. DN-tcont shaper
+  credit did NOT unblock it. (So DN is not mainline's working drain path.)
+- single UP-kick (desc[0]=0xc9): DRAINS (10/10 rx) but STILL replicates ~790x/ping
+  (smac2 TX +7912 / 10 pings), and dups GROW across rounds (+48 → +193).
+⇒ The replication is NOT the dual-kick and NOT DN-vs-UP. ROOT: the HW UP ring
+RE-SCANS accumulated VALID TX descriptors. zx_sw_xmit writes each desc with VALID
+(desc[11] bit5) SET and NEVER clears it after the HW consumes it; descs pile up in
+the 1024-entry ring and the HW re-emits every VALID one each cycle → replication
+that GROWS with the number of un-reclaimed descs. (Iter-33 had removed the
+post-kick VALID clear because clearing it *immediately* made the DN ring skip; the
+correct fix is clear-on-CONSUME, not immediate and not never.)
+
+### REAL FIX (next): proper TX-ring reclaim / consumer-cursor
+Implement a TX reclaim: read the UP consume counter (TM[0x10058] low16), and for
+each desc the HW has consumed, CLEAR its VALID bit (desc[11] &= ~0x20) so it is not
+re-emitted. Maintain SW head/tail; reclaim from tail up to consumed in NAPI and/or
+at the start of the next xmit. Verify smac2 TX delta == ping count. Open question:
+the ~790x/ping suggests the HW re-emits a desc many times BEFORE any reclaim runs —
+may also need the ring producer/consumer/size registers set so HW stops at the
+produced count (kick value = count). Inspect TM ring ptr/size regs vs stock.
+NOTE: committed eth-dsa code is still the dual-kick; the single-UP edit is the
+current (uncommitted) experiment in the booted image.
