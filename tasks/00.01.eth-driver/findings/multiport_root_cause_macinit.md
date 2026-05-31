@@ -107,3 +107,17 @@ SIPC->QMG output FIFO was seen saturated for port1: cc008=0xfff000 vs stock ~0x7
 SIPC but don't drain to QMG; a backpressure/flow issue), or a port1 silicon quirk in the MAC->fabric
 path. Isolated to port1; not a driver bug (config uniform, 3/4 ports work). Multi-port DSA functional
 (3/4 ports + hotplug). Chasing port1 further needs flow-control/credit RE, low value given 3/4 work.
+
+## ★ DEFINITIVE: NOT hardware — stock pings 5/5 over jack2 (2026-05-31)
+User's test: cold-booted STOCK with the cable on jack2/port1 → host ping 192.168.1.1 = 5/5 0% loss.
+So jack2/port1 hardware (RJ45/magnetics/PHY1/MAC1/PCB) is 100% FINE. The mainline failure is a
+DRIVER issue, not hardware. Also re-dumped stock's broadcast-flood + PM rules (the only per-port
+surface not yet compared): stock 8300=0 8304=0 8340=0x15555ff 8004=0x40200ff 81c0=0xff, PM in-port
+rules {0,1,2,3,4,5}, PM ctrl 0x54=0xc0 out 0x1a0=0x8 — ALL match mainline.
+SO: stock and mainline have byte-identical port1 config, AND mainline's port1 config == mainline's
+working port3 config, yet stock-port1 works, mainline-port1 fails, mainline-port0/2/3 work. The
+divergence is DYNAMIC not config: mainline's SIPC→QMG drain backs up ONLY for port1 (cc008=0xfff000
+saturated, QMG hw_trap=0) while stock drains (QMG hw_trap climbs) and mainline's other ports drain.
+=> port1 is a per-port DYNAMIC flow/credit issue (QMG/SIPC), not any config register — needs
+QMG/flow-control credit RE or stock-vs-mainline dynamic-counter tracing. Multi-port DSA functional
+on 3/4 ports + hotplug. This is the honest state: not HW, not config, dynamic, uncracked.
