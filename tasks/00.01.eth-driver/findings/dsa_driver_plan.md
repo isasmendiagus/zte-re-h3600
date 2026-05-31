@@ -168,4 +168,21 @@ must: TX read tag[1]→desc egress port, copy frame[4:] to BP (drop tag); RX pre
   the P1 conduit refactor (invasive + needs HW + user decision) — see the guide.
   Loop slowed to a heartbeat; remaining safe prep ticks: a HW-verify test script for
   the per-port ops (memdump-readback), upstream patch-series prep.
+- **2026-05-31 P1 (safe portion DONE, 20 commits):** conduit datapath TX strip
+  (0b664459b) + RX prepend & tagger mac_header fix (aa3917378) + conduit of_node
+  + DT switch node draft (f2981f269, DTB compiles, status="disabled"). All gated/
+  draft → main's egress unaffected, everything compiles + checkpatch-clean.
+- **TO TEST ON HW (bench session — needs you + the device; not blind overnight):**
+  1. `&switch_dsa { status = "okay"; };` in zx279128s-h3600.dts.
+  2. Make the DSA driver + tagger LOAD at boot: set CONFIG_NET_DSA=y,
+     NET_DSA_ZTE_ZX279128=y, NET_DSA_TAG_ZTE=y (built-in) — else add the .ko's to
+     the initramfs (build_slotA only bundles zx279128-eth.ko today).
+  3. build_slotA.py → boot → `dmesg`: expect zx-dsa probe + dsa_register_switch +
+     lan0..3 netdevs. Watch for EPROBE_DEFER (conduit ordering) or DSA rejecting
+     the conduit (it expects a fairly normal NIC; `sw` is switch-ish — possible
+     friction; debug here).
+  4. `ip addr add 192.168.1.99/24 dev lan2; ip link set lan2 up; ping` from host →
+     expect 0% loss (same directed path, now via the tag). Then dsa_verify.py.
+  RISK: a DSA-enabled boot could disrupt the `sw` conduit; recover by rebuilding a
+  non-DSA image. This is why it's a HW-attended step.
 - Reuse switch HW-init + register helpers from zx-eth-main.c.
