@@ -186,3 +186,60 @@ must: TX read tag[1]→desc egress port, copy frame[4:] to BP (drop tag); RX pre
   RISK: a DSA-enabled boot could disrupt the `sw` conduit; recover by rebuilding a
   non-DSA image. This is why it's a HW-attended step.
 - Reuse switch HW-init + register helpers from zx-eth-main.c.
+
+---
+
+## 2026-05-31 — FIRST HW BRING-UP OF THE DSA DRIVER (user-attended start, then autonomous loop)
+
+Enabled the switch node + built DSA built-in (NET_DSA=y, NET_DSA_TAG_ZTE=y,
+NET_DSA_ZTE_ZX279128=y) and booted on the live H3600. Three findings, two fixes
+HW-VERIFIED:
+
+### Boot #1 — PANIC (PHY double-ownership)
+- DSA probed + `DSA: tree 0 setup` reached, but `lan3: failed to connect to PHY:
+  -EBUSY` → dangling PHY state machine → NULL deref in `netif_carrier_off`
+  (`phy_link_change` ← `phy_state_machine`). Root cause: the eth conduit driver
+  already `phy_attach_direct()`s the 4 GePHYs (for its adjust_link MAC bring-up =
+  the egress fix), so DSA's per-port phylink phy_connect hit EBUSY.
+- FIX (TRANSITIONAL): user ports `phy-handle` → `fixed-link` 1G/full in the dtsi.
+  The conduit keeps PHY+MAC ownership; DSA only provides lanN + tagger. PROPER fix
+  (P2): move MAC bring-up into zx-dsa phylink_mac ops, restore phy-handle.
+
+### Boot #2 — conduit bound to idm0, not sw (RX demux dead)
+- `idm0: error -22 setting MTU to 1504 to include DSA overhead` ⇒ DSA picked idm0
+  as conduit. Counters under ping: sw RX +393, **lan2 RX = 0**, idm0 TX climbing.
+  Tagger datapath hooks live in the sw path (zx_tm_napi_poll / zx_sw_xmit), so an
+  idm0 conduit = no demux to lanN. The "ping works" was the LEGACY sw path (egress
+  default port 2 = jack3), NOT DSA.
+- ROOT CAUSE (RE agent, source-cited): `of_find_net_device_by_node()` →
+  `of_dev_node_match()` (net/core/net-sysfs.c:1968) **walks dev->parent**. All
+  three netdevs (sw + idm0/idm1) share parent `eth->dev` whose of_node is the eth
+  controller node, so `ethernet = <&eth>` matched ALL THREE; `class_find_device()`
+  iterates FIFO → idm0 (registered first, before sw) won.
+- FIX (deterministic, commit a4508c981): add a unique `conduit {}` child node under
+  the eth DT node; point the DSA CPU port `ethernet = <&cpu_conduit>`; anchor ONLY
+  sw's of_node to that child (`of_get_child_by_name(.., "conduit")`). idm0/idm1's
+  parent-walk never reaches the child → sw is the sole match, regardless of order.
+
+### Boot #3 — conduit = sw, RX DEMUX VERIFIED ✅
+- Warning moved to `sw: error -22 ... DSA overhead` (conduit is sw now).
+- **lan2 RX counter climbs (3→52 pkts) mirroring sw RX**, from ambient host
+  multicast; `TM RX … ingress=2 … delivered` logs. The DSA receive path
+  (conduit RX tag-prepend → tagger demux → lan2) WORKS on HW.
+
+### STATUS after 2026-05-31 loop
+- P0 (lanN appear): ✅ HW-VERIFIED.
+- P1 RX demux (wire → lanN): ✅ HW-VERIFIED (lan2 RX climbs, conduit=sw, no panic).
+- P1 TX round-trip (lanN → wire via tagger): WIRED + lan2 TX counter increments,
+  but a clean ICMP round-trip is NOT yet confirmed. BLOCKERS: this C-init REPL has
+  NO `ping`/`ifconfig`/`arping`/`bridge` (all exit=4; only `ip`(busybox, limited),
+  `cat`, `dmesg`, `ls`, `memdump`); the build box is NOT cabled to the device
+  (host-side ping from it = 100% loss); and sw+lan2 currently both hold .99 (route
+  conflict). **USER ACTION for TX proof:** on device leave .99 ONLY on lan2 (`ip
+  addr del 192.168.1.99/24 dev sw`), then from your cabled host `ping 192.168.1.99`
+  — expect lan2 RX *and* TX to climb while sw does NOT carry it.
+- P3 ops (FDB/STP/VLAN/isolation): NOT triggerable from this REPL (`bridge` absent).
+  Needs a fuller userland (bridge/iproute2) or a debugfs trigger hook. Code is
+  written + compiles; HW-verification of the register writes remains PENDING.
+- P2 (phylink MAC bring-up into zx-dsa + restore phy-handle): next big code chunk;
+  multi-port validation needs cable moves (user-attended).
