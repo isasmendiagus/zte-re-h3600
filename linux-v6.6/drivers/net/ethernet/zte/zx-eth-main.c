@@ -621,10 +621,14 @@ static int zx_fdb_add(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 
 static int zx_sbrag_wait(struct zx_eth *e)
 {
-	int n = 10;
+	int n = 100;
 
+	/* BUSY bit0: 1 = operation in progress, 0 = idle/ready. Live-confirmed
+	 * 2026-05-31: the register reads 0 at idle, so the old "wait for bit0==1"
+	 * timed out immediately (returned -EBUSY before any write was issued) and
+	 * every FDB write silently failed. Wait for IDLE instead. */
 	while (n-- > 0) {
-		if (readl(e->fpga_base + ZX_SBRAG_BUSY) & 1)
+		if (!(readl(e->fpga_base + ZX_SBRAG_BUSY) & 1))
 			return 0;
 		udelay(2);
 	}
@@ -675,7 +679,18 @@ static int zx_sbrag_add_mac(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 	 */
 	ram_addr = zx_crc16(mac, 6) & 0xfff;
 
-	d2 = (u32)port | (mac_low_4 << 8);
+	/* D2[7:0] is a PORT BITMAP in REGPORT space, NOT a raw port number
+	 * (RE 2026-05-31 of stock sbrg_add_mactable + a live-learned entry whose
+	 * D2 low byte read back 0x08 = BIT(3) = regport 3 = logical port 2). The
+	 * logical DSA port must be remapped {0:1,1:2,2:3,3:4,4:5,5:0,6:6,7:7} and
+	 * then encoded as BIT(regport). Writing the raw port number left unicast
+	 * undirected → the switch kept flooding. */
+	{
+		static const u8 port_remap[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
+		u32 regport = port_remap[port & 7];
+
+		d2 = BIT(regport) | (mac_low_4 << 8);
+	}
 	d1 = ((status & 0xf) << 4)
 	   | ((vlan >> 8) & 0xf)
 	   | ((smac_ctrl & 1u) << 8)
@@ -684,19 +699,23 @@ static int zx_sbrag_add_mac(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 	   | ((u32)(vlan & 0xfff) << 24)
 	   | ((mac_high_2 & 0xffff) << 8);
 
-	rc = zx_sbrag_wait(e);
+	/* Write order RE-corrected 2026-05-31 via live poke + readback round-trip:
+	 * the DATA words go FIRST (D2→D1→D0), THEN the CMD register commits the
+	 * indirect write. The old order (CMD first, then data) did NOT store the
+	 * entry — a readback returned garbage; data-then-CMD round-trips exactly
+	 * (D2 read back the regport bitmap 0x08, etc.). */
+	rc = zx_sbrag_wait(e);		/* wait for idle (BUSY bit0 == 0) */
 	if (rc)
 		return rc;
-	rc = zx_sbrag_set_cmd(e, 0, 0, mem_id, ram_addr);
-	if (rc)
-		return rc;
-	rc = zx_sbrag_wait(e);
-	if (rc)
-		return rc;
-	/* D2 → D1 → D0 (D0 commits) */
 	writel(d2, e->fpga_base + ZX_SBRAG_D2);
 	writel(d1, e->fpga_base + ZX_SBRAG_D1);
 	writel(d0, e->fpga_base + ZX_SBRAG_D0);
+	rc = zx_sbrag_set_cmd(e, 0, 0, mem_id, ram_addr);	/* commit */
+	if (rc)
+		return rc;
+	rc = zx_sbrag_wait(e);		/* wait for completion */
+	if (rc)
+		return rc;
 	dev_dbg(e->dev, "SBRAG add: %pM vlan=%u port=%u → mem_id=%u ram_addr=%u\n",
 		 mac, vlan, port, mem_id, ram_addr);
 	return 0;
@@ -3920,6 +3939,42 @@ static const struct file_operations zx_poke_fops = {
 	.llseek = default_llseek,
 };
 
+/* fdbadd: seed one static HW (sbrag) FDB entry so the switch DIRECTS a unicast
+ * to <port> instead of flooding it. Write "<port> <aa:bb:cc:dd:ee:ff>", e.g.
+ *   echo '2 c8:a3:62:e9:59:00' > /sys/kernel/debug/zx_eth/fdbadd
+ * Proves the HW-FDB-learning hypothesis for the lan2 dup storm. DEBUG ONLY.
+ */
+static ssize_t zx_fdbadd_write(struct file *f, const char __user *ubuf,
+			       size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	unsigned int port, m[6];
+	char buf[64];
+	u8 mac[6];
+	int i, rc;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (sscanf(buf, "%u %x:%x:%x:%x:%x:%x", &port,
+		   &m[0], &m[1], &m[2], &m[3], &m[4], &m[5]) != 7)
+		return -EINVAL;
+	for (i = 0; i < 6; i++)
+		mac[i] = m[i] & 0xff;
+	rc = zx_sbrag_add_mac(e, mac, 0, port & 0xff);
+	pr_info("[ZXETH] fdbadd %pM -> port %u = %d\n", mac, port, rc);
+	return rc ? rc : count;
+}
+
+static const struct file_operations zx_fdbadd_fops = {
+	.owner  = THIS_MODULE,
+	.open   = simple_open,
+	.write  = zx_fdbadd_write,
+	.llseek = default_llseek,
+};
+
 /* txtest: inject N known TX frames straight through zx_sw_xmit — isolates the
  * TX/egress path (no ARP/RX/ping involved). Frame: dst = host MAC (FDB-resolved
  * to internal port 3 / MAC[2]), src = device MAC, ethertype 0x88b5 (local
@@ -4106,6 +4161,7 @@ static void zx_debugfs_init(struct zx_eth *e)
 			    &zx_pipeline_stats_fops);
 	debugfs_create_file("regdump", 0444, zx_debugfs_root, e, &zx_regdump_fops);
 	debugfs_create_file("poke", 0644, zx_debugfs_root, e, &zx_poke_fops);
+	debugfs_create_file("fdbadd", 0644, zx_debugfs_root, e, &zx_fdbadd_fops);
 	debugfs_create_file("txtest", 0644, zx_debugfs_root, e, &zx_txtest_fops);
 	dev_info(e->dev, "debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem,pipeline_stats,regdump,poke,txtest}\n");
 }
