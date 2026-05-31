@@ -108,3 +108,44 @@ applet and no `ip link ... master` / `type bridge` support.
 - Clean bidirectional unicast: ❌ NOT yet — residual flood-loop in unbridged mode
   (dups grow over time). Catastrophic hairpin storm is fixed; this is the smaller,
   separate, pre-existing flood/FDB issue.
+
+## UPDATE 2026-05-31 (final, this session): config matches stock — it's the DSA datapath
+Fixed the SBRAG FDB write protocol (commit c3fa24a0a: BUSY=wait-for-idle, write
+order D2→D1→D0 then CMD; D2=BIT(regport) bitmap). Entries now verifiably store
+(readback round-trips). BUT seeding host-MAC→lan2 + device-MAC→CPU still does NOT
+stop the dup-loop.
+
+Then diffed EVERY forwarding register live (mainline) — ALL already match stock:
+isolation {fe,fd,fb,f7,ef,df,ff,ff}, PP[0x8004]=040200ff (age_en SET),
+PP[0x8180]=04, PP[0x8184]=01, PP[0x8188]=00211b00, PP[0x8340]=015555ff
+(unknown-unicast-fwd = CPU only), PM 0x921e0054=c0, SPA 0x921d407c=01. So the
+switch CONFIG is correct.
+
+Key signals:
+- `tm_rx_loopback_drops = 0` (loopback-drop never fires now) while `tm_rx_count`
+  climbs to 20k+. So the over-delivered frames are the echo REQUESTS (src = host
+  MAC, dst = our MAC), NOT reply-hairpins. The CPU receives each request ~50-100×
+  and replies to each → the host sees the dup storm.
+- The LEGACY `sw` path (non-DSA, direct IP on the conduit) pings CLEAN with the
+  SAME switch config. Only the DSA `lan2` path loops.
+
+⇒ ROOT CAUSE IS DSA-DATAPATH-SPECIFIC, not the switch registers. Something in the
+conduit RX/TX hooks or the tagger causes the switch to re-deliver a CPU-bound
+unicast many times on the DSA path but not the legacy path. Two automated RE
+agents gave UNRELIABLE analysis here (repeated regport-vs-logical indexing errors;
+claimed "missing" registers that are already set) — do not trust them; verify live.
+
+### Next step (focused, needs methodical RE — likely a separate session)
+Compare the DSA vs legacy CPU datapath directly: boot stock with kprobe on the
+CPU RX/forwarding path (or instrument mainline) to see why a request is delivered
+to the CPU once on legacy but N× on DSA. Suspects: the conduit MTU bump (1504
+"DSA overhead"), the tag prepend/strip altering frame handling, BMU buffer reuse,
+or a CPU-copy/mirror that the DSA conduit enables. The fix is in the datapath
+code, NOT a switch register.
+
+### What IS fixed/verified this session
+- CPU-egress hairpin storm: FIXED (commit 1c60a4b2c) — cut the worst of it.
+- Conduit selection idm0→sw: FIXED (a4508c981) — RX demux verified.
+- SBRAG FDB write protocol: FIXED + verified by readback (c3fa24a0a).
+- lan2 RX ✅ and TX ✅ both verified on HW. Clean bidirectional unicast ❌
+  (residual DSA-datapath dup-loop, root cause now correctly localized).
