@@ -195,3 +195,28 @@ Live now: tm[0x80d0]=07d00000 tm[0x80d4]=ffffff00 tm[0x80d8]=ffffe000
 tm[0x80e0]=00000fb1 tm[0x8004]=0104c040 tm[0x8000]=1. This is the concrete,
 stock-divergent register to fix — verify by re-reading tm[0x80dc] bits[8:3]≈34 and
 re-pinging (expect dups→0).
+
+## UPDATE 2026-05-31 (correction): BMU credit is a SYMPTOM, not the static root
+Poke test: tm[0x80dc] is READ-ONLY HW status — poking 0x50000111 didn't stick
+(reads back 0x40000401 / 0x40000511). And it FLUCTUATES 0..34 dynamically
+(0x...511 → bits[8:3]=34 at one sample), NOT stuck at 1 (the earlier "1" was an
+idle snapshot). So the BMU free-credit is overwhelmed by the amplification under
+load, not statically misconfigured — a zx_tm_bmu_init rebuild likely won't fix it.
+
+Refined model (positive-feedback runaway):
+1. SEED: at FRESH boot, ~3.6 dup-copies/ping (the documented mild "1-3 copies"
+   flood, line 713). Manageable.
+2. FEEDBACK: the amplified RX outruns the BMU free path → free_fail → buffers not
+   recycled → HW re-DMAs stale buffers → MORE re-delivery/re-egress → MORE free
+   pressure → runaway. Dups grow over the session (36 → 1000+); a fresh boot
+   resets to ~36. So the GROWTH is the buffer-leak feedback; the SEED is the
+   baseline mild flood.
+
+⇒ Real fix priority: kill the SEED (the baseline ~3.6-copies/ping flood on the DSA
+egress path) — once each reply egresses exactly once, the free path keeps up and
+the feedback can't run away. Tools that CAN test without rebuild are exhausted
+(isolation/FDB/port-close all read-only-confirmed or ineffective; tm[0x80dc]
+read-only). The decisive next step is the stock+kprobe comparison of the EGRESS
+path (DSCH/SCH/SOPC send2smac) DSA-vs-legacy to find why one CPU reply egresses
+~3.6x (fresh) on the DSA path but 1x on legacy — that is a rebuild/instrumentation
+or stock-trace task, not a poke.
