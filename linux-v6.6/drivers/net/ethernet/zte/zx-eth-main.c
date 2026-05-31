@@ -2859,13 +2859,24 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 				 * arrived on.
 				 */
 				int ingress_port = ((desc[6] >> 3) & 0x1F) - 1;
+				bool dsa = netdev_uses_dsa(e->sw_dev);
 				/* Per-ingress counter for empirical CPU-loopback port id */
 				{
 					int slot = (ingress_port + 1) & 0x1F;
 
 					e->tm_rx_per_ingress[slot]++;
 				}
-				if (e->sw_dev && !memcmp(src + 6, e->sw_dev->dev_addr, 6)) {
+				if (dsa && ingress_port < 0) {
+					/* DSA: no user port to demux an invalid ingress to;
+					 * drop here (frees the bp) rather than black-hole it
+					 * in the tagger with no accounting. */
+					zx_bmu_free_bp(e, bppe_idx, 0);
+				} else if (!dsa && e->sw_dev &&
+					   !memcmp(src + 6, e->sw_dev->dev_addr, 6)) {
+					/* Standalone-only loopback suppression (our own TX
+					 * echoed back). With DSA the per-port netdevs + the
+					 * switch handle this; gating avoids dropping legitimately
+					 * bridged frames that share the conduit MAC. */
 					e->tm_rx_loopback_drops++;
 					if (e->tm_rx_loopback_drops <= 5)
 						dev_info(e->dev, "LOOPBACK drop #%u src=%pM dst=%pM ethertype=%04x len=%u ingress=%d\n",
@@ -2873,7 +2884,6 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 							 ntohs(*(__be16 *)(src + 12)), len, ingress_port);
 					zx_bmu_free_bp(e, bppe_idx, 0);
 				} else {
-					bool dsa = netdev_uses_dsa(e->sw_dev);
 					struct sk_buff *skb =
 						netdev_alloc_skb(e->sw_dev,
 								 len + (dsa ? ZTE_TAG_LEN : 0) + 64);
@@ -3343,20 +3353,21 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	 * the bare frame (the tag never reaches the wire). Dormant until a DSA
 	 * switch binds to this conduit (netdev_uses_dsa == false otherwise), so the
 	 * standalone egress path is unaffected. See dsa_conduit_refactor_guide.md. */
-	if (netdev_uses_dsa(ndev) && skb->len >= ZTE_TAG_LEN &&
+	if (netdev_uses_dsa(ndev) && skb->len >= ZTE_TAG_LEN + ETH_HLEN &&
 	    skb->data[0] == ZTE_TAG_MARK) {
 		eg = skb->data[1];
 		skb_pull(skb, ZTE_TAG_LEN);
 	}
 
-	len = skb->len;
-	if (len < 64) {
-		if (skb_padto(skb, 64)) {
-			TXCP(e, -1, "DROP: padto failed (orig_len=%u)", skb->len);
-			goto drop_noskb;
-		}
-		len = 64;
+	/* skb_put_padto() pads to 64 AND advances skb->len (unlike skb_padto), and
+	 * COWs/expands the head if needed — so it is safe on the cloned/shared skbs
+	 * a DSA conduit can receive, and the memcpy below reads a consistent len.
+	 * Frees the skb on failure (-> drop_noskb). No-op when len >= 64. */
+	if (skb_put_padto(skb, 64)) {
+		TXCP(e, -1, "DROP: put_padto failed");
+		goto drop_noskb;
 	}
+	len = skb->len;
 	if (len > TM_BP_SIZE) {
 		TXCP(e, -1, "DROP: len %u > BP_SIZE %u", len, TM_BP_SIZE);
 		goto drop;
