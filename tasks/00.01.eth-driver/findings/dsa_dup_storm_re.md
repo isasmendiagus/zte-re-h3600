@@ -463,3 +463,17 @@ adjust_link, so it doesn't re-run the serializer bring-up. Same family as the eg
 (solved for port2 via eg_port=2 + TX-DAC force). NOT pokeable — needs RE of port1's serializer
 bring-up (FUN_40e50c40 / smac_init params, per-port PHY TX-DAC/RGMII) to make READY assert.
 NEXT: compare port2 vs port1 serializer bond conditions; consider per-port smac re-init or holding READY.
+
+## 0x19068 IS A RED HERRING FOR INGRESS TOO 2026-05-31 (cross-check vs egress saga)
+The egress investigation already ruled 0x19068 out DECISIVELY: stock egresses with
+NPP[0x19068]=0x00000000 (zte-tx-egress-blocker memory). So 0x19068=0 is NORMAL. My
+ingress poke (enable bit1 → readback 0x02) left tm_rx_count=0 → 0x19068 is NOT the
+ingress gate either. The RE agent's medium-high 0x19068 hypothesis joins the ~6-iteration
+0x19068 red-herring pile. SOLID & unchanged: frames lost between MAC1 (RX-ok=110) and CPU
+(tm_rx_count=0, QMG hw_trap=0). The real per-port ingress→CPU gate is still unidentified.
+DECISIVE NEXT STEP (same conclusion the egress saga reached): boot STOCK from NAND with the
+cable on jack2 (port1), confirm stock forwards port1→CPU, and live-diff the ingress regs
+(SIPC/SDET/SPA/CLA/QMG + FDB) port1-vs-port2. Stop theorizing; measure the working reference.
+Also note (egress TODO): driver hardcodes zx_eg_port=2 — for DSA the tagger should drive the
+egress port per-packet from the slave dp->index (lan1→port1); verify the device's REPLY to a
+jack2 host actually egresses port1, not the hardcoded port2.
