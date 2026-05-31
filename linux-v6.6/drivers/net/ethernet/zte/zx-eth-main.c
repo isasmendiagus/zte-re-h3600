@@ -4477,7 +4477,20 @@ static void zx_eth_init_phys(struct zx_eth *e)
 				continue;
 			}
 			phydev->adjust_link = zx_eth_adjust_link;
-			phy_request_interrupt(phydev);
+			/* Use phylib POLLING, not the per-PHY link IRQ. Live HW test
+			 * (2026-05-31): the GePHY link-change IRQs (GIC SPI 0x47..0x4a)
+			 * do NOT fire for the cabled ports — moving the cable jack1->jack2
+			 * left irq 18/19/20 at 0 and adjust_link never ran, so the new
+			 * port's MAC was never re-inited (dead port until reboot). Only the
+			 * unconnected PHY[3] spuriously storms its line (~650/s, ~30M total).
+			 * Stock doesn't rely on these IRQs either — it polls via
+			 * extphy_timer_func (decomp_all_plat_zxylzb_9128S.c:3137). PHY_POLL
+			 * makes phylib's state machine poll link (~1s) and call
+			 * zx_eth_adjust_link -> zx_smac_init_port on every change (hotplug
+			 * works without reboot), and disabling the PHY IRQ also stops the
+			 * PHY[3] storm. See findings/multiport_root_cause_macinit.md.
+			 */
+			phydev->irq = PHY_POLL;
 			phy_start(phydev);
 			e->gephy[i] = phydev;
 			e->phy_was_link[i] = false;
