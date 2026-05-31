@@ -70,3 +70,14 @@ port2 ✓ — port1 is the odd one out, with a genuine port1-specific ingress→
 port0/port2 don't have. (Its SPA pktdeal is identical to port2's, which works — so not that.)
 NEXT to characterize port1: test port3/jack4 (does the pattern hold?) and/or swap the cable/RJ45
 on jack2 to rule out a bench hardware issue, before assuming a port1 silicon/config quirk.
+
+## ★★ FULL PATTERN 2026-05-31: port0 ✓ port1 ✗ port2 ✓ port3 ✓ — only jack2/port1 fails
+Moved the (same) cable jack1→jack4 live (hotplug, no reboot): polling fired
+`PHY[3] link UP @1000/FD → MAC[3].ctrl=0xba6003`; **host ping port3 = 6/6 0% loss** (tm_rx=35).
+So 3 of 4 ports (port0/jack1, port2/jack3, port3/jack4) ping bidirectional; ONLY port1/jack2 fails.
+The SAME cable works in jacks 1/3/4 but not jack2 → strongly points to jack2/port1 being an
+ISOLATED issue (bench RJ45/connector/magnetics, or a port1 silicon/MAC quirk), NOT a driver bug
+(driver config is uniform; 3/4 ports work identically). Note PHY[1] DID negotiate link fine
+(1Gbps/FD/an_done) when cabled — so the link/autoneg path works; the failure is downstream
+(MAC1→fabric→CPU). To pin it: try jack2 with a DIFFERENT cable; if it still fails, it's jack2/port1
+hardware or a port1-specific silicon quirk — but multi-port DSA is functional (3/4 ports + hotplug).
