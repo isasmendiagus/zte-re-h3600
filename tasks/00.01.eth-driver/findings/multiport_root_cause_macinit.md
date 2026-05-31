@@ -53,3 +53,20 @@ GePHY link-change IRQ are the same broken handler — fixing it enables both.
 3. **Minor 1/15 host→device loss** on port0 — investigate (could be RTT/load or a real drop).
 4. After that, multi-port DSA is functional → resume P2 (phylink/per-port MAC bring-up),
    P3 switch ops (FDB/STP/VLAN/bridge — now testable with the soft-float `ip`/`bridge`).
+
+## ★ PHY_POLL fix VERIFIED + port1 is a real anomaly (2026-05-31)
+Implemented `phydev->irq = PHY_POLL` (drop phy_request_interrupt). HW-verified:
+- GePHY irqs no longer registered → PHY[3] storm GONE (~30M → none).
+- Hotplug WORKS without reboot: moved cable jack2→jack1 live; phylib polling fired
+  `PHY[1] link DOWN` then `PHY[0] link UP @1000/FD → MAC[0].ctrl=0xba6003`; adjust_link
+  re-ran smac_init(0); **host ping port0 = 6/6 0% loss, tm_rx_count climbs — no reboot.**
+So PHY_POLL is the correct fix for link detection + hotplug (matches stock's extphy_timer polling).
+
+BUT this also DISPROVES "MAC-init-at-boot was the whole story": on the same PHY_POLL boot,
+**port1/jack2 FAILS** (host ARP for .99 → FAILED, tm_rx_count=0) even though MAC1 IS inited
+(adjust_link logged "PHY[1] link UP → MAC[1].ctrl=0xba6003", readback ctrl=0xbb6003 en=0x80000001).
+Meanwhile port0/jack1 and port2/jack3 both WORK with MAC inited. Pattern: port0 ✓, port1 ✗,
+port2 ✓ — port1 is the odd one out, with a genuine port1-specific ingress→CPU fabric gap that
+port0/port2 don't have. (Its SPA pktdeal is identical to port2's, which works — so not that.)
+NEXT to characterize port1: test port3/jack4 (does the pattern hold?) and/or swap the cable/RJ45
+on jack2 to rule out a bench hardware issue, before assuming a port1 silicon/config quirk.
