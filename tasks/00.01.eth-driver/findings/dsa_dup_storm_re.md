@@ -169,3 +169,29 @@ of the time) — a TX/egress BP recycle bug would explain re-send/replication. C
 the egress + BMU-free behaviour DSA-path vs legacy-path (stock kprobe on
 pp_bmu_free_bp / the DSCH egress, or mainline instrumentation of zx_bmu_free_bp
 return + per-frame egress count). The fix is in the egress/BMU datapath.
+
+## UPDATE 2026-05-31 (ROOT-CAUSE CANDIDATE): BMU free-credit starved (1 vs stock 34)
+Per-ping amplification measured precisely (1 ping): smac2_rx +2 (host's request
+physically arrives) -> cpu_rx +275 (delivered to CPU ~137x) -> cpu_tx +176
+(replies) -> smac2_tx +14382 (egressed ~82x the CPU replies). TWO compounding
+amplifications in the DSA datapath.
+
+Smoking gun: `tm[0x80dc] = 0x40000409` → free-credit field bits[8:3] = **1**.
+The driver's own comment (zx_bmu_free_bp) documents the STOCK value as
+`tm[0x80dc]=0x...111` → bits[8:3] = **34**. So the HW grants only 1 BMU free-credit
+vs stock's 34. zx_bmu_free_bp frees 1 buffer per credit; with credit≈1 and a slow
+HW replenish, 85% of frees time out (tm_bmu_free_fail=25473 vs ok=4274). Un-freed
+BMU buffers get re-DMA'd by HW with their STALE frame contents → the same frame is
+re-delivered to the CPU (137x RX) AND re-egressed (82x TX). It only runs away on
+the DSA path because that path generates the buffer pressure; the legacy path's
+light load stays under the 1-credit ceiling, so it pings clean.
+
+### THE FIX (next): make the BMU grant ~34 free-credit like stock
+tm[0x80dc] is a STATUS reg reflecting the BMU pool/free-FIFO config. mainline's
+zx_tm_bmu_init leaves it reporting 1. Compare zx_tm_bmu_init / zx_tm_bmu_enable /
+the BMU pool sizing (TM[0x8004]=0x0104c040, TM[0x80d0..0x80e0]) against stock's
+pp_bmu_init to find the missing/wrong BMU config that sets the free-credit depth.
+Live now: tm[0x80d0]=07d00000 tm[0x80d4]=ffffff00 tm[0x80d8]=ffffe000
+tm[0x80e0]=00000fb1 tm[0x8004]=0104c040 tm[0x8000]=1. This is the concrete,
+stock-divergent register to fix — verify by re-reading tm[0x80dc] bits[8:3]≈34 and
+re-pinging (expect dups→0).
