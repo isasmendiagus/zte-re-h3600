@@ -375,3 +375,21 @@ NEXT: compare the CLA / CPU-queue classification config (PP_CLA + the per-queue
 CPU-copy/trap mask) eth-dsa-vs-main/stock; find why CPU-bound frames hit multiple
 queues. Likely a CLA "copy to all CPU queues" or trap-mask misconfig triggered by
 DSA. (Build-speed fixed; lan0/1/3 disabled + the no-op port-op bisect reverted.)
+
+## UPDATE 2026-05-31 (DEFINITIVE: legacy vs DSA single-ping comparison)
+Booted the SAME kernel with &switch_dsa DISABLED (legacy) and single-ping BPDUMP:
+  LEGACY:  tm_rx_count=5, ICMP request delivered q4 ONLY (1x), host sees 1 reply
+           (0 dups, CLEAN), loopback-drop fires (catches the device's own reply).
+  DSA:     tm_rx_count=15, ICMP request delivered q4 AND q5 (2x+), host sees 37 (storm).
+⇒ CONFIRMED ROOT: DSA-enable makes the switch/CLA COPY each CPU-bound frame to
+MULTIPLE CPU RX queues (q4+q5...); the driver's napi (rx_head[0..7]) delivers every
+copy → the dup storm. Legacy = one CPU queue = clean. The 8 disproven hypotheses
+(FDB/isolation/flood/BMU/TX-ring/greg-port-ops/cableless/promisc) were all red
+herrings; THIS (multi-CPU-queue classification under DSA) is it.
+NEXT (focused RE, decisive): find WHY DSA-enable changes CPU-queue classification.
+zx-dsa setup() is a stub + doesn't touch the CLA, so the trigger is one of: (a) the
+extra lanN netdevs/queues registered, (b) the conduit's queue/CLA setup differing
+when it's a DSA conduit, (c) a CLA "copy-to-CPU-queues" mask. Compare the CLA / CPU
+trap-queue config (PP_CLA + per-queue masks) and the napi queue set legacy-vs-DSA;
+or restrict the napi to the single primary CPU queue. Build-speed fixed; DT bisect
+reverted (switch_dsa re-enabled, lan0/1/3 still disabled per the prior commit).
