@@ -490,3 +490,17 @@ Stock QMG golden block (devmem2, port1 active, actively trapping):
 Mainline QMG hwtrap=0 (no trap). zx_pkt_port_addr_offset[1]=0x100,[2]=0x180 (uniform, not the bug).
 HYPOTHESIS TO TEST on mainline: poke QMG cfg 0x9234c000=0x01F40FA0 (+ c00c=0x3FF, c010=0xFAA,
 c02c=0x1112 if needed) and/or clear MAC1 ctrl bit16 → see if tm_rx_count starts climbing on jack2.
+
+## GATE LOCALIZED upstream of QMG 2026-05-31 (poke test)
+On mainline (jack2/port1), poked the full QMG block to stock golden (c000=0x1f40fa0, c004=2,
+c00c=0x3ff, c010=0xfaa, c02c=0x1112) AND MAC1 ctrl→0xba6003 (clear bit16). All readbacks
+confirmed. Result: tm_rx_count STILL 0, QMG hw_trap (0x9234c060) STILL 0, host ping 100% loss.
+=> The QMG-cfg/MAC diffs are NOT the gate. The frame is dropped UPSTREAM of the QMG, in the
+ingress classification (SIPC/SDET/SPA/CLA) — it never becomes a QMG trap. Every per-port reg
+compared so far MATCHES stock (SOPC 0x19068=0, STP=0, SPA pkten/match, ISO, MAC-en, QMG cfg).
+NEXT (broad diff): compare SIPC (0x921cc000, the regdump "0xc000" window) and the SDET per-uni
+ingress enable/drop counters between stock(port1 active, trapping) and mainline(port1, trap=0).
+Best method: bulk-dump the NPP ingress region 0x921c0000..0x921d9000 from stock (devmem2) AND
+mainline (mem debugfs) with port1 cabled+active in both, diff → find the one port-1 reg mainline
+doesn't set. (Same approach as the egress diff harness.) The static config is a dead end; the
+gate is a per-port ingress-classify/detect enable not yet in our register map.
