@@ -3538,11 +3538,24 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	if (!ndev)
 		return -ENOMEM;
 	SET_NETDEV_DEV(ndev, e->dev);
-	/* [P1 conduit/DSA] Bind the `sw` netdev to the eth DT node so a DSA switch
-	 * can find it as its conduit via `ethernet = <&eth>`
-	 * (of_find_net_device_by_node matches dev->of_node). Harmless when no DSA
-	 * switch references it. */
-	device_set_node(&ndev->dev, dev_fwnode(e->dev));
+	/* [P1 conduit/DSA] Bind the `sw` netdev to a UNIQUE DT node so a DSA
+	 * switch can select it as conduit unambiguously via
+	 * `ethernet = <&cpu_conduit>`. of_find_net_device_by_node() ->
+	 * of_dev_node_match() walks dev->parent, so binding sw to the shared eth
+	 * controller node would also match idm0/idm1 (same parent) and FIFO
+	 * registration order would pick idm0 (registered first) as the conduit
+	 * instead of sw — breaking the tagger datapath, whose hooks live in the
+	 * sw netdev path. Anchoring sw to the eth node's `conduit` child (which
+	 * idm0/idm1's parent-walk never reaches) makes sw the only match. Fall
+	 * back to the eth node itself when the child is absent (older DTBs). */
+	{
+		struct device_node *cnp =
+			of_get_child_by_name(e->dev->of_node, "conduit");
+
+		device_set_node(&ndev->dev,
+				cnp ? of_fwnode_handle(cnp)
+				    : dev_fwnode(e->dev));
+	}
 	*(struct zx_eth **)netdev_priv(ndev) = e;
 	ndev->netdev_ops = &zx_sw_netdev_ops;
 	ndev->watchdog_timeo = msecs_to_jiffies(5000);

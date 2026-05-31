@@ -66,3 +66,8 @@
 	status = "okay";
 	memory-region = <&eth_carved>;
 };
+
+/* [HW test 2026-05-31] enable the DSA view of the on-chip switch. */
+&switch_dsa {
+	status = "okay";
+};

@@ -224,6 +224,18 @@
 			 */
 			zte,gephys = <&gephy0>, <&gephy1>, <&gephy2>, <&gephy3>;
 			status = "disabled";
+
+			/* [HW test 2026-05-31] Unique anchor node for the CPU-side
+			 * "sw" netdev so a DSA switch can select it as conduit
+			 * UNAMBIGUOUSLY. The controller registers three netdevs
+			 * (sw + idm0/idm1) all parented to this same eth device;
+			 * of_find_net_device_by_node()/of_dev_node_match() walks
+			 * dev->parent, so pointing `ethernet = <&eth>` matched ALL
+			 * three and FIFO registration order picked idm0 (wrong).
+			 * The driver sets only the sw netdev's of_node to this child,
+			 * which idm0/idm1's parent-walk never reaches -> sw wins. */
+			cpu_conduit: conduit {
+			};
 		};
 
 		/* MDIO bus to the four built-in GePHYs. Cross-checked with
@@ -283,35 +295,58 @@
 				#address-cells = <1>;
 				#size-cells = <0>;
 
+				/* [HW test 2026-05-31] TRANSITIONAL: the conduit (zx-eth)
+				 * driver still owns + brings up the 4 GePHYs and their
+				 * MACs via its proven adjust_link path (smac_init +
+				 * speed/duplex + TM link reg — the egress fix). Declaring
+				 * the user ports with phy-handle made DSA's per-port
+				 * phylink ALSO try to phy_connect the same GePHYs -> EBUSY
+				 * and a dangling PHY state machine -> NULL-deref oops in
+				 * netif_carrier_off. Use fixed-link here so DSA does NOT
+				 * fight for the PHYs; DSA only provides the lanN netdevs +
+				 * the tagger datapath. Proper fix (P2): move MAC bring-up
+				 * into zx-dsa phylink_mac ops and restore phy-handle. */
 				port@0 {
 					reg = <0>;
 					label = "lan0";
 					phy-mode = "internal";
-					phy-handle = <&gephy0>;
+					fixed-link {
+						speed = <1000>;
+						full-duplex;
+					};
 				};
 				port@1 {
 					reg = <1>;
 					label = "lan1";
 					phy-mode = "internal";
-					phy-handle = <&gephy1>;
+					fixed-link {
+						speed = <1000>;
+						full-duplex;
+					};
 				};
 				port@2 {
 					reg = <2>;
 					label = "lan2";
 					phy-mode = "internal";
-					phy-handle = <&gephy2>;
+					fixed-link {
+						speed = <1000>;
+						full-duplex;
+					};
 				};
 				port@3 {
 					reg = <3>;
 					label = "lan3";
 					phy-mode = "internal";
-					phy-handle = <&gephy3>;
+					fixed-link {
+						speed = <1000>;
+						full-duplex;
+					};
 				};
 
 				port@5 {
 					reg = <5>;
 					phy-mode = "internal";
-					ethernet = <&eth>;	/* DSA conduit = the sw netdev */
+					ethernet = <&cpu_conduit>;	/* DSA conduit = the sw netdev (unique anchor) */
 					fixed-link {
 						speed = <1000>;
 						full-duplex;
