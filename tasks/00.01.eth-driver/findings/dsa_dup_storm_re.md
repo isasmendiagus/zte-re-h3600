@@ -220,3 +220,23 @@ read-only). The decisive next step is the stock+kprobe comparison of the EGRESS
 path (DSCH/SCH/SOPC send2smac) DSA-vs-legacy to find why one CPU reply egresses
 ~3.6x (fresh) on the DSA path but 1x on legacy — that is a rebuild/instrumentation
 or stock-trace task, not a poke.
+
+## UPDATE 2026-05-31 (GOLDEN stock reference — egress replication CONFIRMED)
+Re-flashed REAL stock to Slot A (flash.py both, ext/partitions/06_kernel1.bin +
+07_rootfs.bin). Stock pings clean 10/10 0-dup 11.6ms. (Stock self-reboots every
+~2-3 min on the bench — watchdog, no PON/WAN uplink; reads are NOT the cause;
+work in the ~140s+ windows.)
+
+reg_diff.py on clean stock, 600-ping flood, IDLE->DURING deltas:
+  QMG sw_fwd (0x9234c044): +193    MAC2 TX-OK (0x92280718): +217   (~0.3-0.36/ping)
+  BMU/IDM regs (0x921c8000..801c): FLAT under load.
+vs MAINLINE-DSA: smac2 TX +14382 for ONE ping (CPU tm_tx_count +176 → ~82x).
+⇒ EGRESS REPLICATION CONFIRMED: stock egresses <=1 frame/ping; mainline replicates
+~14000x/ping at MAC2. The bug is in mainline's EGRESS DATAPATH (TM/DSCH/SCH/SOPC +
+the BMU free starvation feedback), NOT the switch config (matches stock).
+PRIME SUSPECT: mainline DUAL-KICK (zx_sw_xmit kicks BOTH TM[0x10054] UP + TM[0x10064]
+DN rings per TX, same txdesc base — see zx-eth-main.c:3434). Needed for egress to
+work at all (single-kick=100% loss) but may re-inject/replay frames. Next: compare
+stock's CPU-egress inject (QMG sw_fwd, software-forward, no DMA ring per egress
+notes) vs mainline's dual-ring DMA inject; test single-kick / ring-cleanup variants.
+NOTE: reg_diff mislabels 0x921c8000 as BMU; it's IDM CTRL (=0x020f6766).
