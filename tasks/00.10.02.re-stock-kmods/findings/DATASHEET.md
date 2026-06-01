@@ -1120,6 +1120,21 @@ addr→bank: 0..0xff=ram2, 0x100..17f=ram3, 180..1bf=ram4, 1c0..1ff=ram5, 200..2
 
 ## SMAC[N] MAC block — extra runtime regs & counters (from findings, not in smacRegTable)
 Per-MAC stride 0x40000; MAC0=0x92200000 … MAC2(host/LAN3)=0x92280000 … MAC4=0x92300000.
+
+### SMAC↔PHY serializer / iface bring-up regs (decoded 2026-06-01, `smac_serializer_bond_re.md`)
+The per-port bond chain that makes `phy_mac_ready` (0x921d9068 bit port+5, RO serializer-lock — **cannot be forced**, transient) assert: **`pon_reset(1<<(port+6))` = `pon_base+8` bit(port+6) pulse (clear→delay→set; port1→bit7)** → reprogram these MAC iface regs → config_speed_duplex → settle. Stock holds READY by re-running the whole chain every 10 jiffies (`extphy_timer_func`); mainline drove it once on the link edge (port1 fix = re-run in keepalive, branch port1-serializer-fix).
+| offset (per MAC) | value (U-Boot / kmod) | meaning | conf |
+|---|---|---|---|
+| `+0x000` ctrl | 0xBBE003 / 0xBAE003 | bits[1:0]=rx/tx en, b13=1G, b14=100M, b15=half/10M | ✅ |
+| `+0x004` irq mask | 0xFFFE / 0xFFFF | | ✅ |
+| `+0x008` enable | 0x80000001 | | ✅ |
+| `+0x0e0` serializer/iface cfg | 0x00011200 (writes; reads back ~0 = write-once/clock-gated) | the WRITE during bond is what matters | ✅ |
+| `+0x070` | 0x00300002 | IFG/rate | ✅ |
+| `+0x0b4` | 0x00004000 | | ✅ |
+| `+0xb00` | 0x0010FF11 | | ✅ |
+| `+0xd00` (=+0xe0+0xc20) | 0x32 (U-Boot abs) / `&=~0x2` (kmod) | tsf/store-fwd | ✅ |
+| `+0xd30` (=+0xe0+0xc50) | 0xa8 (U-Boot abs) / `&=~0x20` (kmod) | rsf/flow | ✅ |
+
 | offset (per MAC) | phys (MAC2) | R/W | semantic name | meaning | conf |
 |---|---|---|---|---|---|
 | +0x000 | `0x92280000` | RW | CTRL | bit0/1 = rx/tx-enable pair; bit15(0x8000)=static MAC-cfg/link-present (set on live 1G/FD host); bit13 speed/duplex. stock host=0xBAE003 | ✅ |
