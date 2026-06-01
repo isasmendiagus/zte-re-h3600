@@ -361,3 +361,17 @@ All addresses are **raw/logical** port space (port1 = bit1/bit6/bit7).
 5. **Hold test** — let the link idle 30s, re-read `0x921D9068`: port1 bit6/bit1 must STILL be set
    (Fix 2 holds it). If it drops, the heavy keepalive re-run isn't firing for port1 — check the
    `!(reg & (1<<(i+5)))` gate.
+
+## ★ HW TEST 2026-06-01 — HYPOTHESIS DISPROVEN, FIX ABANDONED
+Booted the port1-serializer-fix branch (keepalive heavy re-bond) with ports 1/2/3 cabled. LIVE:
+  0x921d9068 = 0x40 → port1 ready(bit6)=1 admit(bit1)=0; port2 ready(bit7)=0 admit=0; port3 ready(bit8)=0 admit=0.
+  rx_per_ingress = 0 0 33 27 0... → **port2=33, port3=27 DELIVER to CPU with ALL their 0x19068 bits = 0**;
+  **port1 = 0 (fails) even though its READY bit6 IS set.** Admit-bit writes are HW-rejected (dmesg "0x40→0x0").
+=> The 0x19068 SOPC bridge is CONCLUSIVELY NOT the port1 ingress gate (re-confirms the egress saga's
+"stock egresses with 0x19068=0"). Agent A's H1 (decomp triangulation) is DISPROVEN by HW. The fix's
+premise (set admit bit to bond) is false (bit can't be set, and isn't the gate). Also the fix's gate
+(admit-clear) was true for ALL ports → it re-ran reset on the working ports too (not regression-safe);
+port2/3 ingress still climbed but the fix is useless. ABANDONED — branch port1-serializer-fix NOT merged.
+LESSON: test on HW before advancing (the decomp model looked right but HW contradicts it).
+RE-OPENED: port1's gate is in MAC→SPA (SDET uni1≈2 vs uni2/3 high) but NOT 0x19068. port2/3 deliver
+with 0x19068=0; port1 doesn't with ready=1. The real per-port difference is still unidentified.
