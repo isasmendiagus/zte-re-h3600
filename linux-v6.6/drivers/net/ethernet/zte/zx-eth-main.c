@@ -3123,6 +3123,46 @@ static void zx_mac_keepalive_fn(struct work_struct *w)
 		if (!phy || !phy->link || !e->phy_was_link[i])
 			continue;
 
+		/* [port1 serializer-bond fix 2026-06-01 — UNTESTED, verify on bench]
+		 * If this linked port never bonded (SOPC↔SMAC admit bit i is CLEAR,
+		 * i.e. the MAC→fabric bridge never opened so its RX can't enter the
+		 * fabric — the port1/jack2 symptom), re-run the HEAVY bring-up like
+		 * stock extphy_timer_func: pulse the per-port serializer reset, full
+		 * smac_init + config_speed_duplex, then poll READY with a settle delay
+		 * (the bond is transient; mainline's one-shot edge poll fires too early
+		 * on the boot port). GATED on the LATCHING admit bit (NOT the transient
+		 * ready bit) so already-bonded ports (admit set) are NEVER disturbed —
+		 * worst case this is a no-op for an unbondable port, no regression.
+		 * See findings/smac_serializer_bond_re.md. */
+		reg = readl(br);
+		if (!(reg & (1u << i))) {
+			if (e->pon_early) {
+				u32 m = 1u << (i + 6);
+				u32 v = readl(e->pon_early + 8);
+
+				writel(v & ~m, e->pon_early + 8);
+				msleep(5);
+				writel(v | m, e->pon_early + 8);
+			}
+			zx_smac_init_port(e, i);
+			c = readl(mc);
+			if (phy->speed == SPEED_1000)
+				c = (c & ~0x8000u) | 0x2000u;
+			writel(c, mc);
+			msleep(5);			/* let the serializer relock */
+			for (t = 0; t < 40; t++) {	/* longer poll for the transient READY */
+				reg = readl(br);
+				if (reg & (1u << (i + 5))) {
+					writel(reg | (1u << i), br);
+					break;
+				}
+				udelay(100);
+			}
+			writel(readl(mc) | 0x3u, mc);
+			continue;	/* heavy re-run done for this port this cycle */
+		}
+
+		/* Already-bonded port: light steady-state hold only (do NOT reset). */
 		/* re-write running ctrl (config_speed_duplex): gigabit/FD => clear
 		 * bit15, set bit13 (0xBA6003); re-triggers the MAC->PHY handshake. */
 		c = readl(mc);
