@@ -480,6 +480,17 @@ NOTE: SIPC is a SINGLE shared block (NOT per-port) — it cannot discriminate on
 | `0x921d9038` | 5 | RW | [15:0] | smac_delay_cnt_cfg | ✅ |
 | `0x921d9038` | 6 | RW | [20:16] | smac_half_mode | ✅ |
 | `0x921d9038` | 7 | RW | [30:21] | smac_ready_mode | ✅ |
+
+### ★ SOPC↔SMAC bridge `0x921d9068` (NPP[0x19068]) — the per-port MAC→SPA INGRESS admit gate
+(decoded 2026-06-01, `mac_to_spa_admit_re.md`; stock `smac_sopc_mode_switch` plat:2290 + mainline Iter25). Indexed by **raw/logical port** (= phys-MAC-index for LAN0..3).
+| phys | bits | semantic | conf |
+|---|---|---|---|
+| `0x921d9068` | bit(port+5) | **`phy_mac_ready[port]`** — RO, HW sets when serializer/PHY-MAC bonds (p0→b5, p1→b6, p2→b7, p3→b8, p4→b9) | ✅ |
+| `0x921d9068` | bit(port) | **`mac_rx_to_fabric_en[port]`** — RW, SW admits this SMAC's RX into the switch crossbar (p0→b0 … p4→b4). **THE per-port MAC→SPA admit gate.** Stock sets it ONLY after `phy_mac_ready` asserts; mainline mirrors (`if(ready)`). | ✅ |
+| `0x921d9038` | bit(port+16) | `smac_duplex_half[port]` — 0=FD, 1=HD | ✅ |
+| `MAC[port]+0x0` (`0x92200000+port*0x40000`) | [1:0] | RX/TX datapath enable + "MAC-in-fabric"; stock `pon_npp_smac_enable_part_3` sets `\|=3` AFTER the 0x19068 handshake, clears on link-down | ✅ |
+
+**★ port1 ingress root-cause hypothesis (H1):** port1's `phy_mac_ready` (`0x921d9068` bit6) likely never asserts (serializer/RGMII doesn't bond in mainline for port1 — stock bonds it, hence stock pings jack2) → mainline's `if(ready)` guard never sets the admit bit1 → the SOPC↔SMAC bridge stays closed → port1's RX frames never enter the SPA (SPA `rcv_uni1`≈0, SDET uni1 transport≈2) even though MAC1 RX-ok climbs (wire-side, before the bridge). Reconciles the earlier failed poke: poking the admit bit1 alone does nothing because the RO `ready` bit6 (the real HW requirement, needs the serializer bond) can't be forced. NOTE numbering: this block is raw/logical (port1=bit1/bit6), NOT regport. Bench test: read `0x921d9068` with ports 1/2/3 up → expect p2/p3 ready+admit set, **port1 bit6/bit1 clear**; fix is in the per-port serializer bring-up (smac_init), not poking the admit bit.
 | `0x921da000` | 8 | RW | [0] | sp_rr (sched) | ✅ |
 
 ## SPA (stream/source-port classifier)
@@ -645,7 +656,8 @@ NOTE: SIPC is a SINGLE shared block (NOT per-port) — it cannot discriminate on
 | `0x921e01d4` | 10 | RW | [2] | flow_sta_read_clear_en | ✅ |
 | `0x921e01d4` | 11 | RW | [3] | flow_sta_cnt_mode | ✅ |
 | `0x921e01d4` | 12 | RW | [4] | flow_sta_fwd_only_en | ✅ |
-| `0x921e0248` | 13 | RW | [31:0] | g988 rule RAM[idx] (bit20=valid,b18-19 in,b15-17 out) (x65, +0x4/idx) | ✅ |
+| `0x921e0248` | 13 | RW | [31:0] | g988 rule-RAM[0..64] (65 ent, +0x4/idx): **[20]=valid [19]=byte/type [18]=dir(0=us,1=ds) [17:15]=in_port(raw logical) [14:12]=pri(mode2/3) [11:0]=vlan_id(mode1/3)**; slots: mode0=0-7, mode1=8-15, mode3=16-63. Direct MMIO (not via indirect reg0/1/2). Left EMPTY at boot by BOTH stock+mainline. (corrected 2026-06-01, `pm_add_g988_rule` tm:23625) | ✅ |
+| `0x921e0180`/`0x921e01a0` | 6/7 | RW | — | in/out-port rule = `port[2:0] \| valid_en<<3`; idx0..7 is a **positive-match CAM** (lookup by port value, pm_get_*_rule_valid tm:23108), NOT a per-port admit enable. PM is a forwarding AUTHORIZER, **EXONERATED for the port1 ingress gap**. ⚠️ mainline bug: g988_mode `0x20058=0x1`/`0x2005c=0x3` write bits[1:0] but stock targets **bits[3:2]** (correct = 0x4/0xc); latent. | ✅ |
 | `0x921e0380` | 14 | RW | [31:0] | zte_index_cfg (x17, +0x4/idx) | ✅ |
 | `0x921e03c0` | 15 | RW | [31:0] | zte_index_cfg(2) (x17, +0x4/idx) | ✅ |
 
@@ -935,6 +947,8 @@ addr→bank: 0..0xff=ram2, 0x100..17f=ram3, 180..1bf=ram4, 1c0..1ff=ram5, 200..2
 ## SADM (subscriber admission/policing)
 
 **Block base ≈ `0x92384000`** (zx_sadmregtable). Role: per-flow policing, token bucket, pps limits, indirect RAM
+
+**2026-06-01 placement/init (mac_to_spa_admit_re.md):** SADM is **DOWNSTREAM of CLA** in the RX pipeline (SMAC→SOPC-bridge→SPA→SDET→CLA→**SADM**→RED→QMG), and is **per-flow/per-subscriber, NOT per-ingress-port** — it cannot gate the SMAC→SPA handoff. Stock inits it **globally only**: `adm_en 0x92384000[0]=1`, `adm_trap_en 0x92384000[5]=1`, `one_second 0x9238400c=200000000` (`tm_pon_pp_sadm_initial`); the per-port bucket helper `sadm_port_limit` is **never called**, `pon_pp_sadm_init` is a no-op. **Mainline does not init SADM at all.** Indirect RAM: cmd `0x92384014` / done `0x92384018`[0] / data `0x9238401c`. → SADM EXONERATED for the port1 ingress anomaly.
 
 | phys (sub0) | reg_id | R/W | bits | semantic name | conf |
 |---|---|---|---|---|---|
