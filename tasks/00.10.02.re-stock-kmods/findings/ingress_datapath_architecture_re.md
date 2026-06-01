@@ -1,0 +1,43 @@
+# Ingress datapath architecture (RX: LAN → CPU) — synthesis
+
+Status: synthesized 2026-06-01 from the SPA / PP_PM / port-numbering RE agents + prior live findings.
+Companion to the egress model (`eth_pipeline_architecture_2026-05-28.md`). Ties the per-block decodes
+into one coherent ingress model + the port-numbering per stage + where port1 dies.
+
+## The pipeline (LAN frame → CPU)
+```
+SMAC[port] RX  ──►  [MAC→SPA admit/handoff]  ──►  SPA  ──►  SDET  ──►  CLA  ──►  QMG  ──►  SIPC  ──►  TM RX ring → napi → conduit → DSA demux → lanN
+   (phys MAC)         (the OPEN gate)            (uni)     (uni)    (regport)   (trap)   (shared)
+```
+
+## What each stage does (RE'd) + confidence
+- **SMAC[port] RX** — per-port MAC receives off RGMII. RX-ok counter @ `mac_off(port)+0x780`. ✅ (port1 RX-ok climbs clean = frames arrive).
+- **MAC→SPA admit/handoff** — ⚠️ **THE ONE STAGE NOT UNDERSTOOD.** What carries a received frame from the SMAC into the SPA per-uni receive. port1 dies HERE (SPA `rcv_uni1` low, SDET `uni1` transport≈2 vs uni2/3≈229/230). No counter registers the loss.
+- **SPA** (0x921d4000) — parse + classify. match-RAM (ram0, 11 ent) + hash-RAM (ram5, 8 ent) = **PORTLESS** offset/mask/data byte-matchers → action; **mainline leaves them EMPTY (HW reset) → default admit/forward**. Per-entry `pkt_en`(0x14000/04/08)/`pps_en`(0x1400c/10) = all-on. The ONLY per-port SPA surface = `enty_pktdeal_cfg` `0x921d4300+port*0x14` (2-bit action per port×proto) — **port1 == port2 == port3 byte-identical** (live). ⇒ SPA classification EXONERATED for port1. (`spa_match_hash_ram_re.md`)
+- **SDET** (0x921c4000) — per-uni frame-validate/VLAN-admit. maxframe per-port interleaved (port1=`0x4250[13:0]`=0x07cc, correct). Per-uni transport/drop counters `0x921c4160+uni*4`. Drop=0 (SDET doesn't drop port1; frames just don't reach it). (`port1_sdet_ingress_gate_re.md`)
+- **CLA** (0x9238c014 indirect) — per-**inport** classify. ram2-6 hash table keyed by inport (=regport) → trap action `cpu_qid`. **regport2 (=port1) entries valid + identical to working regport3** (clapeek live). EXONERATED. (`cla_ram_layout_re.md`)
+- **QMG** (0x9234c000) — enqueue/trap to CPU. hw_trap counter `0x9234c060`. Climbs for working ports, 0 for port1 (because nothing reaches it). Shaders/credit (SCH/DSCH/RED) ✅.
+- **SIPC** (0x921cc000) — CPU↔fabric bridge. SHARED block (not per-port). drop counters `0x921cc004`=0. EXONERATED.
+- **PP_PM** (0x9239c000) — per-**FLOW** edit/NAT (flow_id, NOT per-port); all entries no-op; symmetric. EXONERATED. (`pp_pm_table_re.md`)
+
+## Port-numbering per stage (the definitive map — `port_numbering_map_re.md`)
+| stage / block | index space | port1 = |
+|---|---|---|
+| SMAC counters / mac_off, desc egress-hint | **phys MAC index** = raw logical | 1 |
+| SPA rcv_uni, SDET uni, RX-desc ingress `(desc[6]>>3&0x1f)-1` | **uni = logical** | 1 |
+| isolation (0x83c0+p*4), FDB D2, CLA inport | **regport** `{1,2,3,4,5,0,6,7}` | **2** |
+| greg/STP/port_closed | identity (variant A, CPU rejected) | 1 |
+| PM in/out rules (0x20180/0x201a0) | raw logical | 1 |
+TWO decomp "getPort" remaps: variant A (greg, identity LAN0..3) and variant B (`getPort@0x4f108` = regport table). DSA `zx_phys_port=identity` is CORRECT for greg. **No block mis-maps port1** — numbering is internally consistent.
+
+## Where port1 dies + what's exonerated
+port1: MAC1 RX-ok climbs (88 clean) → SPA rcv_uni1 low / SDET uni1≈2 → **lost at MAC1→SPA admit**, upstream of SDET, silent. EXONERATED (all identical/consistent to working ports): SPA classify (match/hash/pktdeal/pkt_en/pps_en), SDET, CLA, QMG, SIPC, PP_PM, port-numbering, MAC ctrl/en, isolation, STP, PM rules, broadcast flood.
+
+## Open leads (next, bench)
+1. **The MAC→SPA admit handoff** — the one un-RE'd stage. What feeds SPA `rcv_uni`. The MAC's "forward-to-fabric" / SMAC→SPA recv enable, per-port.
+2. **PM G.988 `in_port_rule_valid` + g988 rule RAM `0x921e0248`** (Agent-redirect) — a per-port surface NOT yet read live.
+3. ⚠️ **Numbering gotcha for pokes:** poke regport-blocks (isolation/CLA) with **regport2**, but SPA/SDET/uni blocks with **uni/logical 1**. Prior "no-effect" pokes may have hit the wrong port-space (regport2 on a uni block = uni2 = logical port2!). Re-audit before concluding a poke "did nothing".
+4. Method: kotrace stock receiving on port1 to capture the MAC→SPA admit sequence (static diff exhausted).
+
+## Bonus: latent DSA-TX egress-hint space (I-3, currently harmless)
+TX egress hint `((eg+0x28)&0x3f)<<4` uses **phys-MAC-index** space; the DSA tagger puts the slave port in `skb->data[1]`. For LAN ports 0..3 logical == phys-MAC-index so it's fine TODAY, but if those spaces ever diverge the tag must be in the MAC-index space. Note for robustness.
