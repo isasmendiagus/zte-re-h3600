@@ -96,3 +96,47 @@ re-seed it live and see unicast recover); (b) check unknown-unicast flood mask i
 NON-AGING FDB entry + re-seed on link-up (adjust_link) + ensure CPU port in the unknown-ucast
 flood mask. 3 research agents dispatched (general patterns+TI doc / silicon lineage / mainline
 DSA CPU-port FDB+flood+link-up patterns) to ground the exact mechanism + fix.
+
+---
+## Iteration 2026-06-03 (cont.) — 3 research agents landed + more live negatives
+
+LIVE NEGATIVES (none recovered unicast→CPU in the wedged state; all reversible/restored):
+- Add CPU to unknown-unicast flood bitmap: PP[0x8340] 0x015555ff→0x215555ff (set bit5/0x20).
+  No recovery. ⇒ drop is UPSTREAM of the flood/forward decision (active OPC drop, not flood-miss).
+- Re-seed CPU/own MAC into sbrag FDB → CPU port via debugfs `fdbadd` (`echo 5 f4:f6:47:0f:42:64
+  > /sys/kernel/debug/zx_eth/fdbadd`, rc=0). No recovery. ⇒ either wrong port/table, or the
+  CPU-MAC trap doesn't go through the sbrag FDB (the own-MAC is also "spa+pp_pm registered" at
+  probe, ~line 2273 — the my-MAC trap match may live in SPA/PP_PM, not sbrag).
+- (earlier this iter) RED block disable + QMG up_ram_thd raise: no recovery.
+Per-stage still: smac1 good_uc +5 → UP hw_trap +1 (NO trap) → drop_RED(0x1a044) +5.
+
+RESEARCH (3 agents, full reports in session; key cites):
+- IP lineage (agent 2): the switch/TM is ZTE Sanechips (ZXIC) IN-HOUSE IP (CONFIG_ZX_TM /
+  PLAT_ZXYLZB_128S; same zte,zx29xxxx family as mainline zx296702). NO public SDK/datasheet
+  with register semantics — the decompiled tm.ko/plat-zxylzb + our RE are the ONLY source.
+  No public erratum for this symptom (novel finding). HW manual paywalled (scribd 787350189).
+- DSA patterns (agents 1+3, strongly corroborated): "broadcast-to-CPU works, unicast-to-CPU
+  drops" is the TEXTBOOK signature of: HW FDB used as a DA filter for the CPU port + flood-to-
+  CPU off + the host/CPU-MAC FDB entry being aged/evicted/flushed. Canonical mainline fix:
+  install host MAC (and each user-port MAC) as STATIC NON-AGING FDB entries → CPU port
+  (dsa_switch_host_fdb_add→port_fdb_add), ensure port_fast_age flushes DYNAMIC only, re-apply
+  on link-up, and/or put CPU in the unknown-unicast flood mask (mt7530 UNU_FFP analog), and
+  optionally assisted_learning_on_cpu_port. Refs: https://lwn.net/Articles/886699/ ,
+  https://docs.kernel.org/networking/dsa/dsa.html , mt7530 UNU_FFP +
+  https://lore.kernel.org/all/20230210172822.12960-1-richard@routerhints.com/ .
+  RED-lockout (agent 1): RED EWMA average only decays on packet ARRIVAL; if it latches high and
+  all packets are then dropped, it never decays → permanent drop; disabling the RED *block*
+  does NOT clear the latched average (matches our negative). Fix = explicitly CLEAR the per-
+  queue RED average register at init + link-up. Ref Floyd/Jacobson https://www.icir.org/floyd/red.html
+
+SYNTHESIS / remaining leads (the lever NOT yet found, since flood-mask + sbrag-reseed failed):
+1. ★ The CPU-MAC trap mechanism in THIS chip may be the SPA/PP_PM "my-MAC" match (registered
+   at probe, ~line 2273), NOT the sbrag FDB. Under load/relink that registration may be lost.
+   NEXT: RE how stock traps the device's own MAC to CPU (SPA/PP_PM my-MAC table); peek/compare
+   that table wedged vs boot; re-apply it live.
+2. ★ RED EWMA latch on the CPU-trap queue — clearing the *average* (not disabling the block).
+   NEXT: find the per-queue RED average reg (RED indirect read at 0x92344014/18/1c+) or whether
+   re-running zx_red_set_queue_cfg for the trap queue resets it; test live.
+3. The fix is almost certainly a LINK-UP/periodic RE-APPLY of the CPU-trap state (FDB/my-MAC +
+   RED clear + flood) — but must be validated by finding the live recovery lever first (coding
+   the flood/sbrag re-apply is premature since both failed live).
