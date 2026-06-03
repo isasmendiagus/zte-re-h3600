@@ -159,3 +159,24 @@ WHAT THIS SESSION DELIVERED (all merged to main / committed):
  - ping (1) ✅, bridge comm (2) ✅ (SW, light/moderate load). Performance (3) 🔴 — needs HW fwd.
  - Full RE map of the trap-all mechanism + the precise next-step (above) on branch
    hw-bridge-offload (the zx_spa_pktdeal experiment param can be reverted; it's harmless).
+
+---
+## Iter C (overnight, user supervising, runway to 07:00 UTC) — narrowing the CLA trap-all
+Found the CLA default-flow + action cfg regs (driver does NOT write them, at reset/replay value):
+  oth_l3_pkt_action 0x9238c0cc=0, dn_unknown_da_action 0x9238c0d0=1 (act∈{0,1,2,3}, claReg 0x16),
+  up_l2_uni_default_flow_cfg 0x9238c0fc (x9, reg23, set via cla_set_up_l2_uni_default_flow_cfg
+  @decomp 0x11f64 — per-uni struct), dn_l2_default 0x9238c11c, up_l3 0x9238c120, dn_l3 0x9238c124.
+But the static-FDB test already showed KNOWN unicast (FDB-hit) STILL traps → the default-flow (for
+UNMATCHED frames) is not the (only) cause.
+
+★ REAL trap-all suspect = the CLA ram2-6 per-inport HASH entry's TRAP ACTION. Datasheet: ram2-6
+hold "inport VALUE + trap action cpu_qid + cpu_qid_rp_en + valid_en/direct". If every inport's
+hash entry carries an ACTIVE trap-to-CPU action (cpu_qid_rp_en set / direct), the frame traps to
+cpu_qid REGARDLESS of the L2 DA-forward result — exactly matching "known unicast still traps".
+The port1 saga found regport2==regport3 entries (identical, valid, trap action) → ALL ports trap.
+Stock has the SAME entries yet HW-forwards → the trap must be CONDITIONAL on a field
+(cpu_qid_rp_en? a global mode?) that differs, OR stock's forwarding path bypasses this.
+NEXT: clapeek the ram2-6 entry for a LAN inport (regport for lan1/lan3), decode the trap-action +
+cpu_qid_rp_en field, and poke-test CLEARING the trap action (or cpu_qid_rp_en) for that inport →
+re-run the fwd test → if hw_fwd climbs, that's the lever (then code it as port_bridge_join). RISK:
+clearing trap for the CPU inport breaks mgmt — only touch the LAN inports.
