@@ -103,3 +103,23 @@ The auto_bootm-direct path desyncs if TFTP is slow. The reliable flow:
   - Rebuild first if code changed: `python3 tasks/00.01.eth-driver/scripts/build_slotA.py`.
   - tftp_boot_mainline.py also produced slotA.bin+header for `flash_mainline.py` (NAND persist) if
     TFTP ever too fragile — but RAM boot is faster for the loop.
+
+---
+## Iter B RESULT — pktdeal=0 is NOT the HW-fwd lever (negative, but informative)
+Booted zx_spa_pktdeal=0 (confirmed "applied val=0" in log, no panic). Tests:
+- ping-to-device (host .50 -> br0 .99) = 4/4 0% loss ✅ → the ONU-MAC trap is INDEPENDENT of SPA
+  pktdeal; CPU mgmt connectivity SURVIVES pktdeal=0. (Good safety result.)
+- LAN<->LAN fwd test (nsA jack2 <-> nsB jack4 through br0) = 6/6 ping, BUT QMG hw_fwd(0xc05c)
+  stayed at 1 (did NOT climb), hw_trap(0xc060) +30, tm_rx +32. ⇒ STILL CPU/SW-bridge forwarding,
+  NOT HW. **SPA pktdeal is NOT the trap-all lever.**
+⇒ The trap-to-CPU happens regardless of SPA pktdeal — the lever is deeper: either the CLA
+per-inport trap action (replayed from stock zx_cla_table) OR the HW FDB never learns (so DA
+lookup always misses → trap), likely because the CLA traps the frame to CPU BEFORE the SBRG
+learn/forward stage runs. NEXT: (a) decisive test — statically add both host MACs to the HW FDB
+(debugfs fdbadd) pointing at lan1/lan3 + static host ARP, ping, check hw_fwd: if KNOWN-unicast now
+hw_fwds → learning was the issue; if still traps → the CLA traps regardless of FDB = the CLA is
+the lever (deep). (b) the CLA is replayed byte-for-byte from stock yet stock HW-forwards — the
+fundamental puzzle (why same CLA traps in mainline but forwards in stock) may be architectural.
+ASSESSMENT: HW forwarding is looking like a DEEP blocker (CLA trap-all, replayed-from-stock,
+risky to change). pktdeal param left in (harmless, default 0). Continuing but flagging possible
+honest dead-end if the CLA proves architectural.
