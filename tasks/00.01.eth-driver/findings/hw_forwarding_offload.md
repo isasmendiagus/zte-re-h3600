@@ -851,3 +851,35 @@ ALTERNATIVE/robust (if race-fix insufficient): eliminate the CPU trap path entir
 reverse (UP/ACK) direction HW-forward like the DN dir (stock forwards BOTH dirs, never traps bulk) —
 the DN/UP asymmetry (why ACK dir traps, Iter Q) — then the RX trap ring is never stressed. Also retry
 the real LAN↔LAN sustained-TCP test once the host USB hub settles (both r8152 NICs were dropping).
+
+================================================================================
+## Iter W (2026-06-04 ~02:45 UTC) — NAPI re-arm fix tried + REVERTED; re-think the test methodology
+
+Implemented the Iter V "re-check pending after unmask + napi_schedule" re-arm in zx_tm_napi_poll,
+rebuilt, booted, single-NIC flood (5000 ICMP→br0 10.0.0.3). RESULT:
+  tm_napi_count=235467 (busy-loop!), tm_irq=191, tm_rx_count=922, RED[0x1a044]=4005, 82% ping loss.
+⇒ TWO findings: (a) the re-check BUSY-LOOPS — TM_RX_QCNT low16 reads nonzero when the queue is empty,
+so napi reschedules forever (235k polls, CPU hog). (b) MORE IMPORTANT: even with NAPI running
+constantly, tm_rx STILL capped at ~922 and RED dropped 4005 → NAPI scheduling is NOT the bottleneck.
+The NAPI-rearm-race hypothesis (Iter V) is RULED OUT. REVERTED the change (net-negative).
+
+⇒ The consistent signal across ALL iterations: under any CPU-bound flood, RED[0x1a044] drops heavily
+and CPU delivery caps at ~900-1024. RED drops trap-bound frames BEFORE the CPU RX ring.
+
+### ⚠️ METHODOLOGY RE-THINK (important): the single-NIC ICMP-flood "wedge" proxy is SUSPECT:
+- 82% loss at only ~95 pps (ping -f rate-limited) is absurd for RED rate-limiting → likely the HOST
+  USB NIC (jack2, on the flaky hub) is dropping, NOT purely the device. The test is contaminated.
+- ICMP-to-the-device-IP traps to CPU and RED-dropping an ICMP flood is partly CORRECT behavior —
+  stock ALSO traps + RED-limits ICMP (Iter P). So this proxy is NOT representative of the real goal.
+- The DEFINITIVE test is the 2-NIC LAN↔LAN sustained TCP (the actual streaming use case), measured
+  ONCE (Iter Q: collapsed 51→1.5 Mbit/s) — but that run also had USB flakiness in play.
+
+### NEXT FIRE: (1) rebuild the reverted tree + boot clean. (2) PRIORITIZE a STABLE 2-NIC setup: check
+both r8152 NICs are present+stable (the host USB hub must settle; if a NIC keeps dropping, try a
+different USB port / powered hub, or note the HW blocker clearly). (3) Run the REAL LAN↔LAN iperf3
+TCP -t30 through br0=lan1+lan3 — the ONLY definitive measure. If it SUSTAINS → there was no real
+wedge for TCP (the ICMP-flood was an artifact) → STABLE STREAMING, document WIN. If it genuinely
+collapses → THEN the lever is RED dropping the reverse-ACK trap frames: identify the CPU/trap queue
+index + its per-queue RED out-buffer threshold (red_set_out_buffer_queue_cfg; stock q16-335 max=0x7ff)
+and compare mainline zx_tm_red_init's per-queue values to stock; raise the CPU queue's RED threshold.
+Stop chasing the contaminated single-NIC ICMP proxy.

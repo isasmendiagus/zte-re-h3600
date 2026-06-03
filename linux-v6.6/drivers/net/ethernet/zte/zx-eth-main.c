@@ -3043,6 +3043,13 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 		napi_complete_done(napi, done);
 		/* Re-arm: CLEAR mask bits to re-enable IRQs (1=masked semantics) */
 		tm_and(e, TM_REG_IRQ_MASK, ~(u32)TM_IRQ_ARM_BITS);
+		/* [Iter W 2026-06-04] A pending-recheck+napi_schedule re-arm was tried
+		 * here to close a suspected missed-IRQ race — REVERTED: it busy-looped
+		 * (TM_RX_QCNT low16 reads nonzero when empty → 235k polls) AND did NOT
+		 * raise throughput (tm_rx still capped ~922 under flood, RED dropping
+		 * 4005). ⇒ NAPI scheduling is NOT the bottleneck; RED drops trap-bound
+		 * frames BEFORE the CPU RX ring. See findings Iter W.
+		 */
 	}
 	return done;
 }
