@@ -389,3 +389,32 @@ opensource.ztedevices.com (Wireless Home Gateway); ZTE owes source for 3yr from 
 filing for the H3600 (cite the GPL kernel + in-firmware tm.ko/plat-zxylzb), escalate to the
 shipping carrier / FSF gpl-violations if refused. (Surfaced to the user — their GPL point is
 correct; ZTE is non-compliant in practice.)
+
+---
+## ★★★ Iter K — FFE OFFLOAD CHAIN FULLY MAPPED (RE-able end-to-end): it's the ACL L3-hardfast engine
+Using Ghidra (vmlinux project decompile-by-address, Jython) + the switch.ko decomp, traced the
+COMPLETE FFE flow-offload chain:
+  ffe_learn_skb (vmlinux c04511f4: builds flow-key, MUST run in softirq) → notifier_call_chain
+   → npu_drv_create_flow (switch.ko 0x21d10) → create_flow_part_2 (5-tuple descriptor)
+   → (*npu_hff_func_tbl) == hf_set_l3_entry (switch.ko 0x12de8)
+   → sw_acl_l3_hardfast_session_add (0x12d7c) → sw_acl_l3_hardfast_session_add_part_1 (0x125e0)
+   → builds a 0xa0(160)-byte ACL session entry (5-tuple match + fwd action/egress) via
+     sw_acl_setMtchInfo (0x11b38) / sw_acl_add_port_flowconfig (0x11e58) → programs the ACL HW.
+The 4 HW funcs registered via npu_hff_register (from l3_hardfastReg @0x12404) are:
+  hf_set_l3_entry (INSERT), hf_del_l3_entry, hf_query_l3_status, hf_entry_police2 — ALL in switch.ko.
+
+⇒ THE FFE/NPU "flow offload" that gives stock 292 Mbit/s = the switch's **ACL engine running L3
+"hardfast" sessions**: when the CPU learns a flow (ffe_learn_skb), it installs an ACL session
+(5-tuple→forward-in-HW) so subsequent packets bypass the CPU. This is FULLY reverse-engineerable
+from the decompiled switch.ko (only the ffe_learn_skb GLUE is in vmlinux, and we have vmlinux.elf
++ a working Ghidra decompile pipeline for it). The "vmlinux out of reach" dead-end was WRONG.
+
+TO IMPLEMENT in mainline (well-defined now): (1) decode sw_acl_l3_hardfast_session_add_part_1's
+160-byte ACL entry format + sw_acl_setMtchInfo + the ACL HW registers (ACL base — reserve_mem
+ZX_ACL_BASE; the ACL indirect-RAM write); (2) hook flow-learn (e.g. on the bridge/forward path,
+or a conntrack/flow-offload shim) to build + install the ACL session for established LAN<->LAN
+flows; (3) age/delete via hf_del_l3_entry. Substantial but concrete + resourced.
+NEXT: decompile sw_acl_l3_hardfast_session_add_part_1 + sw_acl_setMtchInfo (switch.ko) to C
+(Ghidra by-address on the kmods project, or read the decomp directly) → extract the ACL entry
+fields + the HW register sequence. Then prototype: poke an ACL hardfast session for a test
+LAN<->LAN flow on mainline + measure hw_trap (should stay flat = offloaded).
