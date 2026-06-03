@@ -792,3 +792,34 @@ stock's two-call split). Then rebuild → boot → iperf3 TCP → tm_rx_count cl
 firing, throughput SUSTAINS = STABLE LAN STREAMING. (Caution: only release slots HW actually produced
 — if the scan skips truly-unproduced slots, releasing them over-credits; verify by watching pending
 not go negative / no spurious RX. Stock releases the full scanned range, so follow that.)
+
+================================================================================
+## Iter U (2026-06-04 ~01:45 UTC) — slot-release fix implemented (kept, stock-match) but wedge PERSISTS
+
+Implemented the Iter T fix in zx_tm_net_poll: track start_head, release the FULL ring-slot advance
+(slots = (rx_head-start_head)&1023) via stock's two-call split — zx_tm_release_rx_desc_raw(q,slots-ack,0)
++ (q,ack,1). Built (build_slotA) + booted clean. KEPT (it matches stock pon_tm_net_poll and is more
+correct), but it did NOT fix the wedge.
+
+### Test (hampered by host USB instability):
+- LAN↔LAN iperf BLOCKED: both host r8152 USB NICs (jack2 enxc8a362e95900, jack4 enx6c70cbb68169)
+  dropped off the USB bus mid-setup (dmesg: usb 3-1.2/3/4 disconnect; a NIC reappeared as
+  enx2c9975313ea9 then also vanished). Host USB-hub flakiness (user flagged the hub earlier). The
+  DEVICE console (UART /dev/ttyUSB0 → :9999) stayed alive throughout — device fine.
+- Single-NIC trap-flood test (jack2 stable in nsA → 6000 ICMP to br0 IP 10.0.0.3 = trap-to-CPU):
+  tm_rx_count latched at 1020, tm_irq_count froze at 1003, 84% loss → STILL WEDGES at ~1024. NOTE
+  this single-flow path has NO skipped slots (slots==ack), so the new sop=0 release never fired —
+  this test doesn't exercise the fix; but it proves the ~1024 latch has a cause beyond skipped slots.
+
+### ⇒ The ~1024 latch now survives THREE fixes: BP pool (1024→8192), RED share-pool, slot-release.
+Common factor = something sized ~1024 in the CPU RX trap path that, once consumed, isn't replenished
+and tm_irq stops (~1003). Remaining suspects (NEXT, needs live instrumentation at the wedge moment):
+  (a) BMU/BPPE buffer REPLENISH: does zx_bmu_free_bp actually write freed bp indices back into the
+      bppe[] ring + advance a HW producer cursor (tm[0x80dc] refill bits 8..13 per the @line 337
+      comment), or only decrement a SW credit? If HW pulls bppe[0..1023] once and SW never refills
+      the bppe ring, HW starves at ~1024 regardless of pool size. Compare stock pon_tm_bmu / the
+      free path. THIS is the leading suspect (explains 1024-independent-of-pool + IRQ stop).
+  (b) trap/RX IRQ GIC re-arm: read TM IRQ_STATUS(0x100)+mask + the per-q pending(tm[0x10100+q*4])
+      AT the wedge — if pending>0 but no IRQ → GIC line not re-asserted (level-trig mask bug).
+  (c) wait for host USB to stabilize → run the real LAN↔LAN sustained-TCP test (the actual goal).
+Device on mainline (wedged). Fix committed. host USB hub needs to settle for clean 2-NIC testing.

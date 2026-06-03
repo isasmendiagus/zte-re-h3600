@@ -2844,7 +2844,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 						 * in LOW16. Prior `status >> 16` was
 						 * always 0 → NAPI saw no work.
 						 */
-		u32 take, n, ack = 0;
+		u32 take, n, ack = 0, start_head, slots;
 
 		if (!pending) {
 			if (e->tm_napi_count < 5 && q == 0)
@@ -2855,6 +2855,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 
 		take = min_t(u32, pending, (u32)(budget - done));
 		take = min_t(u32, take, TM_RX_DESC_PER_Q);
+		start_head = e->rx_head[q];	/* [Iter U] remember ring pos to release the FULL advance */
 
 		/* [Iter 31] HW writes RX descs out-of-order: in queue 5, first
 		 * frame at idx 0, subsequent at idx 12+. SW rx_head[q] advance
@@ -3022,9 +3023,20 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 			ack++;
 		}
 
-		/* ACK to HW so pending count decrements (stock: soft_release_rx_desc) */
+		/* ACK to HW so pending count decrements (stock: soft_release_rx_desc).
+		 * [Iter U 2026-06-04] WEDGE FIX: release EVERY ring slot the poll
+		 * advanced past, not just the `ack` delivered frames. The scan-forward
+		 * (skip len=0/stale descs) moves rx_head past skipped slots; if those
+		 * are never released, HW's free-slot count never recovers and after one
+		 * TM_RX_DESC_PER_Q wrap the RX engine stops producing (tm_irq_count
+		 * freezes) — the unicast→CPU wedge. Stock pon_tm_net_poll releases the
+		 * full scanned range in two calls (sop=0 non-delivered + sop=1 delivered).
+		 */
+		slots = (e->rx_head[q] - start_head) & (TM_RX_DESC_PER_Q - 1);
+		if (slots > ack)
+			zx_tm_release_rx_desc_raw(e, (u8)q, (u16)(slots - ack), 0);
 		if (ack)
-			zx_tm_release_rx_desc(e, (u8)q, (u16)ack);
+			zx_tm_release_rx_desc_raw(e, (u8)q, (u16)ack, 1);
 	}
 
 	if (done < budget) {
