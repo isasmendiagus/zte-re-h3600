@@ -373,3 +373,28 @@ BENCH NOTE: jack3 NIC enx2c9975313ea9 vanished (USB re-enumerated under heavy te
 
 STATUS: offload_fwd_mark fix committed (SW-bridge stopgap). HW forwarding is CLOSE (enable regs
 on) — needs the flood-mask config and/or CLA un-trap, then code+rebuild+test. Multi-cycle feature.
+
+---
+## Iteration 2026-06-03 (cont.10) — BRIDGE COMM WORKS (SW); HW-fwd blocker = CLA trap-all
+
+Progress: with the offload_fwd_mark fix (cont.7) + flood masks poked (brdcst_fwd_en 0x92388300
+[15:8]=0xff, unknown_ucast_fwd 0x92388340[31:24]=0xff), **bridge comm WORKS**: ping nsA(jack2/
+lan1)->nsB(jack4/lan3) through br0 = 6/6 0% loss, ttl=64 (L2). ✅ case ② functional.
+BUT it's SOFTWARE bridging (CPU): tm_rx climbed +31 for 6 pings, and a 30MB bridge stream climbed
+tm_rx +573 (1:1 with frames), got <6.9 Mbit/s, and WEDGED (ping 100% loss after). So bridge comm
+works at light load but is CPU-bound + wedges → NOT the HW forwarding the user needs for perf.
+
+★ HW-FWD BLOCKER NAILED: the switch has transfer_en/smac_look/da_lookup/learn_mode/flood ALL on,
+yet every frame still traps to the CPU (tm_rx climbs 1:1). ⇒ the **CLA traps everything to CPU**
+(per-inport hash RAM trap action / def_ptl_pkt_map cpu_qid) BEFORE/INSTEAD OF the L2-forward
+decision. For HW forwarding the CLA must do a SELECTIVE trap (trap only CPU-destined: own-MAC,
+control protocols; FORWARD the rest in HW). The current trap-all is the "safe dumb" config the
+mainline driver uses (CPU does all switching). Un-trapping is the real HW-offload feature — and
+it's RISKY (wrong un-trap breaks CPU connectivity: ARP-to-device, management). This is the deep
+remaining work (the original port1 saga lived in the CLA). Next: RE how stock's CLA decides
+forward-vs-trap (cla ram2-6 trap action, def_ptl_pkt_map) and whether a config makes L2-known
+traffic HW-forward while still trapping CPU-destined.
+
+CURRENT FUNCTIONAL STATE: ① ping ✅  ② bridge comm ✅ (SW, light load)  ③ perf/streaming 🔴
+(wedges; needs HW forwarding = CLA un-trap). offload_fwd_mark fix committed. Flood-mask enable
+still needs to move from poke into driver code (zx_sbrg_l2_fwd: brdcst_fwd_en + unknown fwd).
