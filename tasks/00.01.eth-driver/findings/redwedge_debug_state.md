@@ -171,3 +171,40 @@ which the block-enable bit does not do. NEXT (needs more RE or a rebuild):
 3. Belt-and-suspenders per agents: also program host/user MACs as STATIC non-aging FDB→CPU and
    re-apply CPU-path state on link-up (even though the flood/sbrag pokes alone didn't recover a
    table that's already intact — they matter once learning/aging is involved).
+
+---
+## Iteration 2026-06-03 (cont.3) — stock decomp checked; HONEST DEAD-END for cheap approaches
+
+Checked stock decomp (decomp_all_tm.c / plat_zxylzb): `tm_pon_tm_initial` (red+qmg+sch+reg init,
+@0x54258) is BOOT-ONLY. The lan_up handler `tm_set_p2pmode` (@0x464c0) only sets lan_up_port +
+tm_set_pp_wan_cfg — it does NOT re-run red/qmg init. `tm_pon_tm_qmg_initial` sets up_thd=0x50/
+dn=0x1fa0 gated on lan_up but is called from the boot init path, not on link transitions. So
+stock does NOT "re-init on link-up" — it simply never wedges. ⇒ the easy "re-apply init on
+link-up" fix has no stock precedent to copy.
+
+ALSO tried this iteration: re-applied q2's RED queue cfg (types 0/2/4) via the indirect iface
+(TM[0x4014] cmd + 0x401c/20/24/28 data) → no recovery. CAVEAT: did not verify each indirect
+write committed (no idle-wait on TM[0x4018] between pokes; the iface is write-only/hard to read
+back), and q2 may not be the unicast cpu_qid's RED index — so this single negative is not
+conclusive proof that "config re-write can't clear the latch", only that this attempt didn't.
+
+CONCLUSION (cheap live-poke approach EXHAUSTED): the unicast→CPU drop is a latched state in the
+TM/QMG/RED/OPC block that is NOT cleared by any config register I can reach via poke (RED-block
+enable, up_thd, flood mask, sbrag FDB, RED per-queue cfg) and NOT a registration loss (SPA
+ONU-MAC my-MAC trap table verified intact). Only a full reboot (HW reset) clears it. This is an
+undocumented in-house ZTE Sanechips silicon behaviour with no public datasheet/SDK (agent 2).
+
+REMAINING OPTIONS (all expensive/uncertain — need user decision):
+ A. Find a TM/QMG/RED block SOFT-RESET bit (stock decomp deep-dive for *_srst / reset regs) that
+    clears the latch without a reboot, then trigger it from a driver watchdog (detect wedge:
+    drop_RED climbing while host-RX idle) or on link-up. MOST LIKELY to actually work.
+ B. Deep stock-vs-mainline RED/QMG config diff for the CPU trap queue (maybe stock's per-queue
+    RED thresholds for the cpu_qid are set so a CPU-terminated burst never saturates). Multi-
+    session RE.
+ C. Accept as a documented KNOWN LIMITATION: port1 (and all ports) work bidirectionally on a
+    clean boot (the merged gate fix is verified); sustained CPU-terminated bulk load OR a cable
+    replug wedges unicast→CPU until reboot. The port1 deliverable is met; this is an edge-case.
+
+NB the agents' FDB/static-host-entry fix (broadcast-works/unicast-drops = unknown-unicast-to-CPU)
+is the textbook cause BUT here the my-MAC trap table is intact and re-seeding sbrag didn't help,
+so the FDB angle does not fit this instance — it's the RED/OPC latch, option A is the lead.
