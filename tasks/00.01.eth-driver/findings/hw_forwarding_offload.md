@@ -297,3 +297,27 @@ real "offload" — a separate feature. NEXT: stress-test stock under SUSTAINED b
 wedge like mainline, or stay stable?) to confirm the wedge is the key fixable diff; then pursue
 the wedge fix (RED/OPC latch recovery) for stable streaming. HW-fwd dead-end is RESOLVED as a
 non-goal.
+
+---
+## ★★★ Iter H — THE ANSWER: stock uses FFE flow offload (292 Mbit/s); mainline lacks it
+Stress-tested stock under SUSTAINED bulk: 30MB nsA->nsB (jack2<->jack4) THROUGH stock =
+**0.82s = ~292 Mbit/s, COMPLETE, STABLE, no wedge** (ping after 3/3). Stock hw_trap (0x9234c060)
+climbed only **+280** across the ~20000-packet 30MB blast (0x1d9→0x2f1). So only ~280 packets
+(the learning/slow-start phase) hit the CPU; the remaining ~19700 were OFFLOADED TO HARDWARE.
+
+⇒ DEFINITIVE: stock achieves stable high-throughput LAN<->LAN via the **FFE flow fast-path**
+(hardware flow offload) — NOT basic-L2 hw_fwd (which is 0). After the CPU learns a flow
+(ffe_learn_skb), the FFE offloads it to HW → line-rate, CPU untouched. MAINLINE has NO FFE → every
+packet stays CPU-forwarded → <7 Mbit/s AND the CPU path saturates/WEDGES. **The "wedge" is a
+SYMPTOM of missing FFE** (the CPU drowns in traffic that stock offloads to HW).
+
+THE REAL TARGET for stable streaming = implement the FFE flow offload in the mainline driver.
+PROVEN correct (stock = 292 Mbit/s via FFE). This supersedes BOTH the "HW L2 forwarding" goal
+(false premise) AND treating the wedge as the root cause (it's a symptom). NOTE: ffe_learn_skb
+lives in stock VMLINUX (not the decompiled .ko) per the egress saga — so FFE RE needs the chip's
+FFE flow-table HW registers + how stock programs them (datasheet FFE block / runtime trace),
+a substantial but now-correctly-targeted feature.
+NEXT: RE the FFE — find the FFE/flow-table HW block (registers/indirect-RAM), how stock learns +
+programs a flow into it, and what mainline must do to offload established flows. Start: datasheet
++ decomp for ffe_*/flow-table/napt regs; dump stock's FFE block before/after a flow; find the
+flow-insert path.
