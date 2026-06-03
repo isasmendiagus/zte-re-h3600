@@ -345,3 +345,27 @@ soft-reset/watchdog recovery (pon_reset + re-init) from the redwedge investigati
 MORNING-SUMMARY-READY CONCLUSION: stock's 292 Mbit/s is FFE/NPU (vmlinux, out of reach). Mainline
 can at best do stable-but-slow CPU forwarding (if the wedge is fixed). True high-throughput needs
 the NPU/FFE = a dedicated vmlinux-RE project.
+
+---
+## ★ Iter J — CORRECTION: FFE is RE-able (NOT a dead-end). NPU driver in .ko + vmlinux.bin present
+User was right — I gave up too fast. The NPU/FFE IS reverse-engineerable:
+- The FULL npu_drv_* family IS in switch.ko decomp: npu_drv_create_flow (0x21d10) →
+  create_flow_part_2 (builds a 5-tuple flow descriptor from the skb) → calls a registered HW-write
+  func pointer (*DAT_0002b914)/(*npu_hff_func_tbl). npu_drv_{delete,refresh,free,dup}_flow,
+  create_multivlan, indev_learn/outdev_learn all present + real.
+- npu_hff_register(funcs[4]) (switch.ko 0x202d4) registers the 4 HW-write func pointers
+  (npu_hff_func_tbl=funcs[0], DAT_0002b90c/910/914=funcs[1..3]) then npu_register_driver(&npu_drv).
+  The CALLER that passes the 4 funcs = the "FastForward"/"KFASTFORWARD" module, which lives in
+  stock VMLINUX — and **ext/extracted/vmlinux.bin (6.9MB) IS PRESENT** (strings: ffe_learn_skb,
+  ffe_learn_passed_dev, FastForward, KFASTFORWARD). So the FFE flow-table HW-write funcs are
+  recoverable by disassembling vmlinux.bin around those symbols.
+- ALSO present: ext/<HW manual PDF> (V1.0 2018 — SCANNED/no text layer, would need OCR), stock
+  .ko set (switch.ko/tm.ko/plat) in ext/rootfs/kmodule/, ext/extracted/{vmlinux.bin,zImage,uImage}.
+- Device is GPL → ZTE must publish the kernel+driver source (incl. FastForward/NPU). GPL-source-
+  search agent dispatched.
+⇒ FFE OFFLOAD IS A REAL, RESOURCED RE TARGET (supersedes the "vmlinux out of reach" dead-end).
+NEXT: (a) await the GPL-source agent (the actual FastForward/npu source would shortcut everything);
+(b) disassemble ext/extracted/vmlinux.bin (arm-linux-gnueabi-objdump; find ffe_learn_skb +
+npu_hff_register's caller → the 4 HW-write funcs → the NPU flow-table register interface);
+(c) then define + implement the mainline FFE-offload (load NPU fw if any + the flow-insert path).
+This is a substantial multi-session feature but the PATH IS CLEAR with all resources in hand.
