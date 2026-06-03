@@ -2018,6 +2018,13 @@ static int zx_cla_read_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr, u32 data
 	writel(ram_addr | ((u32)ram_id << 22) | CLA_RAM_READ, e->base + CLA_REG_CMD);
 	if (zx_cla_wait_done(e))
 		return -EBUSY;
+	/* NOTE (2026-06-01): this back-to-back indirect read returns data[1..16]
+	 * correctly but data[0] (word0) is OFFSET BY ONE ENTRY — readback word0 of
+	 * the entry at addr A actually yields the NEXT entry's word0 (verified 7/7
+	 * vs zx_cla_table.h: read[A].word0 == table[A+1].word0). Stock's fpga path
+	 * does not show this (its CMD and data reads are ms apart). The STORED data
+	 * is correct; only this tool's word0 read is shifted. Don't trust word0 from
+	 * a single read — cross-check via the previous entry, or use stock fpga. */
 	for (i = 0; i < 17; i++)
 		data[i] = readl(e->base + CLA_REG_DATA0 + i * 4);
 	return 0;
@@ -2865,7 +2872,8 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 			     desc[0], desc[1], desc[2], desc[3],
 			     desc[4], desc[5], desc[6], desc[7]);
 
-			if (len > 0 && len < 1600 && e->bp_cpu) {
+			if (len > 0 && len < 1600 &&
+			    bppe_idx < TM_BPPE_POOL_SIZE && e->bp_cpu) {
 				const u8 *bp_buf = (const u8 *)e->bp_cpu + (u32)bppe_idx * TM_BP_SIZE;
 				/* Detect frame offset by examining the ETHERTYPE field
 				 * (16-bit, bytes 12..13 of ethernet frame). Real ethertypes
@@ -4042,15 +4050,23 @@ static ssize_t zx_poke_write(struct file *f, const char __user *ubuf,
 	if (copy_from_user(buf, ubuf, count))
 		return -EFAULT;
 	buf[count] = 0;
-	if (sscanf(buf, "%x %x", &phys, &val) != 2)
-		return -EINVAL;
-	if (phys < 0x921c0000u || phys >= 0x921c0000u + 0x200000u || (phys & 3))
-		return -EINVAL;
-	off = phys - 0x921c0000u;
-	writel(val, e->base + off);
-	pr_info("[ZXETH] poke 0x%08x = 0x%08x (readback 0x%08x)\n",
-		phys, val, readl(e->base + off));
-	return count;
+	{
+		int n = sscanf(buf, "%x %x", &phys, &val);
+
+		if (n < 1)
+			return -EINVAL;
+		if (phys < 0x921c0000u || phys >= 0x921c0000u + 0x200000u || (phys & 3))
+			return -EINVAL;
+		off = phys - 0x921c0000u;
+		if (n == 1) {	/* one arg = read-only PEEK (unlocks arbitrary mainline reg reads) */
+			pr_info("[ZXETH] peek 0x%08x = 0x%08x\n", phys, readl(e->base + off));
+			return count;
+		}
+		writel(val, e->base + off);
+		pr_info("[ZXETH] poke 0x%08x = 0x%08x (readback 0x%08x)\n",
+			phys, val, readl(e->base + off));
+		return count;
+	}
 }
 
 static const struct file_operations zx_poke_fops = {
@@ -4187,22 +4203,46 @@ static int zx_pipeline_stats_show(struct seq_file *s, void *_unused)
 		 * (per agent 9 smac_real_counters_re.md). Real wire-side RX
 		 * counters: MAC[N]+0x780 (rx pkts), +0x784 (rx bytes).
 		 */
-		u32 rx_pkts  = readl(mac + 0x780);
-		u32 rx_bytes = readl(mac + 0x784);
-		u32 tx_bytes = readl(mac + 0x710);	/* relabel — these are TX */
-		u32 tx_pkts  = readl(mac + 0x714);
-		u32 tx_good_bc = readl(mac + 0x718);
-		u32 r71c     = readl(mac + 0x71c);
+		u32 rx_pkts  = readl(mac + 0x780);	/* receive total frames */
+		u32 rx_crc   = readl(mac + 0x794);	/* receive CRC error frames */
+		u32 rx_ovf   = readl(mac + 0x7d4);	/* receive overflow error */
+		u32 rx_wdog  = readl(mac + 0x7dc);	/* receive watchdog err */
+		u32 rx_uc    = readl(mac + 0x7c4);	/* receive good unicast */
 
-		seq_printf(s, "  smac%d RX_pkts=%u RX_bytes=%u | TX_bytes=%u TX_pkts=%u TX_bc=%u r71c=0x%x\n",
-			   p, rx_pkts, rx_bytes, tx_bytes, tx_pkts, tx_good_bc, r71c);
+		seq_printf(s, "  smac%d RX_pkts=%u good_uc=%u | ERR crc=%u ovf=%u wdog=%u\n",
+			   p, rx_pkts, rx_uc, rx_crc, rx_ovf, rx_wdog);
 	}
-	seq_puts(s, "  (TODO) sdet uniN egress_transport_cnt / drop_cnt  [need NPP_Sdet offsets]\n");
-	seq_puts(s, "  (TODO) sipc2cpu_aful_cnt_up                       [need NPP_Sipc offset]\n");
-	seq_puts(s, "  (TODO) spa_fwd / spa_trp                          [need NPP_Spa offsets]\n");
-	seq_puts(s, "  (TODO) cla trap pkts                              [need PP_CLA stats offset]\n");
-	seq_puts(s, "  (TODO) qmg hw fwd / hw trap                       [need TM_QMG offsets]\n");
-	seq_puts(s, "  (TODO) red fwd / trap / drop                      [need TM_RED stat offsets]\n");
+
+	/* [port1 hunt 2026-06-01] Per-uni ingress chain — localizes where a
+	 * port's frames are lost between MAC-RX and the CPU. uni == logical port. */
+	seq_puts(s, "  ingress chain (uni=logical port):\n");
+	for (p = 0; p < 5; p++) {
+		u32 spa_rcv = readl(e->base + 0x145cc + p * 4);	/* SPA per-uni receive */
+		u32 sdet_tr = readl(e->base + 0x4160 + p * 4);	/* SDET egress_transport_cnt [7:0] */
+
+		seq_printf(s, "    uni%d: SPA_rcv=0x%08x  SDET_transport=%u (raw 0x%08x)\n",
+			   p, spa_rcv, sdet_tr & 0xff, sdet_tr);
+	}
+	/* [2026-06-01] LAN→CPU ingress is UPSTREAM → the relevant QMG counters are
+	 * the UP set (0xc054/5c/60); 0xc044/48/4c are DN (egress). Print both. */
+	seq_printf(s, "  QMG DN sw_fwd=%u hw_fwd=%u hw_trap=%u | UP sw_fwd=%u hw_fwd=%u hw_trap=%u | SIPC drop=0x%08x\n",
+		   readl(e->base + TM_OFF + 0xc044),
+		   readl(e->base + TM_OFF + 0xc048),
+		   readl(e->base + TM_OFF + 0xc04c),
+		   readl(e->base + TM_OFF + 0xc054),
+		   readl(e->base + TM_OFF + 0xc05c),
+		   readl(e->base + TM_OFF + 0xc060),
+		   readl(e->base + 0xc004));
+	seq_printf(s, "  drops: PP[0x1a040]=%u RED[0x1a044]=%u DSCH[0x1a04c]=%u\n",
+		   readl(e->base + 0x1a040),
+		   readl(e->base + 0x1a044),
+		   readl(e->base + 0x1a04c));
+	seq_printf(s, "  CLA fwd[0x1cc3c0]=%u drop[0x1cc3c8]=%u copy[0x1cc3d8]=%u | SADM pass[0x1c4200]=%u drop[0x1c4208]=%u\n",
+		   readl(e->base + 0x1cc3c0),
+		   readl(e->base + 0x1cc3c8),
+		   readl(e->base + 0x1cc3d8),
+		   readl(e->base + 0x1c4200),
+		   readl(e->base + 0x1c4208));
 
 	/* ---------- [A02] new MMIO regions (sys_ctrl / pin_mux / pon_serdes) ---------- */
 	seq_puts(s, "\nextras mapped via DT (gap [A02]):\n");
@@ -4716,6 +4756,17 @@ static void zx_pm_spa_init(struct zx_eth *e)
 	npp_write(e, 0x14048, 0x0007ffff);
 	npp_write(e, 0x14054, readl(e->base + 0x14054) | 0x03000000);
 	npp_write(e, 0x1407c, 0x00000001);		/* SPA match_mode = 1 */
+
+	/* [port1 ingress fix 2026-06-02] SPA port_vlan_filter (0x142ac + port*4, [5:0]).
+	 * Mainline left it at a non-zero reset default (p0=0x36 p1=0x26 p2=0x36 p3=0x27
+	 * p4=0x36); stock clears all of them to 0. That non-zero per-port VLAN filter
+	 * GATES port1's ingress→CPU trap (port1 frames pass MAC→SPA→SDET but are dropped
+	 * at the OPC, never hw-trapped). LIVE-CONFIRMED: zeroing these (matching stock)
+	 * makes port1's rx_per_ingress climb (0 → 18) — the long-standing port1 gate.
+	 * x10 table; clear all to fully match stock. Runs in zx_pm_spa_init (last in init)
+	 * so the bulk stock replay can't re-default it. */
+	for (i = 0; i < 10; i++)
+		npp_write(e, 0x142ac + i * 4, 0);
 
 	/* PM in-port rule table (logical port i → entry i), 0..7 */
 	for (i = 0; i < 8; i++)

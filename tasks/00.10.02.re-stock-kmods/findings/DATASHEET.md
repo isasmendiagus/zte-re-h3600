@@ -6,6 +6,23 @@ diagrams below). Built from RE of stock kmods + live reads.
 Confidence per entry: ✅ verified live/decomp-named · 🟡 decomp/table-inferred ·
 ❓ structure known, semantics unknown.
 
+## ⚠️ ERRATA (2026-06-01 PM — supersedes earlier port1 claims)
+- **port1 ingress is NOT lost at MAC→SPA→SDET.** Earlier text (the "Multi-port/DSA ingress
+  status" §, the SDET counter §, SPA admit notes, and the H1 `0x19068` hypothesis) said port1's
+  frames die before/at SDET (citing "SDET uni1 transport=2"). **REFUTED by clean delta on mainline
+  2026-06-01:** port1 frames *fully traverse* MAC→SPA→SDET (MAC RX +27 → SPA rcv_uni +27 → SDET
+  transport +27, CRC=0/ovf=0) and are then **100% dropped at `drop_PP` (0x921da040)** — the
+  forwarding/policy stage (not RED=congestion, not DSCH=egress-sched). The old "transport=2" was a
+  stale/low-traffic snapshot, not a localization. New localization = the PP/bridge forwarding
+  decision for regport2; CLA ram7 trap-queue + isolation are identical p0..p6 (not the gate).
+  Instrument: `pipeline_stats` now prints the full per-uni ingress chain + drops. See the
+  Multi-port § below (corrected inline) and [[zte-multiport-ingress-gap]].
+- **smac_init d00/d30 (0x32/0xA8 absolute) REFUTED as a per-port issue:** all 4 ports' HW defaults
+  are byte-identical (d00=d30=e0=0) AND mainline's writes to d00/d30/e0 *don't stick* (read back 0).
+- **Stock reg-read channel is UNCERTAIN:** this doc/[[zte-device-access]] say `fpga -r` → `/proc/kmsg`,
+  but `dump_stock_regs.py` reads `/dev/logger_main` ("fpga read: reg=.., value=.."). `/proc/kmsg` came
+  back EMPTY in the 2026-06-01 session; the live channel was NOT re-verified — confirm before relying.
+
 **Three parts:**
 0. **Block diagrams** — vendor SoC brief + our RE'd ethernet datapath (where egress dies).
 1. **Overview / block map** — DT windows, the base-gotcha, per-block bases, egress pipeline, what is NOT dumped.
@@ -253,8 +270,8 @@ path (wire→PHY→MAC2→CLA→QMG→CPU) works fully and is unaffected.
 tm=36 (CPU↔switch ⭐), npp=35, idm=38, pon=66, pp=37.
 Per-PHY GePHY link-change IRQs: GIC SPI **0x47..0x4a** (71..74) for gephy0..3. ⚠️ **2026-05-31: these IRQs do NOT fire on a cable link-change for the cabled ports** — live test, moving the cable left gephy irq counts at 0; only the unconnected PHY[3] spuriously storms its line (~30M). Stock doesn't rely on them either — it polls (`extphy_timer_func` decomp_all_plat:3137). The mainline DSA driver (eth-dsa branch) therefore uses **`PHY_POLL`** (phylib polling, ~1s) instead of `phy_request_interrupt`; this enables hotplug (move cable, no reboot → `adjust_link` re-runs `zx_smac_init_port`) AND kills the PHY[3] storm.
 
-## Multi-port / DSA ingress status (2026-05-31, eth-dsa branch)
-Ports 0/2/3 ping bidirectional via DSA slaves; **port1/jack2 ingress→CPU is broken** — a dynamic, config-invisible per-port drop in the **MAC→SPA→SDET** admit stage (SDET uni1 transport=2 vs uni2/3=229/230, drop=0; SIPC drop=0; MAC1 RX-ok climbs clean). NOT hardware (stock pings jack2), NOT a register bit (every per-port reg byte-identical to working ports + stock). Live debug tools added to the driver: debugfs `clapeek`/`cladump` (CLA indirect read) + `rx_per_ingress` (per-ingress-port RX-to-CPU histogram in `stats`) + SDET per-uni counters (0x921c4160+uni*4). Full writeup: `tasks/00.01.eth-driver/findings/{multiport_root_cause_macinit,port1_sdet_ingress_gate_re,port1_spa_admit_gate_re}.md`.
+## Multi-port / DSA ingress status (2026-05-31, eth-dsa branch) — ⚠️ see ERRATA at top
+Ports 0/2/3 ping bidirectional via DSA slaves; **port1/jack2 ingress→CPU is broken**. ~~a dynamic, config-invisible per-port drop in the **MAC→SPA→SDET** admit stage (SDET uni1 transport=2...)~~ **CORRECTED 2026-06-01:** port1 frames fully pass MAC→SPA→SDET and are dropped at **`drop_PP` (0x921da040)**, the forwarding/policy stage (clean delta: MAC RX/SPA/SDET all +N, CRC=0; drop_PP +N; CPU 0). NOT hardware (stock pings jack2), NOT a register bit (every per-port reg byte-identical to working ports + stock; CLA ram7 + isolation identical p0..p6). Live debug tools: debugfs `clapeek`/`cladump` (CLA indirect) + `rx_per_ingress` (in `stats`) + **`pipeline_stats` (full per-uni ingress chain: MAC RX/CRC/ovf, SPA rcv_uni, SDET transport, QMG sw/hw_fwd/hw_trap, drops PP/RED/DSCH)**. Full writeup: `tasks/00.01.eth-driver/findings/{multiport_root_cause_macinit,port1_sdet_ingress_gate_re,port1_spa_admit_gate_re}.md` (the last two are now SUPERSEDED — port1 dies at PP, not SPA/SDET).
 
 ## Egress status — ✅ SOLVED 2026-05-30 (commit 1c7af7d6c)
 CPU→LAN TX egress works end-to-end: `ping -c5 192.168.1.99` = 5/5, 0% loss; txtest → send2smac2
@@ -420,7 +437,7 @@ absolute phys in the tables below — they were computed from `base_off*4` direc
 | `0x921c4160` + uni*4 (uni0..3 = logical port 0..3; uni4 @0x921c4178) | [7:0] | **egress_transport_cnt** (frames that passed SDET to the classifier) | ✅ |
 | `0x921c4160` + uni*4 | [23:16] | **egress_drop_cnt** (SDET-dropped) | ✅ |
 
-Live 2026-05-31 (ports 1/2/3 cabled): uni1(port1)=transport **2**, uni2=229, uni3=230, drop=0 all → port1's frames (MAC1 RX-ok=88) don't REACH the SDET (lost upstream in MAC→SPA), SDET itself doesn't drop them. This counter is the live discriminator for the port1 ingress anomaly.
+~~Live 2026-05-31 (ports 1/2/3 cabled): uni1(port1)=transport **2** ... port1's frames don't REACH the SDET (lost upstream in MAC→SPA).~~ ⚠️ **ERRATA 2026-06-01:** WRONG conclusion. The transport=2 was a stale/low-traffic read. Clean delta shows uni1 SDET transport tracks MAC1 RX exactly (port1 frames DO reach + pass SDET); they die downstream at `drop_PP` (0x921da040). SDET is NOT the port1 gate.
 
 ## SIPC (CPU<->fabric bridge)
 
@@ -490,14 +507,14 @@ NOTE: SIPC is a SINGLE shared block (NOT per-port) — it cannot discriminate on
 | `0x921d9038` | bit(port+16) | `smac_duplex_half[port]` — 0=FD, 1=HD | ✅ |
 | `MAC[port]+0x0` (`0x92200000+port*0x40000`) | [1:0] | RX/TX datapath enable + "MAC-in-fabric"; stock `pon_npp_smac_enable_part_3` sets `\|=3` AFTER the 0x19068 handshake, clears on link-down | ✅ |
 
-**★ port1 ingress root-cause hypothesis (H1):** port1's `phy_mac_ready` (`0x921d9068` bit6) likely never asserts (serializer/RGMII doesn't bond in mainline for port1 — stock bonds it, hence stock pings jack2) → mainline's `if(ready)` guard never sets the admit bit1 → the SOPC↔SMAC bridge stays closed → port1's RX frames never enter the SPA (SPA `rcv_uni1`≈0, SDET uni1 transport≈2) even though MAC1 RX-ok climbs (wire-side, before the bridge). Reconciles the earlier failed poke: poking the admit bit1 alone does nothing because the RO `ready` bit6 (the real HW requirement, needs the serializer bond) can't be forced. NOTE numbering: this block is raw/logical (port1=bit1/bit6), NOT regport. Bench test: read `0x921d9068` with ports 1/2/3 up → expect p2/p3 ready+admit set, **port1 bit6/bit1 clear**; fix is in the per-port serializer bring-up (smac_init), not poking the admit bit.
+**★ port1 ingress root-cause hypothesis (H1) — ⚠️ SUPERSEDED 2026-06-01** (port1 frames DO reach SPA; they drop at `drop_PP`, not the 0x19068 bridge — 0x19068 also disproven on HW since p2/p3 deliver with its bits=0): ~~port1's `phy_mac_ready` (`0x921d9068` bit6) likely never asserts (serializer/RGMII doesn't bond in mainline for port1 — stock bonds it, hence stock pings jack2) → mainline's `if(ready)` guard never sets the admit bit1 → the SOPC↔SMAC bridge stays closed → port1's RX frames never enter the SPA (SPA `rcv_uni1`≈0, SDET uni1 transport≈2) even though MAC1 RX-ok climbs (wire-side, before the bridge). Reconciles the earlier failed poke: poking the admit bit1 alone does nothing because the RO `ready` bit6 (the real HW requirement, needs the serializer bond) can't be forced. NOTE numbering: this block is raw/logical (port1=bit1/bit6), NOT regport. Bench test: read `0x921d9068` with ports 1/2/3 up → expect p2/p3 ready+admit set, **port1 bit6/bit1 clear**; fix is in the per-port serializer bring-up (smac_init), not poking the admit bit.
 | `0x921da000` | 8 | RW | [0] | sp_rr (sched) | ✅ |
 
 ## SPA (stream/source-port classifier)
 
 **Block base ≈ `0x921d4000`** (zx_sparegtable). Role: source-port match classifier, trap, untag/VLAN, ONU-MAC, indirect match/hash RAM
 
-**2026-05-31 admit-stage notes** (MAC→SPA is the stage where port1 ingress dies): the up/dn receive admit is TWO per-ENTRY bitmaps — **pkt_en** (`0x14000`=ent0-0x1f / `0x14004`=0x20-0x3f / `0x14008`=0x40-0x4d) and **pps_en** (`0x1400c`=ent0-0x1f / `0x14010`=0x20-0x3d), dn mirrors at `0x4040/44/48` + `0x404c/4050`. These are per matched rule/ENTRY (78/62 bits), NOT per physical port — the entry is picked by the SPA match/hash RAM (portless byte-matcher, see [[zte-spa-matchram-not-gate]]). Live golden (all all-on): `0x14000/04=ffffffff`, `0x14008=00003fff`, `0x1400c=ffffffff`, `0x14010=3fffffff`, `0x404c/4050=ffffffff`, `0x14054=03ff05dc`. ⚠️ Mainline `zx_pm_spa_init` writes pkt_en+match but NOT pps_en — harmless because HW reset-default is all-on (verified live). Per-uni receive counters (sop/eop, byte-packed): **`0x921d45cc` + uni*4** (e.g. live 0xe5e5e6e6 = uni2/3 ≈ 229/230). NOT the port1 gate (admit all-on, port1 dies before/at SPA classification). See `port1_spa_admit_gate_re.md`.
+**2026-05-31 admit-stage notes** (~~MAC→SPA is the stage where port1 ingress dies~~ ⚠️ ERRATA 2026-06-01: port1 dies at `drop_PP`, downstream of SPA — see top ERRATA; SPA admit is all-on and NOT the gate, as this note already concluded): the up/dn receive admit is TWO per-ENTRY bitmaps — **pkt_en** (`0x14000`=ent0-0x1f / `0x14004`=0x20-0x3f / `0x14008`=0x40-0x4d) and **pps_en** (`0x1400c`=ent0-0x1f / `0x14010`=0x20-0x3d), dn mirrors at `0x4040/44/48` + `0x404c/4050`. These are per matched rule/ENTRY (78/62 bits), NOT per physical port — the entry is picked by the SPA match/hash RAM (portless byte-matcher, see [[zte-spa-matchram-not-gate]]). Live golden (all all-on): `0x14000/04=ffffffff`, `0x14008=00003fff`, `0x1400c=ffffffff`, `0x14010=3fffffff`, `0x404c/4050=ffffffff`, `0x14054=03ff05dc`. ⚠️ Mainline `zx_pm_spa_init` writes pkt_en+match but NOT pps_en — harmless because HW reset-default is all-on (verified live). Per-uni receive counters (sop/eop, byte-packed): **`0x921d45cc` + uni*4** (e.g. live 0xe5e5e6e6 = uni2/3 ≈ 229/230). NOT the port1 gate (admit all-on, port1 dies before/at SPA classification). See `port1_spa_admit_gate_re.md`.
 
 | phys (sub0) | reg_id | R/W | bits | semantic name | conf |
 |---|---|---|---|---|---|
