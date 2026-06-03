@@ -310,8 +310,31 @@
       bring-up watching 0x19068 + MII regs + GePHY MDIO + TOPCRM egress clock). See
       `findings/session_2026-05-29_egress_fabric_cracked.md` (update pending).
 
-**Last updated**: 2026-05-29 (Journey #22 — corrected diagnosis: remaining blocker = 0x19068 READY
-handshake won't assert from cold; egress-port fix + MAC init-order fix are real & kept).
+23. **port1/jack2 ingress→CPU SOLVED — SPA port_vlan_filter gate (2026-06-03)**: The
+    long-standing "only port1 fails ingress→CPU; port0/2/3 work" anomaly is fixed.
+    Root cause: mainline never fully inited the SPA, leaving **port_vlan_filter
+    (0x921d42ac + port*4, field [5:0])** at its non-zero reset default (p0=0x36 p1=0x26
+    p2=0x36 p3=0x27 p4=0x36). That per-port VLAN filter **gated port1's trap-to-CPU
+    verdict** — frames passed MAC→SPA→SDET but were dropped at the OPC, never hw-trapped.
+    Stock clears the WHOLE x10 table to 0. **Fix** (`zx_pm_spa_init`, last in init):
+    `for (i=0;i<10;i++) npp_write(e, 0x142ac + i*4, 0);`. The clear is cross-port (the
+    whole table must be 0, matching stock). **Live-confirmed + stable**: port1
+    rx_per_ingress climbed 0→18→37→55→94 under sustained jack2 traffic, BPDUMP showed
+    port1 frames reaching the CPU, no poke. **Also fixed a latent crash** the opened
+    ingress exposed: `zx_tm_napi_poll` deref'd `bp_buf` for descriptors with
+    out-of-range `bppe_idx` (stale descs, bppe up to ~4975 vs pool 1024) → ~11MB past
+    the bp pool → kernel panic. Guarded with `bppe_idx < TM_BPPE_POOL_SIZE`. Debug
+    observability kept in tree (poke PEEK + pipeline_stats full ingress chain).
+    **Committed + merged to main** (`c37e6168f`, fast-forward; egress fix untouched —
+    diff is purely additive + never touches the TX path). The user's per-port-gate
+    hypothesis was correct. See `tasks/00.01.eth-driver/findings/port1_drops_at_PP_re.md`
+    (full RE trail), DATASHEET errata, stock CLA golden captures. **Device was rebooted
+    after the test → currently on stock NAND** (RAM-boot mainline to re-verify).
+
+**Last updated**: 2026-06-03 (Journey #23 — port1/jack2 ingress→CPU SOLVED: SPA
+port_vlan_filter cleared to match stock + napi bppe bound-check; committed & merged to
+main c37e6168f, egress fix intact). Prior: 2026-05-29 (Journey #22 — egress 0x19068
+READY-handshake diagnosis).
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)

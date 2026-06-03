@@ -12,7 +12,7 @@ For the naming convention itself, see `CLAUDE.md` "Task folder naming".
 
 ```
 00 openwrt-port              tasks/00.openwrt-port/              📋 PLANNED (root goal — stage 5/6)
-├── 00.01 eth-driver         tasks/00.01.eth-driver/             🚧 ACTIVE — RX dead, TX intermittent
+├── 00.01 eth-driver         tasks/00.01.eth-driver/             🚧 ACTIVE — RX all 4 ports (port1 gate fixed 2026-06-03); egress solved; tuning/iperf next
 │   ├── 00.01.01 fix-lief-rel-sections                            ✅ DONE — LIEF #661 patch
 │   │       Fix to LIEF's silent section-drop on ARM REL files.
 │   │       Forward decl + REL fast-path delegation.
