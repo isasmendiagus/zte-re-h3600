@@ -823,3 +823,31 @@ and tm_irq stops (~1003). Remaining suspects (NEXT, needs live instrumentation a
       AT the wedge — if pending>0 but no IRQ → GIC line not re-asserted (level-trig mask bug).
   (c) wait for host USB to stabilize → run the real LAN↔LAN sustained-TCP test (the actual goal).
 Device on mainline (wedged). Fix committed. host USB hub needs to settle for clean 2-NIC testing.
+
+================================================================================
+## Iter V (2026-06-04 ~02:10 UTC) — wedge = CPU-trap-queue/IRQ deadlock (NOT buffer-free); RED drops downstream
+
+Instrumented the wedged device (single-NIC trap-flood, 6000 ICMP→br0 IP 10.0.0.3):
+  tm_rx_count=1020 (frozen), tm_irq_count=1003 (frozen), tm_napi_count=1003 (frozen),
+  tm_bmu_free_ok=1040, tm_bmu_free_fail=0, bmu_free_credit=14, RED[0x1a044]=5010, DSCH[0x1a04c]=26.
+⇒ buffers ARE returned to HW (free_ok=1040, 0 fail) — the Iter U "BMU replenish" suspect is RULED
+OUT. The free path (zx_bmu_free_bp writes bp_idx→tm[0x8010], credit from tm[0x80dc] bits3..8) works.
+THE PICTURE: CPU stops draining at ~1020 (NAPI+IRQ frozen at 1003) → trap queue stays full → RED
+drops all subsequent CPU-bound frames (5010 drops) → dropped frames never enqueue to the CPU RX →
+no new RX-ready IRQ → NAPI never re-scheduled → permanent stall. The ~1024 is the trap-queue depth.
+
+ROOT MECHANISM (leading): NAPI IRQ re-arm RACE in zx_tm_napi_poll end:
+  if (done < budget) { napi_complete_done(); tm_and(IRQ_MASK, ~ARM_BITS); }  // unmask, NO re-check
+There is NO re-check of per-queue pending AFTER unmask. If a frame arrives in the window between the
+last pending-read and the unmask (or the trap IRQ is edge-ish / not re-asserted on a still-full
+queue), that wake is lost → no further IRQ → stall. Classic missed-NAPI-rearm. (The 3 prior fixes —
+pool/RED-sharepool/slot-release — couldn't help because the bug is IRQ scheduling, not buffers/slots.)
+
+### NEXT FIRE (concrete fix): in zx_tm_napi_poll, after napi_complete_done + unmask, RE-CHECK pending
+(loop over TM_RX_QCNT_BASE per q); if any pending, re-mask + napi_schedule(&e->tm_napi) (or return
+budget to stay polling). Mirror stock zx_pon_tm_int / the standard "rearm-and-recheck" NAPI idiom.
+Rebuild → single-NIC flood → tm_rx_count must climb PAST 1024 + tm_irq keep firing + RED flat.
+ALTERNATIVE/robust (if race-fix insufficient): eliminate the CPU trap path entirely by making the
+reverse (UP/ACK) direction HW-forward like the DN dir (stock forwards BOTH dirs, never traps bulk) —
+the DN/UP asymmetry (why ACK dir traps, Iter Q) — then the RX trap ring is never stressed. Also retry
+the real LAN↔LAN sustained-TCP test once the host USB hub settles (both r8152 NICs were dropping).
