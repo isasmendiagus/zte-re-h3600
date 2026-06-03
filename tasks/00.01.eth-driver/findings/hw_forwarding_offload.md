@@ -369,3 +369,23 @@ NEXT: (a) await the GPL-source agent (the actual FastForward/npu source would sh
 npu_hff_register's caller → the 4 HW-write funcs → the NPU flow-table register interface);
 (c) then define + implement the mainline FFE-offload (load NPU fw if any + the flow-insert path).
 This is a substantial multi-session feature but the PATH IS CLEAR with all resources in hand.
+
+---
+## GPL-source search result (agent, 2026-06-04) — NO public source; RE is the only path
+ZTE/Sanechips has NOT published the GPL kernel + NPU/FFE/switch driver source for the ZX279128S
+anywhere reachable (no GitHub/Gitee/SDK hits for npu_drv_create_flow/ffe_learn_skb/zxylzb/
+ZXICKERNEL/CONFIG_ZX_TM). The FFE/NPU offload (tm.ko, plat-zxylzb_9128S.ko) is closed; even the
+GPL kernel is withheld in practice (kanxue thread: ZTE meets informal requests with commercial
+licensing pushback). So there is NO source to port — RE (our vmlinux.bin disasm + switch.ko/tm.ko
+decomp) is the only technical route.
+LEADS: (1) closest artifact = github.com/xuejian1354/openwrt_cc (branch gateway-3.0, R2680) has
+target/linux/zx279128/ + zxic128/127 board defs (BOARDNAME "ZTE zx279128 xPON (ARM)", cortex-a9,
+KERNEL_PATCHVER 3.18) — but THIN WRAPPERS only (Makefile/base-files), NO kernel/driver source.
+(2) firmware kernel = 4.1.25 (buildroot 2017.05, gcc 4.9.4); the FFE/NPU = a "fast L2/L3
+forwarding" QoS framework under the ZXICKERNEL tag (binary only). (3) sibling ZX297520v3 mainline
+port (gitlab.com/stefandoesinger/zx297520-kernel) = precedent for RE-driven porting w/o a GPL drop.
+LEGIT LEVER (the GPL angle): formal GPLv2 §3(b) source request → tech.sp@zte.com.cn +
+opensource.ztedevices.com (Wireless Home Gateway); ZTE owes source for 3yr from purchase. Worth
+filing for the H3600 (cite the GPL kernel + in-firmware tm.ko/plat-zxylzb), escalate to the
+shipping carrier / FSF gpl-violations if refused. (Surfaced to the user — their GPL point is
+correct; ZTE is non-compliant in practice.)
