@@ -418,3 +418,65 @@ NEXT: decompile sw_acl_l3_hardfast_session_add_part_1 + sw_acl_setMtchInfo (swit
 (Ghidra by-address on the kmods project, or read the decomp directly) → extract the ACL entry
 fields + the HW register sequence. Then prototype: poke an ACL hardfast session for a test
 LAN<->LAN flow on mainline + measure hw_trap (should stay flat = offloaded).
+
+================================================================================
+## Iter L (2026-06-04 ~21:35 UTC) — FFE OFFLOAD IS NOW REGISTER-COMPLETE ★★★
+
+Decompiled the rest of the chain (switch.ko → tm.ko → CLA HW). The ACL "hardfast session"
+bottoms out at the **CLA hash table** — the SAME indirect-RAM interface I already poke
+(clapeek/clapoke, DATASHEET §CLA `0x9238c014`). NOT a separate mystery ACL block.
+
+### Full chain, now to the register:
+```
+ffe_learn_skb (vmlinux)
+ → npu_drv_create_flow (switch.ko 0x21d10)
+   → hf_set_l3_entry → sw_acl_l3_hardfast_session_add → _part_1 (switch.ko 0x125e0)
+       builds 160B session; sw_acl_setMtchInfo (0x11b38) fills 5-tuple
+     → zte_api_fast_l3_session_add (tm.ko 0x6558c)   ← real worker
+         tm_acl_setMtchInfo(local_e4) builds match; local_148 = action/flag mask
+       → tm_add_acl_flow_rule (tm.ko 0x5f430)
+         → addFlowOperInfo + (addAclRule | tm_acl_fast_add)
+           → cla_set_hash_table (tm.ko 0x15a14)      ← WRITES HW
+               + SW shadow list g_FastList[512] keyed by cla_list_hash_addr_gen(&5tuple,0x28)&0x1ff
+             → cla_set_indirect_rw_cmd / _data / _status
+               → tmOnuRegWrite(field, val, idx, &claRegTable)  = CLA indirect HW regs
+```
+
+### cla_set_hash_table(hash_addr, entry[60]) — the exact HW write (decomp 0x15a14):
+1. `hash_addr < 0x208` (max 520 entries).
+2. Poll `cla_get_indirect_rw_status` (reg DONE 0x9238c018) up to 0x14× until ready.
+3. **Bank-select ram_id from hash_addr range** (hash_addr is then made bank-relative):
+   - `< 0x100`          → ram_id **2** (offset = hash_addr)
+   - `0x100..0x17f`     → ram_id **3** (offset -= 0x100)
+   - `0x180..0x1bf`     → ram_id **4** (offset -= 0x180)
+   - `0x1c0..0x1ff`     → ram_id **5** (offset -= 0x1c0)
+   - `0x200..0x207`     → ram_id **6** (offset -= 0x200)
+4. `cla_set_indirect_rw_cmd(rw=0, ram_id, offset)` →
+   `tmOnuRegWrite(0, offset | ram_id<<22 | rw<<27, 0, claRegTable)` = **write CMD 0x9238c014**
+   (0x400000==1<<22, 0x8000000==1<<27 — matches DATASHEET cmd encoding exactly).
+5. Write **15 words** (data_id 14→0, entry bytes [0x3c]→[0x00], 4B each):
+   `cla_set_indirect_rw_data(data_id, word)` → `tmOnuRegWrite(2, word, data_id, claRegTable)`
+   = **write DATA 0x9238c01c + data_id*4**.
+
+⇒ This is the per-inport hash table I mapped in memory [[zte-cla-ram-layout]] (ram2..6). The
+old paradox ("mainline replays CLA byte-for-byte yet traps") is RESOLVED: those were the STATIC
+boot entries. Stock **dynamically inserts FLOW-FORWARD entries** into ram2..6 as it learns each
+flow (valid_en + direct + outport + act_val=forward). Mainline never populates them ⇒ every flow
+falls through to the trap default ⇒ CPU-bound + wedge. The offload = populate ram2..6 at runtime.
+
+### 60-byte (15-word) hash entry fields (from cla_set_hash_table printks; bit-exact TBD at proto):
+ - [0x00]: act_val[1:0], act_rp_en, queue_id, queue_rp_en, tcont_id(+[1])
+ - [0x06..0x0a]: cpu_qid, cpu_qid_rp_en, mtu_val/mtu_rp_en, qos_id/qos_rp_en, bucket_info
+ - [0x0b..0x0e]: wan_id, flow_pri, **outport**, inport   ← the forward decision
+ - [0x0f..0x12]: tag_level, l2_type, pppoe_flag, extr_index, **rule_mode, direct, valid_en**, da_known
+ - [0x13..0x39]: **windata0..19** (20×u16) = the 5-tuple match key/window
+ - hash_addr (the bucket) = cla_acl_hash_addr_gen(5tuple) (TODO next: decode 0x16cdc).
+
+### Why this is the breakthrough:
+The offload is reachable from mainline with tools I ALREADY HAVE (the CLA indirect poke). No new
+HW block, no firmware blob. PROTOTYPE PLAN (next fire): boot mainline, set up br0=lan1+lan3, start
+a known LAN<->LAN unicast flow, then POKE one CLA hash entry (ram2, valid_en=1, direct=1,
+outport=<lan3 phys>, act_val=forward, windata=that flow's key) and watch QMG hw_trap go FLAT for
+that flow (= HW-forwarded, CPU bypassed). If it forwards → code cla_set_hash_table-equivalent as a
+flow-offload hook in the mainline driver. NEXT decode: cla_acl_hash_addr_gen (0x16cdc) + the exact
+windata packing in tm_acl_setMtchInfo (tm.ko 0x60ea0).
