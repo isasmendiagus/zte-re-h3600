@@ -624,3 +624,41 @@ DATASHEET); decode sbrg_add_ipv4table (find its decomp + the ipv4-table ram_id/a
 for an FFE-specific counter that ticks with the TCP flow (MAC2 TX-OK 0xa01c6 climbed?). Then
 implement the SBRAG-ipv4 / FFE flow-insert in mainline. NOTE: jack4 is in netns nsB — RESTORE to
 default ns before any TFTP boot. Device left on stock for continued capture.
+
+================================================================================
+## Iter P (2026-06-04 ~22:50 UTC) — ★★★ THE MECHANISM: protocol-discriminated HW L2 switching
+
+Continued on live stock. Confirmed the 360 Mbit/s TCP flow is REAL (nsB tx = 90MB/2s) and
+offloaded (hw_trap flat). Then called the L3 fast-flow dumpers via /proc/tm/shell DURING the flow:
+  `echo -f tm_show_fast_rule_list > /proc/tm/shell`     → EMPTY (header only)
+  `echo -f sbrg_print_ipv4table   > /proc/tm/shell`     → EMPTY (header only)
+So the L3 fast-rule / SBRAG-ipv4 / CLA-hash paths are ALL empty during the offloaded flow.
+⇒ stock's same-subnet LAN↔LAN TCP offload is NOT any L3 fast-path — it's PLAIN HARDWARE L2
+SWITCHING (FDB lookup → egress port, in the switch fabric).
+
+### THE DECISIVE TEST (clean, same ports/MACs/subnet, simultaneous):
+With the TCP flow running (hw_trap flat), fired 2000 concurrent ICMP (ping -f) nsB→10.0.0.1:
+  hw_trap(0xd3018): 0x1d52 → 0x2d0b = **+0xFB9 (+4025)** ≈ 2×2000 (both directions of the ICMP).
+Meanwhile the concurrent TCP added ~0 to hw_trap.
+⇒ AT THE SAME TIME, on the SAME ports/MACs: **TCP data = HW-switched (no trap); ICMP = trapped to
+CPU.** This is PROTOCOL-DISCRIMINATED forwarding, NOT learning/FDB-based (MACs already learned; both
+run concurrently). The CLA classifier decides per-protocol: control (ICMP/ARP/IGMP) → trap to CPU;
+TCP/UDP data → HW L2-forward to the egress port.
+
+### Reframes the WHOLE problem (supersedes the Iter K-O "FFE/hash offload" framing):
+- Stock's "292/353 Mbit/s LAN streaming" = the switch fabric doing HW L2 forwarding of TCP/UDP,
+  with the CLA trapping only control protocols. NO per-flow software learning needed for L2.
+- MAINLINE traps EVERYTHING (incl. TCP) → CPU-bound + wedge. The old "no basic-L2 HW forwarding on
+  this chip" conclusion ([[zte-hw-forwarding-deadend]]) was WRONG — it was tested with ICMP/ping,
+  which traps even on stock. TCP/bulk IS hw-switched on stock.
+- ⇒ THE LEVER: make mainline's CLA classify TCP/UDP L2 unicast as FORWARD (not trap), like stock.
+
+### NEXT (now decisively targeted + EXECUTABLE — stock boots reliably now):
+Diff stock-vs-mainline the CLA forward/trap DECISION for a TCP L2 unicast frame. On stock (live,
+during the flow) dump the CLA rule-TCAM (ram1) + the trap/forward action config (trap_acl_en
+0x9238c080, oth_l3_pkt_action 0x9238c0cc, default-flow actions 0x9238c0fc/11c/120/124, transfer_en
+0x92388004, da_lookup); then boot mainline and read the SAME regs; the delta governing
+TCP-forward-vs-trap = the fix. (Old dead-end said ram1 entries replay byte-identical yet stock
+forwards — so the lever is likely a global action/mode reg or an incomplete ram1 replay; the live
+protocol-discriminated behavior now gives an exact repro to bisect against.) Implement the fix in
+the mainline CLA init. Stock fpga idx=(phys-0x92000000)/4, output via /proc/kmsg.
