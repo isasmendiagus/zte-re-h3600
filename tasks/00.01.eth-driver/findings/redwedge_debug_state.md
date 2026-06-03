@@ -339,3 +339,37 @@ PLAN to implement HW forwarding:
    trap entry so to-CPU still works.
 4. Rebuild + test all 3: ping, bridge comm (HW), performance (sustained, no wedge).
 This ALSO fixes the wedge for streaming (forwarded traffic never touches the CPU UP-trap path).
+
+---
+## Iteration 2026-06-03 (cont.9) — HW-fwd enable regs ALREADY ON; blocker = flood masks / CLA trap
+
+PEEKED the sbrag L2-fwd control regs on a clean boot — mainline ALREADY has them enabled:
+  transfer_en  0x92388004[7:0]  = 0xff   (all ports forward-enabled)   ✅
+  smac_look_en 0x923881c0[7:0]  = 0xff   (learning on)                 ✅
+  da_lookup_en 0x923882c0[7:0]  = 0xff   (DA/FDB forwarding on)        ✅
+  learn_mode   0x923881c4       = 0x5555 (2b/port mode1 = stock)       ✅
+  vlan_chk     0x92388008       = 0x0000ff00 (out-chk on, in-chk off)
+  unknown_ucast_fwd 0x92388340[31:24] = 0x01  (only 1 port in mask)
+So the switch IS configured to learn + DA-forward. The trap-all behaviour is NOT due to missing
+transfer/learn/da_lookup. Remaining suspects for "why frames trap to CPU instead of HW-forward":
+  (a) FLOOD MASKS too narrow — broadcast/unknown only flood to ~1 port, so ARP never reaches the
+      peer LAN port → FDB never learns the peer → DA lookup misses → trap. Relevant sbrag regs:
+      brdcst_fwd (reg 0x32), unknown_ucast_fwd (0x36=0x8340[31:24]=0x01), unknown_mcast_fwd
+      (reg 47 @0x923882d4[31:24]), unkmul_flood_portmask (reg 48 @0x923882d8 x9), multicst_md
+      (0x92388180[1]). Need to peek brdcst_fwd + the flood portmasks and widen them to the LAN+CPU
+      ports.
+  (b) the CLA per-packet-type trap action still copies/traps everything to CPU (def_ptl_pkt_map /
+      cla_set_cpu_queue_id) regardless of the DA-lookup result.
+TEST PLAN (cheap, poke): static-FDB approach to isolate HW-fwd from flooding — add both host MACs
+to the FDB (debugfs fdbadd) pointing at their lan ports, set static host ARP, ping → if it
+forwards with tm_rx FLAT, HW DA-forwarding works and only the broadcast flood mask is missing.
+SBRAG reg→addr map (from DATASHEET, base 0x92388000): transfer_en r1=0x..004[7:0],
+smac_look r0x20=0x..1c0[7:0], learn_mode r0x22=0x..1c4(2b/port), da_lookup r0x2c=0x..2c0[7:0],
+unknown_ucast_fwd r0x36=0x..340[31:24], unknown_mcast r47=0x..2d4[31:24], unkmul_portmask
+r48=0x..2d8(x9), multicst_md=0x..180[1], pt_tls r0x38, brdcst_fwd r0x32 (addr TBD).
+
+BENCH NOTE: jack3 NIC enx2c9975313ea9 vanished (USB re-enumerated under heavy testing); jack2
+(enxc8a362/.50) + jack4 (enx6c70/lan3) still present — use jack4 for the 2nd fwd endpoint.
+
+STATUS: offload_fwd_mark fix committed (SW-bridge stopgap). HW forwarding is CLOSE (enable regs
+on) — needs the flood-mask config and/or CLA un-trap, then code+rebuild+test. Multi-cycle feature.
