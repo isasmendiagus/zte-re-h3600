@@ -502,3 +502,49 @@ GROUND-TRUTH 60-byte entry + bucket for a real flow. Then boot mainline and repl
 entry via clapoke (CMD 0x9238c014 ram2/3.., DATA 0x9238c01c x15) for the same flow + measure QMG
 hw_trap (flat = offloaded) + throughput. This is the user's "dump de su inicializacion en stock".
 Fallback if debug-level not reachable: fpga-oracle indirect-read ram2..6 on stock during a flow.
+
+================================================================================
+## Iter M (2026-06-04 ~21:50 UTC) — LIVE confirmation + entry-builder spec complete
+
+Device is on MAINLINE (REPL :9999 + debugfs /sys/kernel/debug/zx_eth/ live). Worked the
+prototype directly on mainline (skipped the unreliable stock boot).
+
+### LIVE root-cause confirmation (clapeek on real silicon):
+- `clapeek 2 0` → ram2[0] = `0100005d 00154000 80000408 90001417 00000045 000000e0 0...` (a
+  multicast/control entry, 0100005d = IPv4-mcast MAC), ram2[1..3] = ALL ZERO.
+- ⇒ the per-inport HASH fast-path table (ram2..6) is essentially EMPTY on mainline. Confirms
+  live: mainline never installs per-flow forward entries → every unicast flow misses the hash →
+  falls to the trap default → CPU-bound + wedge. This IS the missing FFE, observed directly.
+- Static zx_cla_init_table[780] is ram_id=1 dominated (the ACL rule-TCAM, 17-word match+mask);
+  ram2..6 (hash) is meant to be filled at runtime. mainline loads the static TCAM but nothing
+  populates the hash → no fast-path.
+
+### Tooling in place (no rebuild needed to experiment):
+- `zx_cla_write_entry(e, ram_id, ram_addr, data[17])` ALREADY in the driver (zx-eth-main.c:2009):
+  writes data[0..16] then CMD `ram_addr | ram_id<<22`. The proven indirect-write helper.
+- CLA_REG_CMD=0x9238c014, DONE=0x9238c018, DATA0=0x9238c01c (npp_base 0x921C0000 + 0x1CC014..).
+- `poke` debugfs writes any reg in [0x921c0000,0x923c0000) → can drive the indirect seq by hand.
+- `clapeek` reads back (note: known off-by-one — read[A].word0 == table[A+1].word0).
+
+### Full entry-build transform (now fully traced, switch.ko + tm.ko):
+match struct (0xbc, built by tm_acl_setMtchInfo 0x60ea0): SIP@0x64, DIP@0x6c, proto@0x62,
+sport@0x74, dport@0x76, rule_cfg@0x1c (0x301600 TCP/UDP up, 0x401600 other up, 0x1600 down)
+  → addFlowOperInfo (0x5b30c) packs it into the 45-byte key (outport[0]&0x1f, inport, l2_type,
+    tag_level, pppoe, direct, extra_data0..19 = the 5-tuple window, 7-bit-offset packed) +
+    handles all WAN cases (NAT/PPPoE/DSLite/IPv6/6rd — ALL OFF for plain LAN↔LAN IPv4 unicast)
+  → cla_acl_hash_addr_gen(hash_mode, key45, &hash): CRC32 (Ethernet 0x04C11DB7 default), bucket=
+    hash&0xffff, collision-tracked via s_aclHashUsedCnt[bucket(+0x208)]
+  → cla_set_hash_table(bucket, entry60): writes the 15-word entry into ram2..6.
+
+### DECISION — implement, don't blind-poke:
+addFlowOperInfo is WAN-feature-heavy; a byte-exact blind userspace poke is fragile. Instead PORT a
+SIMPLIFIED basic-case builder into the driver as C (compile-checked structs, reuse
+zx_cla_write_entry), covering ONLY LAN↔LAN IPv4 unicast (skip NAT/PPPoE/DSLite/IPv6/VLAN). Expose a
+debugfs `claflow` trigger: write "<inport> <outport> <sip> <dip> <proto> <sport> <dport>" → driver
+builds the 45-byte key, computes the CRC32 bucket, builds the 60-byte entry (valid_en=1, direct=1,
+rule_mode, act_val=forward, outport), and zx_cla_write_entry's it into ram2. Then start a matching
+LAN↔LAN flow and watch QMG hw_trap go flat / throughput jump. This tests the mechanism on ONE
+controlled flow with debuggable C. If it forwards → wire it to a real flow-learn hook (ndo / bridge
+fastpath / conntrack-offload). NEXT FIRE: write the claflow builder + debugfs in zx-eth-main.c,
+rebuild, RAM-boot, test one flow. (Builder ref: the 45-byte key printk in addFlowOperInfo ~line
+52360 + the 60-byte entry printks in cla_set_hash_table.)
