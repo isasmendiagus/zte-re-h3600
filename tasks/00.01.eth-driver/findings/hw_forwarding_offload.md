@@ -238,3 +238,31 @@ set → at reset default in mainline). The ONLY decisive remaining step that can
 to that now (heavy, multi-iteration). If the stock diff shows the forwarding regs MATCH → the
 trap-all is whole-pipeline/dynamic = honest dead-end (HW offload needs a dedicated re-architecture
 replicating stock's complete forwarding-domain setup + likely runtime learning state).
+
+---
+## ★★ HONEST DEAD-END — HW forwarding (overnight loop conclusion, 2026-06-04 ~20:30 UTC)
+Iter G attempted the decisive stock-boot reg diff: DTR reset reached U-Boot, but `boot` landed on
+MAINLINE (RAM/NAND holds the mainline image, not stock) — could NOT boot stock to dump its
+forwarding regs. Booting stock is unreliable this session (auto_bootm desync earlier; `boot` →
+mainline now; 2+ failed attempts). So the one decisive remaining step (stock-vs-mainline reg diff
+to catch a replay gap) is NOT executable right now.
+
+FINAL CONCLUSION (HW forwarding): after 6+ iterations the switch NEVER HW-forwards (QMG hw_fwd
+0x9234c05c never moves off ~0; every frame hw_traps to CPU). CONCLUSIVELY RULED OUT as a single
+lever: SPA pktdeal (module-param test), flood masks, FDB/learning (static-FDB: known unicast still
+traps), trap_acl_en, CLA default-flow regs, CLA per-inport hash entries (stock HW-forwards with
+the IDENTICAL cpu_qid entries mainline replays), QMG init (matches stock), dpa protocol-trap
+(control-plane only), macaddr_exchange_md/multicst_md, isolation, pp[0x2c] mode. ⇒ HW forwarding
+is NOT a flip-one-register fix. It needs a DEDICATED RE + re-architecture: this driver is a
+trap-all DSA conduit (everything to CPU so Linux switches in SW); replicating stock's complete
+HW-forwarding pipeline config (the full tm_pon_pp_* init + any replay-blob gap + runtime
+learning/forwarding state) is a multi-session project. PRECISE NEXT STEP: reliably boot stock
+(fix the boot-slot selection / use a known-good stock NAND), kotrace the cla/sbrg/qmg path while
+stock forwards a LAN<->LAN frame, and diff the live forwarding config + path vs mainline.
+
+DELIVERED THIS SESSION (merged to main, verified on HW): (1) port1 ingress→CPU gate fix (SPA
+port_vlan_filter); (2) offload_fwd_mark fix (tag_zte.c) → lan<->lan bridge comm via SOFTWARE
+bridge. So: ping ✅, bridge comm ✅ (SW, light/moderate load). Performance/HW-forwarding 🔴 (the
+SW path is CPU-bound + hits the unicast→CPU wedge under load — see zte-redwedge-unicast-cpu).
+Device left on mainline (functional). Branch hw-bridge-offload has the full trail (zx_spa_pktdeal
+experiment param is harmless/revertible). Loop STOPPED (honest dead-end).
