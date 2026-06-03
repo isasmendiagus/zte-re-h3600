@@ -761,3 +761,34 @@ zx_tm_release_rx_desc + the pending-count read vs stock soft_release_rx_desc / p
 after the wedge, does a 2nd flow or an `echo > some-irq-rearm` un-stick it (→ IRQ) vs stay dead
 (→ ring ptr)? (d) candidate fix: re-arm the TM RX IRQ / reset the ring head at end of poll, or
 correct the release-desc cursor. Then rebuild+test sustained TCP. Device on mainline (wedged).
+
+================================================================================
+## Iter T (2026-06-04 ~01:10 UTC) — ★ WEDGE ROOT CAUSE FOUND: RX desc release leaks skipped slots
+
+Decisive live test on the wedged device: sent 20 fresh pings → tm_irq_count STAYED frozen at 129
+(= tm_napi_count), tm_rx_count stuck 1035, tm_tx_count=1098 (TX fine). ⇒ the trap RX IRQ stopped
+firing entirely = HW STOPPED PRODUCING RX after exactly one TM_RX_DESC_PER_Q(1024) ring. Not the BP
+pool (8192 now), not RED. It's RX DESCRIPTOR RING SLOT EXHAUSTION.
+
+ROOT CAUSE (stock-vs-mainline diff of the RX poll release):
+- Stock pon_tm_net_poll (decomp_all_plat_zxylzb_9128S.c:8724-8730) releases ALL iVar9 consumed ring
+  slots in TWO calls: soft_release_rx_desc(1,q,sop=0, iVar9-local_4c) [the non-SOP/skipped slots] +
+  soft_release_rx_desc(1,q,sop=1, local_4c) [the SOP slots]. Sum = iVar9 = every slot it advanced past.
+- Mainline zx_tm_net_poll (zx-eth-main.c:2864-3027) SCANS FORWARD skipping stale/empty descs (len=0,
+  line 2871-2878 — "HW writes out-of-order, idx 0 then 12+") but only calls
+  zx_tm_release_rx_desc(q, ack, sop=1) where ack = DELIVERED frames. The SKIPPED ring slots (the gaps
+  it scanned past) are NEVER released to HW.
+⇒ skipped slots accumulate; after the consumer advances through all 1024 ring positions, HW sees no
+freed slots → stops producing → no more RX IRQ → wedge. Matches the exact 1024 latch + frozen IRQ.
+
+release reg encoding (both stock+mainline identical): TM[0x4068]=(1<<14)|(count<<4)|q|(sop<<3); TM[0x4064]=1.
+
+### THE FIX (next fire): make mainline release EVERY ring slot it advances past, like stock. Track
+the total slot advance per poll (current rx_head movement incl. skips), not just delivered frames.
+Implement: per queue, record start_head; after the take-loop, slots_advanced = (rx_head - start_head)
+& (TM_RX_DESC_PER_Q-1) [handle wrap]; release that many (e.g. zx_tm_release_rx_desc_raw(q, skipped,
+sop=0) for the non-delivered slots + (q, ack, sop=1) for delivered, summing to slots_advanced — mirror
+stock's two-call split). Then rebuild → boot → iperf3 TCP → tm_rx_count climbs PAST 1024, IRQ keeps
+firing, throughput SUSTAINS = STABLE LAN STREAMING. (Caution: only release slots HW actually produced
+— if the scan skips truly-unproduced slots, releasing them over-credits; verify by watching pending
+not go negative / no spurious RX. Stock releases the full scanned range, so follow that.)
