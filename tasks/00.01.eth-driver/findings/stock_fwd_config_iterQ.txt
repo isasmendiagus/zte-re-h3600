@@ -1,0 +1,16 @@
+STOCK forward/trap config snapshot (Iter Q, 2026-06-04, live during HW-switching state):
+ trap_acl_en          0x9238c080 = 0x00000600
+ oth_l3_pkt_action    0x9238c0cc = 0x00000000
+ dn_unknown_da_action 0x9238c0d0 = 0x00000001
+ up_l2_default_flow   0x9238c0fc = 0x00000000
+ dn_l2_default_flow   0x9238c11c = 0x00000000
+ up_l3_default_flow   0x9238c120 = 0x00000000
+ dn_l3_default_flow   0x9238c124 = 0x00000000
+ transfer_en          0x92388004 = 0x040200ff
+ da_lookup            0x923882c0 = 0x000000ff
+ learn_mode           0x923881c4 = 0x00005555
+ smac_look            0x923881c0 = 0x000000ff
+ brdcst_fwd           0x92388300 = 0x00000000
+HYPOTHESIS to test next: the old "mainline traps everything" was based on ICMP ping (which
+traps even on STOCK). NEVER tested mainline with TCP. Boot mainline, iperf3 TCP through br0,
+measure hw_trap — maybe mainline ALSO hw-switches TCP (=> goal already met for TCP streaming).

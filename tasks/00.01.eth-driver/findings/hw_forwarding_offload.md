@@ -662,3 +662,40 @@ TCP-forward-vs-trap = the fix. (Old dead-end said ram1 entries replay byte-ident
 forwards — so the lever is likely a global action/mode reg or an incomplete ram1 replay; the live
 protocol-discriminated behavior now gives an exact repro to bisect against.) Implement the fix in
 the mainline CLA init. Stock fpga idx=(phys-0x92000000)/4, output via /proc/kmsg.
+
+================================================================================
+## Iter Q (2026-06-04 ~23:20 UTC) — ★★★ MAINLINE TCP TEST: HW-forwards DN but TRAPS UP → WEDGES
+
+The realization that unlocked this: ALL prior "mainline traps everything" tests used ICMP ping —
+and ICMP traps even on stock (Iter P). NEVER tested mainline with TCP. So: booted mainline (TFTP),
+br0=lan1(jack2)+lan3(jack4), host netns flow nsA@10.0.0.1 <-> nsB@10.0.0.2, ran iperf3 TCP.
+
+### RESULT — mainline DOES HW-forward TCP (one direction), then WEDGES:
+mainline /sys/kernel/debug/zx_eth/pipeline_stats (QMG, DN=toward-LAN / UP=toward-CPU):
+| state            | DN sw_fwd | DN hw_fwd | DN hw_trap | UP hw_trap | RED drops |
+|------------------|-----------|-----------|------------|------------|-----------|
+| baseline         | 96        | 0         | 0          | 42         | -         |
+| during TCP (~8s) | 1084      | **4240**  | **0**      | **1033**   | -         |
+| after stall      | 1091      | 4258      | 0          | 1033       | **157**   |
+iperf3: 1st sec **51 Mbit/s** (127 retr) → collapses to **1.7 Mbit/s** total (134 retr) → tx stalls.
+
+⇒ DIAGNOSIS: mainline HW-forwards the BULK (DN) direction (hw_fwd 0→4258, hw_trap=0 on DN — IT
+WORKS!) but TRAPS the reverse (UP) direction (the TCP ACKs: hw_trap 42→1033). The UP/CPU trap path
+WEDGES under load — RED[0x1a044]=157 drops (the unicast→CPU RED latch, [[zte-redwedge-unicast-cpu]])
+— stalling the reverse path so TCP collapses. So the blocker is NOT "no HW forwarding" (DN works!),
+it's (a) the UP direction traps instead of forwarding, and (b) that trap path wedges.
+
+### Contrast with stock (Iter O/P): stock's hw_fwd(QMG)=0 during its 360Mbit/s offload — stock's
+datapath BYPASSES QMG entirely (pure fabric switch, both directions), so no CPU path, no wedge.
+Mainline routes through QMG and traps UP → wedge. Two possible fixes:
+  (1) Make the UP direction ALSO HW-forward (eliminate the CPU path → no wedge). Investigate the
+      DN-vs-UP asymmetry: why does lan3→lan1 (DN) forward but lan1→lan3 (UP) trap? per-port/
+      per-direction CLA or DSA-conduit config.
+  (2) Prevent the RED wedge on the UP/CPU path (the old untested hypothesis: QMG up_thd=0xfa0 +
+      ddr_cache_enable; or a RED/TM soft-reset/watchdog). Even if UP stays CPU-forwarded, if it
+      doesn't wedge the flow could sustain (slower but stable).
+
+### NEXT FIRE: (a) characterize the DN/UP asymmetry (read per-port CLA/forward config for lan1 vs
+lan3, both directions); (b) try wedge-prevention live (poke QMG up_thd 0x9234c000 + ddr_cache
+0x9234c004 BEFORE the flow) + rerun iperf → does TCP sustain? (c) if UP-forward is reachable, poke
+it. Goal: sustained TCP through br0 with RED drops flat = stable LAN streaming. Device on mainline.
