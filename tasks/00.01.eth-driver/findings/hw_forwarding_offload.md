@@ -57,3 +57,33 @@ only when all 3 work. Document + commit every iteration. Resolve by morning.
   nsB=10.0.0.2; stream nsA->nsB. (jack3 enx2c99 vanished from USB — ignore it.)
 - C-init leaves IP on conduit sw + lanN DOWN; for bridge test: brctl addbr br0 + addif lan1 lan3.
 - NEVER touch main / break egress. Test on HW before asserting. Commit+document each iteration.
+
+---
+## Iter A (overnight 2026-06-03 ~19:10) — hw_fwd=0 confirmed; trap-all = SPA pktdeal=1
+
+Live on a clean-ish boot: br0=lan1+lan3 + flood masks poked, ran netns fwd test jack2<->jack4 =
+6/6 ping OK (SW bridge). QMG counters: UP hw_fwd(0xc05c)=0 BEFORE and AFTER, UP hw_trap(0xc060)
+103->139 (+36). ⇒ the switch NEVER HW-forwards — every frame hw_traps to CPU; the L2/SBRG
+forward engine never runs (so no learning, no DA-forward, hw_fwd stuck 0).
+
+★ TRAP-ALL MECHANISM = SPA per-entity pktdeal. The driver (zx-eth-main.c ~1139) sets
+spa_enty_pktdeal_cfg = **1** for ALL entities 0..7 × slots 0x43..0x7d via
+byte_off=(zx_spa_table[slot].base_dword + port*stride)*4 - 0x1c0000, field mask/shift. pktdeal=1
+means "deliver/trap to CPU" (the driver added it to MAKE frames reach the CPU — comment: "without
+it the switch [doesn't deliver to CPU]"). Stock spa_set_enty_pktdeal_cfg(entity,slot,val) val is
+2-bit; action type ∈ {0,1,2} (stock zte_api uses pkt-type->slot map @56430). So pktdeal: likely
+0=forward(L2)/1=trap-to-CPU/2=drop (TBD).
+
+HW-FWD HYPOTHESIS: set pktdeal=0 (forward) for the LAN-port entities (across the L2-unicast
+slots) → frames proceed to the SBRG L2 engine → learn + DA-forward in HW (hw_fwd climbs). KEEP
+pktdeal=1 (trap) for the CPU-destined slots/the CPU port so ping-to-device + mgmt still work.
+RISK: changing the wrong slots breaks CPU connectivity (ARP-to-device stops trapping).
+
+NEXT ITER: (a) decode pktdeal value 0/1/2 meaning + which slots = normal-unicast vs control
+(decomp zte_api pkt-type->slot map @56430: pkt types 8->0x1a, 9->0x1c, 10->0x1b, 0xb->0x1d, ...);
+(b) get zx_spa_table[slot] {base_dword,mask,shift,stride} from zx-fpga-reg-tables.h; (c) poke-test:
+set pktdeal=0 for lan1+lan3 entities on the L2-unicast slots, re-run fwd test, check hw_fwd climbs
++ tm_rx flat + throughput high + ping-to-device still works; (d) if it works, code it as
+port_bridge_join + keep CPU trap. This is a deep + risky feature (un-trapping the SPA); progress
+is incremental. Device currently: br0=lan1+lan3, flood masks poked, uptime ~2.3h (dirty but
+usable for hw_fwd diagnostics).
