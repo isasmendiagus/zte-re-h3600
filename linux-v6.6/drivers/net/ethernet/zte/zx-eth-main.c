@@ -183,10 +183,15 @@
 /* Stock prints `BPPE_POOL_SIZE=2000` in `pon init` = 0x2000 = 8192. Match
  * stock to avoid buffer exhaustion under sustained traffic (boot UART capture, mainline_eth/captures/boot_init.log).
  */
-#define TM_BPPE_POOL_SIZE	1024	/* was 8192 — 18MB bp_pool failed dma_alloc_coherent
-					 * on default CMA. 1024 entries → ~2.3 MB,
-					 * fits comfortably. Reduce buffer head-room
-					 * but plenty for initial RX validation.
+#define TM_BPPE_POOL_SIZE	8192	/* = stock 0x2000. Restored 2026-06-04 (Iter S): the
+					 * earlier 1024 was to dodge an 18MB dma_alloc_coherent
+					 * CMA failure, but pools are now carved from the reserved
+					 * region via memremap_wc (zx_tm_alloc_pools), so that
+					 * reason is moot. 8192 × TM_BP_SIZE(2304) = 18 MiB fits the
+					 * BP region (CARVED_BP_OFF 0x2C20000 → RXDESC 0x3F1F000 =
+					 * ~20 MiB). ROOT CAUSE of the unicast→CPU wedge: the 1024
+					 * BP pool exhausts after ~1024 trapped frames (tm_rx_count
+					 * latched at ~1033-1048 every run) → HW can't receive → wedge.
 					 */
 #define TM_BP_SIZE		2304	/* stock has 0x900=2304 (NOT 2048!) in TM[0xFC] low16 */
 #define TM_TX_RING_SIZE		1024

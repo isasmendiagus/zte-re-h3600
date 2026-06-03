@@ -731,3 +731,33 @@ red_set_* equivalents: open_out_en/trap_color_en/share_mode/in_share_max=0x3ff/u
 0x3fff via the RED direct regs 0x92344004/40/74) → rebuild → reverify. If NO → the share-pool isn't
 the lever; PIVOT to the per-queue out-buffer max for the CPU queue, or the DN/UP asymmetry.
 Device currently WEDGED (needs reboot for a clean test).
+
+================================================================================
+## Iter S (2026-06-04 ~00:30 UTC) — BP pool 1024→8192 (stock match) DONE; but wedge root = TM RX ring
+
+USER LEAD: "how big is the queue in stock? maybe mainline is too small?" — spot-on instinct.
+FOUND: mainline TM_BPPE_POOL_SIZE=1024 vs STOCK=8192 (stock prints BPPE_POOL_SIZE=0x2000). The 1024
+was a leftover from when pools used dma_alloc_coherent (18MB CMA alloc failed); the driver now CARVES
+pools from a reserved region via memremap_wc (zx_tm_alloc_pools, CARVED_BASE 0x4C000000), so that
+reason is dead. 8192×TM_BP_SIZE(2304)=18MiB fits the BP region (0x2C20000→0x3F1F000 ≈ 20MiB). FIXED:
+restored TM_BPPE_POOL_SIZE=8192 (propagates to BPPE table, BMU_POOL_SIZE 0x8048, BUCKETS_M1 0x8058).
+This is a correct stock-matching fix (kept) — prevents real BP exhaustion under sustained load.
+
+### BUT it did NOT fix the wedge. Rebuilt (build_slotA.py) + TFTP-booted + iperf3 TCP:
+  37.7 Mbit/s (1st sec) → collapse to 1.5 Mbit/s; tm_rx_count LATCHED at 1035 (was 1033/1048 w/
+  pool=1024 — UNCHANGED by the pool bump); tm_napi_count froze at 129.
+⇒ the ~1024 latch is NOT the BP pool — it's the **TM RX DESCRIPTOR RING (TM_RX_DESC_PER_Q=1024)**.
+After consuming exactly one ring's worth (~1024 trapped frames), the CPU RX stops and NAPI is never
+rescheduled. The TM RX consumer (zx_tm_net_poll ~2864-3027) LOOKS correct — it frees BP
+(zx_bmu_free_bp), invalidates each desc (clears len desc[12]), advances rx_head, and ACKs HW
+(zx_tm_release_rx_desc). Yet it latches after one wrap ⇒ a producer/consumer/ACK pointer DESYNC on
+ring-wrap, OR the trap/RX IRQ stops firing after the ring fills once (tm_napi frozen at 129).
+
+### NEXT FIRE: pin the TM RX ring wrap bug. (a) Read the TM RX "pending count" register the poll
+keys on (line ~2856 `pending`) live during the wedge — is it stuck at 0 (HW thinks nothing
+pending = consumer ptr not advanced) or nonzero (NAPI not scheduled = IRQ stopped)? (b) Compare
+zx_tm_release_rx_desc + the pending-count read vs stock soft_release_rx_desc / pon_tm_net_poll
+(decomp): does stock write a producer/consumer cursor mainline misses on wrap? (c) Quick probe:
+after the wedge, does a 2nd flow or an `echo > some-irq-rearm` un-stick it (→ IRQ) vs stay dead
+(→ ring ptr)? (d) candidate fix: re-arm the TM RX IRQ / reset the ring head at end of poll, or
+correct the release-desc cursor. Then rebuild+test sustained TCP. Device on mainline (wedged).
