@@ -302,3 +302,40 @@ bridge forwards lan1<->lan2 through the CPU. Clean 1-spot change. Rebuild + test
 NOTE: this makes bridge comm work via SOFTWARE (CPU) forwarding → moderate load OK, but heavy
 streaming will still hit the CPU-trap wedge (③). HW bridge offload (a bigger feature) would make
 it both stable AND fast, but the offload_fwd_mark fix is the correct first step for ② now.
+
+---
+## Iteration 2026-06-03 (cont.8) — HW FORWARDING is the goal (user) — found stock's L2-fwd blueprint
+
+User course-correction: we want HW forwarding, NOT CPU/software bridging (CPU wedges + slow). The
+offload_fwd_mark removal (cont.7) was only a SW-bridge stopgap. Correct fix = HW bridge offload:
+configure the switch to L2-forward LAN<->LAN in hardware (bypasses CPU → no wedge + line rate).
+
+★ STOCK L2-FORWARDING BLUEPRINT (decomp_all_tm.c, the tm_pon_*_initial per-port loop ~43590):
+per-port (0..7) the stock enables HW switching that mainline's trap-all driver OMITS:
+  - sbrg_set_pt_transfer_en(port, 1)          # per-port forwarding/transfer enable
+  - sbrg_set_pt_smac_look_en(port, 1)         # SMAC lookup => MAC learning
+  - sbrg_set_pt_smac_lookfail_pktdeal(port,0)
+  - sbrg_set_pt_da_lookup_en(port, 1)         # DA lookup => HW forwards by FDB
+  - sbrg_set_pt_learn_mode(0,port) then (1,port)   # learn mode (reg_id = port+0x22 in sbragRegTable)
+  - tm_vlan_check_ena_set(port,0/1,0)         # vlan check off
+  - sbrg_set_unknown_unicst_fwd(port,0) + (0,1)   # unknown-ucast: off per-port, ON to port0
+  - sbrg_set_unknown_multicst_fwd(port,1)
+  - sbrg_set_pt_tls(port,0) + (0,1)
+globals: sbrg_set_macaddr_age_en(1), tm_mac_aging_cycle_set(300), sbrg_set_multicst_md(1),
+  sbrg_set_hash_collision_pktdeal(1), sbrg_set_macaddr_exchange_md(1), sbrg_set_brdcst_fwd_en
+  (reg_id 0x32 = the PP[0x8340] bits24-31 FWD bitmap), sbrg_set_irq_en_mask(10).
+All via tmOnuRegWrite(reg_id, val, 0, &sbragRegTable) → direct sbragRegTable registers
+(base ~0x92388xxx; 0x32=PP[0x8340], learn_mode=port+0x22, etc.).
+
+PLAN to implement HW forwarding:
+1. Map the sbragRegTable reg_ids → phys addr/bitfield for transfer_en, smac_look_en,
+   da_lookup_en, learn_mode (port+0x22), unknown_ucast/mcast_fwd, pt_tls (from DATASHEET sbrag
+   section / decomp tmOnuRegWrite + the per-set_* bodies).
+2. LIVE-TEST via poke on a clean boot: enable transfer_en + smac_look_en + da_lookup_en +
+   brdcst_fwd for the lan ports, bridge lan1+lan2, ping nsA<->nsB → success = forwards with
+   tm_rx FLAT (HW, not CPU). Measure throughput (should be fast + not wedge).
+3. CODE it: a zx_sbrg_l2_fwd_init() replicating the stock per-port loop, called at probe (and/or
+   port_bridge_join); restore offload_fwd_mark (correct once HW forwards); keep the static CPU-MAC
+   trap entry so to-CPU still works.
+4. Rebuild + test all 3: ping, bridge comm (HW), performance (sustained, no wedge).
+This ALSO fixes the wedge for streaming (forwarded traffic never touches the CPU UP-trap path).
