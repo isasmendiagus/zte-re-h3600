@@ -68,7 +68,18 @@ static struct sk_buff *zte_tag_rcv(struct sk_buff *skb, struct net_device *dev)
 		return NULL;
 
 	skb_pull_rcsum(skb, ZTE_TAG_LEN);
-	dsa_default_offload_fwd_mark(skb);
+
+	/* [bridge-fwd fix 2026-06-03] Do NOT set skb->offload_fwd_mark. This is a
+	 * TRAP-ALL driver with NO hardware bridge offload (no .port_bridge_join / HW
+	 * forwarding — every frame is trapped to the CPU). dsa_default_offload_fwd_
+	 * mark() sets offload_fwd_mark = !!(dp->bridge), i.e. 1 whenever the user
+	 * port is in a bridge — telling the bridge "hardware already forwarded this
+	 * to the other bridge ports, don't software-forward it". That is a LIE here:
+	 * the HW did NOT forward it, so the frame reaches the CPU but the bridge
+	 * drops it instead of flooding to the peer lan port -> lan<->lan comms break
+	 * (verified: ARP RX on lan1 never egresses lan2). Leaving offload_fwd_mark=0
+	 * lets the software bridge forward lan1<->lan2 through the CPU. (When real HW
+	 * bridge offload is added, restore this gated on actual HW-fwd capability.) */
 
 	return skb;
 }

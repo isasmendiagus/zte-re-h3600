@@ -284,3 +284,21 @@ routed, AND (would-be) bridged traffic all wedge under sustained load. → Fixin
 "Stable streaming" (sustained) is gated solely by the wedge. (HW bridge offload is a separate
 perf feature that would make forwarding FAST + bypass the CPU, but the wedge fix is what makes it
 STABLE.) Next per user's "las dos en orden": pursue option A (wedge reset+re-init recovery).
+
+---
+## Iteration 2026-06-03 (cont.7) — STREAMING loop: found+fixed the bridge-comm bug (offload_fwd_mark)
+
+User goal: leave the driver functional+tested — ① ping ② bridge comm (lan<->lan) ③ good perf;
+loop stops only when all work.
+
+★ BRIDGE-COMM BUG FOUND + FIXED: net/dsa/tag_zte.c zte_tag_rcv() called
+`dsa_default_offload_fwd_mark(skb)` which sets `skb->offload_fwd_mark = !!(dp->bridge)` → 1 when
+the user port is in a bridge. This driver is TRAP-ALL with NO HW bridge offload (confirmed: no
+.port_bridge_join / dsa_switch_ops bridge ops anywhere). So offload_fwd_mark=1 LIES to the bridge
+("HW already forwarded this") → the bridge skips software-forwarding → frame reaches CPU but is
+dropped instead of flooded to the peer lan port → lan<->lan broken (matches the test: ARP RX on
+lan1 never egressed lan2). FIX: removed the offload_fwd_mark call (leave it 0) so the software
+bridge forwards lan1<->lan2 through the CPU. Clean 1-spot change. Rebuild + test pending.
+NOTE: this makes bridge comm work via SOFTWARE (CPU) forwarding → moderate load OK, but heavy
+streaming will still hit the CPU-trap wedge (③). HW bridge offload (a bigger feature) would make
+it both stable AND fast, but the offload_fwd_mark fix is the correct first step for ② now.
