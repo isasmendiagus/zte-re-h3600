@@ -233,3 +233,28 @@ needs a HW block reset, which needs paired re-init = code). The port1 GATE fix (
 is DONE + merged + verified on clean boot. This load/relink wedge is a documented OPEN robustness
 bug; the actionable fix is option A (reset+re-init on link-up/watchdog) — a code+rebuild task for
 a future session. Memory: [[zte-redwedge-unicast-cpu]].
+
+---
+## Iteration 2026-06-03 (cont.5) — FORWARDING test (для "streaming estable"): inter-port fwd does NOT work
+
+Tested the REAL router data-plane (forwarding through the device, not CPU-terminated): device
+br0 = lan1+lan2 (brctl, both forwarding state); host netns nsA(jack2/lan1)=10.0.0.1, nsB(jack3/
+lan2)=10.0.0.2; ping nsA→nsB. RESULT: 100% loss. tcpdump localization: nsA's broadcast ARP
+EGRESSES jack2 fine, but **nsB (jack3) receives NOTHING** — the device bridge does NOT flood
+lan1→lan2. Frames RX on lan1 (rx_per_ingress port1 climbs, trapped to CPU) but never egress
+lan2 (lan2 tx barely moves). So inter-port forwarding is non-functional:
+ - NO HW bridge offload (port_bridge_join doesn't program the switch to forward lan1↔lan2 in HW
+   → frames go up to the CPU instead of HW-forwarding), AND
+ - the CPU software-bridge path doesn't complete the lan1→lan2 egress either (broadcast reaches
+   CPU but isn't flooded back out lan2).
+Not a wedge/dirty-state artifact (broadcast-to-CPU works; this is CPU→lan2 egress / bridge
+forwarding missing) — a clean reboot won't fix a missing feature.
+
+⇒ "STABLE STREAMING" SCOPE (both paths are substantial DRIVER FEATURES, not live-poke fixes):
+ (1) Through-traffic (forwarding, the real router data plane): needs DSA **HW bridge offload**
+     (port_bridge_join → program the switch fwd/flood masks so lan↔lan forwards in HW, bypassing
+     the CPU). Without it, even a working SW bridge would be CPU-bound + would hit the wedge.
+ (2) To-device traffic (CPU endpoint): the unicast→CPU RED/OPC wedge (option A: reset+re-init).
+Neither is a quick loop win. The port1 gate fix (the original deliverable) remains DONE+merged.
+Recommend treating stable-streaming as a deliberate DSA-offload feature effort. Bench restored
+to sane state (lan1=.99 standalone, host=.50, br0 removed, netns deleted).
