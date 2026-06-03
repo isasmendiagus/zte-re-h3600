@@ -699,3 +699,35 @@ Mainline routes through QMG and traps UP → wedge. Two possible fixes:
 lan3, both directions); (b) try wedge-prevention live (poke QMG up_thd 0x9234c000 + ddr_cache
 0x9234c004 BEFORE the flow) + rerun iperf → does TCP sustain? (c) if UP-forward is reachable, poke
 it. Goal: sustained TCP through br0 with RED drops flat = stable LAN streaming. Device on mainline.
+
+================================================================================
+## Iter R (2026-06-04 ~23:50 UTC) — RED out-buffer share-pool: the wedge-prevention lever (hypothesis)
+
+Found a concrete stock-vs-mainline gap in RED init. Stock's pon_tm_red_init (decomp_all_tm.c
+~42509) sets GLOBAL RED enables BEFORE the per-queue loop:
+  red_set_cfg_enable(0,1); red_set_open_out_en(1); red_set_trap_color_en(1); red_set_share_mode(1);
+  red_set_in_share_max(0x3ff); red_set_up_out_share_max(0x3fff);
+then per-queue out-buffer: q0-15=(guart 0x3ff,max 0), q16-335=(0x40,0x7ff), q336-375=(0x40,0x200/0x80),
+q376-391=(0x40,0xc00), q392-399=(0x40,0x3ff).
+Mainline's zx_tm_red_init (zx-eth-main.c:2352) does ONLY the 4 per-queue indirect loops — it NEVER
+sets the global share-pool maxes. RED regs (DATASHEET): 0x92344004 [4]open_out_en/[3]trap_color_en/
+[2]share_mode/[1:0]cfg_enable; 0x92344040[12:0]=in_share_max; 0x92344074[14:0]=up_out_share_max.
+HYPOTHESIS: mainline leaves in_share_max/up_out_share_max at reset (0) → the OUT (CPU/trap) queue
+has no share buffer → overflows under the reverse-ACK trap load → RED drops → unicast→CPU WEDGE.
+
+### Test attempt (INVALID — methodology): poked 0x92344040=0x3ff + 0x92344074=0x3fff on mainline
+(readback OK) but the device was ALREADY WEDGED from the Iter Q iperf (tm_rx_count frozen at 1033,
+ping 100% loss, hw_trap latched at 1033). Poking RED AFTER the wedge does NOT recover it (matches
+the old DATASHEET note: poking RED didn't un-wedge port1). ⇒ the share-max must be set on a CLEAN
+device BEFORE load to PREVENT the wedge. Could not read mainline's pre-poke RED values (no od/
+hexdump on the C-init REPL; 0x92344040/74 not in regdump windows; mem file needs a hex tool).
+
+### NEXT FIRE (clean-boot prevention test): TFTP-boot mainline fresh → IMMEDIATELY (before any
+traffic) poke 0x92344040=0x000003ff, 0x92344074=0x00003fff, and ensure 0x92344004 bits [2][3][4]
+set (open_out/trap_color/share_mode) → set up br0 + netns → run iperf3 TCP → check: does the UP
+hw_trap KEEP CLIMBING (CPU path alive, not latching at a fixed number) + RED drops stay ~0 +
+throughput SUSTAIN? If YES → wedge prevented → codify in zx_tm_red_init (add the 5 global
+red_set_* equivalents: open_out_en/trap_color_en/share_mode/in_share_max=0x3ff/up_out_share_max=
+0x3fff via the RED direct regs 0x92344004/40/74) → rebuild → reverify. If NO → the share-pool isn't
+the lever; PIVOT to the per-queue out-buffer max for the CPU queue, or the DN/UP asymmetry.
+Device currently WEDGED (needs reboot for a clean test).
