@@ -140,3 +140,34 @@ SYNTHESIS / remaining leads (the lever NOT yet found, since flood-mask + sbrag-r
 3. The fix is almost certainly a LINK-UP/periodic RE-APPLY of the CPU-trap state (FDB/my-MAC +
    RED clear + flood) — but must be validated by finding the live recovery lever first (coding
    the flood/sbrag re-apply is premature since both failed live).
+
+---
+## Iteration 2026-06-03 (cont.2) — my-MAC trap table INTACT → it's a congestion latch, not registration loss
+
+DECISIVE: peeked the SPA ONU-MAC table (ZX_SPA_ONU_MAC_BASE 0x14120 → phys 0x921d4120+slot*8)
+in the wedged state: slot0 low=0x470f4264 high=0x0000f4f6 = f4:f6:47:0f:42:64 (CPU MAC) PRESENT
++ correct (slots 1-3 = ...65/66/67). So the my-MAC trap registration (zx_register_cpu_mac:
+SPA ONU-MAC + PP_PM, mirrors stock tm_onu_mac_addr_set) is NOT lost under the wedge.
+
+⇒ The frame reaches the MAC (good_uc+5), the CPU MAC IS registered for trap, yet it is dropped
+(drop_RED+5) instead of trapped (hw_trap+1). So this is NOT an FDB/registration loss — it is a
+**congestion/RED LATCH on the unicast CPU-trap queue (q2)** that survives disabling the RED
+block (matches agent-1's RED-EWMA-lockout: the average only decays on enqueue; once latched
+high with all packets dropped, it never recovers; disabling the block doesn't clear the latched
+average — only a reset/reboot does). Broadcast uses a different cpu_qid (q4/q5) whose RED state
+is not latched → still works.
+
+CONCLUSION OF THIS SESSION'S LIVE WORK: ruled out as the recoverable lever (none restored
+unicast in the wedged state): RED-block disable, QMG up_ram_thd, unknown-ucast flood mask +CPU,
+sbrag FDB re-seed, and confirmed the SPA ONU-MAC my-MAC trap table is intact. The remaining
+lever is CLEARING the latched per-queue RED/congestion average for the unicast CPU-trap queue —
+which the block-enable bit does not do. NEXT (needs more RE or a rebuild):
+1. Find/clear the per-queue RED average state: try re-applying zx_red_set_queue_cfg for the
+   CPU-trap cpu_qid via the indirect iface (TM[0x4014] cmd=q|(type<<22), data 0x4028/24/20/1c,
+   idle 0x4018b0) and see if a re-write resets the average → live unwedge. Need the exact
+   cpu_qid (unicast trap) from CLA def_ptl_pkt_map (stock decomp).
+2. If a re-write clears it → CODE fix: re-apply RED queue init (and/or a periodic/again-on-
+   link-up clear of the CPU-trap-queue average) in zx-eth-main.c, rebuild, test (bulk + relink).
+3. Belt-and-suspenders per agents: also program host/user MACs as STATIC non-aging FDB→CPU and
+   re-apply CPU-path state on link-up (even though the flood/sbrag pokes alone didn't recover a
+   table that's already intact — they matter once learning/aging is involved).
