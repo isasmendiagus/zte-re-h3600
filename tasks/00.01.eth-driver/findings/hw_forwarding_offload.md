@@ -583,3 +583,44 @@ DON'T interrupt autoboot → cspstart boots NAND stock (NAND still holds stock; 
 only). On stock: read ram2..6 via the indirect iface (devmem/reg tool: write CMD 0x9238c014 =
 addr|ram_id<<22|1<<27 read, poll 0x9238c018, read 0x9238c01c x15) idle-vs-during-flow; capture
 QMG (0x9234c044 sw_fwd / 0x9234c060 hw_trap) + CLA forward regs. NEXT FIRE: execute the capture.
+
+================================================================================
+## Iter O (2026-06-04 ~22:25 UTC) — ★★★ EMPIRICAL BREAKTHROUGH on LIVE STOCK ★★★
+
+Booted NAND stock (DTR power-cycle, no autoboot interrupt — RELIABLE). /bin/fpga reads/writes
+regs via kmsg (`fpga -r/-w <wordidx>`, wordidx=(phys-0x92000000)/4; value prints to /proc/kmsg).
+Built a same-subnet LAN↔LAN flow that traverses the device: jack2 (enxc8a362e95900) stays in
+default ns @10.0.0.1 (also .50 for SSH), jack4 (enx6c70cbb68169) → netns nsB @10.0.0.2, static
+neigh both ways. SSH to .1 preserved throughout.
+
+### THE MEASUREMENTS (QMG: sw_fwd@44=0xd3011, sw_fwd@54=0xd3015, hw_fwd@5c=0xd3017, hw_trap@60=0xd3018):
+| state            | sw_fwd@44 Δ/3s | hw_fwd@5c | hw_trap@60 Δ/3s | throughput |
+|------------------|----------------|-----------|-----------------|------------|
+| idle             | ~0             | 0         | ~0              | -          |
+| ICMP ping -f     | +1761          | 0         | +1759           | (CPU)      |
+| **TCP iperf3**   | **+25 (flat)** | **0**     | **+25 (flat)**  | **353 Mbit/s** |
+
+⇒ CONFIRMED: stock HW-OFFLOADS TCP/UDP 5-tuple LAN↔LAN flows (353 Mbit/s, 1.23 GB, 0 retr) with
+hw_trap FLAT = CPU fully bypassed. ICMP is NOT offloaded (traps to CPU, hw_trap climbs in lockstep
+— same as mainline). The offload is **PROTOCOL-SPECIFIC (TCP/UDP only)**, matching the hardfast
+rule_cfg keyed on proto 6/0x11. Same-subnet L2 TCP IS accelerated (keyed on the 5-tuple).
+
+### ⚠️ THE OFFLOAD TABLE IS *NOT* THE CLA HASH (ram2-6) — Iter K-M target was WRONG:
+Full scan of CLA hash during the live offloaded flow:
+- ram2 (256 buckets): only 14 non-zero, ALL `01:00:5x` multicast/IGMP L2 entries — NO unicast 5-tuple.
+- ram3,4,5,6 (full): ALL ZERO.
+So cla_set_hash_table (ram2-6) holds multicast/L2 classify entries, NOT the unicast TCP fast-path.
+Moreover BOTH QMG sw_fwd@44 AND hw_trap are FLAT during TCP ⇒ offloaded packets bypass the entire
+CLA→QMG→DSCH pipeline (the "ring-less" datapath from ffe_ringless_egress_re.md).
+
+⇒ The TCP offload = the FFE / **sbrg_add_ipv4table** path (switch.ko zte_api_fast_l3_session_add →
+sbrg_add_ipv4table = SBRAG L3 ipv4 forwarding table), NOT the CLA hash. The tm.ko
+cla_set_hash_table path I traced in Iter K-M is a DIFFERENT (L2/multicast) table.
+
+### NEXT (capture the REAL offload table — device staying on stock, harness live):
+Diff the SBRAG L3 ipv4 table (+ FFE regs) BEFORE vs DURING the TCP flow to find the inserted
+forward entry = ground truth. SBRAG base 0x92388000 (indirect CMD 0x92388014/DONE/DATA per
+DATASHEET); decode sbrg_add_ipv4table (find its decomp + the ipv4-table ram_id/addr). Also sweep
+for an FFE-specific counter that ticks with the TCP flow (MAC2 TX-OK 0xa01c6 climbed?). Then
+implement the SBRAG-ipv4 / FFE flow-insert in mainline. NOTE: jack4 is in netns nsB — RESTORE to
+default ns before any TFTP boot. Device left on stock for continued capture.
