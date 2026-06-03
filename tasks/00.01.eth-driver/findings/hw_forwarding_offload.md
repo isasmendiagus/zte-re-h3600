@@ -222,3 +222,19 @@ the fpga oracle, boot mainline, dump the same, diff — the reg(s) the driver's 
 cover/sets differently = the lever (or confirms it's whole-pipeline). Heavy but decisive.
 NOTE: still ruled out cleanly — CLA, pktdeal, flood, FDB, trap_acl, qmg, dpa-protocol. ping ✅ +
 SW bridge comm ✅ remain delivered (merged main). Continuing per user (supervising, run to 07:00 UTC).
+
+---
+## Iter F — macaddr_exchange_md/multicst_md also negative; pivoting to stock-boot reg diff
+Found a real diff: 0x92388180 = 0x4 → macaddr_exchange_md(bit0)=0 + multicst_md(bit1)=0 (stock
+sets BOTH =1 in brg_initial). Poked to 0x7 (set both) → hw_fwd STILL 0x01 (no climb). Negative.
+(mirror bit7=1 matches; pp[0x2c] bit25 correctly unset = matches stock.)
+
+6 iterations, EVERY incremental lever negative; hw_fwd never moves off ~0. Firm conclusion: the
+trap-all is NOT a single configurable register — it's either inherent to the driver's DSA-conduit
+pipeline drive, OR a gap in the 22363-entry stock REPLAY blob (zx_stock_ops) that the code audit
+cannot see (a forwarding reg stock sets that the replay omits AND the driver doesn't explicitly
+set → at reset default in mainline). The ONLY decisive remaining step that can catch a replay gap
+= boot stock, dump the full forwarding-reg set via the fpga oracle, boot mainline, diff. Pivoting
+to that now (heavy, multi-iteration). If the stock diff shows the forwarding regs MATCH → the
+trap-all is whole-pipeline/dynamic = honest dead-end (HW offload needs a dedicated re-architecture
+replicating stock's complete forwarding-domain setup + likely runtime learning state).
