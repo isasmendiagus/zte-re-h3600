@@ -208,3 +208,28 @@ REMAINING OPTIONS (all expensive/uncertain — need user decision):
 NB the agents' FDB/static-host-entry fix (broadcast-works/unicast-drops = unknown-unicast-to-CPU)
 is the textbook cause BUT here the my-MAC trap table is intact and re-seeding sbrag didn't help,
 so the FDB angle does not fit this instance — it's the RED/OPC latch, option A is the lead.
+
+---
+## Iteration 2026-06-03 (cont.4) — found the reset mechanism; option A needs CODE (not poke)
+
+Stock reset = `pon_reset(mask)` (plat_zxylzb @0x1b284): `pon_base+8 &= ~mask; <wait>; pon_base+8
+|= mask` — i.e. pulse-LOW a per-block reset register. `pon_reset(0xffffffff)` = full reset at
+boot; per-port MAC reset = `1<<(port+6)` (this is the bit the cable-relink pulses, via
+extphy_timer_func). Bits 0..5 reset the major blocks (TM/QMG/RED/SPA/CLA/…) but the exact
+bit→block map isn't decoded.
+
+⇒ A block soft-reset CANNOT be cleanly validated by a live poke: pulsing pon_reset on the
+TM/QMG/RED block leaves it RESET-BUT-UNINITIALIZED (the driver won't re-run its init), so it
+would break the datapath, and a blind full pon_reset would hang the running path. The reset must
+be PAIRED with a re-init in the driver. So option A is necessarily a CODE change:
+  on wedge-detect (drop_RED 0x921da044 climbing while host-RX idle) or on link-up →
+  pon_reset(<TM/QMG/RED block bits>) THEN re-run tm_pon_tm_initial-equivalent (zx_tm_red_init +
+  QMG init + register_cpu_mac + flood policy), rebuild, test (bulk + relink).
+This requires decoding the pon_reset bit→block map first (stock decomp: which bit each init path
+asserts), then a careful re-init sequence. NON-TRIVIAL + needs a rebuild/boot/test cycle.
+
+FINAL STATUS (this loop): cheap live-poke approach EXHAUSTED and proven insufficient (the latch
+needs a HW block reset, which needs paired re-init = code). The port1 GATE fix (the deliverable)
+is DONE + merged + verified on clean boot. This load/relink wedge is a documented OPEN robustness
+bug; the actionable fix is option A (reset+re-init on link-up/watchdog) — a code+rebuild task for
+a future session. Memory: [[zte-redwedge-unicast-cpu]].
