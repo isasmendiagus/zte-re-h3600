@@ -180,3 +180,24 @@ NEXT: clapeek the ram2-6 entry for a LAN inport (regport for lan1/lan3), decode 
 cpu_qid_rp_en field, and poke-test CLEARING the trap action (or cpu_qid_rp_en) for that inport →
 re-run the fwd test → if hw_fwd climbs, that's the lever (then code it as port_bridge_join). RISK:
 clearing trap for the CPU inport breaks mgmt — only touch the LAN inports.
+
+---
+## Iter D — CLA CONCLUSIVELY RULED OUT as the trap-all; it's a global driver-vs-stock diff
+Compared live mainline vs the stock CLA golden dump (captures/cla_stock): stock's regport2 ram2
+entries carry `cpu_qid=0x15 valid/dir=0x42` — and STOCK HW-FORWARDS with those exact entries
+(the working ports forward in stock). Mainline replays the SAME entries byte-for-byte. ⇒ the
+cpu_qid in the CLA hash entry is NOT an unconditional trap, and the CLA is NOT the trap-all
+differentiator (logic: identical CLA, opposite behaviour → the cause is elsewhere). This matches
+the static-FDB result (the trap is upstream of / independent of the CLA forward decision).
+Peeked global-mode candidates (no smoking gun yet): pp ctrl 0x92380000=1, pp 0x92380004=0x02abfc8d,
+pp CPU-fwd ctrl 0x9238002c=0x106 (the lan_up_port+0x19 bit NOT set, but that gates CPU-SOURCE fwd,
+likely egress not LAN->LAN), sbrag 0x92388004=0x040200ff.
+
+⇒ The trap-all is a GLOBAL config the mainline driver sets/omits differently from stock. Reg-by-reg
+poking is NOT converging. The DECISIVE next step is a stock-vs-mainline FORWARDING-CONFIG DIFF:
+boot stock (DTR reset → NAND), dump the sbrag/cla/qmg/pp/spa/opc forwarding-relevant regs via the
+fpga-read oracle (/dev/logger_main, see zte-device-access), boot mainline, dump the same, and diff
+— the reg(s) that differ = the trap-all lever. (Lighter alternative to kotrace-stock; the
+egress-diff-harness already does stock-vs-mainline reg diffs.) This is the dedicated RE the
+dead-end note flagged. ASSESSMENT: HW forwarding needs this stock-config-diff; not crackable by
+blind poking. Continuing the loop toward the stock diff (heavier per-iteration).
