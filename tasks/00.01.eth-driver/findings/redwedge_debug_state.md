@@ -258,3 +258,29 @@ forwarding missing) — a clean reboot won't fix a missing feature.
 Neither is a quick loop win. The port1 gate fix (the original deliverable) remains DONE+merged.
 Recommend treating stable-streaming as a deliberate DSA-offload feature effort. Bench restored
 to sane state (lan1=.99 standalone, host=.50, br0 removed, netns deleted).
+
+---
+## Iteration 2026-06-03 (cont.6) — CLEAN-boot forwarding test: routing WORKS, but wedge is UNIVERSAL
+
+Clean reboot (fresh state, wedge cleared). Tested on a clean boot with host netns:
+- **lan1 (jack2) AND lan2 (jack3) both work standalone (L3 endpoint): bidirectional ping OK**
+  (lan2 5/5 0% loss, 1.3ms). So per-port egress works on BOTH ports, not just port1.
+- **L2 BRIDGE forwarding (br0=lan1+lan2) does NOT work** even clean: nsA's ARP reaches the CPU
+  (port1 RX climbs) but is NOT flooded out lan2 (nsB sees nothing). No HW offload + the SW-bridge
+  lan1→lan2 flood doesn't complete.
+- **L3 ROUTING through the device WORKS (functional!):** lan1=10.0.0.99, lan2=10.1.0.99,
+  ip_forward=1; nsA(10.0.0.1)→nsB(10.1.0.50) routed = ttl=63, 5/5 0% loss, ~14ms. The device
+  IS a functional multi-port IP router at light/moderate load.
+- **BUT sustained streaming through the routed path WEDGES** (same as CPU-terminated): a 20MB
+  stream stalled at <4 Mbit/s after routing ~500+ frames bidirectionally (port1=557, port2=504,
+  tx=959), then ping = 100% loss (wedged). drops RED only +34 this time (lower than the
+  terminated case) but the path is dead until reboot.
+
+★ KEY CONCLUSION: the CPU UP-trap wedge is the UNIVERSAL blocker for stable streaming. ALL
+inter-port/endpoint traffic currently goes through the CPU (no HW bridge offload), so terminated,
+routed, AND (would-be) bridged traffic all wedge under sustained load. → Fixing the wedge
+(option A) enables stable streaming on ALL CPU paths; it is the right universal target.
+"Functional" (light/moderate: ping, routing, per-port endpoints) ALREADY WORKS on a clean boot.
+"Stable streaming" (sustained) is gated solely by the wedge. (HW bridge offload is a separate
+perf feature that would make forwarding FAST + bypass the CPU, but the wedge fix is what makes it
+STABLE.) Next per user's "las dos en orden": pursue option A (wedge reset+re-init recovery).
