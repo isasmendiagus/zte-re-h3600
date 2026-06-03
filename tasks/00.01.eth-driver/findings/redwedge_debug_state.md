@@ -58,3 +58,41 @@ during the burst and does NOT decay/drain → RED drops all new unicast. Boot-ti
 - REPL :9999 — simple commands, space them (UART input-overrun if too fast).
 - Host: ping/dd/nc/tcpdump on enxc8a362e95900 (jack2=port1, .50). No sudo for ethtool -s.
 - Bulk test: device `nc -l -p 5001 >/dev/null &`; host `dd if=/dev/zero bs=64k | nc -N .99 5001`.
+
+---
+## Iteration 2026-06-03 (live, continuous) — RED ruled out; FDB-miss is the lead
+
+RULED OUT LIVE (in the wedged state, poke-tested, reversible):
+- **RED block** (0x92344004 cfg_enable [1:0]): poked 0xde→0xdc (readback OK) → unicast still
+  100% loss, drop_RED counter still climbing. So the OPC "drop_RED" bucket (0x921da044) is
+  NOT enforced by the RED block. (DATASHEET flagged ❓ — see RED + drop-counter notes.)
+- **QMG up_ram_thd** (0x9234c000[12:0]): raised 0x050→0x1fff (readback OK) → no effect. Not a
+  UP-RAM-occupancy/threshold drop. QMG config is otherwise correct (up_thd=0x50/dn_thd=0x1FA0
+  = stock values, applied at lan_up; 0xc00c=0x3ff depth; 0xc008 trap_cfg=0).
+- NAPI advances/ACKs ALL descriptors incl. bad ones (invalidate+rx_head++ +ack are OUTSIDE the
+  bppe bound-check `if`, lines 2990-3002) — so the crash bound-check does NOT stall the queue.
+  (Minor: BP not freed when bppe_idx>=pool — possible slow pool leak, lines 2875/2988; low
+  priority.)
+
+DROP STAGE: every unicast→CPU frame increments OPC drop bucket **0x921da044** (+5 per 5 ICMP);
+QMG UP hw_trap only +1; frames die BEFORE the CPU ring (tm_rx/tm_napi/rx_head flat during a
+pure-unicast burst → no enqueue, no RX IRQ, NAPI doesn't run).
+
+★ LEAD HYPOTHESIS: **FDB-miss for the CPU/host MAC** (f4:f6:47:0f:42:64). The asymmetry fits:
+- device→host unicast (ARP reply, DA=host MAC c8:a3:62, NOT in FDB since learning is off) →
+  egresses fine (flooded). ✅ seen on wire.
+- host→CPU unicast (DA = CPU MAC) → needs FDB hit (CPU MAC → CPU port) to trap. If that entry
+  is evicted/aged under load or on relink → unknown-unicast → flooded to LAN ports but NOT to
+  the CPU port → CPU never sees it → no reply. ✅ matches symptom + drop bucket.
+- broadcast→CPU (ARP req) → flooded to ALL incl CPU → always works. ✅
+Driver: dynamic FDB learning is DISABLED (zx_tm_napi_poll ~2970); only the CPU's own MAC is
+seeded at probe via zx_sbrag_add_mac (sbragRegTable, ZX_SBRAG_CMD 0x388814/BUSY 0x388818/
+D0-2 0x38881c/20/24) + zx_fdb_add (PP_BRG_RAM). Suspect the seed ages out / is flushed by the
+MAC port-reset on relink, and a traffic burst's source-MAC churn evicts it (or aging timer).
+
+NEXT: (a) confirm CPU-MAC FDB entry is gone in the wedged state (read sbrag table back, or
+re-seed it live and see unicast recover); (b) check unknown-unicast flood mask includes CPU
+(PP unk-ucast ~0x8340 / phys ~0x92388340); FIX likely = program the CPU/host MAC as a STATIC
+NON-AGING FDB entry + re-seed on link-up (adjust_link) + ensure CPU port in the unknown-ucast
+flood mask. 3 research agents dispatched (general patterns+TI doc / silicon lineage / mainline
+DSA CPU-port FDB+flood+link-up patterns) to ground the exact mechanism + fix.

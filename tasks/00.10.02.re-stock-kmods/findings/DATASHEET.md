@@ -750,9 +750,15 @@ NOTE: SIPC is a SINGLE shared block (NOT per-port) — it cannot discriminate on
 
 **Block base ≈ `0x92344004`** (zx_redregtable). Role: congestion/drop: share max, color trap, FEC, indirect RAM
 
+> ⚠️ **`cfg_enable` master-disable behaviour UNCONFIRMED (2026-06-03):** live value 0xde
+> ([1:0]=0b10). Clearing [1:0] (poke 0xde→0xdc, readback OK) did NOT stop the OPC `drop_RED`
+> counter (0x921da044) nor restore port1 unicast→CPU when wedged. So [1:0]=2 may be a *mode*
+> select rather than a simple enable, or the drop that increments 0x921da044 is not gated by
+> this block. The RED block↔drop_RED relationship is not established — see the drop-counter note.
+
 | phys (sub0) | reg_id | R/W | bits | semantic name | conf |
 |---|---|---|---|---|---|
-| `0x92344004` | 0 | RW | [1:0] | cfg_enable | ✅ |
+| `0x92344004` | 0 | RW | [1:0] | cfg_enable (⚠️ effect unconfirmed) | ❓ |
 | `0x92344004` | 3 | RW | [2] | share_mode | ✅ |
 | `0x92344004` | 2 | RW | [3] | trap_color_en | ✅ |
 | `0x92344004` | 1 | RW | [4] | open_out_en | ✅ |
@@ -1186,8 +1192,19 @@ The per-port bond chain that makes `phy_mac_ready` (0x921d9068 bit port+5, RO se
 | phys | R/W | semantic | conf |
 |---|---|---|---|
 | `0x921da040` | R | drop_PP | ✅ |
-| `0x921da044` | R | drop_RED | ✅ |
+| `0x921da044` | R | drop_RED (⚠️ see note) | ❓ |
 | `0x921da04c` | R | drop_DSCH | ✅ |
+
+> ⚠️ **`0x921da044` "drop_RED" name UNCONFIRMED (2026-06-03).** These are OPC drop-*reason*
+> counters in the 0x921da000 region. Live test: with port1 unicast→CPU wedged (each unicast
+> frame increments 0x921da044 +1), **disabling the actual RED block `0x92344004` cfg_enable
+> [1:0] (poked 0xde→0xdc, readback OK) did NOT stop the 0x921da044 drops and did NOT restore
+> unicast**. So either (a) 0x921da044 is an OPC-enforced drop NOT controlled by the RED block
+> (the "RED" label is just a reason tag), or (b) `0x92344004[1:0]` is not the RED master enable
+> (its encoding is unconfirmed — value read 0xde, [1:0]=0b10). Treat the "drop_RED"↔RED-block
+> association as NOT established until verified. The drop that gates port1 unicast→CPU under
+> load/relink is bucketed here but its true enforcing stage is still unidentified
+> (OPC/QMG up_ram_thd suspected). See findings/redwedge_debug_state.md.
 
 ## PP / ETH_TM2 (outside the RegTables; from MEMORY_LAYOUT)
 | phys | R/W | semantic | meaning | conf |
