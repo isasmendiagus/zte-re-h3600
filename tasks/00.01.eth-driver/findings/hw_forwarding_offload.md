@@ -123,3 +123,39 @@ fundamental puzzle (why same CLA traps in mainline but forwards in stock) may be
 ASSESSMENT: HW forwarding is looking like a DEEP blocker (CLA trap-all, replayed-from-stock,
 risky to change). pktdeal param left in (harmless, default 0). Continuing but flagging possible
 honest dead-end if the CLA proves architectural.
+
+---
+## ★ HONEST DEAD-END for HW forwarding (overnight 2026-06-03 night) — CLA trap-all is architectural
+
+DECISIVE static-FDB test: added BOTH host MACs as static HW-FDB entries (fdbadd, rc=0) so the
+switch DA-lookup is guaranteed to HIT, set static host ARP (skip ARP), ping nsA<->nsB through
+br0 = 6/6 — but QMG hw_fwd(0x9234c05c) STILL stays 0 (hw_trap +26, tm_rx +28). ⇒ the switch traps
+to CPU REGARDLESS of the FDB. So it is NOT FDB/learning, and the CLA preempts the L2 forward
+decision entirely.
+
+RULED OUT as the HW-fwd lever (all tested live, none make hw_fwd climb):
+ - SPA pktdeal (zx_spa_pktdeal=0 module param, rebuilt+booted): ping-to-device survives but
+   hw_fwd stays 0.
+ - Flood masks (brdcst_fwd 0x92388300, unknown_ucast 0x92388340): enable SW-bridge ARP only.
+ - HW FDB / learning (static fdbadd entries): hw_fwd stays 0.
+ - trap_acl_en (CLA reg4 0x9238c080[17]): already 0 — not the trap mechanism.
+ - Enable regs (transfer_en/smac_look/da_lookup/learn_mode): already on.
+
+CONCLUSION: the driver is architected as a TRAP-ALL DSA conduit — the CLA (replayed byte-for-byte
+from stock zx_cla_table) traps EVERY frame to the CPU before the switch's L2 forward engine runs,
+so hw_fwd is always 0 and ALL inter-port traffic is CPU/software-forwarded (slow + wedges under
+load). None of the reachable config levers change this. The fundamental puzzle — stock HW-forwards
+with the SAME CLA replay — means the trap-all is either (a) inherent to how this driver drives the
+pipeline (CPU-port-centric), or (b) gated by a higher-level mode (PON-vs-switch / a CLA default-
+flow action / SADM CPU-port routing) NOT captured in the per-entry CLA dump. Cracking it is a
+DEDICATED multi-session RE effort: live-trace stock forwarding a LAN<->LAN frame (kotrace the
+cla/sbrg/qmg path) and diff vs mainline to find what makes stock hw_fwd; likely needs the CLA
+default-flow action (claRegTable reg0 0x9238c014) + the SADM/CPU-port forward config decoded. NOT
+attainable safely overnight. Stopping the loop here (honest dead-end).
+
+WHAT THIS SESSION DELIVERED (all merged to main / committed):
+ - port1 ingress→CPU gate fix (SPA port_vlan_filter) — MERGED, verified bidi ping.
+ - offload_fwd_mark fix (tag_zte.c) — MERGED — bridge comm works via SW (lan<->lan).
+ - ping (1) ✅, bridge comm (2) ✅ (SW, light/moderate load). Performance (3) 🔴 — needs HW fwd.
+ - Full RE map of the trap-all mechanism + the precise next-step (above) on branch
+   hw-bridge-offload (the zx_spa_pktdeal experiment param can be reverted; it's harmless).
