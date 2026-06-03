@@ -201,3 +201,24 @@ fpga-read oracle (/dev/logger_main, see zte-device-access), boot mainline, dump 
 egress-diff-harness already does stock-vs-mainline reg diffs.) This is the dedicated RE the
 dead-end note flagged. ASSESSMENT: HW forwarding needs this stock-config-diff; not crackable by
 blind poking. Continuing the loop toward the stock diff (heavier per-iteration).
+
+---
+## Iter E — forwarding-init stages audited (decomp vs driver); no single global lever found
+Stock forwarding init = tm_pon_pp_initial → {reg, sadm, brg, cla, adm, dpa, pm}. Audited:
+ - tm_pon_pp_brg_initial (sbrg per-port loop @43590): transfer_en/smac_look/da_lookup/learn_mode
+   all ON in mainline (matches). flood masks were off (poked, only gave SW-bridge ARP).
+ - tm_pon_pp_cla_initial: CLA entries match stock byte-for-byte (stock forwards with them).
+ - tm_pon_tm_qmg_initial: minimal (ext_ddr/ddr_cache + up/dn thd) — matches mainline.
+ - tm_pon_pp_dpa_initial: dpa_set_protocol_cpu_pps_en(1) = trap PROTOCOL pkts to CPU (control
+   plane, correct) — NOT a data-plane trap-all.
+No single global forward-vs-trap bit found in any audited stage. GROWING ASSESSMENT: the trap-all
+is likely INHERENT to the driver's DSA-conduit design (it configures the pipeline to deliver
+everything to the CPU so Linux can switch in SW) and/or a difference across the FULL init sequence
+(brg+cla+adm+dpa+pm+sadm + order + dynamic state) that no single reg captures. The hardware CAN
+forward (stock proves it) but enabling HW forwarding = replicating stock's COMPLETE forwarding
+pipeline config, not flipping one bit — a dedicated re-architecture.
+DECISIVE next: boot stock + dump the full sbrg/cla/qmg/pp/spa/opc/adm/dpa forwarding-reg set via
+the fpga oracle, boot mainline, dump the same, diff — the reg(s) the driver's replay does NOT
+cover/sets differently = the lever (or confirms it's whole-pipeline). Heavy but decisive.
+NOTE: still ruled out cleanly — CLA, pktdeal, flood, FDB, trap_acl, qmg, dpa-protocol. ping ✅ +
+SW bridge comm ✅ remain delivered (merged main). Continuing per user (supervising, run to 07:00 UTC).
