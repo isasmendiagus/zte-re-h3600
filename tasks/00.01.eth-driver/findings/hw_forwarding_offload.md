@@ -266,3 +266,34 @@ bridge. So: ping ✅, bridge comm ✅ (SW, light/moderate load). Performance/HW-
 SW path is CPU-bound + hits the unicast→CPU wedge under load — see zte-redwedge-unicast-cpu).
 Device left on mainline (functional). Branch hw-bridge-offload has the full trail (zx_spa_pktdeal
 experiment param is harmless/revertible). Loop STOPPED (honest dead-end).
+
+---
+## ★★★ Iter G BREAKTHROUGH (new approach: stock-boot diff) — "HW forwarding" was a FALSE PREMISE
+Cracked reliable stock boot: DTR cold reset (bridge :9998) + DO NOT interrupt autoboot → cspstart
+boots stock NAND (the earlier failures interrupted autoboot → mainline). Verified stock up (.1).
+
+DECISIVE LIVE TEST on STOCK: ran the netns fwd test jack2<->jack4 THROUGH stock = 6/6 ping (stock
+forwards LAN<->LAN). Dumped stock's QMG counters via the fpga oracle around it:
+  hw_fwd (0x9234c05c / widx 0xd3017): 0 BEFORE, **0 AFTER** (did NOT climb)
+  hw_trap (0x9234c060 / widx 0xd3018): 0x143 BEFORE, **0x1d9 AFTER (+150)** (climbed)
+⇒ **STOCK ALSO CPU-FORWARDS LAN<->LAN — it traps to the CPU (hw_trap) and forwards in software,
+EXACTLY like mainline. STOCK DOES NOT HW-FORWARD (hw_fwd=0).** The chip's basic L2 LAN<->LAN path
+is CPU/software-forward in BOTH stock and mainline. So the entire "enable HW forwarding / hw_fwd
+should climb" goal was based on a FALSE PREMISE — mainline ALREADY MATCHES stock's forwarding
+mechanism. There is no "HW bridge offload" for basic L2 on this chip's normal path; the trap-all
+is CORRECT (matches stock), not a bug.
+
+Stock forwarding-reg dump (vs mainline): all match (sbrag 0x040200ff, flood 0x015555ff,
+brdcst_fwd 0x92388300=0 in BOTH, cla default-flow, pp 0x9238002c=0x106) EXCEPT qmg 0x9234c000:
+stock=0x01f40fa0 (up_thd 0xfa0/dn 0xfa0, lan_up=0 state) vs mainline=0x03f40050 (up_thd 0x50 set
+at lan_up). Not a HW-fwd lever.
+
+⇒ REFRAME of the real goal (stable streaming): both stock & mainline CPU-forward LAN<->LAN. The
+REAL difference that matters = (1) mainline's unicast→CPU path WEDGES under load
+([[zte-redwedge-unicast-cpu]]) while stock's does NOT → FIX THE WEDGE = stable CPU forwarding =
+matches stock's behavior (TRACTABLE). (2) Stock likely uses the FFE flow fast-path for sustained
+throughput acceleration (ffe_learn_skb / the L3 fast-path) — that, not basic L2 hw_fwd, is the
+real "offload" — a separate feature. NEXT: stress-test stock under SUSTAINED bulk (does stock
+wedge like mainline, or stay stable?) to confirm the wedge is the key fixable diff; then pursue
+the wedge fix (RED/OPC latch recovery) for stable streaming. HW-fwd dead-end is RESOLVED as a
+non-goal.
