@@ -87,3 +87,19 @@ set pktdeal=0 for lan1+lan3 entities on the L2-unicast slots, re-run fwd test, c
 port_bridge_join + keep CPU trap. This is a deep + risky feature (un-trapping the SPA); progress
 is incremental. Device currently: br0=lan1+lan3, flood masks poked, uptime ~2.3h (dirty but
 usable for hw_fwd diagnostics).
+
+---
+## ROBUST BOOT RECIPE (use this every fire — learned 2026-06-03 night)
+The auto_bootm-direct path desyncs if TFTP is slow. The reliable flow:
+  1. RESTORE host NICs to default ns + .50 FIRST (the netns fwd test leaves enxc8a362e95900 in
+     nsA → TFTP from default-ns tftpd fails with 'T T T' timeouts):
+     `echo <pass> | sudo -S bash -c 'for ns in nsA nsB; do for nic in $(ip netns exec $ns ls /sys/class/net 2>/dev/null|grep enx); do ip netns exec $ns ip link set $nic netns 1; done; ip netns del $ns 2>/dev/null; done; sleep 1; ip addr flush dev enxc8a362e95900; ip addr add 192.168.1.50/24 dev enxc8a362e95900; ip link set enxc8a362e95900 up; ip link set enx6c70cbb68169 up'`
+  2. Launch the bridge FIRST (owns the serial, serves :9999 cmd + :9998 DTR):
+     `fuser -k /dev/ttyUSB0; sleep 2; nohup python3 tasks/00.04.02.uart-bridge/uart_bridge.py >/tmp/bridge.log 2>&1 &`
+  3. RAM-boot via the dedicated script (UART_TCP=1, talks through the bridge, retry/DTR-recovery,
+     no NAND write): `nohup python3 tasks/00.01.eth-driver/scripts/tftp_boot_mainline.py >/tmp/boot.log 2>&1 &`
+     then wait ~3min for 'C-init REPL ready' (grep /tmp/boot.log). The bridge stays up = REPL on
+     :9999 ready immediately after boot (NO kill/restart needed — the script shares the bridge).
+  - Rebuild first if code changed: `python3 tasks/00.01.eth-driver/scripts/build_slotA.py`.
+  - tftp_boot_mainline.py also produced slotA.bin+header for `flash_mainline.py` (NAND persist) if
+    TFTP ever too fragile — but RAM boot is faster for the loop.
