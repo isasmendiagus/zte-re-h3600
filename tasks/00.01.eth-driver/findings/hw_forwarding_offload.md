@@ -321,3 +321,27 @@ NEXT: RE the FFE — find the FFE/flow-table HW block (registers/indirect-RAM), 
 programs a flow into it, and what mainline must do to offload established flows. Start: datasheet
 + decomp for ffe_*/flow-table/napt regs; dump stock's FFE block before/after a flow; find the
 flow-insert path.
+
+---
+## Iter I — FFE confirmed VMLINUX-only (NPU); PIVOT to wedge-prevention (up_thd/ddr_cache)
+RE'd the FFE: ffe_learn_skb / ffe_receive_skb / ffe_get_npu_enable are all halt_baddata() STUBS in
+the decompiled .ko → the FFE core is an NPU whose code lives in stock VMLINUX (not decompiled).
+pp_pm_set_flow_info / pm_set_flow_cfg exist but are PM flow-STATISTICS, not the forwarding offload.
+⇒ Implementing the FFE = a massive NPU + vmlinux RE (and likely NPU firmware) — out of reach now.
+Per the loop's pivot rule (FFE needs vmlinux → pivot), the achievable target = STABLE (if slow,
+CPU-bound) LAN streaming by fixing the WEDGE.
+
+FRESH wedge hypothesis (NOT yet tested this way): stock qmg 0x9234c000 up_thd=0xfa0 (4000) +
+ddr_cache_enable(1) [0x9234c004 bit1] vs mainline up_thd=0x50 (80). Earlier I raised up_thd on an
+ALREADY-wedged device (no un-wedge). But I NEVER set the big up_thd + ddr_cache on a FRESH boot
+BEFORE the load — to PREVENT the wedge (small on-chip CPU-queue threshold may overflow under burst
+→ RED latch → wedge; a big threshold + DDR-backed cache like stock may avoid overflow). NEXT:
+RAM-boot mainline fresh, set qmg up_thd field to 0xfa0 (0x9234c000) + ext_ddr_only_enable(0)/
+ddr_cache_enable(1) (0x9234c004) BEFORE the bulk, then stress-test (30MB nsA->nsB through br0) →
+if it does NOT wedge (sustains without dying) → that's the wedge-prevention fix → code it at init.
+It'll still be CPU-bound (slow, no FFE) but STABLE. If it still wedges → pursue the TM-block
+soft-reset/watchdog recovery (pon_reset + re-init) from the redwedge investigation.
+
+MORNING-SUMMARY-READY CONCLUSION: stock's 292 Mbit/s is FFE/NPU (vmlinux, out of reach). Mainline
+can at best do stable-but-slow CPU forwarding (if the wedge is fixed). True high-throughput needs
+the NPU/FFE = a dedicated vmlinux-RE project.
