@@ -170,3 +170,55 @@ Clean boot, both fixes in driver, NO pokes. Sustained port1 traffic (3× 30 ping
 rx_per_ingress[port1] climbed 11→37→55→94, REPL alive all rounds (no panic). port1 ingress→CPU WORKS
 and is STABLE under load. The multi-session port1 saga is CLOSED. Remaining = tuning (full bidirectional
 ping / egress to port1, bench route hygiene, remove debug instrumentation, OpenWrt integration).
+
+---
+
+## ✅✅ FINAL HW VERIFICATION on a CLEAN BOOT (2026-06-03) + new load-wedge finding
+
+RAM-booted mainline with BOTH fixes (port_vlan_filter clear + bppe bound-check).
+Boot was clean — REPL ready, **no panic**, DSA tree setup, live `ingress=1 ... delivered`.
+
+DSA note: the C-init puts `192.168.1.99/24` on the **conduit `sw`**, and `lan0..lan3`
+come up **DOWN**. For a port to ping you must `ip link set lanN up` and move the IP to
+the user port (frames trapped to a down user-port netdev are dropped). After
+`ip link set lan1 up` + IP on `lan1`:
+
+- **Bidirectional ping on port1/jack2: 8/8, 0% loss** (ARP + ICMP round-trip on the wire,
+  confirmed by host tcpdump). The port1 gate fix is **fully verified end-to-end**.
+- Sustained 90 pings earlier: 90/90 0% loss; a 100MB ingress blast climbed rx_per_ingress
+  port1 by +424 with `tm_bmu_free_fail=0` and **no crash** — the fix is stable under load
+  for the *ingress-count* path.
+
+### ⚠️ NEW SEPARATE BUG (not the gate fix) — unicast→CPU RED-wedge under load / relink
+
+Two independent triggers put port1 into a state where **light + bulk unicast→CPU stops
+working while broadcast still works**:
+1. A **cable disconnect/reconnect** (PHY link DOWN→UP pulses the MAC port-reset, dmesg:
+   `PHY[1] link DOWN ... MAC[1].ctrl=0xba6000 (port-reset bit 7 pulsed)`).
+2. A **heavy bulk TCP blast** (50MB nc) — after ~1000 packets the path wedges.
+
+Per-stage localization (5 ICMP unicast sent, post-wedge), repeatable:
+- `smac1 good_uc` +5 (frames arrive CLEAN at MAC1, crc=0) ✅
+- `QMG UP hw_trap` **+1** (almost none trapped to CPU)
+- **`RED[0x1a044]` +5** ← the 5 unicast frames die at RED
+- `tm_tx_count` +1 (kernel never sees them → no reply) → host ping 100% loss
+
+So the unicast-to-CPU frames are routed into a CPU queue that **RED drops persistently**
+(broadcast/flood-to-CPU uses a different queue and keeps working — that's why ARP resolves
+but ICMP doesn't). The `port_vlan_filter` gate is NOT involved (verified still =0 across
+the whole table via peek after the wedge). RX is not hard-wedged (tm_rx still climbs,
+bmu_free_credit fluctuates 5..33) — it's specifically the unicast-trap CPU queue that RED
+is dropping.
+
+**Consequence**: bulk TCP throughput is currently unobtainable — the bulk transfer itself
+triggers the wedge (~1000 pkts in, then RED drops the rest → TCP collapses to ~kbit/s).
+A clean boot restores it; the next disturbance re-wedges it.
+
+**Root-cause hypothesis (for the next iteration)**: the QMG CPU-trap queue used by the
+unicast-DA-hit path has a RED threshold / average-occupancy that saturates under burst and
+does not decay/drain (per-queue NAPI servicing or RED EWMA stuck). The boot-time QMG/RED
+init sets it correctly; neither the link-up handler nor steady-state recovers it. NEXT:
+map the QMG per-queue + RED threshold regs, peek the unicast-trap queue's occupancy/RED
+config pre- vs post-wedge, and either (a) re-apply RED/queue init on link-up, or (b) fix
+the per-queue drain so the trap queue doesn't saturate. This is a robustness/QoS bug,
+distinct from the (solved + merged) port1 ingress gate.
