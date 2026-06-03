@@ -548,3 +548,38 @@ controlled flow with debuggable C. If it forwards → wire it to a real flow-lea
 fastpath / conntrack-offload). NEXT FIRE: write the claflow builder + debugfs in zx-eth-main.c,
 rebuild, RAM-boot, test one flow. (Builder ref: the 45-byte key printk in addFlowOperInfo ~line
 52360 + the 60-byte entry printks in cla_set_hash_table.)
+
+================================================================================
+## Iter N (2026-06-04 ~22:00 UTC) — COURSE-CORRECTION: hardfast is L3/NAT-routed; L2 ≠ L3-hash
+
+Cross-checked against ffe_ringless_egress_re.md (2026-05-28, HIGH confidence). That session
+established: **sw_acl_l3_hardfast_session_add programs an L3 NAT/ROUTING session** (carries
+natip/natport/gemport/tcont/sessionid/pppoe → the WAN↔LAN routed/NAT fast-path). The cla
+hash-table fast-path (ram2..6) I mapped in Iter K-M is fed by that L3 session API.
+
+⚠️ MY 292 Mbit/s TEST WAS SAME-SUBNET (10.0.0.1/24 ↔ 10.0.0.2/24, jack2↔jack4) = pure **L2
+bridging**, NOT L3 routing. So the L3-hardfast hash may NOT be the accelerator for that test.
+Two distinct stock fast-paths likely exist:
+  (A) L3-hardfast hash (ram2..6) — WAN/NAT ROUTED flows. (Iter K-M mapped this.)
+  (B) L2 switch fabric — same-subnet LAN↔LAN, forwarded by the CLA L2 decision + FDB
+      (CLA→QMG sw_fwd→DSCH→SOPC→MAC, NO CPU trap). This is what the 292 Mbit/s test used.
+
+The old dead-end (zte-hw-forwarding-deadend) already showed: stock L2-forwards (hw_trap flat,
+frames flow) while mainline TRAPS every L2 frame (hw_trap climbs) — and the lever was never
+found because "the decisive stock-vs-mainline reg diff was NOT executable (stock boot unreliable)."
+
+⇒ BOTH paths are blocked on the SAME missing experiment: **boot stock reliably + capture its
+LIVE forwarding state during a same-subnet LAN↔LAN flow.** This single capture disambiguates
+A-vs-B AND yields ground truth:
+  - clapeek-equivalent ram2..6 DURING the L2 flow: if it POPULATES → the hash (A) handles L2 too
+    → capture the entry, replicate (Iter M plan stands). If it stays EMPTY → it's the L2 fabric
+    (B) → the lever is the CLA L2 forward decision (default-flow action / FDB / da_lookup), diff
+    stock-vs-mainline CLA + QMG live.
+  - Either way: diff stock's live CLA/QMG/SADM forwarding regs vs mainline during the flow.
+
+DECISION: STOP blind-implementing claflow (might target the wrong path). PIVOT to the empirical
+stock capture (the user's "dump de su init en stock"). Reliable stock boot = DTR cold reset +
+DON'T interrupt autoboot → cspstart boots NAND stock (NAND still holds stock; mainline is RAM/TFTP
+only). On stock: read ram2..6 via the indirect iface (devmem/reg tool: write CMD 0x9238c014 =
+addr|ram_id<<22|1<<27 read, poll 0x9238c018, read 0x9238c01c x15) idle-vs-during-flow; capture
+QMG (0x9234c044 sw_fwd / 0x9234c060 hw_trap) + CLA forward regs. NEXT FIRE: execute the capture.
