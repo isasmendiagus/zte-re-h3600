@@ -480,3 +480,25 @@ outport=<lan3 phys>, act_val=forward, windata=that flow's key) and watch QMG hw_
 that flow (= HW-forwarded, CPU bypassed). If it forwards → code cla_set_hash_table-equivalent as a
 flow-offload hook in the mainline driver. NEXT decode: cla_acl_hash_addr_gen (0x16cdc) + the exact
 windata packing in tm_acl_setMtchInfo (tm.ko 0x60ea0).
+
+### Iter L addendum — hash bucket generator decoded (cla_acl_hash_addr_gen 0x16cdc):
+`cla_acl_hash_addr_gen(hash_mode, key[0x2d], &out)`:
+ - reverses the 45-byte (0x2d) match key, then runs a **byte-wise MSB-first CRC-32** over it.
+ - **poly table selected by hash_mode**: 1→crctable_1EDC6F41 (CRC-32C), 2→crctable_F4ACFB13,
+   3→crctable_32583499, 0/else→crctable_04C11DB7 (Ethernet CRC-32). `bucket = crc & 0xffff`.
+ - 45-byte key fields: [0]outport(5b)+inport, [2]l2_type/tag_level/pppoe/direct, [3]ex_rule_id,
+   [4..0x2c] extra_data0..19 (the packed 5-tuple/match window, 7-bit-offset packing).
+ - hash_mode per table = cla_set_hash_poly_config (0x1103c). (cla_list_hash_addr_gen, used for the
+   SW shadow g_FastList, is the SAME CRC-32 0x04C11DB7 over the raw 0x28-byte 5-tuple, &0x1ff.)
+
+⇒ To place an entry the HW will actually hit, the bucket MUST equal CRC32(key) for that flow's key
+under the table's configured poly. Computable offline, BUT the cleanest verification is EMPIRICAL.
+
+### NEXT (empirical capture — device is on STOCK right now, perfect timing):
+Stock's cla_set_hash_table PRINTS the full entry (windata, outport, act_val, hash_addr, valid_en,
+direct) at g_tm_debug_level>=7. PLAN: on stock, raise tm/switch debug level → start a known
+LAN<->LAN unicast flow (jack2<->jack4) → capture the printed FLOW-FORWARD entries from dmesg =
+GROUND-TRUTH 60-byte entry + bucket for a real flow. Then boot mainline and replicate that exact
+entry via clapoke (CMD 0x9238c014 ram2/3.., DATA 0x9238c01c x15) for the same flow + measure QMG
+hw_trap (flat = offloaded) + throughput. This is the user's "dump de su inicializacion en stock".
+Fallback if debug-level not reachable: fpga-oracle indirect-read ram2..6 on stock during a flow.
