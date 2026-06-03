@@ -1037,6 +1037,14 @@ static void zx_stock_apply_block(struct zx_eth *e, const char *name,
  * ============================================================
  */
 
+/* [HW-FWD EXPERIMENT 2026-06-03, branch hw-bridge-offload] SPA per-entity pktdeal:
+ * 0 = let the L2/SBRG engine decide (DA-lookup forwards LAN<->LAN in HW; ONU-MAC
+ * match should still trap DA=our-MAC to CPU); 1 = old trap-all-to-CPU. Default 0
+ * to test HW forwarding. Revert to 1 if it breaks CPU connectivity. */
+static uint zx_spa_pktdeal;
+module_param(zx_spa_pktdeal, uint, 0644);
+MODULE_PARM_DESC(zx_spa_pktdeal, "SPA per-entity pktdeal (0=SBRG-forward/HW, 1=trap-to-CPU)");
+
 static void zx_pp_init(struct zx_eth *e)
 {
 	void __iomem *pp = e->base + PP_OFF;
@@ -1157,6 +1165,12 @@ static void zx_pp_init(struct zx_eth *e)
 		 * Stock kotrace shows 465 — slight diff likely from validation bounds.
 		 * stride is in dwords; spaRegTable already encodes per-entity stride.
 		 */
+		/* [HW-FWD EXPERIMENT 2026-06-03, branch hw-bridge-offload] pktdeal value
+		 * is module-param'd so we can test trap-all(=1) vs let-SBRG-forward(=0)
+		 * without a re-edit. Default 0 = let the L2/SBRG engine decide (DA-lookup
+		 * forwards LAN<->LAN in HW; ONU-MAC match should still trap DA=our-MAC to
+		 * CPU). =1 restores the old trap-all-to-CPU. Goal: get QMG hw_fwd to climb
+		 * (HW forwarding) while ping-to-device still works. */
 		for (slot = 0x43; slot <= 0x7d; slot++) {
 			ent = &zx_spa_table[slot];
 			if (ent->mask == 0)
@@ -1166,11 +1180,12 @@ static void zx_pp_init(struct zx_eth *e)
 					   - ZX_FPGA_BASE_TO_NPP_OFF;
 				cur = readl(e->base + byte_off);
 				new_v = (cur & ~(ent->mask << ent->shift)) |
-					((1 & ent->mask) << ent->shift);
+					((zx_spa_pktdeal & ent->mask) << ent->shift);
 				writel(new_v, e->base + byte_off);
 			}
 		}
-		dev_info(e->dev, "spa_enty_pktdeal_cfg: applied for entities 0..7 × slots 0x43..0x7d\n");
+		dev_info(e->dev, "spa_enty_pktdeal_cfg: applied val=%u for entities 0..7 × slots 0x43..0x7d\n",
+			 zx_spa_pktdeal);
 	}
 
 	/* PP_BRG port isolation table (pp+0x83C0..0x83DC) — exact stock values.
