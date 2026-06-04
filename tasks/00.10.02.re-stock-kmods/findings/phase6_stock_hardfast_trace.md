@@ -143,3 +143,23 @@ zte-port-numbering) for the egress action, (c) at the slot = hash of a mainline 
 own first-packet lands in the hash), (d) test in ISOLATION (one flow, watch hw_trap for THAT flow only,
 don't disturb other classification). This is the parameterized path (Stage 2b) — the verbatim shortcut
 is dead. CLA writes are RAM-only → reboot restores the clean working router.
+
+## UPDATE 2026-06-04 (Stage 2b — the hash slot function = CRC-32 0x04C11DB7 & 0x1ff)
+cla_list_hash_addr_gen (tm.c:4271) is a byte-wise table CRC: `h = crctable_04C11DB7[(b ^ (h>>24))&0xff]
+^ (h<<8)` over `len` bytes = standard **CRC-32, poly 0x04C11DB7, MSB-first**. The SW shadow uses
+`cla_list_hash_addr_gen(tuple, 0x28) & 0x1ff` (9-bit, 0..511 → ram2-6 banks via the 0x100/0x180/0x1c0/
+0x200 split). So the candidate slot = **CRC32_0x04C11DB7(40-byte tuple) & 0x1ff**.
+CAVEATS to resolve next: (a) is the HW slot THIS CRC (SW shadow) or a separate HW hash via
+cla_get_hash_poly_config/aclGetAvailableHashAddr? (b) the exact 40-byte TUPLE layout (which packet/
+key bytes, what order) fed to the CRC — needed to predict a slot. VERIFY: reconstruct the tuple for
+the 3 captured flows (slots 0x5a/0x35/0x0a; sports 52811/46063/56045, same src/dst/dport/proto) and
+check CRC32&0x1ff reproduces those slots (the only varying input is the sport → brute the tuple
+layout against the 3 known (sport→slot) pairs). If it matches → we can compute the slot for any flow.
+### Stage 2b plan
+1. Confirm the hash (CRC32&0x1ff) vs the 3 captured (sport→slot) pairs + pin the tuple layout.
+2. Build a ram2 entry with MAINLINE port numbers (egress regport in bytes 1-2, inport in 4/6) for a
+   mainline test flow; compute its slot.
+3. clawrite ONLY that ram2 slot (reuse mainline's existing boot ram1/ram0 infra — do NOT inject
+   stock's, which clobbers the live classifier per the verbatim attempt).
+4. Isolated test: one flow, watch hw_trap for it; confirm HW-forward.
+Then parameterize in cls_flower_add (Stage 2 done).
