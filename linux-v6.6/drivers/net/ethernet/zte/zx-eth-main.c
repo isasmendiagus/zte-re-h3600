@@ -2225,6 +2225,25 @@ static int zx_spa_set_enty_pktdeal_cfg(struct zx_eth *e, u8 port, u8 proto, u8 a
  * zx_pp_pro_actions[] was extracted from kotrace trace; see
  * tasks/00.01.eth-driver/findings/chip_tm_init_args.md.
  */
+/* [Iter AQ, 2026-06-04 — THE TCP-ACK-HW-FORWARD FIX] The SPA per-protocol pktdeal
+ * decides which protocol-type SLOTS forward (deal=0) vs trap (deal=1). The
+ * zx_pp_pro_actions[] replay above writes the kotrace proto value DIRECTLY as the
+ * slot index — but stock's zte_api_pp_set_pro_action first REMAPS proto->ptype-slot
+ * (a 71-case switch), so our un-remapped writes land on the WRONG slots and TCP
+ * control frames (pure-ACK/SYN/FIN) end up trapping to the CPU (~62k/flow).
+ * Stock's actual forward-slot set (read live from stock's pktdeal RAM 0x921d4300)
+ * is the list below. VERIFIED ON HW: forcing exactly these slots to forward makes
+ * TCP ACKs HW-forward (tm_rx delta 2 over a 20s/354 Mbit-s flow, 0 retransmits)
+ * while broadcast/ARP still traps to the CPU (ping 4/4) — i.e. CPU offloaded for
+ * TCP without breaking the bridge. MUST go through spa_set_enty_pktdeal_cfg (the
+ * indirect write); a direct poke of 0x921d4300 does NOT update the live classifier.
+ * See tasks/00.01.eth-driver/findings/stock_ack_forward_lever_re.md.
+ */
+static const u8 zx_pktdeal_ack_fwd_slots[] = {
+	0x0c, 0x0d, 0x17, 0x1f, 0x22, 0x24, 0x25, 0x26,
+	0x2c, 0x2d, 0x2f, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45,
+};
+
 static void zx_chip_tm_init_pro_action(struct zx_eth *e)
 {
 	int port, i, ok = 0, fail = 0;
@@ -2242,10 +2261,19 @@ static void zx_chip_tm_init_pro_action(struct zx_eth *e)
 			else
 				fail++;
 		}
+		/* THE FIX: force stock's remapped forward-slot set to deal=0 so TCP
+		 * control frames HW-forward (CPU offloaded) while broadcast keeps
+		 * trapping. Skipped under the (debug) forward-all override. */
+		if (!zx_proto_fwd_all) {
+			for (i = 0; i < (int)ARRAY_SIZE(zx_pktdeal_ack_fwd_slots); i++)
+				zx_spa_set_enty_pktdeal_cfg(e, port,
+					zx_pktdeal_ack_fwd_slots[i], 0);
+		}
 	}
-	dev_info(e->dev, "pro_action replay: %d ok, %d fail (%d entries × 8 ports) [%s]\n",
-		 ok, fail, ZX_PP_PRO_ACTION_COUNT,
-		 zx_proto_fwd_all ? "FORWARD-ALL (TCP HW-fwd)" : "stock trap table");
+	dev_info(e->dev, "pro_action: %d ok, %d fail [%s]\n",
+		 ok, fail,
+		 zx_proto_fwd_all ? "FORWARD-ALL (debug)" :
+		 "stock trap table + ACK-fwd slots (TCP ACKs HW-fwd, bcast traps)");
 }
 
 /* chip_tm_init's per-port isolation loop. mask = ports each port may NOT
