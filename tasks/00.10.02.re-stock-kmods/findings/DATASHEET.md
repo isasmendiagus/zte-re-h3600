@@ -1890,3 +1890,20 @@ addFlowOperInfo + tm_acl_fast_add (tm.c:54225) → tm_acl_fast_add_v4v6 (tm.c:52
 - ⇒ a hardfast flow = ONE CLA hash slot (5-tuple key → fwd+rewrite action). This is the gate
   mainline never programs (→ CLA trap-all, [[zte-hw-forwarding-deadend]]). The fast path is gated by
   g_fast_opti and the entry "type" field +0xc (must be in [3..8]).
+
+### 🆕 2026-06-04 (Stage 0a-deeper) — HFF hardfast writes the SAME CLA ram2-6 hash we already RE'd
+RECONCILED: the L3 HFF hardfast (cla_set_hash_table) and the May ingress-classifier RE are the SAME
+table + interface. ⇒ Phase 6 write primitive ALREADY EXISTS in-driver. findings/ffe_cla_hash_entry_re.md.
+- CLA indirect iface (already known + in driver zx_cla_write_entry/zx_cla_read_entry @ zx-eth-main.c:
+  1994/2007): CMD 0x1CC014 (=addr|ram_id<<22|rw<<27), data 0x1CC01C (17 words), done 0x1CC018. Live
+  read: debugfs clapeek/cladump.
+- ram2..6 (cla_set_hash_table @ tm.c:3366) holds BOTH ingress trap-action entries AND L3-hardfast
+  FORWARD entries (same key tuple; action = trap-to-cpu_qid OR forward-to-uni/gemport). External
+  overflow hash = cla_set_external_hash_table @ tm.c:3792 (slot&0xffff).
+- Forward-action entry (tm_acl_get_fastHashRule @ tm.c:49213, builds entry `param_4` from flow desc):
+  egress UNI/gemport target = flow+0xb2 → param_4[1] lo-nibble + param_4[2] (✅, validated "Invalid
+  target uni port"); direction/mode = flow+0x10 (→ param_4[0x10] valid byte bit5, param_4[0x12] bit2,
+  param_4[0xe/0xf] inport-like); param_4[3..9] = prio/proto/len flags. NAT-rewrite entry bits = ❓
+  (capture via 0b koprobe on a stock NAT flow).
+- Slot/hash = cla_get_hash_poly_config + aclGetAvailableHashAddr_constprop_13 (❓ poly — needed only
+  for self-computed slots; can bootstrap by matching stock placement read via clapeek).
