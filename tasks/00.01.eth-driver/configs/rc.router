@@ -1,0 +1,29 @@
+#!/bin/sh
+# Router auto-bring-up, run by /init (C-init) at boot. Editable data — no recompile.
+# LAN = lan1 (172.31.9.1/24, DHCP server). WAN = lan4 (the physical WAN jack).
+BB=/bin/busybox
+IPT=/sbin/iptables
+LAN=lan1; WAN=lan4
+LANIP=172.31.9.1/24; WANIP=192.168.9.1/24
+
+# quiet console spam (BPDUMP etc.) so the REPL stays usable
+echo 1 4 1 7 > /proc/sys/kernel/printk
+
+# interfaces
+$BB ip addr add $LANIP dev $LAN 2>/dev/null
+$BB ip link set $LAN up
+$BB ip addr add $WANIP dev $WAN 2>/dev/null
+$BB ip link set $WAN up
+
+# NAT router: forward + masquerade LAN -> WAN
+echo 1 > /proc/sys/net/ipv4/ip_forward
+$IPT -t nat -A POSTROUTING -o $WAN -j MASQUERADE
+$IPT -A FORWARD -i $LAN -o $WAN -j ACCEPT
+$IPT -A FORWARD -i $WAN -o $LAN -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# let the LAN link settle before binding the DHCP server (boot race)
+sleep 3
+# LAN DHCP server (-f foreground + backgrounded so it logs reliably; the REPL
+# has no job control, and the default daemonize loses output at boot)
+[ -f /tmp/udhcpd.leases ] || : > /tmp/udhcpd.leases
+$BB udhcpd -f /etc/udhcpd.conf >/tmp/udhcpd.log 2>&1 &

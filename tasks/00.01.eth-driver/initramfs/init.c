@@ -45,6 +45,13 @@ int main(void) {
     sh("/bin/busybox ip link set sw up");
     kmsg("ip addr add 192.168.1.99/24 dev sw");
     sh("/bin/busybox ip addr add 192.168.1.99/24 dev sw");
+
+    /* Router bring-up: run /etc/rc.router if present (LAN/WAN ifaces, udhcpd,
+     * ip_forward, NAT rules). Config-as-data so we don't recompile PID 1 to
+     * tweak the router setup. See tasks/00.01.eth-driver/configs/rc.router. */
+    kmsg("running /etc/rc.router (router bring-up)");
+    sh("[ -f /etc/rc.router ] && /bin/busybox sh /etc/rc.router");
+
     kmsg("=== entering REPL on /dev/console ===");
 
     /* Open /dev/console for read+write, dup to stdio. */

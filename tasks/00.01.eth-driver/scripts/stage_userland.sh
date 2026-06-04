@@ -36,6 +36,14 @@ done
 cp -a "$CFG/passwd" "$DST/etc/passwd"
 cp -a "$CFG/group"  "$DST/etc/group"
 cp -a "$CFG/udhcpd.conf" "$DST/etc/udhcpd.conf"
+cp -a "$CFG/rc.router" "$DST/etc/rc.router"; chmod +x "$DST/etc/rc.router"
 cp -a "$CFG/udhcpc.default.script" "$DST/usr/share/udhcpc/default.script"
 chmod +x "$DST/usr/share/udhcpc/default.script"
+
+# rebuild /init (C-init PID 1) — it runs /etc/rc.router at boot
+if command -v arm-linux-gnueabi-gcc >/dev/null; then
+  arm-linux-gnueabi-gcc -static -O2 -o "$DST/init" \
+    "$REPO/tasks/00.01.eth-driver/initramfs/init.c" 2>/dev/null \
+    && echo "  init (recompiled)"
+fi
 echo "✓ userland staged into $DST"
