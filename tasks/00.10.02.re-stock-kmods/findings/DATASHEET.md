@@ -1854,3 +1854,23 @@ ram_id=5(hash), addr=7 = last hash-RAM write — confirms the field layout. `_LA
    leave NPP partially reset. Unconfirmed.
 7. **PP[0xc080]** — `mac_to_cpu_path_re.md` Q4(c): decomp writes 0x1000, stock-live=0x600; possible
    CLA-config drift affecting ARP/ICMP trap. Needs live mainline-vs-stock diff (MEDIUM).
+## 🆕 DISCOVERY 2026-06-04 — HFF (Hardware Fast Forward) / fast-L3 flow-offload engine
+The stock HW flow-offload ("FFE") is internally **HFF**, engine namespace **NPU**. 🟡 inferred-from-decomp
+(call chain named; exact chip regs pending 0a-deep). Full map: findings/ffe_hardfast_install_re.md.
+- **Registration** ✅: `l3_hardfastReg` (switch.ko:0x12404) → `npu_hff_register(handlers,sizes)`
+  (switch.ko:0x202d4) with 4 callbacks, entry size 0x14 each: `hf_set_l3_entry` (0x12de8, install),
+  `hf_del_l3_entry` (0x12ec4, del), `hf_query_l3_status` (0x13014, status/aging), `hf_entry_police2`
+  (0x11dac, QoS/policing).
+- **Install** ✅(chain)/❓(regs): hf_set_l3_entry → sw_acl_l3_hardfast_session_add (0x12d7c) →
+  _part_1 (0x125e0) → **`zte_api_fast_l3_session_add`** — thin @ switch.ko:0x2c31c, REAL @
+  **tm.ko:0x6558c** (decomp_all_tm.c:59030, ~900 lines, takes `fast_api_busy_lock`). ❓ The CLA/QMG
+  indirect-RAM writes (the actual hardfast table entry) are inside this fn — NOT yet extracted.
+  Likely the CLA per-inport hash RAM (ram2-6, see CLA § / [[zte-cla-ram-layout]]) + QMG egress map.
+- **Teardown** ✅: zte_api_fast_l3_session_del @ tm.ko:0x66ca4. **Aging** ✅: hf_query_l3_status →
+  zte_api_fast_l3_session_use @ tm.ko:0x638d8 (HW-status-driven, polled by the NPU core).
+- **ptFastL3Session struct** 🟡 (arg to tm.ko fn): +0x00 direction(0=up/1=dw); +0x68 flag; +0x6a u16;
+  +0x98/0x9a u16, +0x9c/0x9d/0x9f byte (+0x9d==0xff = field-absent sentinel, likely NAT); flow KEY =
+  +0x58..0x68 (5 dwords, used by _session_use). HW entry assembled as ~188B (local_e4[0xbc]).
+- **Slow→fast**: first pkt misses CLA hash → trap to CPU → conntrack ESTABLISHED → hf_set_l3_entry
+  installs hash entry → subsequent pkts hit hash → forward in HW (this is why mainline, which never
+  installs entries, has the CLA trap-all behaviour of [[zte-hw-forwarding-deadend]]).
