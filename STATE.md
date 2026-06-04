@@ -31,10 +31,15 @@ Legend: [SW]=software, works on mainline now · [DRV]=driver/RE chip work · [�
   SOPC bridge enabled). The long "MAC4 TX never reaches the wire" blocker was a register-address
   error (read TM 0x92340718 as MAC4 TX-ok; MAC4 is at npp_base 0x921c0000 + 0x140000 = 0x92300000).
   Also ported stock zx5201_config's pad-clear (pin_mux[0x0c]&=0xffe7f7ff) — stock-faithful. End-to-end
-  visible WAN just needs a host NIC on the physical WAN jack. — **1.1 [→ NEXT]** rebuild kernel WITH
-  netfilter (CONFIG_NETFILTER/NF_CONNTRACK/NF_NAT/IP_NF_*, ip_forward) + iptables in initramfs;
-  1.2 WAN IPv4 via udhcpc, then PPPoE via pppd [SW]; 1.3 `ip_forward` + masquerade LAN→WAN [SW].
-  ⇒ working NAT router / internet sharing.
+  visible WAN just needs a host NIC on the physical WAN jack. — **1.1 [✅ DONE 2026-06-04]** kernel
+  rebuilt WITH netfilter (41 NF symbols =y: NETFILTER/NF_CONNTRACK/NF_NAT/IP_NF_*/XT match+target;
+  config fragment tasks/00.01.eth-driver/configs/netfilter.fragment, auto-merged by build_slotA.py
+  step 0a) + stock's uClibc iptables/ip6tables staged in the initramfs (sbin/ + lib/ uClibc runtime
+  +libcommfun; extensions are built into the binary). VERIFIED on HW: iptables -L / -t nat -L,
+  MASQUERADE -o lan4 rule installs, -m state match, ip_forward=1, /proc/net/nf_conntrack present.
+  (Known deferred: kernel now exceeds the 0xc00000 NAND write size — TFTP/RAM boot unaffected; trim
+  before flashing.) — **1.2 [→ NEXT]** WAN IPv4 via udhcpc, then PPPoE via pppd [SW]; 1.3 `ip_forward`
+  + masquerade LAN→WAN [SW]. ⇒ working NAT router / internet sharing.
 - **Phase 2 — LAN services [SW]:** dnsmasq (DHCP server + DNS + static leases), static routes.
 - **Phase 3 — Firewall/security [SW]:** zone firewall (iptables/nftables: WAN-in drop, LAN-out
   accept), IP/port filter, DoS guard, port-forward (DNAT), DMZ, ALG (conntrack helpers), UPnP-IGD

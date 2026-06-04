@@ -55,6 +55,21 @@ def run(cmd, cwd=None):
 def main():
     TFTP.mkdir(parents=True, exist_ok=True)
 
+    # 0a) [Phase 1.1] Ensure the netfilter/NAT/conntrack config fragment is
+    #     merged into the build .config. The build dir is untracked/ephemeral,
+    #     so without this a fresh build would silently drop netfilter (CONFIG_
+    #     NETFILTER is off in the base defconfig). merge_config.sh -m is a pure
+    #     text merge (idempotent); olddefconfig then resolves dependencies.
+    cfg  = BUILD / ".config"
+    frag = ZXIC / "tasks/00.01.eth-driver/configs/netfilter.fragment"
+    if cfg.exists() and frag.exists():
+        print("  $ merge netfilter.fragment into .config (Phase 1.1)")
+        run(["linux-v6.6/scripts/kconfig/merge_config.sh", "-m",
+             "-O", str(BUILD), str(cfg), str(frag)], cwd=str(ZXIC))
+        run(["make", "-C", str(ZXIC / "linux-v6.6"),
+             "ARCH=arm", "CROSS_COMPILE=arm-linux-gnueabi-",
+             f"O={BUILD}", "olddefconfig"])
+
     # 0) FULL kernel rebuild — always. Previously we tried to gate this on
     #    'is zx279128-eth.c newer than the .ko?' but that missed changes to
     #    any other in-tree driver we author (mdio-zte.c, future phy-zte.c,
