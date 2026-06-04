@@ -249,3 +249,46 @@ wire-speed routed/NAT offload (not just L2 forwarding) becomes a requirement.
   mainline poll wrap logic, not a chip protocol rule — direction is firm (UDP proves
   forwarding works; the wedge is a trap-drain bug), but the precise off-by-one in the
   ring wrap still needs the targeted audit in §4(i).2.
+
+---
+
+## CORRECTION + synthesis — 2026-06-04 (Iter AF, verified on HW)
+
+Two updates to the claims above, from live testing this session:
+
+1. **WRONG above: "mainline programs deal=0 (forward) for all 61 pktdeal slots."** It does
+   NOT. `zx_chip_tm_init_pro_action` (zx-eth-main.c) replays the **stock def_ptl_pkt_action
+   trap table** (deal=1 for most slots) and runs LAST in init, overwriting the earlier
+   entity-loop deal=0 writes. VERIFIED by experiment: forcing deal=0 for ALL slots
+   (`zx_proto_fwd_all=1`) BREAKS broadcast/ARP — frames reach the MACs (smac RX climbs) but
+   never trap to the CPU (tm_rx=0), the bridge never learns/replies → 100% loss. Control
+   with the stock trap table: ping 5/5, tm_rx=16. So broadcast/control MUST keep trapping;
+   the §4(i).1 "ensure all deal=0" step is wrong and would break the bridge. The reason TCP
+   still works today is NOT pktdeal=forward — it's the merged bit14 wedge fix letting the
+   CPU software-bridge drain the trapped frames. (The §3 conclusion "pktdeal is not the
+   TCP-vs-UDP discriminator" still stands — but because forwarding goes via the CPU SW
+   bridge, not because pktdeal=0.)
+
+2. **Resolves the Iter O/P "CLA hash ram2-6 EMPTY during the offloaded flow" contradiction.**
+   ffe_learn_pkt (§2) installs one of TWO actions depending on flow type: L3/NAT flows →
+   the heavy CLA-hash hardfast (`cla_set_hash_table`); **pure-L2 bridged flows → the lighter
+   SBRAG FDB/forward bind, NOT the CLA hash.** The Iter O/P LAN↔LAN same-subnet test was a
+   pure-L2 flow → stock used the FDB bind, so ram2-6 was legitimately empty while TCP still
+   HW-forwarded. ⇒ For OUR L2 goal, the FFE-equivalent we need is just **populating the SBRAG
+   FDB** (+ the switch honoring it), which in mainline DSA = `assisted_learning_on_cpu_port`
+   → `.port_fdb_add` → `zx_sbrag_write_entry` (already stubbed; tested inert in Iter AB
+   because the bridge FDB stays EMPTY — see below). We do NOT need conntrack/FFE for L2.
+
+**The concrete open blocker (the real "part 2"):** on the live mainline device the **bridge
+FDB is EMPTY** (`bridge fdb show` shows no lan1/lan3 peer MACs) even after sustained trapped
+traffic (tm_rx=105, hw_fwd=0). Software ping works via FLOODING, which is why FDB can stay
+empty. With an empty bridge FDB, assisted-learning has nothing to push to the SBRAG, so no HW
+offload. Two sub-questions to settle (need 2 stable NICs — HW-blocked by host USB hub
+instability this session, only jack2/ASIX survived; jack4/enx6c70 dropped off the bus):
+  (A) Why doesn't the bridge FDB populate from the trapped frames' source MACs? (learning
+      disabled on the DSA user ports? frames delivered without correct skb->dev?)
+  (B) The dead-end claim (zte-hw-forwarding-deadend: static fdbadd didn't make hw_fwd climb —
+      "CLA preempts DA-lookup") vs Iter AC (UDP DID HW-forward 450761 frames). DECISIVE test
+      when NICs return: with a static SBRAG FDB entry for the peer MAC, run a unicast UDP/TCP
+      flow lan3→lan1 and watch QMG hw_fwd — climbs ⇒ FDB-offload path viable (do that);
+      stays 0 ⇒ CLA-trap-all confirmed and the FFE-hardfast port (option ii) is the only path.
