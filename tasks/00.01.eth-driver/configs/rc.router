@@ -3,20 +3,23 @@
 # LAN = lan1 (172.31.9.1/24, DHCP server). WAN = lan4 (the physical WAN jack).
 BB=/bin/busybox
 IPT=/sbin/iptables
+IP6T=/sbin/ip6tables
 LAN=lan1; WAN=lan4
 LANIP=172.31.9.1/24; WANIP=192.168.9.1/24
+LAN6=fd00:1::1/64; WAN6=fd00:9::1/64
 
 # quiet console spam (BPDUMP etc.) so the REPL stays usable
 echo 1 4 1 7 > /proc/sys/kernel/printk
 
-# interfaces
+# interfaces (v4 + v6)
 $BB ip addr add $LANIP dev $LAN 2>/dev/null
+$BB ip -6 addr add $LAN6 dev $LAN 2>/dev/null
 $BB ip link set $LAN up
 $BB ip addr add $WANIP dev $WAN 2>/dev/null
+$BB ip -6 addr add $WAN6 dev $WAN 2>/dev/null
 $BB ip link set $WAN up
 
-# NAT router with a default-deny FORWARD zone firewall (stock-style: allow
-# LAN->WAN + established WAN->LAN, drop unsolicited WAN->LAN).
+# IPv4 NAT router with default-deny FORWARD zone firewall (stock-style).
 echo 1 > /proc/sys/net/ipv4/ip_forward
 $IPT -P FORWARD DROP
 $IPT -t nat -A POSTROUTING -o $WAN -j MASQUERADE
@@ -26,9 +29,18 @@ $IPT -A FORWARD -i $WAN -o $LAN -m state --state ESTABLISHED,RELATED -j ACCEPT
 # $IPT -t nat -A PREROUTING -i $WAN -p tcp --dport 8080 -j DNAT --to-destination 172.31.9.100:8080
 # $IPT -A FORWARD -i $WAN -o $LAN -p tcp -d 172.31.9.100 --dport 8080 -j ACCEPT
 
+# IPv6 routed (no NAT) with the same default-deny zone firewall.
+echo 1 > /proc/sys/net/ipv6/conf/all/forwarding
+$IP6T -P FORWARD DROP
+$IP6T -A FORWARD -i $LAN -o $WAN -j ACCEPT
+$IP6T -A FORWARD -i $WAN -o $LAN -m state --state ESTABLISHED,RELATED -j ACCEPT
+# allow ICMPv6 (NDP/PMTU) both ways — required for v6 to function
+$IP6T -A FORWARD -p ipv6-icmp -j ACCEPT
+# NOTE: LAN RA/prefix-delegation (radvd/odhcpd) not yet shipped — see finding;
+# clients need static v6 or a future RA daemon (clean build; busybox lacks it).
+
 # let the LAN link settle before binding the DHCP server (boot race)
 sleep 3
-# LAN DHCP server (-f foreground + backgrounded so it logs reliably; the REPL
-# has no job control, and the default daemonize loses output at boot)
+# LAN DHCP server (-f foreground + backgrounded so it logs reliably)
 [ -f /tmp/udhcpd.leases ] || : > /tmp/udhcpd.leases
 $BB udhcpd -f /etc/udhcpd.conf >/tmp/udhcpd.log 2>&1 &

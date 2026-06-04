@@ -60,7 +60,12 @@ Legend: [SW]=software, works on mainline now · [DRV]=driver/RE chip work · [�
   verified (WAN-side curl→device WAN:8099→LAN host = HTTP 200); shipped as the secure default in
   rc.router. Finding phase3_firewall_portforward.md. Remaining: IP/port filter, DoS guard, DMZ, ALG
   (conntrack helpers), UPnP-IGD (miniupnpd), URL/parental filter — all iptables/SW, add as needed.
-- **Phase 4 — IPv6 [SW]:** WAN DHCPv6-PD / SLAAC, RA on LAN (radvd/odhcpd), prefix delegation, v6 firewall.
+- **Phase 4 — IPv6 [SW]:** **routed v6 + v6 firewall [✅ DONE 2026-06-04]** — ip6tables enabled
+  (IP6_NF_* added to the fragment), IPv6 forwarding + ip6tables FORWARD-DROP zone firewall in
+  rc.router (lan1 fd00:1::1/64, lan4 fd00:9::1/64, no NAT). VERIFIED: LAN client → fake-ISP ping6
+  ttl=63 routed through the device. Finding phase4_ipv6.md. Follow-up: RA/prefix-deleg daemon
+  (radvd/odhcpd/odhcp6c — need clean builds; busybox lacks them, stock would liboss_pub-hang) so LAN
+  clients auto-get v6; WAN DHCPv6-PD; tighten the ICMPv6 rule.
 - **Phase 5 — QoS [SW now / DRV later]:** tc queue/shaper/speed; HW shaper (SCH/OPC) offload later.
 - **Phase 6 — HW flow offload [DRV — the big perf piece]:** wire the chip flow engine into Linux
   `flow_offload`/flowtable (the FFE-equivalent: conntrack-ESTABLISHED → CLA-hash hardfast session,
