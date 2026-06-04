@@ -378,10 +378,28 @@
     Full trail: `tasks/00.01.eth-driver/findings/hw_forwarding_offload.md` (Iters K–Z + MORNING
     SUMMARY). Fixes are stock-matching corrections, kept on the branch; main + egress fix untouched.
 
-**Last updated**: 2026-06-04 (Journey #24 — HW-forwarding arc: stock=protocol HW-L2-switch proven,
-mainline forwards bulk DN, but the unicast→CPU WEDGE = CPU-RX trap path halts ~1024 frames; survived
-8 fixes; 3 kept on branch hw-bridge-offload, NOT merged; 2 open targets). Prior: 2026-06-03 (Journey
-#23 — port1/jack2 ingress→CPU SOLVED, merged main c37e6168f, egress fix intact).
+25. **★ MAJOR CORRECTION via UDP (2026-06-04, user's lead "esto con udp?") — HW FORWARDING ALREADY
+    WORKS BOTH DIRECTIONS; the "wedge" is TCP/ICMP-trap-SPECIFIC, not a forwarding problem.** My
+    Journey #24 "reverse direction doesn't forward / wedge" framing was generalized from TCP+ICMP
+    tests — both of which TRAP to the CPU. Re-tested with UDP (which IS HW-forwarded, per the
+    protocol-discrimination finding), per direction, clean:
+      - UDP lan3→lan1: 300 Mbit/s, 0% loss (0/129467).
+      - UDP lan1→lan3 (the "reverse"): 300 Mbit/s, 0.0008% loss (1/129467).
+      - UDP BIDIRECTIONAL simultaneous: QMG hw_fwd=450761, hw_trap=143, RED drops=0, tm_rx_count=143
+        → NO WEDGE. (Proof it's real HW: CPU received only 143 frames while 450761 were forwarded —
+        impossible to software-bridge that.)
+    ⇒ The driver's HW L2 forwarding is SOLID in both directions, simultaneously, at ~300 Mbit/s/dir.
+    The unicast→CPU WEDGE only manifests for traffic that TRAPS to the CPU: TCP (its
+    handshake/control/likely flow-learn) and ICMP floods. The ~1024 CPU-RX-halt (Journey #24) is real
+    but is only EXERCISED by trapped traffic; pure forwarded data (UDP, TCP bulk) bypasses it.
+    ⇒ REMAINING QUESTION (narrowed): why does TCP trap ~1063 frames when UDP traps ~143? Identify the
+    trapping TCP frames (tcpdump/driver RX log during a TCP iperf) and either stop them trapping or
+    fix the ~1024 CPU-RX-halt so the trap path survives. **UDP streaming works on mainline TODAY.**
+
+**Last updated**: 2026-06-04 (Journey #25 — UDP CORRECTION: HW forwarding works BOTH directions
+~300Mbit/s/dir no-wedge; the wedge is TCP/ICMP-trap-specific, NOT a forwarding problem. Branch
+hw-bridge-offload. Prior #24 — HW-forwarding arc + the ~1024 CPU-RX-halt wedge). Prior: 2026-06-03
+(Journey #23 — port1/jack2 ingress→CPU SOLVED, merged main c37e6168f, egress fix intact).
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)
