@@ -1084,3 +1084,32 @@ are legitimate stock-matching corrections that should stay.
    bug; pending==0 → HW producer/credit stop.)
 2. Make the reverse dir HW-forward (sidesteps the CPU path entirely, like stock): verify/fix why the
    device bridge FDB isn't populating so assisted-learning can offload both MACs.
+
+================================================================================
+## Iter AC (2026-06-04 ~07:15 UTC) — per-protocol trap RE (Ghidra) + the UDP-works finding
+
+★ KEY POSITIVE FINDING (user lead "esto con udp?"): HW L2 forwarding ALREADY WORKS BOTH DIRECTIONS
+for UDP — UDP lan3→lan1 AND lan1→lan3 each ~300 Mbit/s ~0% loss; bidirectional simultaneous
+hw_fwd=450761, hw_trap=143, RED=0, tm_rx=143 → NO WEDGE (CPU got 143 frames while 450761 forwarded =
+provably HW). So the driver's forwarding is solid; the unicast→CPU WEDGE only hits traffic that
+TRAPS to the CPU. TCP wedges within ~3s (hw_trap→1057, hw_fwd freezes, iperf collapses 1.8Mbit/s with
+71 retransmits/s) — it traps ~900 frames vs UDP's ~143. On a wedged device even a TCP control
+connection times out (TCP needs the dead CPU path). UDP streaming works on mainline TODAY.
+
+★ THE RE LEAD (why TCP traps): the per-PROTOCOL trap-vs-forward decision is set by
+**tm_port_protocol_pktdeal_set** (and the protocol/pktdeal classification band) — but the OLD bulk
+decompile left it (and ~80 functions in the 0x2c1xx–0x2c2xx address band) as `halt_baddata()` STUBS
+(the decompiler couldn't decode that band). So our decomp can't currently show how the chip maps
+proto 6 (TCP) / 17 (UDP) / 1 (ICMP) to trap-vs-forward — which is exactly the question for the TCP
+wedge.
+
+GPL / legitimacy: the H3600 modem ships GPL software; ZTE has been contacted and has NOT provided
+the GPL source, so reverse-engineering the binary stock kernel modules (switch.ko/tm.ko/plat) is the
+available path and is consistent with the GPL position. We do RE from the .ko binaries we have.
+
+ACTION: launched a background agent to Ghidra-headless decompile-by-address the halt_baddata band
+(priority tm_port_protocol_pktdeal_set) and append the recovered C to
+`tasks/00.10.02.re-stock-kmods/findings/decomp_halt_baddata_band.c`, with a plain-English writeup of
+the per-protocol trap-vs-forward logic. In parallel: instrumented the driver (Iter AC, trap-log gate
+10→130) to classify the first ~130 CPU-trapped frames during a TCP flow (ethertype/MAC/ingress) —
+to see directly whether TCP's traps are the iperf 5-tuple (data/ACKs) or background mcast.
