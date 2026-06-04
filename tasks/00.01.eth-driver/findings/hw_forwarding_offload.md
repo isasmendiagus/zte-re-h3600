@@ -1192,6 +1192,7 @@ tm_rx_count) snapped before + mid-flow:
 | UDP 100M | lan1→lan2 (reverse) | +41240 | **+8** | 100% HW |
 | TCP 331Mbit | lan2→lan1 data | +164389 | +59627 | data HW, **ACKs trap** |
 | TCP (after static fdbadd both MACs) | — | (same) | +104k | static FDB had **NO effect** |
+| UDP small (-l 18, len~60, 1.66M pkts) | lan2→lan1 | +995127 | **+7** | 100% HW (refutes size) |
 
 DECISIVE conclusions (each refutes a prior hypothesis):
 1. **The chip HW-forwards unicast L2 in BOTH directions** (UDP, tm_rx flat = CPU untouched). This
@@ -1202,9 +1203,13 @@ DECISIVE conclusions (each refutes a prior hypothesis):
    "part 2 / HW FDB offload" worry is moot — the FDB already works.
 3. **NOT directional.** UDP lan1→lan2 (the same direction the TCP ACKs take) HW-forwards fine. So the
    ACK trap is not a DN/UP-direction artifact.
-4. ⟹ **The TCP-ACK trap is the per-protocol pktdeal/SPA classifier.** TCP *data* (large frames) and
-   all UDP HW-forward (deal=0 slots); the small TCP **pure-ACK** frames (len-66) land in a DIFFERENT
-   ptype slot that the stock trap table sets to **deal=1 (trap)**. Confirms the Iter AC hypothesis.
+4. **NOT size-based.** Small UDP (len~60, 1.66M pkts) HW-forwards 100% (tm_rx +7) — so the trap is
+   not "short frames", it is TCP-specific.
+5. ⟹ **The TCP-ACK trap is the per-protocol pktdeal/SPA classifier on a TCP-specific ptype slot.**
+   TCP *data* (with payload) and all UDP HW-forward (deal=0 slots); the TCP **pure-ACK** variant
+   (no payload) lands in a DIFFERENT ptype slot the stock trap table sets to **deal=1 (trap)**.
+   Confirms the Iter AC hypothesis. Because the slot is TCP-variant-specific (not size, not ARP/ND),
+   flipping it deal→0 is SAFE — it won't un-trap broadcast/control (those are separate ptype slots).
 
 **This collapses the plan to ONE surgical change** (and removes the FFE-port and FDB-offload from the
 critical path entirely):
