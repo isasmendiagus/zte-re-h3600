@@ -512,11 +512,23 @@
     bisect to set the one TCP-control slot deal=0 in zx_pp_pro_actions[], OR exploit the flow-learning
     (seed + self-sustain). Details: hw_forwarding_offload.md Iter AI.
 
-**Last updated**: 2026-06-04 (Journey #31 — ACKs-via-HW PROVEN live: `all 0` → TCP 328Mbit/s tm_rx=0,
-full CPU offload. BIG: chip auto-installs a sticky HW flow-forward entry on first forward [overrides
-pktdeal, survives link-bounce] = FFE-hardfast equiv. Minimal-slot bisect needs reboot-per-test [sticky
-confound]. branch hw-ack-forward). Prior #30 — ACKs=pktdeal slot (not FDB/FFE). #29 — forward-all
-NEGATIVE. #28 — pruned+merged. #27 — WEDGE SOLVED (bit14). #23 — port1 SOLVED.
+32. **CORRECTION (2026-06-04): the "sticky/persistent flow-learning" of #31 was a flaky-NIC
+    measurement artifact — RETRACTED.** User confirmed DTR cuts SoC power (real cold cycle), so
+    "survives reboot" was impossible. Re-tested with iperf throughput verified per run: the delta=0
+    readings that implied "sticky/overrides pktdeal" were the flaky enx2c997 NIC intermittently not
+    pushing the ACK stream (no traffic ⇒ tm_rx flat ⇒ misread as "forwarding"). The 62k trap only
+    appears when the link genuinely sustains the flow, and even then didn't reproduce run-to-run.
+    WHAT STILL STANDS (link-stable, repeated): `all 0`→TCP 328Mbit tm_rx~0 (ACKs HW-forward,
+    achievable); stock→TCP can trap ~62k; forward-all breaks broadcast (#29); UDP HW-fwds both dirs.
+    The per-slot bisect is NOT doable on this rig (flaky NIC → untrustworthy per-test deltas) — needs
+    a STABLE 2nd LAN NIC (good jack4 enx6c70, unplugged). Details: hw_forwarding_offload.md Iter AK.
+    NIC-recovery that works: driver-level r8152 unbind/bind on 3-3.1:1.0.
+
+**Last updated**: 2026-06-04 (Journey #32 — CORRECTION: #31's "sticky flow-learning survives reboot"
+RETRACTED = flaky-NIC artifact [DTR does cut power]. Solid: all-0→TCP 328Mbit tm_rx~0 [ACKs-via-HW
+achievable], stock can trap ~62k, but per-slot bisect needs a STABLE 2nd NIC [flaky enx2c997 →
+untrustworthy deltas]. branch hw-ack-forward). Prior #30 — ACKs=pktdeal slot. #29 — forward-all NEG.
+#28 — pruned+merged. #27 — WEDGE SOLVED (bit14). #23 — port1 SOLVED.
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)

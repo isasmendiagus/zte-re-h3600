@@ -1335,6 +1335,38 @@ should clear it. To run the minimal-slot scan: physically power-cycle the device
 measure the FIRST TCP flow before any all-0/forward seeds the entry (boots 1 & 3 prove a never-yet-
 forwarded flow traps at ~62k); then scan slots. Until a cold cycle, the chip is latched in forward.
 
+## Iter AK (2026-06-04) — CORRECTION: the "sticky/persistent" claims were a flaky-link measurement artifact
+
+User confirmed the DTR pulse DOES cut SoC power (a real cold cycle), which contradicts the Iter
+AI/AJ "forward entry survives reboot" story. Re-tested with the link verified working (iperf
+throughput checked each run):
+- stock table, one fresh measurement: tm_rx 26133→88448 = **+62315** (TCP ACKs DO trap) at 331 Mbit.
+- but immediately re-running stock / all-0 / all-1 / a FRESH unlearned nsB MAC all then read
+  **delta 0 at 328–331 Mbit** — i.e. NOT reproducible.
+
+⟹ The earlier delta=0 readings (the basis for "sticky survives reboot", "all-1 still forwards",
+"overrides pktdeal") are UNRELIABLE: with the flaky enx2c997 NIC the iperf intermittently doesn't
+actually push the ACK stream, so tm_rx barely moves and delta≈0 was misread as "forwarding". The
+trap (62k) only shows when the link genuinely sustains the flow, and even then it didn't reproduce
+run-to-run. **RETRACT Iter AI's "autonomous flow-learning that survives reboot/overrides pktdeal"
+and Iter AJ's "fabric persists across DTR" — both were artifacts of the unstable NIC, not real chip
+behaviour.**
+
+WHAT STILL STANDS (observed with the link stable, multiple times):
+- `all 0` (forward all pktdeal slots) → TCP ~328 Mbit/s, tm_rx delta ~0 (ACKs HW-forward, CPU
+  offloaded). [Iter AI validation — link was stable then.]
+- stock table → TCP can trap the ACK stream (the clean 62235 readings in Iter AG and the one clean
+  reading here).
+- forward-all breaks broadcast/ARP (Iter AF) — solid.
+- The chip HW-forwards unicast L2 both directions for UDP (Iter AG) — solid.
+
+HONEST STATE: the per-slot bisect is NOT doable on the current rig — the flaky enx2c997 NIC gives
+inconsistent iperf flow, so per-test tm_rx deltas can't be trusted (the whole Iter AH–AK slot hunt
+was undermined by this). The minimal-slot identification needs a STABLE 2nd LAN NIC (the good jack4
+enx6c70, currently unplugged) so each per-slot trial yields a trustworthy 62k-vs-0 signal. Until
+then, the reliable, reproducible result is: all-0 demonstrates ACKs-via-HW is achievable; the exact
+minimal/safe slot is unresolved. Branch hw-ack-forward.
+
 ⚠️ HW caveat this boot: the link came up DEGRADED — ping 71 ms (vs 2.5 ms pre-reboot) and TCP
 collapsed to 11.9 Kbit/s. The chronic host-USB-hub flakiness (NICs re-enumerate dirty on reboot).
 The TCPTRAP capture is still valid (it only needs frames to trap, which they did), but clean
