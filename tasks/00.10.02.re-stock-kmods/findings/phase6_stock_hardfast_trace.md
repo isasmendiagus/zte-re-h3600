@@ -163,3 +163,27 @@ layout against the 3 known (sport→slot) pairs). If it matches → we can compu
    stock's, which clobbers the live classifier per the verbatim attempt).
 4. Isolated test: one flow, watch hw_trap for it; confirm HW-forward.
 Then parameterize in cls_flower_add (Stage 2 done).
+
+## UPDATE 2026-06-04b (booted stock to confirm the hash — CRC model insufficient → PIVOT to ram1-TCAM)
+Booted stock + kotrace 'G' (cla_list_hash_addr_gen) on a live forwarded flow. Captured 4 (sport→slot)
+fwd pairs: 52811→0x5a, 46063→0x35, 56045→0x0a, **41100→0x48** (new today). Also confirmed the call:
+`G r0=<tuple ptr> r1=0x28` and the install's `C r0=<slot>` (slot 0x48 fwd / 0x3f rev today).
+TESTED the hash hypothesis "slot = CRC32_0x04C11DB7(tuple)&0x1ff" via XOR-linearity across the 4
+pairs (assuming only the sport byte varies) → **NO match at any offset/endian**. Two confounds explain
+the failure, both fatal to the shortcut:
+  (a) **aclGetAvailableHashAddr linear-probes**: slot = hash if the bucket is free, else the next free
+      slot. With several flows installed in sequence, collisions shift the slot ≠ raw hash.
+  (b) **the 40-byte tuple = ptFastL3Session+4 .. +0x2c** (call site tm.c:59890, `pbVar11=param_1+4`)
+      includes session-struct fields (conn handle / MAC / gemport) that vary per flow even when the
+      5-tuple is identical → "only sport varies" is FALSE → XOR-linearity invalid.
+Verifying the CRC needs the ACTUAL 40 tuple bytes (kotrace doesn't dump deref'd memory; reading the
+kernel ptr via /dev/mem races the install). Deep rabbit hole.
+
+### PIVOT — Stage 2 = ram1 TCAM rule (no hash), per phase6_offload_design.md
+ram1 (cla_set_extra_rule_table, tm.c:2870; 160 entries × 17 words) is **directly addressed** — write
+rule N, NO hash poly needed. This is the documented "first HW forward" (Stage 2); the ram2 hash
+(Stage 2b) was always meant to come AFTER. Plan: decode the ram1 entry format (winoffset/winmask +
+inport/outport flags + 5-tuple match bytes) from the captured ram1[0x98] + cla_set_extra_rule_table /
+tm_acl_get_fastHashRule, then write a rule at a FREE ram1 slot (NOT 0x98) with MAINLINE port numbers
+matching a mainline test flow, action=forward-to-egress-port. Isolated test: one flow, watch hw_trap
+go FLAT = HW forwards. This sidesteps the entire hash-slot problem.

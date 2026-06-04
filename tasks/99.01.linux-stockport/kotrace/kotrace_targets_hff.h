@@ -38,6 +38,7 @@ static const struct trace_target_v2 kt_tm_targets[] = {
 	{ "cla_set_hash_table",          0x02, {0,64,0,0},  2, 'C' }, /* slot(r0), 17-word ENTRY(r1) — KEY */
 	{ "cla_set_indirect_rw_cmd",     0x04, {0,0,64,0},  3, 'I' }, /* rw(r0), ram_id(r1), addr(r2) */
 	{ "cla_set_indirect_rw_data",    0x00, {0,0,0,0},   2, 'D' }, /* data_id(r0), value(r1) — per-word seq */
+	{ "cla_list_hash_addr_gen",      0x01, {40,0,0,0},  2, 'G' }, /* tuple(r0, deref 40B), len(r1)=0x28 — the hash INPUT */
 };
 #define KT_TM_COUNT  (sizeof(kt_tm_targets)/sizeof(kt_tm_targets[0]))
 
