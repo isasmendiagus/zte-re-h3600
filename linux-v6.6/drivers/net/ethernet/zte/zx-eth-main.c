@@ -3317,14 +3317,25 @@ static void zx_mac_keepalive_fn(struct work_struct *w)
 		void __iomem *br = e->base + 0x19068;
 		u32 c, reg;
 		int t;
+		/* [WAN] MAC4 = the WAN port (external ZX5201 PHY @ MDIO 0x08, NOT
+		 * phylib-probed → gephy[4]==NULL). Without holding its SOPC bridge
+		 * (0x19068 bit4) + MAC enable open here, the one-shot is_wan bring-up
+		 * in zx_eth_adjust_link decays and send2smac4 stops → CPU→MAC4 egress
+		 * dies after QMG sw_fwd. Re-assert it as a fixed 1G/FD always-up port
+		 * (only after the one-shot set phy_was_link[4]). See mac4_wan_tx_egress_re.md */
+		bool is_wan = (i == 4 && !phy);
 
-		if (!phy || !phy->link || !e->phy_was_link[i])
+		if (is_wan) {
+			if (!e->phy_was_link[i])
+				continue;
+		} else if (!phy || !phy->link || !e->phy_was_link[i]) {
 			continue;
+		}
 
 		/* re-write running ctrl (config_speed_duplex): gigabit/FD => clear
 		 * bit15, set bit13 (0xBA6003); re-triggers the MAC->PHY handshake. */
 		c = readl(mc);
-		if (phy->speed == SPEED_1000)
+		if (is_wan || phy->speed == SPEED_1000)
 			c = (c & ~0x8000u) | 0x2000u;
 		writel(c, mc);
 
