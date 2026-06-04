@@ -524,11 +524,27 @@
     a STABLE 2nd LAN NIC (good jack4 enx6c70, unplugged). Details: hw_forwarding_offload.md Iter AK.
     NIC-recovery that works: driver-level r8152 unbind/bind on 3-3.1:1.0.
 
-**Last updated**: 2026-06-04 (Journey #32 — CORRECTION: #31's "sticky flow-learning survives reboot"
-RETRACTED = flaky-NIC artifact [DTR does cut power]. Solid: all-0→TCP 328Mbit tm_rx~0 [ACKs-via-HW
-achievable], stock can trap ~62k, but per-slot bisect needs a STABLE 2nd NIC [flaky enx2c997 →
-untrustworthy deltas]. branch hw-ack-forward). Prior #30 — ACKs=pktdeal slot. #29 — forward-all NEG.
-#28 — pruned+merged. #27 — WEDGE SOLVED (bit14). #23 — port1 SOLVED.
+33. **Deep RE (2 agents) + live tests: full HW-ACK-offload converges on the HW-forwarding-offload
+    dead-end (2026-06-04, branch hw-ack-forward).** With a stable rig (good jack4 NIC + retry reader),
+    confirmed cleanly: stock→TCP traps ~61k, all-0→0 (ACKs HW-fwd), no sticky state, fully reversible.
+    Bisect: the ACK trap is NOT a single/double pktdeal slot — only all-0 forwards; every partial
+    range traps fully (multi-slot/default-action). RE agent A (pktdeal_override_re.md): CLA-hash does
+    NOT override the pktdeal trap (SPA is UPSTREAM of CLA in the pipeline) → no cheap L2 hardfast; only
+    SPA pktdeal controls L2 trap; cla_set_hash_table is L3/NAT-only. RE agent B (hw_broadcast_flood_re.md):
+    the chip CAN HW-flood broadcast via a SEPARATE block (SBRG VLAN-membership, not pktdeal), recipe =
+    PP[0x863c]=0 + membership/isolation + flood regs — BUT live test (full recipe poked) did NOT enable
+    flood (ARP still 100% loss). ⟹ broadcast flood-replication path isn't wired in the trap-all conduit
+    (same root as zte-hw-forwarding-deadend). So: all-0 forwards TCP but breaks broadcast, and neither a
+    pktdeal-slot subset nor the SBRG recipe nor a CLA override cleanly fixes it. Full HW-ACK-offload is
+    BLOCKED on the deeper HW-forwarding/flood-replication wiring (or the FFE port). The L2 STREAMING
+    GOAL remains MET via the CPU SW bridge (merged main, 354 Mbit/s). Docs: pktdeal_override_re.md,
+    hw_broadcast_flood_re.md, alt_trap_levers_re.md, hw_forwarding_offload.md Iters AF–AM.
+
+**Last updated**: 2026-06-04 (Journey #33 — deep RE: full HW-ACK-offload BLOCKED on the HW-forwarding/
+broadcast-flood-replication dead-end. Confirmed: all-0→TCP HW but breaks ARP; CLA-hash can't override
+pktdeal [SPA upstream]; SBRG broadcast-flood recipe didn't enable flood live. Goal MET via SW bridge
+[merged main]. branch hw-ack-forward NOT merged). Prior #32 — retract sticky-NIC-artifact. #30 —
+ACKs=pktdeal. #28 — pruned+merged. #27 — WEDGE SOLVED (bit14). #23 — port1 SOLVED.
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)
