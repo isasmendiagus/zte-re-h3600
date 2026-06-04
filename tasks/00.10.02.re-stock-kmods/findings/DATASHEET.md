@@ -1907,3 +1907,16 @@ table + interface. ⇒ Phase 6 write primitive ALREADY EXISTS in-driver. finding
   (capture via 0b koprobe on a stock NAT flow).
 - Slot/hash = cla_get_hash_poly_config + aclGetAvailableHashAddr_constprop_13 (❓ poly — needed only
   for self-computed slots; can bootstrap by matching stock placement read via clapeek).
+
+### ⚠️ ERRATA 2026-06-04 (adversarial review phase6_research_review.md) — corrects the HFF blocks above
+- **zx_cla_write_entry/zx_cla_read_entry are at zx-eth-main.c:2035/2053**, NOT 1994/2007 (that's
+  pp_pm). Functions/registers/debugfs confirmed real + usable.
+- **CLA internal hash = 520 entries (valid addr < 0x208)**, NOT 32768/65536 — the `&0x7fff`/`&0xffff`
+  in tm_acl_fast_add_v4v6 strip the found/sign flag, they are NOT capacity. cla_set_hash_table rejects
+  addr ≥ 0x208 (tm.c:3472). ram2-6 entry = 15 words (not 17).
+- **Forward-action egress uni = HIGH nibble of entry param_4[1] [7:4] + param_4[2]** (tm.c:49410-411),
+  not the low nibble.
+- **UNPROVEN**: that a CLA forward rule overrides the per-inport CPU trap. The merged #36 TCP-ACK
+  HW-forward used the SPA pktdeal field (0x921d4300), NOT a CLA action — Stage 2 must verify
+  experimentally + may need to also flip SPA pktdeal. CLA cmd encoding (addr|ram_id<<22|rw<<27)
+  independently CONFIRMED in stock (tm.c:324) + our driver.

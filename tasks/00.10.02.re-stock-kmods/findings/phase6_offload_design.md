@@ -1,5 +1,27 @@
 # Phase 6 / Stage 0d — HW flow-offload backend DESIGN (synthesis)
 
+## ⚠️ CORRECTIONS (adversarial review 2026-06-04, full record: phase6_research_review.md) — APPLY THESE
+Verdict was "sound enough to code Stage 1, fix before Stage 2". The 5 corrections that change code:
+1. **zx_cla_write_entry / zx_cla_read_entry are at zx-eth-main.c:2035 / 2053** (NOT 1994/2007 — that's
+   pp_pm code). They exist + write CMD 0x1CC014 / data 0x1CC01C / done 0x1CC018, cmd=addr|ram_id<<22|
+   rw<<27 — usable. (This wrong cite is in several docs/DATASHEET; trust 2035/2053.)
+2. **Egress-target uni nibble is the HIGH nibble**: the rule writes the target uni to `param_4[1]`
+   bits[7:4] + `param_4[2]` (tm.c:49410-49411), NOT the low nibble. Use high nibble in Stage 2/2b.
+3. **Internal hash = 520 entries (valid addr < 0x208), NOT 32768.** `&0x7fff`/`&0xffff` just strip the
+   found/sign flag — they are NOT the table capacity. cla_set_hash_table hard-rejects addr ≥ 0x208
+   (tm.c:3472). Size any slot allocator to the real bank ranges (ram2:0..0xff … ram6:0x200..0x207).
+4. **The core thesis (a CLA forward action overrides the per-inport trap) is UNPROVEN** and partly
+   contradicted: the merged TCP-ACK HW-forward fix (#36) worked via the **SPA pktdeal field
+   (0x921d4300)**, not a CLA action. ⇒ Stage 2 must TREAT "does writing a CLA forward rule actually
+   stop the CPU trap?" as the explicit experiment, and be ready to ALSO set the SPA pktdeal slot for
+   the flow. Don't assume.
+5. **clapeek read-back has a word0 off-by-one** (zx-eth-main.c:2062-2068) and the forward ACTION bits
+   live in word0/word1 — so clapeek is unreliable for verifying the action word. Verify via
+   double-read / previous-slot, or read on stock via `fpga -r`.
+Minor: ram2-6 entry is **15 words** (not 17); tm_acl_get_fastHashRule global lines 49312-49464;
+TC_SETUP_FT (nf-flowtable) routes to the CONDUIT (zx-eth), tc-flower on a user port → zx-dsa.
+
+
 2026-06-04, branch phase6-hw-offload. Synthesizes Stage 0 RE (ffe_hardfast_install_re,
 ffe_hardfast_regwrites_re, ffe_cla_hash_entry_re, phase6_linux_flowtable_survey) into a concrete,
 staged implementation plan for our zx-dsa/zx-eth driver.

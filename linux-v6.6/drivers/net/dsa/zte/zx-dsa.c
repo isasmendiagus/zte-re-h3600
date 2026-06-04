@@ -29,6 +29,8 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <net/dsa.h>
+#include <net/flow_offload.h>
+#include <net/pkt_cls.h>
 #include <uapi/linux/if_bridge.h>
 
 /* 4 user LAN ports (0..3) + CPU port (5). Port 4 is the unused RGMII WAN MAC on
@@ -495,6 +497,96 @@ static void zx_dsa_port_fast_age(struct dsa_switch *ds, int port)
 	}
 }
 
+#if IS_ENABLED(CONFIG_NET_CLS_FLOWER)
+/* [Phase 6 / Stage 1] HW flow-offload plumbing — LOG ONLY (no chip write yet).
+ * DSA routes a user-port netdev's tc-flower offload to these ops. We parse the
+ * flow's 5-tuple + action and log it; Stage 2 translates it into a CLA
+ * classifier entry (first a ram1 rule-TCAM rule, then the ram2-6 hash) via the
+ * already-present zx_cla_write_entry()/clapeek. Design + the stock-FFE RE this
+ * mirrors: tasks/00.10.02.re-stock-kmods/findings/phase6_offload_design.md.
+ * Returning -EOPNOTSUPP here keeps every flow in the (working) SW datapath while
+ * we validate that the callback fires with the right tuple.
+ */
+static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
+				 struct flow_cls_offload *cls, bool ingress)
+{
+	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
+	struct flow_action_entry *act;
+	__be32 saddr = 0, daddr = 0;
+	__be16 sport = 0, dport = 0;
+	u8 ip_proto = 0;
+	int i, in_ifidx = 0;
+
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_META)) {
+		struct flow_match_meta m;
+
+		flow_rule_match_meta(rule, &m);
+		in_ifidx = m.key->ingress_ifindex;
+	}
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
+		struct flow_match_basic m;
+
+		flow_rule_match_basic(rule, &m);
+		ip_proto = m.key->ip_proto;
+	}
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IPV4_ADDRS)) {
+		struct flow_match_ipv4_addrs m;
+
+		flow_rule_match_ipv4_addrs(rule, &m);
+		saddr = m.key->src;
+		daddr = m.key->dst;
+	}
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_PORTS)) {
+		struct flow_match_ports m;
+
+		flow_rule_match_ports(rule, &m);
+		sport = m.key->src;
+		dport = m.key->dst;
+	}
+
+	dev_info(ds->dev,
+		 "[phase6] cls_flower_add port%d ing=%d cookie=%lx proto=%u %pI4:%u -> %pI4:%u in_ifidx=%d\n",
+		 port, ingress, cls->cookie, ip_proto,
+		 &saddr, ntohs(sport), &daddr, ntohs(dport), in_ifidx);
+
+	flow_action_for_each(i, act, &rule->action) {
+		switch (act->id) {
+		case FLOW_ACTION_REDIRECT:
+		case FLOW_ACTION_REDIRECT_INGRESS:
+			dev_info(ds->dev, "[phase6]   act[%d]=REDIRECT dev=%s\n",
+				 i, act->dev ? netdev_name(act->dev) : "?");
+			break;
+		case FLOW_ACTION_MANGLE:
+			dev_info(ds->dev,
+				 "[phase6]   act[%d]=MANGLE(NAT) htype=%u off=%u val=%08x\n",
+				 i, act->mangle.htype, act->mangle.offset,
+				 act->mangle.val);
+			break;
+		default:
+			dev_info(ds->dev, "[phase6]   act[%d]=id %u\n", i, act->id);
+			break;
+		}
+	}
+
+	/* Stage 1: not offloading yet — keep the flow in SW. */
+	return -EOPNOTSUPP;
+}
+
+static int zx_dsa_cls_flower_del(struct dsa_switch *ds, int port,
+				 struct flow_cls_offload *cls, bool ingress)
+{
+	dev_info(ds->dev, "[phase6] cls_flower_del port%d cookie=%lx\n",
+		 port, cls->cookie);
+	return -EOPNOTSUPP;
+}
+
+static int zx_dsa_cls_flower_stats(struct dsa_switch *ds, int port,
+				   struct flow_cls_offload *cls, bool ingress)
+{
+	return -EOPNOTSUPP;
+}
+#endif /* CONFIG_NET_CLS_FLOWER */
+
 static const struct dsa_switch_ops zx_dsa_switch_ops = {
 	.get_tag_protocol	= zx_dsa_get_tag_protocol,
 	.setup			= zx_dsa_setup,
@@ -509,6 +601,11 @@ static const struct dsa_switch_ops zx_dsa_switch_ops = {
 	.port_vlan_add		= zx_dsa_port_vlan_add,
 	.port_vlan_del		= zx_dsa_port_vlan_del,
 	.port_fast_age		= zx_dsa_port_fast_age,
+#if IS_ENABLED(CONFIG_NET_CLS_FLOWER)
+	.cls_flower_add		= zx_dsa_cls_flower_add,
+	.cls_flower_del		= zx_dsa_cls_flower_del,
+	.cls_flower_stats	= zx_dsa_cls_flower_stats,
+#endif
 	/* All per-port switch ops implemented. VLAN attr 2-bit encoding + the HW
 	 * age/flush command are best-effort/TODO. ALL ops compile but are NOT
 	 * HW-verified (driver doesn't probe yet) — see dsa_driver_plan.md.
