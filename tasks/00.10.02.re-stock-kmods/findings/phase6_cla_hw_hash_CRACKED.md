@@ -85,3 +85,12 @@ write+read must be same driver-open as in calculatehashaddr). The shell's printk
 logger_main, and the stock UART console is silent. ⇒ VERIFY ON MAINLINE instead: debugfs `poke` reads
 any reg. Plan: on mainline write a test key to base+0x1CC2C0.. and read base+0x1CC2FC; confirm the engine
 returns a slot. Then the driver: build key from 5-tuple+mainline ports → HW-hash → write ram2[slot].
+
+### MAINLINE READINESS CONFIRMED (static, 2026-06-04)
+- npp window = 0x921c0000 + 0x200000 (2MB) → covers up to 0x923c0000, so the hash engine
+  0x9238C2C0/0x9238C2FC IS mapped (zx-eth-main.c:21).
+- debugfs `poke` (zx_poke_write @4312): 2 args `<phys> <val>` = WRITE (+readback print); 1 arg = PEEK
+  read; validates phys ∈ [0x921c0000, 0x923c0000) & aligned. ✓ Both write+read available.
+- RECIPE on mainline: write key `poke 0x9238C2C0 <w0>` … `poke 0x9238C2F0 <w12>` (13 words), then read
+  slot `poke 0x9238C2FC` (peek) → kmsg → UART :9999. First test: vary the key, confirm the slot changes
+  (engine live). Then match a stock flow's key fields → expect a known slot. Then driver integration.
