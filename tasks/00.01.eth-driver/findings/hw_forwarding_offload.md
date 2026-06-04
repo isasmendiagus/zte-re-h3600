@@ -1243,12 +1243,20 @@ rebuilt the br0=lan1+lan2+lan3 setup, ran TCP. Captured 40 TCPTRAP lines:
 NET: confirmed the trap is TCP-control-specific (not data, not size per Iter AG's small-UDP), but the
 exact pktdeal ptype slot is NOT observable from the CPU side (generic trap queue + no desc ptype).
 
-REMAINING to pinpoint the slot (two clean options):
-  1. **Live-bisect debugfs (recommended, no more reboots):** add a debugfs hook that flips one
-     pktdeal slot to deal=0 at runtime (calls zx_spa_set_enty_pktdeal_cfg). Boot once, then bisect
-     the 61 slots live while a TCP flow runs, watching tm_rx go flat. One build, then zero reboots.
-  2. **RE the SPA match-RAM** (spa_set_matchram, tm.ko 0x28120): the header-pattern→ptype map that
-     decides which ptype a TCP-control frame gets. Gives the slot analytically.
+REMAINING to pinpoint the slot — THREE options (kotrace is the cleanest, sidesteps the flaky 2-NIC HW):
+  1. **kotrace the SPA classifier on stock boot (RECOMMENDED).** The existing kotrace tool
+     (tasks/00.01.eth-driver/kotrace + targets in tasks/99.01.linux-stockport/kotrace) can trace any
+     stock fn. The header-pattern→ptype map is `spa_set_matchram` / `spaDebugSetMatchRuleAndHashRam`
+     (targets exist in kotrace_targets.h.full.bak) — NOT yet captured (the p3c capture only traced
+     tm_port_protocol_pktdeal_set[466] + zte_api_pp_set_pro_action[142], whose args we already have
+     as zx_pp_pro_actions[]; that gives ptype→deal but not header→ptype). Trace matchram during a
+     stock boot → decode which ptype slot a TCP/short-TCP frame is classified into. Pure init trace:
+     needs only a stock NAND boot (DTR reset, no autoboot interrupt) — NO 2-NIC LAN setup, dodges the
+     USB-hub flakiness entirely. Then flip that one slot's deal in zx_pp_pro_actions[].
+  2. **Live-bisect debugfs:** add a runtime hook flipping one pktdeal slot to deal=0
+     (zx_spa_set_enty_pktdeal_cfg). One build, then bisect the 61 slots live during a TCP flow,
+     watching tm_rx go flat — no further reboots, but needs the (flaky) 2-NIC flow live.
+  3. **Static RE of spa_set_matchram** (tm.ko 0x28120) from the decompile — analytic, no device.
 
 ⚠️ HW caveat this boot: the link came up DEGRADED — ping 71 ms (vs 2.5 ms pre-reboot) and TCP
 collapsed to 11.9 Kbit/s. The chronic host-USB-hub flakiness (NICs re-enumerate dirty on reboot).
