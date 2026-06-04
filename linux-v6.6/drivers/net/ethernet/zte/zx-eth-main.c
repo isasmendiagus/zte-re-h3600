@@ -2045,6 +2045,26 @@ static int zx_cla_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 	return zx_cla_wait_done(e);
 }
 
+/* CLA HASH write (ram2-6 + ram1 per the FFE hardfast install). Per the live stock
+ * kotrace of cla_set_hash_table → cla_set_indirect_rw_cmd + cla_set_indirect_rw_data
+ * (Phase 6, findings/phase6_stock_hardfast_trace.md): the WRITE protocol is
+ *   (1) CMD(rw=0, ram_id, addr)  FIRST  — arms the slot,
+ *   (2) then write the data words in DESCENDING data_id order (word[n-1]..word[0]).
+ * This differs from zx_cla_write_entry (data-first, ascending) which only commits
+ * word0 for the hash rams. nwords = 15 for ram2-6 hash, 17 for ram1. */
+static int zx_cla_write_hash(struct zx_eth *e, u8 ram_id, u32 ram_addr,
+			     const u32 data[17], int nwords)
+{
+	int i;
+
+	if (zx_cla_wait_done(e))
+		return -EBUSY;
+	writel(ram_addr | ((u32)ram_id << 22), e->base + CLA_REG_CMD); /* CMD first, rw=0 */
+	for (i = nwords - 1; i >= 0; i--)
+		writel(data[i], e->base + CLA_REG_DATA0 + i * 4);
+	return zx_cla_wait_done(e);
+}
+
 /* Indirect READ of one CLA RAM entry (17 words). Mirror of zx_cla_write_entry
  * with the CLA_RAM_READ bit set: write the cmd (rw=1), wait done, read DATA0..16.
  * Debug-only — used by the cladump/clapeek debugfs to compare per-port classify
@@ -4261,7 +4281,13 @@ static ssize_t zx_clawrite_write(struct file *f, const char __user *ubuf,
 		n++;
 		p += consumed;
 	}
-	rc = zx_cla_write_entry(e, ram_id & 0xff, addr, data);
+	/* ram2-6 (hash) + ram1 (rule) use the CMD-first/descending hash protocol;
+	 * others (ram0/ram7) use the plain data-first write. */
+	if (ram_id >= 1 && ram_id <= 6)
+		rc = zx_cla_write_hash(e, ram_id & 0xff, addr, data,
+				       (ram_id == 1) ? 17 : 15);
+	else
+		rc = zx_cla_write_entry(e, ram_id & 0xff, addr, data);
 	pr_info("[ZXETH] clawrite ram%u addr%#x: %d words, rc=%d\n",
 		ram_id, addr, n, rc);
 	if (rc == 0 && zx_cla_read_entry(e, ram_id & 0xff, addr, data) == 0)

@@ -110,3 +110,16 @@ NOTE: stock forwards LAN→WAN with ip_forward=0 (HW/FFE forwards, TTL decrement
 not the CPU. This is precisely the offload we want.
 OPEN (carry): clawrite ram2 persisted only word0 — likely mainline's zx_cla_write_entry ram2 path
 (U-Boot loaded the live ram2 we read, mainline never wrote ram2 successfully). Fix the data-write.
+
+## ✅ RESOLVED 2026-06-04 — CLA hash WRITE protocol cracked + verified on mainline
+kotrace of cla_set_indirect_rw_data during a live install gave the EXACT sequence:
+`cla_set_indirect_rw_cmd(rw=0, ram_id, addr)` FIRST, then `cla_set_indirect_rw_data(data_id, value)`
+for data_id **DESCENDING** (word[n-1]..word[0]); nwords=15 for ram2-6, 17 for ram1. word0 is written
+LAST. The old driver did data-FIRST + ascending → only word0 stuck.
+Fix: added `zx_cla_write_hash(e, ram_id, addr, data, nwords)` (zx-eth-main.c) = CMD-first + descending
+write; clawrite routes ram1-6 through it (nwords 17 for ram1, 15 for ram2-6). VERIFIED on mainline:
+`clawrite 2 5a <captured fwd entry>` → clapeek ram2[0x5a] reads back the FULL entry
+`03005044 fa11c000 00000608 80000000 06000009 32c0a800 010a0901 51ce4b09 00000014` (all words persist,
+not just word0). The write primitive now works — Stage 2's blocker is cleared.
+NEXT: write the full trio ram0[0x09]+ram1[0x98]+ram2[slot] in mainline + reproduce the flow (netns rig,
+bound sport→captured slot) → pipeline_stats/hw_trap FLAT = HW forwards. Then parameterize in cls_flower_add.

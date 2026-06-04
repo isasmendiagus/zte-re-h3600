@@ -36,7 +36,8 @@ static const struct trace_target_v2 kt_tm_targets[] = {
 	{ "tm_acl_fast_add_v4v6",        0x06, {0,64,64,0}, 4, 'V' }, /* dir, entry, handle, .., out */
 	{ "tm_acl_get_fastHashRule",     0x0a, {0,64,0,64}, 4, 'R' }, /* .., flow-desc(r1), .., entry-out(r3) */
 	{ "cla_set_hash_table",          0x02, {0,64,0,0},  2, 'C' }, /* slot(r0), 17-word ENTRY(r1) — KEY */
-	{ "cla_set_indirect_rw_cmd",     0x04, {0,0,64,0},  3, 'I' }, /* rw(r0), idx(r1), data(r2) */
+	{ "cla_set_indirect_rw_cmd",     0x04, {0,0,64,0},  3, 'I' }, /* rw(r0), ram_id(r1), addr(r2) */
+	{ "cla_set_indirect_rw_data",    0x00, {0,0,0,0},   2, 'D' }, /* data_id(r0), value(r1) — per-word seq */
 };
 #define KT_TM_COUNT  (sizeof(kt_tm_targets)/sizeof(kt_tm_targets[0]))
 
