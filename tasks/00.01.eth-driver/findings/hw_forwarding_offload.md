@@ -1113,3 +1113,19 @@ ACTION: launched a background agent to Ghidra-headless decompile-by-address the 
 the per-protocol trap-vs-forward logic. In parallel: instrumented the driver (Iter AC, trap-log gate
 10→130) to classify the first ~130 CPU-trapped frames during a TCP flow (ethertype/MAC/ingress) —
 to see directly whether TCP's traps are the iperf 5-tuple (data/ACKs) or background mcast.
+
+### Iter AC test — DIRECT trap classification during a TCP flow (gate raised to 130):
+TCP iperf collapsed to 6.29 Mbit/s (90 retr). Trapped-frame breakdown (dmesg "TM RX delivered"):
+  14×  jack2(lan1) → jack4(lan3)  IPv4  len=66  ingress=1   ← server→client (REVERSE/ACK dir) TRAPPING
+   8×  jack4 → jack2              IPv4         ingress=1   ← WRONG ingress port (jack4-src on lan1) = looped/hairpin?
+   1×  jack4 → jack2              IPv4         ingress=3   ← legit data-dir ingress
+   2×  → 33:33:..                 IPv6 mcast               ← background ND
+⇒ CONFIRMED (direct frame capture): the REVERSE direction (TCP ACKs, small IPv4 len-66 frames,
+lan1→lan3) TRAPS to the CPU — while UDP in the SAME direction HW-forwards. So the trap is
+PER-PROTOCOL (TCP proto6 vs UDP proto17), exactly what tm_port_protocol_pktdeal_set governs (being
+decompiled by the Ghidra agent). SECONDARY LEAD: 8 frames show jack4-as-source with ingress=lan1 —
+either a mis-decoded ingress-port field OR genuine hairpin/loopback (could relate to the historical
+dup storm + feeds extra frames into the trap path). NOTE: only ethertype was logged (the L4-proto/
+port parse didn't get applied — gate-only change); len=66 IPv4 during a TCP iperf ⇒ almost certainly
+TCP ACKs. Next: the Ghidra decomp of tm_port_protocol_pktdeal_set will show the proto→action map; if
+TCP is set to trap (or not set to forward) per-port, that's the fix point.
