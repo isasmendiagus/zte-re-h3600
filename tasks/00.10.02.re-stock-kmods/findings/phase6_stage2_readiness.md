@@ -41,3 +41,25 @@ a real rule redirect?" probe. Lower confidence but no stock boot needed.
 Next iteration: 0b koprobe ground-truth (the review's recommended de-risk). It needs a stock boot +
 kotrace build (stock_instrumentation_extraction_howto.md) but yields the exact entry+regs, avoiding
 blind TCAM guessing. Then Stage 2 write + iperf hw_trap verification.
+
+## UPDATE 2026-06-04 — the two paths to a correct entry are both walled; DECISION NEEDED
+Investigated both ways to get a CORRECT CLA forward entry for Stage 2:
+1. **koprobe ground-truth on stock — BLOCKED.** Stock installs an L3 hardfast only for a ROUTED/NAT'd
+   ESTABLISHED flow, which needs a WAN uplink. The device's WAN jack is EMPTY (enx6c70 absent) and
+   there's no GPON fiber → stock has no WAN → no hardfast to trace. Can't be fixed in software (the
+   WAN port is the physical MAC4 jack; the host's LAN-jack NICs can't present a WAN to stock).
+2. **full static decode — slow/error-prone.** tm_acl_get_fastHashRule (tm.c:49213-49469) packs the
+   entry as an opaque, unlabeled HW bit-shuffle (param_2 flow-desc → param_4 entry); identifying which
+   bits are the 5-tuple key vs the egress/action by hand is high-risk guessing.
+Confirmed via clapeek on live mainline: the CLA boot rules ARE loaded (ram1 addr0x16 reads byte-exact
+to zx_cla_table.h) and readable; the review's clapeek word0 OFF-BY-ONE is real (peek "addr0x18"
+returned the 0x19 entry). So a mainline copy-a-working-rule-and-tweak-the-outport experiment is
+possible, but (a) still needs the action-bit decode and (b) risks perturbing the live classifier on
+the WORKING SW router.
+
+### Recommendation
+The clean, low-risk unblock is **physical: plug a host NIC (or a real uplink) into the WAN jack** so
+stock gets a WAN, a real flow goes ESTABLISHED, and koprobe captures the EXACT hardfast entry + regs
+to copy. Without that, Stage 2 is a slow blind-decode/experiment grind. The entire SW router (Phases
+0-4) + all Phase 6 RE + the verified cls_flower plumbing (Stage 1) are already delivered; Stage 2 (the
+actual chip offload) is the remaining frontier and is gated on this.
