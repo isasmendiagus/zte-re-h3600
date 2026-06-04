@@ -4572,7 +4572,19 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 		 * but A11 IS load-bearing now that carved DMA + SOPC bridge
 		 * + 5 BMU instances are all in place).
 		 */
-		writel(now ? 0x03f40050 : 0x01f40fa0,
+		/* [Iter AA 2026-06-04] QMG queue threshold 0x9234c000:
+		 *   [12:0]=up_ram_thd, [25:13]=dn_ram_thd (per DATASHEET).
+		 * Stock link-UP value 0x03f40050 = up_thd=0x050(80), dn_thd=0x1fa0(8096):
+		 * the UP (CPU/trap) queue is starved (80) while DN is ample (8096). Stock
+		 * gets away with up=80 because it HW-forwards TCP in BOTH directions, so
+		 * the UP/CPU queue carries almost nothing. MAINLINE traps the reverse
+		 * (ACK) direction to the CPU → that starved UP queue floods → the wedge.
+		 * MITIGATION (diverge from stock): raise up_ram_thd 80→0xfa0(4000) on
+		 * link-UP so the trapped UP traffic can buffer. New link-UP = 0x03f40fa0
+		 * (up=4000, dn=8096 unchanged). UNTESTED-pending-HW (2-NIC TCP, USB-blocked).
+		 * The deeper stock-faithful fix is to make the UP dir HW-forward (no trap).
+		 */
+		writel(now ? 0x03f40fa0 : 0x01f40fa0,
 		       e->base + TM_OFF + 0xc000);
 
 		/* [Iter 25] SOPC↔SMAC bridge handshake at NPP[0x19068].

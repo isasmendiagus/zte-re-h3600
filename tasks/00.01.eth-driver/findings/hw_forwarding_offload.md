@@ -943,3 +943,31 @@ NIC trap-flood AND real 2-NIC iperf3 TCP: does tm_rx now climb PAST 1024 + RED d
 throughput sustain? If yes → likely the wedge fix → reverify 3 criteria → WIN. If RED block init has
 a protocol bug (no effect / instability) → read back RED regs (mem/regdump) to debug the indirect
 seq. If still USB-blocked → re-arm long, don't thrash.
+
+================================================================================
+## Iter AA (2026-06-04 ~05:50 UTC) — USER LEAD: the DN/UP asymmetry = QMG up_ram_thd vs dn_ram_thd
+
+User pointed at the recurring "DN/UP — sometimes joined, sometimes separated" pattern. DATASHEET +
+decomp nailed it: QMG threshold reg 0x9234c000 has SEPARATE fields [12:0]=up_ram_thd, [25:13]=dn_ram_thd.
+Stock sw_alarm_scanforalarm (decomp_all_switch.c:4807/4822) writes 0xd3000 (=0x9234c000) with:
+  - 0x1f40fa0  → up_thd=0xfa0(4000), dn_thd=0xfa0(4000)   [JOINED/equal]
+  - 0x3f40050  → up_thd=0x050(80),   dn_thd=0x1fa0(8096)   [SEPARATED, UP starved]
+Mainline (zx-eth-main.c link-state writer) copies these faithfully: link-UP=0x03f40050 (up=80!),
+link-DOWN=0x01f40fa0 (both 4000).
+
+⇒ Under the operational state (link UP), the UP (CPU/trap) queue threshold is only 80 while DN is
+8096. Stock survives up_thd=80 because it HW-forwards TCP BOTH directions → the UP/CPU queue is
+barely used. MAINLINE traps the reverse (ACK) direction to the CPU → floods that starved UP queue →
+the unicast→CPU wedge / the DN-forwards-UP-traps asymmetry observed in Iter Q.
+
+FIX (Iter AA, commit pending): raise mainline link-UP value 0x03f40050 → 0x03f40fa0 (up_ram_thd
+80→4000, dn_thd unchanged 8096). MITIGATION (divergence from stock) so the trapped UP traffic can
+buffer. Built into zImage alongside the Iter Y RED-block-init. UNTESTED — 2-NIC TCP needed (USB-blocked).
+
+⚠️ CAVEAT: the measured cap was ~1024, not ~80, so up_thd=80 may not be THE sole limiter (units may
+differ; may interact with the RED out-buffer from Iter Y). Both are real DN/UP-asymmetric config gaps.
+The DEEPER stock-faithful fix remains: make the UP direction HW-forward (no CPU trap) so up_thd=80 is
+irrelevant — that requires finding why mainline traps the reverse direction (per-port? flow-rate? CLA
+forward-decision for the reverse 5-tuple?). NEXT (when 2 NICs stable): boot the built zImage (RED +
+up_thd fixes) → 2-NIC iperf3 TCP -t30 → does it sustain now? If partial, bisect RED vs up_thd; if the
+UP dir still traps, chase the forward-vs-trap decision for the reverse direction.
