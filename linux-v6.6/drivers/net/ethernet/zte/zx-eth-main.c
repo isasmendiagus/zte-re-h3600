@@ -4829,6 +4829,38 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 	}
 }
 
+/* [WAN] Port of stock zx5201_config (plat:3224): the external WAN PHY ("ZX5201"
+ * at MDIO 0x08, config page 0x09) needs this vendor magic to bring up its copper
+ * TX driver. Without it CPU→MAC4 egress reaches QMG sw_fwd but the frame never
+ * reaches the wire (the OPC won't issue send2smac4 to a port whose TX endpoint
+ * isn't driving) — the ZX5201 equivalent of the GePHY TX-DAC force. The ZX5201 is
+ * NOT phylib-probed (no standard PHY ID), so we drive it directly on the mii_bus.
+ * See tasks/00.01.eth-driver/findings/{wan_port_bringup_re,mac4_egress_dispatch_re}.md */
+static void zx_wan_zx5201_config(struct mii_bus *bus)
+{
+	int v, u;
+
+	if (!bus)
+		return;
+	mdiobus_write(bus, 8, 0x12, 0x8402);
+	mdiobus_write(bus, 9, 0x16, 0x0a0f);
+	mdiobus_write(bus, 9, 0x1b, 0x0800);
+	mdiobus_write(bus, 8, 0x1d, 0x0355);
+	mdiobus_write(bus, 8, 0x10, 0xb62d);
+	mdiobus_write(bus, 8, 0x11, 0x0006);
+	mdiobus_write(bus, 9, 0x12, 0x0004);
+	v = mdiobus_read(bus, 9, 0x15);
+	u = mdiobus_read(bus, 9, 0x14);
+	mdiobus_write(bus, 9, 0x11, (((v < 0) ? 0 : v) & 0xc1ff) | 0x2800);
+	mdiobus_write(bus, 9, 0x10, (u < 0) ? 0 : u);
+	mdiobus_write(bus, 9, 0x12, 0x0204);
+	v = mdiobus_read(bus, 9, 0x16);
+	mdiobus_write(bus, 9, 0x16, (((v < 0) ? 0 : v) & 0xfff3) | 4);
+	/* power-up: BMCR reg0 |= 0x800 (stock plat:3317) */
+	v = mdiobus_read(bus, 8, 0);
+	mdiobus_write(bus, 8, 0, ((v < 0) ? 0 : v) | 0x800);
+}
+
 /*
  * Attach each GePHY to the sw netdev so phylib's state machine drives
  * our adjust_link callback on link changes. After phy_init_hw fires
@@ -4936,6 +4968,25 @@ static void zx_eth_init_phys(struct zx_eth *e)
 		}
 	}
 	dev_info(dev, "PHY init complete (%d GePHYs attached)\n", n);
+
+	/* [WAN] bring up the external ZX5201 WAN PHY (MDIO 0x08) — not phylib-probed,
+	 * so config it directly on the mii_bus (borrow a GePHY's bus). */
+	{
+		struct mii_bus *bus = NULL;
+		int k;
+
+		for (k = 0; k < 5; k++)
+			if (e->gephy[k]) {
+				bus = e->gephy[k]->mdio.bus;
+				break;
+			}
+		if (bus) {
+			zx_wan_zx5201_config(bus);
+			dev_info(dev, "[WAN] ZX5201 PHY @ MDIO 0x08 configured (copper TX up)\n");
+		} else {
+			dev_warn(dev, "[WAN] no mii_bus to config ZX5201 PHY\n");
+		}
+	}
 }
 
 /*
