@@ -442,10 +442,30 @@
     be audited/trimmed before merge; bit14 is THE fix). main + egress fix untouched, NOT yet merged.
     Findings: rx_ring_wrap_re.md, ffe_tcp_trap_re.md, hw_forwarding_offload.md (Iters K–AD).
 
-**Last updated**: 2026-06-04 (Journey #27 — ★ unicast→CPU WEDGE SOLVED: tm[0x4068] bit14 ring-selector
-fix; TCP sustains 354 Mbit/s, UDP 300 both dirs, no wedge = stable LAN streaming. Branch
-hw-bridge-offload, NOT merged). Prior #26 — root cause = FFE conntrack. #25 — UDP works both dirs.
-#23 — port1 ingress SOLVED, merged main c37e6168f, egress fix intact.
+28. **Branch pruned + verified + merged to main (2026-06-04).** Post-fix audit of hw-bridge-offload:
+    KEPT the legitimate fixes — **bit14 ring-selector (THE fix)**, pool 1024→8192 (load-bearing:
+    napi bppe>pool guard + sustained throughput), RED-block-init (stock-match), QMG up_thd 80→4000
+    (UP-queue headroom for the CPU ACK-drain). PRUNED the non-contributing: assisted_learning (Iter AB,
+    inert here) + the diagnostic trap-log gate (130→10, debug kept). RE-VERIFIED on HW after the prune:
+    ICMP flood→tm_rx=4028 (no wedge), iperf3 TCP **354 Mbit/s 20s/844MB 0-retransmits**, ping-after
+    clean. Merged to main (commit-before-prune restore point was 8b41d68; egress fix untouched — the
+    diff is RX-ring/CLA/RED, never the TX path; CPU→LAN egress is exercised by the bridge software-
+    forwarding the trapped ACKs out lan3, which TCP-sustaining confirms).
+
+    **★ NEXT STEP (documented): make the TCP ACKs HW-forward instead of CPU.** Today the data dir
+    HW-forwards but the reverse (ACK) dir traps to the CPU and is software-bridged (works, ~stock
+    throughput because ACKs are sparse, but CPU-assisted — not pure-HW like stock-post-ESTABLISHED).
+    To offload the CPU entirely (and scale to multi-flow / higher rates), install a HW forwarding
+    session for the reverse 5-tuple so the ACKs HW-forward too — i.e. a minimal FFE-style hardfast
+    session-install on flow-learn: hook the trapped-flow path → build + write the CLA hash / SBRAG
+    entry (chain mapped in hw_forwarding_offload.md Iter L: zte_api_fast_l3_session_add tm.ko 0x6558c
+    → tm_add_acl_flow_rule → cla_set_hash_table tm.ko 0x15a14), keyed on conntrack-ESTABLISHED like
+    stock's ffe_ip_conntrack_check (vmlinux c0452a7c). Optional/perf — the L2 streaming goal is met.
+
+**Last updated**: 2026-06-04 (Journey #28 — branch pruned [kept bit14/pool/RED-init/up_thd; dropped
+assisted-FDB + log-spam], RE-VERIFIED TCP 354Mbit/s 0-retr + no wedge, MERGED to main. NEXT: make
+TCP ACKs HW-forward not CPU = minimal FFE hardfast session-install, optional/perf). Prior #27 — WEDGE
+SOLVED (bit14). #26 — root cause FFE conntrack. #25 — UDP both dirs. #23 — port1 SOLVED.
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)
