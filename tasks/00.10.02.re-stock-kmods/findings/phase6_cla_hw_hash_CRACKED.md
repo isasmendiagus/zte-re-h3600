@@ -57,3 +57,31 @@ masked per the HW outspace cfg, first free way. To replicate we need, on mainlin
 VERIFY shortcut available: once we read the live poly cfg + know the key layout, recompute the slot for
 a captured stock flow and check it equals the captured slot (0x48/0x5a/...) — confirms the model end to
 end without needing kotrace deref.
+
+## UPDATE 2026-06-04d — there is a HW HASH ENGINE (use it directly, skip CRC reimpl)
+The stock `/proc/tm/shell` command `calculatehashaddr` (cla_info_store @tm.c:67678) does NOT compute the
+slot in SW. It packs the 45-byte key into words, then:
+```
+fpga_write_reg(0xe30b0, key_word0);
+for i in 0..11: fpga_write_reg(0xe30b1 + i, key_word[1+i]);   // 12 more words
+slot = fpga_read_reg(0xe30bf);                                 // "calculate hash addr is :0x%x"
+```
+⇒ a dedicated **HW hash engine**: write the 13-word key to fpga words **0xe30b0..0xe30bc**, read the
+slot from **0xe30bf**. The SW cla_acl_hash_addr_gen (4-poly CRC) is just a mirror of this HW block.
+### Register offsets (driver-relative, e->base = phys 0x921c0000)
+- fpga word W → phys 0x92000000 + W*4. So:
+  - key in:  0xe30b0..0xe30bc → phys 0x9238C2C0..0x9238C2F0 → **e->base + 0x1CC2C0 .. +0x1CC2F0** (13 words)
+  - slot out: 0xe30bf        → phys 0x9238C2FC          → **e->base + 0x1CC2FC**
+- These sit right next to the CLA indirect iface (CLA_REG_CMD = e->base+0x1CC014) — same CLA block,
+  already mapped by the driver. NO new ioremap needed.
+### calculatehashaddr key packing (29 hex args → 45-byte key) — for the key BUILDER
+sscanf 29 hex args -> {arg0=outport(&0x1f); arg1<<5 region; arg2&7=tag?, arg3&3, arg4&1, arg5&0xff;
+then args6.. = extra_data0..19 as 16-bit values bit-packed with a 1-bit shift (matches the extra_dataN
+decode `dataN = b[2N+1]<<7 | b[2N]>>1 | (b[2N+2]&1)<<15`)}. The 5-tuple→extra_dataN mapping comes from
+tm_acl_get_fastHashRule (fills the 20 ushorts local_51..local_2b in tm_acl_fast_add_v4v6 @52583-52602).
+### Why stock readback failed (tooling, NOT a blocker)
+`fpga -r 0xe30bf` returns rc=0 but emits NO logger_main line (only some widx ranges log; or the
+write+read must be same driver-open as in calculatehashaddr). The shell's printk doesn't reach
+logger_main, and the stock UART console is silent. ⇒ VERIFY ON MAINLINE instead: debugfs `poke` reads
+any reg. Plan: on mainline write a test key to base+0x1CC2C0.. and read base+0x1CC2FC; confirm the engine
+returns a slot. Then the driver: build key from 5-tuple+mainline ports → HW-hash → write ram2[slot].
