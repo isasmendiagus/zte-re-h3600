@@ -1,5 +1,16 @@
 # STATE — what's on the device RIGHT NOW
 
+## ★ MILESTONE (2026-06-04): SW control plane COMPLETE on `main`; HW offload next on its own branch
+`main` (commit dbcdc7b31) now carries the **complete, verified, self-starting SW router** — Phase 0
+L2 (incl. #36 TCP-ACK HW-forward) + Phases 1–4: WAN MAC4, netfilter+iptables, LAN DHCP, NAT
+(SNAT verified), firewall (FORWARD-DROP + DNAT port-forward), IPv6 (routed + ip6tables), all
+auto-configured at boot via /etc/rc.router. This is the entire **"CPU configures"** half of the
+objective. `hw-ack-forward` is an old ancestor of main (superseded). **Phase 6 (HW flow offload —
+the "HW forwards" half) proceeds on a dedicated branch `phase6-hw-offload`** so main stays the
+known-good SW router. Phase 5 (SW QoS) intentionally SKIPPED: software `tc` is bypassed once flows
+are HW-offloaded, so QoS will be done in HW (the chip SCH/OPC/DSCH shaper) as part of the Phase 6
+datapath — matching stock.
+
 ## ★ ROADMAP — stock features, brought up one-by-one on MAINLINE (added 2026-06-04)
 
 **★ OBJECTIVE (the north star):** match stock's HYBRID model — **configure everything on the CPU
