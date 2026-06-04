@@ -1325,6 +1325,16 @@ TO FINISH THE MINIMAL-SLOT SCAN: need clean (trap-armed) state per trial. Option
 NIC-recovery recipe (works): driver-level r8152 unbind/bind on 3-3.1:1.0, then re-add to nsB +
 ethtool autoneg on + link bounce. Branch hw-ack-forward.
 
+UPDATE (same iter): refuted the "pings seeded it" idea — a fresh reboot with NO pre-iperf ICMP (static
+ARP only, immediate iperf) STILL reads delta 0. And boots 1 & 3 read 62k while boots 4 & 5 (both after
+the boot-3 `all 0`) read 0. ⟹ the forward entry persists across the DTR/warm reboot itself; the
+trigger was the `all 0`, not the pings. LEADING MECHANISM: the DTR "cold reset" resets the ARM CPU
+but **not the switch fabric** — the fabric's installed flow-forward entry survives a CPU reboot and
+keeps overriding pktdeal. Only a **full physical power-cycle** (cut SoC power) — or flow/FDB aging —
+should clear it. To run the minimal-slot scan: physically power-cycle the device, re-TFTP-boot, and
+measure the FIRST TCP flow before any all-0/forward seeds the entry (boots 1 & 3 prove a never-yet-
+forwarded flow traps at ~62k); then scan slots. Until a cold cycle, the chip is latched in forward.
+
 ⚠️ HW caveat this boot: the link came up DEGRADED — ping 71 ms (vs 2.5 ms pre-reboot) and TCP
 collapsed to 11.9 Kbit/s. The chronic host-USB-hub flakiness (NICs re-enumerate dirty on reboot).
 The TCPTRAP capture is still valid (it only needs frames to trap, which they did), but clean
