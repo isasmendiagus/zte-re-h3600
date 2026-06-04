@@ -1371,3 +1371,35 @@ minimal/safe slot is unresolved. Branch hw-ack-forward.
 collapsed to 11.9 Kbit/s. The chronic host-USB-hub flakiness (NICs re-enumerate dirty on reboot).
 The TCPTRAP capture is still valid (it only needs frames to trap, which they did), but clean
 throughput re-validation needs a stable hub. Instrumentation kept (debug). Branch hw-ack-forward.
+
+## Iter AL (2026-06-04) — clean rig (good jack4 NIC + robust reader): trap CONSISTENT; NOT a single pktdeal slot
+
+User power-cycled everything; all 3 USB NICs re-enumerated incl. the good **jack4 (enx6c70cbb68169)**.
+Set jack4→nsB (10.0.0.2) ↔ jack2/ASIX→default (10.0.0.1), br0=lan0..lan3. Root cause of the earlier
+chaos: the `rxget` helper intermittently returned EMPTY on a slow zcon read → `delta` computed as 0 →
+all the false "delta 0 / sticky / survives reboot" readings (Iters AH–AK). Replaced with a
+retry-until-numeric reader; confirmed by direct manual snapshots that a 10s TCP traps tm_rx +102376
+while hw_fwd +306631.
+
+CLEAN, REPRODUCIBLE (robust reader, ~354 Mbit/s each): stock → tm_rx delta **+61451**; all-0 → **0**;
+stock again → **+61465**. ⟹ the trap is consistent AND fully reversible — **NO sticky/persistent
+state** (the "autonomous flow-learning survives reboot / overrides pktdeal" saga of Iter AI/AJ was the
+rxget artifact — fully RETRACTED).
+
+BISECT — the ACK trap is **NOT governed by one or two pktdeal slots**:
+- [0..35] fwd → +61430 (traps); [36..70] fwd → +61411 (traps); only all-0 [0..70] → 0. A single slot
+  can't be absent from both halves yet present in the union ⟹ ≥2 slots.
+- Fix [36..70] forwarded, bisect [0..35]: [0..17],[18..26],[27..31],[32..33],[34..35] ALL still trap
+  fully (~61k). Every PARTIAL forward gives the FULL ~61k (not a fraction); only complete all-0 → 0.
+⟹ forwarding the ACK stream needs a LARGE set of pktdeal slots at once (multi-slot / default-action
+fallthrough), not a clean minimal slot. **There is no single zx_pp_pro_actions[] entry to flip** that
+frees the ACKs while leaving the rest stock. The surgical-one-slot plan is dead.
+
+REALISTIC DELIVERIES NOW:
+  (a) **forward broadly + keep only the broadcast/control slots trapping**: start from all-0 (forwards
+      TCP fully) and PING/ARP-bisect which few slots must stay deal=1 so broadcast/ND still reach the
+      CPU (forward-all breaks ARP, Iter AF). Ping-signal bisect (no iperf needed) → "forward-most,
+      trap-the-handful-of-control-ptypes". This is the next concrete step.
+  (b) accept the L2 streaming goal as already met via the CPU software bridge (merged main, 354
+      Mbit/s) and treat full HW-ACK offload as not worth the broad-pktdeal change + broadcast risk.
+RIG: good jack4 NIC + retry-reader = trustworthy now; flaky enx2c997 left unused. Branch hw-ack-forward.
