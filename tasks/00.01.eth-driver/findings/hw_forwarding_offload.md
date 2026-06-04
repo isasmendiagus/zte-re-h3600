@@ -1223,3 +1223,34 @@ slot (poke debugfs) during a TCP flow and watch tm_rx go flat — bisect the off
 rebuild; (c) RE the upstream TCP-flags→vendor-enum map (decomp gave enum→slot, not which enum is the
 short-ACK variant). Once the slot is known, set it deal=0 in zx_pp_pro_actions[] (one entry) and
 re-test: TCP with tm_rx flat = ACKs HW-forward = DONE. Branch hw-ack-forward.
+
+## Iter AH (2026-06-04) — RX-trap classifier instrumentation: TCP-CONTROL traps, data forwards
+
+Added a TCPTRAP log in the trap delivery path (zx_tm_napi_poll): parses each trapped IPv4 frame's
+L4 (ihl/thl/payload/flags) and logs the trap QUEUE + desc bytes for the first 50 TCP frames. Booted,
+rebuilt the br0=lan1+lan2+lan3 setup, ran TCP. Captured 40 TCPTRAP lines:
+
+- **EVERY trapped TCP frame is a CONTROL segment**: payload≤0 with flags 0x10 (ACK) / 0x12 (SYN-ACK)
+  / 0x11 (ACK+FIN). The large TCP *data* frames never appear (they HW-forward). One len-74 payload=8
+  frame trapped too (a tiny segment) — so the split is "small/control TCP" forwards-no, "bulk data"
+  forwards-yes. Trapped frames come from BOTH ingress ports (1 and 2).
+- **All trap to q=4.** BUT q=4 is the GENERIC CPU trap queue — in zx_def_ptl_pkt_map ~all protocol
+  ptypes map to qid 4 (only the high ptypes 0x47–0x54 go to q0–q3). So the trap queue does **not**
+  uniquely identify the pktdeal ptype slot. Dead end for queue→slot.
+- The RX descriptor doesn't carry a usable ptype either: desc[6]=ingress, desc[7]=bp_idx(low),
+  desc[9]=len. No classification field exposed to the CPU.
+
+NET: confirmed the trap is TCP-control-specific (not data, not size per Iter AG's small-UDP), but the
+exact pktdeal ptype slot is NOT observable from the CPU side (generic trap queue + no desc ptype).
+
+REMAINING to pinpoint the slot (two clean options):
+  1. **Live-bisect debugfs (recommended, no more reboots):** add a debugfs hook that flips one
+     pktdeal slot to deal=0 at runtime (calls zx_spa_set_enty_pktdeal_cfg). Boot once, then bisect
+     the 61 slots live while a TCP flow runs, watching tm_rx go flat. One build, then zero reboots.
+  2. **RE the SPA match-RAM** (spa_set_matchram, tm.ko 0x28120): the header-pattern→ptype map that
+     decides which ptype a TCP-control frame gets. Gives the slot analytically.
+
+⚠️ HW caveat this boot: the link came up DEGRADED — ping 71 ms (vs 2.5 ms pre-reboot) and TCP
+collapsed to 11.9 Kbit/s. The chronic host-USB-hub flakiness (NICs re-enumerate dirty on reboot).
+The TCPTRAP capture is still valid (it only needs frames to trap, which they did), but clean
+throughput re-validation needs a stable hub. Instrumentation kept (debug). Branch hw-ack-forward.

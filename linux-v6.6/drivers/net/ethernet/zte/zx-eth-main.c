@@ -3078,6 +3078,39 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 								 src + 6, src, ntohs(*(__be16 *)(src + 12)),
 								 ingress_port);
 						}
+						/* [Iter AH] TCP-trap slot identifier: for the first
+						 * ~50 IPv4-TCP frames that trap, log the trap QUEUE
+						 * (q maps to the chip ptype slot via zx_def_ptl_pkt_map)
+						 * + L4 detail, so we can see which ptype the chip
+						 * assigns to TCP pure-ACKs (which trap) vs TCP data
+						 * (which HW-forwards). Dump desc bytes too in case the
+						 * ptype rides in the RX descriptor directly. */
+						{
+							static u32 tcptrap_log;
+							u16 et = ntohs(*(const __be16 *)(src + 12));
+
+							if (et == 0x0800 && tcptrap_log < 50) {
+								const u8 *ip = src + 14;
+								u8 ihl = (ip[0] & 0x0f) * 4;
+								u8 proto = ip[9];
+
+								if (proto == 6) {
+									const u8 *tcp = ip + ihl;
+									u8 thl = (tcp[12] >> 4) * 4;
+									u8 flags = tcp[13];
+									int payload = (int)len - 14 - ihl - thl;
+
+									tcptrap_log++;
+									dev_info(e->dev,
+										"TCPTRAP #%u q=%d len=%u ihl=%u thl=%u payload=%d flags=%02x %s ingress=%d desc[4..b]=%02x %02x %02x %02x %02x %02x %02x %02x\n",
+										tcptrap_log, q, len, ihl, thl, payload, flags,
+										(payload <= 0 && (flags & 0x10)) ? "PURE-ACK" : "data",
+										ingress_port,
+										desc[4], desc[5], desc[6], desc[7],
+										desc[8], desc[9], desc[10], desc[11]);
+								}
+							}
+						}
 						/* Dynamic FDB learning DISABLED (degradation test).
 						 * Per round-2 review: zx_fdb_add writes to PP_BRG_RAM
 						 * (VLAN table), not the sbrag MAC FDB the switch reads
