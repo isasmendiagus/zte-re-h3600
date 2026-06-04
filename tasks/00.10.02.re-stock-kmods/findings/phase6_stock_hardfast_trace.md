@@ -87,3 +87,26 @@ B) **Parameterized build:** implement the byte layout above in cls_flower_add (e
    same tuple before trusting it.
 Recommended: A first (de-risks the "does a CLA hash entry actually override the trap?" question with a
 known-good entry), then B.
+
+## UPDATE 2026-06-04 — FULL hardfast trio captured (ram0+ram1+ram2)
+flow #2 = 192.168.1.50:46063 → 10.9.9.1:5201 TCP. Install (kotrace) wrote ram2[0x35] fwd / ram2[0x0c]
+rev + ram1[0x98] + ram0[0x09]. ram1/ram0 addrs are the SAME across both captured flows ⇒ FIXED shared
+infra; only the ram2 slot changes (= hash of the 5-tuple). Full entries (fpga read, 17 words):
+```
+ram0[0x09] (extract-index, FIXED): 93929190 97969594 9b9a9998 9f9e9d9c 00150051 0...   (which packet
+   bytes form the hash key: extract_index0..15 = 0x90..0x9f ascending; 0x00150051 = ext_mode/len)
+ram1[0x98] (rule TCAM IP, FIXED):  22038608 000058a1 00000000 00000000 f00ff000 ffffffff ffffffff
+   0fffffff 0 0 0 0 0 0 00700000 00092492 0   (matches IP, points into the hash; ~= boot ram1 entries)
+ram2[0x35] (fwd hash result):      03005044 fa11c000 00000608 80000000 06000009 32c0a800 010a0901
+   51b3ef09 00000014 0...   (sport 0xB3EF=46063 at word7 ✓; same shape as the 0x5a capture)
+ram2[0x0c] (rev hash result):      03002044 fa11c000 00000608 80000000 06100029 010a0900 020a0909
+   ef145109 000000b3 0...
+```
+⇒ **To offload a flow on mainline: ensure ram0[0x09]+ram1[0x98] exist (infra — check the boot table),
+then write ONE ram2 entry at the flow's hash slot.** The slot = hash(5-tuple) via the ram0 extract +
+the CLA hash poly (cla_get_hash_poly_config) — still need that to compute a slot for an arbitrary flow,
+OR craft a flow with a known sport so it hashes to a captured slot (verbatim replay).
+NOTE: stock forwards LAN→WAN with ip_forward=0 (HW/FFE forwards, TTL decremented) — the chip routes,
+not the CPU. This is precisely the offload we want.
+OPEN (carry): clawrite ram2 persisted only word0 — likely mainline's zx_cla_write_entry ram2 path
+(U-Boot loaded the live ram2 we read, mainline never wrote ram2 successfully). Fix the data-write.
