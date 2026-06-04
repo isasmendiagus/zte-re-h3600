@@ -140,3 +140,20 @@ TODO (mechanical): (a) python/C key-builder = pack {mainline outport,inport, ext
 into 12 words w/ the 1-bit-shift; (b) find mask via the 4 captured pairs on mainline hashcalc;
 (c) cls_flower_add: build key->zx_cla_hash_raw->slot->build 15-word ram2 entry->clawrite; (d) isolated
 hw_trap test.
+
+## ★★ UPDATE 2026-06-04g — STOCK vs MAINLINE hash CONTRAST: IDENTICAL (config validated)
+User asked: shouldn't we contrast mainline's hash against stock (and can we even read stock?). Answer:
+YES on both. The earlier `fpga -r 0xe30bf` "no output" was the WRONG PROTOCOL (trigger before load) —
+with the correct sequence the engine computes and the read LOGS fine on stock via /dev/logger_main.
+Drove BOTH engines (stock via fpga -w/-r, mainline via debugfs hashcalc) with identical keys:
+  key [0xdeadbeef, 0x12345678] → stock 0xd738 == mainline 0xd738
+  key [1]                      → stock 0x6f41 == mainline 0x6f41
+  key [0,0,1]                  → stock 0x1665 == mainline 0x1665
+⇒ **mainline's CLA hash engine is configured IDENTICALLY to stock** (same poly cfg, not uninitialized).
+CONSEQUENCES (de-risks Stage 2b):
+- the captured stock (sport→slot) pairs (0x5a/0x48/0x35/0x0a) are VALID ground truth for mainline;
+- mainline's install-time hash (engine) == its ingress-time packet hash (same silicon block) — so an
+  entry written at engine-computed slot is where the HW will look on ingress;
+- we now have a stock hash oracle too: load 0xe30b1..0xe30bc via fpga -w, trigger fpga -w 0xe30b0 1,
+  read fpga -r 0xe30bf (logs to /dev/logger_main with the right protocol).
+Stock-driver fpga recipe (verified): zero 0xe30b1..0xe30bc, write key words, write 0xe30b0=1, read 0xe30bf.
