@@ -293,3 +293,22 @@ NEXT RE TARGET (precise): the PP / drop_PP (0x921da040) forwarding-and-flood-rep
 decision — what makes PP DROP a broadcast (DA=ff:ff:ff) vs REPLICATE it to the VLAN member
 ports. This is the real lever for autonomous HW broadcast flood (and, once it floods,
 all-0 forwards TCP too with no broadcast cost).
+
+---
+
+## CORRECTION (Iter AO) — "stock parity" was OVER-CLAIMED; stock DOES forward TCP ACKs
+
+Journey #34 concluded "we are at stock parity (stock also traps control to CPU for L2)". That
+CONFLICTS with the earlier DIRECT live stock measurement (Iter O, zte-hw-forwarding-deadend):
+stock ran TCP at 353 Mbit/s with QMG **hw_trap FLAT** (CPU bypassed) — so stock HW-forwards the
+TCP flow including ACKs; only ICMP trapped. A direct live measurement outweighs the decomp
+inference, so: **stock forwards the TCP ACKs; our merged solution traps them. We are NOT at parity.**
+
+Likely mechanism (to be RE-confirmed): stock's "hw_trap flat" is the STEADY STATE after the FFE
+conntrack engine, on ESTABLISHED, installed a HW forward bind for the flow (stock's FFE explicitly
+TRAPS TCP until conntrack==ESTABLISHED, then offloads). So stock's ACK-forward is the FFE-installed
+bind, NOT a static matchram classify-to-forward (if the matchram forwarded TCP, stock would never
+trap it / need the FFE). The SPA matchram is therefore probably NOT the lever — but RE of stock's
+matchram init settles it: if stock's matchram traps TCP-control → confirms it's the FFE bind; if it
+forwards TCP → the matchram IS the lever and mainline (which leaves matchram at HW-default) just
+needs to replicate it. Open question; pursuing via matchram RE.
