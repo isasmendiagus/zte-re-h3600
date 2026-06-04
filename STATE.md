@@ -38,9 +38,17 @@ Legend: [SW]=software, works on mainline now · [DRV]=driver/RE chip work · [�
   +libcommfun; extensions are built into the binary). VERIFIED on HW: iptables -L / -t nat -L,
   MASQUERADE -o lan4 rule installs, -m state match, ip_forward=1, /proc/net/nf_conntrack present.
   (Known deferred: kernel now exceeds the 0xc00000 NAND write size — TFTP/RAM boot unaffected; trim
-  before flashing.) — **1.2 [→ NEXT]** WAN IPv4 via udhcpc, then PPPoE via pppd [SW]; 1.3 `ip_forward`
-  + masquerade LAN→WAN [SW]. ⇒ working NAT router / internet sharing.
-- **Phase 2 — LAN services [SW]:** dnsmasq (DHCP server + DNS + static leases), static routes.
+  before flashing.) — **1.2 [→ NEXT, cable-blocked for live test]** WAN IPv4 via udhcpc (busybox; script
+  staged), then PPPoE via pppd (needs CLEAN BUILD — see blocker below); 1.3 `ip_forward` + masquerade
+  LAN→WAN [SW]. ⇒ working NAT router / internet sharing.
+- **Phase 2 — LAN services [SW]:** **LAN DHCP [✅ DONE 2026-06-04]** via busybox udhcpd on lan1
+  (172.31.9.1/24) — VERIFIED end-to-end: host got a full DHCPOFFER (172.31.9.50, gw/dns/lease all
+  correct) over the DSA lan1 port (nmap broadcast-dhcp-discover). Config /etc/udhcpd.conf (staged).
+  **BLOCKER (memory [[zte-stock-daemon-liboss-block]]): stock dnsmasq/pppd HANG at exec on mainline**
+  — they link ZTE liboss_pub.so whose constructor blocks with no ZTE platform daemon (iptables works
+  only because it doesn't link it). ⇒ use busybox for DHCP; DNS/PPPoE need a clean rebuild or busybox
+  alternatives. Remaining Phase 2: LAN DNS (optional — clients can use upstream DNS via DHCP opt 6),
+  static routes/leases. (dnsmasq clean-build deferred.)
 - **Phase 3 — Firewall/security [SW]:** zone firewall (iptables/nftables: WAN-in drop, LAN-out
   accept), IP/port filter, DoS guard, port-forward (DNAT), DMZ, ALG (conntrack helpers), UPnP-IGD
   (miniupnpd), URL/parental filter.
