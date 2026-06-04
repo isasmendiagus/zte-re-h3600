@@ -187,3 +187,25 @@ inport/outport flags + 5-tuple match bytes) from the captured ram1[0x98] + cla_s
 tm_acl_get_fastHashRule, then write a rule at a FREE ram1 slot (NOT 0x98) with MAINLINE port numbers
 matching a mainline test flow, action=forward-to-egress-port. Isolated test: one flow, watch hw_trap
 go FLAT = HW forwards. This sidesteps the entire hash-slot problem.
+
+## UPDATE 2026-06-04c (ram1 decoded = window-matcher / hash-key extractor, NOT a standalone forward rule)
+cla_set_extra_rule_table (tm.c:2870) writes a 17-word entry that is a GENERIC byte-window matcher:
+winoffset0..19 (each ~7-bit, packed across param_2[0..0x15]), winmask0..17 (packed param_2[0x12..0x35]),
+plus rule_mode (param_2[0x3a] bit), **hash_len** (param_2[0x3a]>>4 | bit), mem_ctrl, cvlan_mask,
+offsetN_type (param_2[0x3c..0x41]). NO src/dst/port fields and NO obvious forward-to-port action word —
+it selects WHICH packet bytes/windows participate + a `hash_len`. Combined with the captured ram1[0x98]
+(winmask words = ffffffff/0fffffff, hash_len present), this strongly indicates **ram1 defines the HASH
+KEY (extract windows), and the forward decision lives in the ram2 hash result** — i.e. ram1→ram2 are
+CHAINED. This refutes phase6_offload_design.md's assumption that "ram1 = a directly-addressed forward
+rule, no hash needed". The design-doc risk note was right: *the packet matches a ram1 rule that POINTS
+into the ram2-6 hash*. ⇒ There is NO hash-free shortcut; the ram2 hash slot is on the critical path.
+
+### Refined critical path (single highest-value next action)
+To compute a ram2 slot for ANY flow we MUST know the real 40-byte tuple + the probing model. The clean
+unblock: **augment kotrace to dump the deref'd bytes** (it currently logs only r0-r3). Then on stock,
+one forwarded flow gives: the exact 40-byte tuple (G r0 deref) + its slot (C r0). Compute
+CRC32_0x04C11DB7(tuple)&0x1ff and compare to the slot (accounting for probing: if the bucket was free,
+slot==hash; the first flow after a table-clear avoids collisions). That CONFIRMS or REFUTES the CRC and
+pins the exact tuple byte layout → then cls_flower can build the key + slot. This is the gate for all of
+Stage 2/2b. Fallback if CRC is refuted: the HW uses cla_get_hash_poly_config (a configurable HW poly) —
+read that register set on stock.
