@@ -80,3 +80,25 @@ Added a `clawrite` debugfs to the mainline driver (zx-eth-main.c): `echo "<ram_i
   neighbors a8..ac all zero rules out a simple ±1. NEXT: diff zx_cla_write_entry vs the boot-load path
   vs the stock cla_set_indirect_rw_cmd per-word sequence; fix the write; then re-test (write a boot
   entry's bytes to its own slot and confirm round-trip, then a fresh slot).
+
+## UPDATE 2026-06-04 (Stage 2 loop iter — a hardfast is a ram0+ram1+ram2 TRIO, not just ram2)
+Two findings this iteration:
+1. **cla_set_indirect_rw_cmd (tm.c:0x44c)** = just the CMD-reg write: `tmOnuRegWrite(claRegTable[0],
+   addr + ram_id*0x400000 + rw*0x8000000)` = `addr|ram_id<<22|rw<<27` — EXACTLY the driver's encoding
+   (zx-eth-main.c:2044). Validates ram_id<10, addr≤0x3fffff. The DATA (17 words) is written by the
+   caller before the CMD. So the driver's protocol matches the CMD; the data path is the suspect.
+2. **A hardfast install touches THREE rams** (re-read the kotrace 'I' lines for the fwd flow):
+   `cla_set_indirect_rw_cmd(rw=0, ram_id=2, addr=0x5a)` + `(rw=0, ram=1, addr=0x98)` +
+   `(rw=0, ram=0, addr=0x09)`. ⇒ a flow = **ram0 (extract-index, addr 0x09) + ram1 (rule TCAM, addr
+   0x98) + ram2 (hash result, addr 0x5a)** TRIO. Writing ram2 alone (what clawrite did) is NOT enough
+   to forward — the CLA needs ram0 (which bytes to extract as the key), ram1 (the rule that matches +
+   points into the hash), and ram2 (the forward action). This is the real reason mainline traps: it
+   has the boot ram0/1 but never installs per-flow ram1+ram2 hardfast entries.
+- Also: clawrite to ram2 0x5a persisted ONLY word0 (0x03005044 seen at 0x5a via the off-by-one) —
+  words1-16 didn't stick. Either the runtime CLA hash engine partial-commits, or the data-reg write
+  needs a different sequence than boot-load. TBD.
+
+### NEXT (loop)
+Reboot STOCK, kotrace/fpga-read the FULL trio for one flow: ram0[0x09], ram1[0x98], ram2[0x5a] (and
+the reverse trio). Then in mainline write all three via clawrite and re-test hw_trap. Also resolve the
+ram2 words1-16 persist issue (compare boot-load timing vs runtime; try writing each word + CMD).
