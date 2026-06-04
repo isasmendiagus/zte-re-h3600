@@ -496,11 +496,27 @@
     log / live-poke bisect 0x921d4300 / RE flags→enum), set it in zx_pp_pro_actions[], re-test TCP for
     tm_rx flat = DONE. Details: hw_forwarding_offload.md Iter AG.
 
-**Last updated**: 2026-06-04 (Journey #30 — ★ DECISIVE: "ACKs via HW" = ONE surgical pktdeal slot
-flip, NOT FFE/FDB-offload. Live proof: UDP 100% HW both dirs + static-FDB inert + non-directional ⟹
-TCP short-ACK ptype slot=trap is the only cause. NEXT: ID the slot + flip deal 1→0. branch
-hw-ack-forward). Prior #29 — pktdeal RE + forward-all NEGATIVE. #28 — pruned+merged. #27 — WEDGE
-SOLVED (bit14). #23 — port1 SOLVED.
+31. **★★ pktdeal live-bisect: ACKs-via-HW PROVEN + autonomous HW flow-learning discovered
+    (2026-06-04, branch hw-ack-forward).** Added a `pktdeal` debugfs hook (flip per-proto slots at
+    runtime). VALIDATED on live HW: stock table → TCP 330Mbit/s tm_rx delta=62235 (ACKs trap);
+    `all 0` (forward all slots) → TCP 328Mbit/s **tm_rx delta=0 = ACKs HW-forward, CPU 100% offloaded**
+    = goal reachable. ★★ BIG UNEXPECTED: after one forward, the flow STICKS — restoring stock AND
+    forcing `all 1` (all slots→trap) AND a link bounce all leave it HW-forwarding (tm_rx=0). ⟹ the
+    chip installs a **persistent HW flow-forward entry when it forwards a flow**, overriding pktdeal
+    (= the FFE-hardfast equivalent, but triggered by forwarding not a CPU install; fresh-boot stock
+    traps forever only because it never forwards to seed it). CONSEQUENCE: the runtime minimal-slot
+    bisect is invalid (the all-0 seeded the sticky entry → all later per-slot tests read 0 regardless;
+    [0..2] result bogus). Minimal-slot ID needs clean state per trial = reboot-per-test (sticky entry
+    survives pktdeal writes + link bounce; only chip reset / FDB aging clears it). Also: flaky nsB NIC
+    bad-autoneg fixed by ethtool autoneg + link down/up bounce (80ms→2.7ms). NEXT: reboot-per-trial
+    bisect to set the one TCP-control slot deal=0 in zx_pp_pro_actions[], OR exploit the flow-learning
+    (seed + self-sustain). Details: hw_forwarding_offload.md Iter AI.
+
+**Last updated**: 2026-06-04 (Journey #31 — ACKs-via-HW PROVEN live: `all 0` → TCP 328Mbit/s tm_rx=0,
+full CPU offload. BIG: chip auto-installs a sticky HW flow-forward entry on first forward [overrides
+pktdeal, survives link-bounce] = FFE-hardfast equiv. Minimal-slot bisect needs reboot-per-test [sticky
+confound]. branch hw-ack-forward). Prior #30 — ACKs=pktdeal slot (not FDB/FFE). #29 — forward-all
+NEGATIVE. #28 — pruned+merged. #27 — WEDGE SOLVED (bit14). #23 — port1 SOLVED.
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)

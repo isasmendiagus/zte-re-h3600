@@ -1258,6 +1258,42 @@ REMAINING to pinpoint the slot — THREE options (kotrace is the cleanest, sides
      watching tm_rx go flat — no further reboots, but needs the (flaky) 2-NIC flow live.
   3. **Static RE of spa_set_matchram** (tm.ko 0x28120) from the decompile — analytic, no device.
 
+## Iter AI (2026-06-04) — ★★★ pktdeal live-bisect: all-forward = TCP FULLY HW (tm_rx 0); + autonomous HW flow-learning discovered
+
+Added a `pktdeal` debugfs hook (zx-eth-main.c) to flip per-protocol pktdeal slots at runtime
+(`echo "<proto> <deal>"`, plus `all <deal>` and `stock`). Booted, br0=lan1+lan2+lan3, jack2/lan1
+(nsA) ↔ enx2c997/lan2 (nsB). NOTE the flaky nsB NIC came up at a bad autoneg state (ping 80 ms,
+TCP stalled) — an `ethtool -s autoneg on` + `ip link down/up` BOUNCE fixed it (ping back to 2.7 ms).
+The wedge is gone (ICMP flood→tm_rx 4067, bit14 holds).
+
+★ VALIDATION (clean link, with a static ARP on nsB so broadcast loss can't break the control conn):
+- STOCK trap table: TCP **330 Mbit/s, tm_rx delta = 62235** (ACKs trap to CPU).
+- `all 0` (forward every slot): TCP **328 Mbit/s, tm_rx delta = 0** — ACKs HW-forward, CPU 100%
+  offloaded. **Proves the goal is reachable: forwarding the pktdeal slot makes TCP fully HW.**
+
+★★ UNEXPECTED — AUTONOMOUS HW FLOW-LEARNING (the big one). After the `all 0` forwarded the flow
+once, the forwarding STUCK: restoring `stock`, and even forcing **`all 1` (ALL slots → trap)**, the
+same TCP flow STILL HW-forwards (tm_rx delta = 0, 330 Mbit/s). A link bounce on nsB did NOT restore
+the trap either. ⟹ the chip **installs a persistent HW forwarding entry when it forwards a flow**,
+and that entry OVERRIDES the pktdeal trap (and survives L2 link-bounce). This is the chip's own flow
+offload — the FFE-hardfast equivalent — but triggered by HW-forwarding the flow, not by a CPU
+install. Fresh-boot stock-table TCP-control traps forever (62k) precisely because it NEVER forwards,
+so the entry never installs; one forward seeds it and it sticks. This both (a) re-confirms the goal
+and (b) hints the real fix could be "forward TCP-control just long enough to seed the flow entry,
+then it self-sustains".
+
+⚠️ CONSEQUENCE: the runtime minimal-slot bisect is INVALID — the `all 0` validation seeded the sticky
+entry, so every subsequent per-slot test read delta 0 regardless of which slot was flipped (the
+[0..2] result is bogus). Pinpointing the minimal TCP-control slot needs CLEAN STATE PER TEST = a
+reboot before each trial (the sticky entry survives pktdeal writes + link bounce; only a chip reset
+clears it; FDB/flow aging ~minutes is the other clear path). Hook kept for that (reboot-per-trial)
+bisect or for seeding experiments. Branch hw-ack-forward.
+
+NET THIS ITER: "ACKs via HW" is no longer hypothetical — `all 0` demonstrably gives TCP at 328 Mbit/s
+with ZERO CPU trap. Remaining = pick the delivery: (a) reboot-per-trial bisect → set the one
+TCP-control slot deal=0 in zx_pp_pro_actions[]; or (b) lean on the autonomous flow-learning (seed +
+self-sustain). Either keeps broadcast/control trapping (forward-all breaks ARP, Iter AF).
+
 ⚠️ HW caveat this boot: the link came up DEGRADED — ping 71 ms (vs 2.5 ms pre-reboot) and TCP
 collapsed to 11.9 Kbit/s. The chronic host-USB-hub flakiness (NICs re-enumerate dirty on reboot).
 The TCPTRAP capture is still valid (it only needs frames to trap, which they did), but clean

@@ -4274,6 +4274,61 @@ static const struct file_operations zx_fdbadd_fops = {
 	.llseek = default_llseek,
 };
 
+/* [Iter AI] pktdeal: live-bisect the per-protocol SPA pktdeal RAM (0x921d4300).
+ * Write "<proto> <deal>" to set that protocol-slot's action (0=forward 1=trap
+ * 2=drop 3=copy) on ALL 8 ports at runtime, no reboot. Used to find which ptype
+ * slot the chip assigns to TCP pure-ACKs: flip slots to 0 while a TCP flow runs
+ * and watch tm_rx_count stop climbing. proto range 0..0x46 (slot 0x43+proto).
+ *   echo '6 0' > /sys/kernel/debug/zx_eth/pktdeal   # forward proto-slot 6
+ * Special: "all 0" forwards every slot 0..0x46 (= forward-all, breaks broadcast);
+ * "stock" restores the zx_pp_pro_actions trap table. DEBUG ONLY. */
+static ssize_t zx_pktdeal_write(struct file *f, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	unsigned int proto, deal;
+	char buf[64];
+	int port, i, ok = 0;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+
+	if (!strncmp(buf, "stock", 5)) {
+		for (i = 0; i < ZX_PP_PRO_ACTION_COUNT; i++)
+			for (port = 0; port < 8; port++)
+				zx_spa_set_enty_pktdeal_cfg(e, port,
+					zx_pp_pro_actions[i].proto,
+					zx_pp_pro_actions[i].action_pp0);
+		pr_info("[ZXETH] pktdeal: restored stock trap table\n");
+		return count;
+	}
+	if (!strncmp(buf, "all ", 4) && sscanf(buf + 4, "%u", &deal) == 1) {
+		for (proto = 0; proto <= 0x46; proto++)
+			for (port = 0; port < 8; port++)
+				if (zx_spa_set_enty_pktdeal_cfg(e, port, proto, deal & 3) == 0)
+					ok++;
+		pr_info("[ZXETH] pktdeal: ALL slots 0..0x46 -> deal=%u (%d writes)\n", deal & 3, ok);
+		return count;
+	}
+	if (sscanf(buf, "%u %u", &proto, &deal) != 2 || proto > 0x46)
+		return -EINVAL;
+	for (port = 0; port < 8; port++)
+		if (zx_spa_set_enty_pktdeal_cfg(e, port, proto & 0xff, deal & 3) == 0)
+			ok++;
+	pr_info("[ZXETH] pktdeal: proto-slot %u -> deal=%u on %d ports\n", proto, deal & 3, ok);
+	return count;
+}
+
+static const struct file_operations zx_pktdeal_fops = {
+	.owner  = THIS_MODULE,
+	.open   = simple_open,
+	.write  = zx_pktdeal_write,
+	.llseek = default_llseek,
+};
+
 /* txtest: inject N known TX frames straight through zx_sw_xmit — isolates the
  * TX/egress path (no ARP/RX/ping involved). Frame: dst = host MAC (FDB-resolved
  * to internal port 3 / MAC[2]), src = device MAC, ethertype 0x88b5 (local
@@ -4487,6 +4542,7 @@ static void zx_debugfs_init(struct zx_eth *e)
 	debugfs_create_file("clapeek", 0644, zx_debugfs_root, e, &zx_clapeek_fops);
 	debugfs_create_file("poke", 0644, zx_debugfs_root, e, &zx_poke_fops);
 	debugfs_create_file("fdbadd", 0644, zx_debugfs_root, e, &zx_fdbadd_fops);
+	debugfs_create_file("pktdeal", 0644, zx_debugfs_root, e, &zx_pktdeal_fops);
 	debugfs_create_file("txtest", 0644, zx_debugfs_root, e, &zx_txtest_fops);
 	dev_info(e->dev, "debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem,pipeline_stats,regdump,poke,txtest}\n");
 }
