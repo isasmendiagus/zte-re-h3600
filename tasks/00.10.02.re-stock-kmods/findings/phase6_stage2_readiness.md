@@ -121,3 +121,22 @@ ram2 words1-16 persist issue (compare boot-load timing vs runtime; try writing e
   the decomp data section (or fpga-read the descriptor). Then fix zx_cla_write_entry's hash path.
 - Tool note (user): can perturb firewall/rules in the stock web UI + read CLA registers to observe
   table effects — use only if needed.
+
+## UPDATE 2026-06-04 (Stage 2 loop — claRegTable descriptor decoded; word0-persist still a puzzle)
+tmOnuGlbRegValidation (tm.c:~35300): the descriptor for regtype N is at `claRegTable + N*0x1c`
+(28-byte descriptors). Fields: +0x00 u16 self-id(==N), +0x04 writable-flag(==1), +0x08 base,
++0x0c mask, +0x10 u16 shift, +0x12 u16 max-idx, +0x14 stride, +0x18 access-counter.
+- READ (tmOnuRegRead): val = mask & (fpga_read_reg(base + idx*stride) >> shift).
+- WRITE (tmOnuRegWrite): fpga_write_reg(base+idx*stride, (cur & ~(mask<<shift)) | (val&mask)<<shift).
+- regtype 0=CMD, 1=DONE, 2=DATA. The DATA read returns 17 DISTINCT words (clapeek), so for regtype 2:
+  base=0xC01C (fpga word 0xe3007), stride=4, max-idx≥16, mask likely full. ⇒ the driver's data-port
+  addressing (DATA0+i*4) IS correct.
+PUZZLE: addressing is right + read sees 17 words, yet a write persists only word0 (stock fpga AND
+mainline clawrite, both CMD-first and data-first). Hypotheses to test next: (a) the indirect WRITE
+needs the CMD re-issued per word (the kotrace 'I' per-word calls), i.e. CMD(addr) before EACH data
+word, not once; (b) a write-enable/commit bit in the CMD (bit other than rw); (c) the read-buffer vs
+slot-store are separate and the commit transfers only word0. 
+NEXT sharper test (on stock fpga): write CMD(addr) then ONE data word at idx=5 (a distinctive value),
+read back slot — does idx5 land? Then try CMD-before-each-word. Isolate the minimal working write.
+Recover claRegTable[2]'s actual base/stride/mask/maxidx from the decomp .data (or fpga-probe the
+descriptor at its symbol addr) to rule out a non-4 stride.
