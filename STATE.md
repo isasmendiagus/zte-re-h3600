@@ -462,10 +462,29 @@
     → tm_add_acl_flow_rule → cla_set_hash_table tm.ko 0x15a14), keyed on conntrack-ESTABLISHED like
     stock's ffe_ip_conntrack_check (vmlinux c0452a7c). Optional/perf — the L2 streaming goal is met.
 
-**Last updated**: 2026-06-04 (Journey #28 — branch pruned [kept bit14/pool/RED-init/up_thd; dropped
-assisted-FDB + log-spam], RE-VERIFIED TCP 354Mbit/s 0-retr + no wedge, MERGED to main. NEXT: make
-TCP ACKs HW-forward not CPU = minimal FFE hardfast session-install, optional/perf). Prior #27 — WEDGE
-SOLVED (bit14). #26 — root cause FFE conntrack. #25 — UDP both dirs. #23 — port1 SOLVED.
+29. **Per-protocol pktdeal RE landed + FORWARD-ALL experiment = NEGATIVE, baseline reconfirmed
+    (2026-06-04, branch hw-ack-forward, NOT merged).** Pursuing "ACKs via HW": RE completed the
+    trap-vs-forward mechanism — a 2-bit pktdeal field per (port, protocol-slot) at SPA HW
+    **0x921d4300[1:0]** (`tm_port_protocol_pktdeal_set` tm.ko 0x37340; 0=fwd/1=trap/2=drop/3=copy),
+    table-driven by stock's def_ptl_pkt_action (mostly trap). Tested a `zx_proto_fwd_all` module param
+    that forces ALL slots to deal=0. RESULT NEGATIVE: 100% loss — frames reach the MACs (smac RX
+    climbs) but with no broadcast trap the ARP/ND never reach the CPU (tm_rx=0), the bridge never
+    learns/replies. CONTROL (default reverted to 0 = stock table, same topology): ping 5/5 0% loss,
+    tm_rx=16 (ARP traps, SW bridge forwards) → cabling OK + forward-all was the sole regression +
+    merged-main baseline intact. LESSON: cannot blanket-forward; broadcast/control MUST keep trapping.
+    REFINED PLAN (two parts, both required): (1) flip ONLY the TCP-pure-ACK ptype slot trap→forward
+    (Iter AC: TCP data already HW-fwds, only len-66 ACKs trap → different slot; identify via upstream
+    flags→enum RE / RX-desc classification log / 0x921d4300 dump+correlate), AND (2) HW FDB offload —
+    "not trapping" is insufficient; the switch needs the dest MAC in SBRAG/CLA FDB to L2-forward the
+    unicast ACK, but the bridge FDB is empty + driver is trap-all conduit (re-converges on the known
+    open CLA-offload problem, zte-hw-forwarding-deadend). So "ACKs via HW" is an optimization bigger
+    than a one-line flip; the L2 streaming GOAL is already met via the SW bridge (merged main).
+    Details in hw_forwarding_offload.md Iter AF; decomp in decomp_halt_baddata_band.c.
+
+**Last updated**: 2026-06-04 (Journey #29 — pktdeal RE done [SPA 0x921d4300[1:0]]; forward-all
+experiment NEGATIVE [breaks broadcast/ARP], baseline reconfirmed 5/5 0% loss; refined plan = surgical
+TCP-ACK-slot flip + HW FDB offload, both required; branch hw-ack-forward NOT merged). Prior #28 —
+pruned+merged to main. #27 — WEDGE SOLVED (bit14). #26 — FFE conntrack. #23 — port1 SOLVED.
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)

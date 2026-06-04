@@ -1050,6 +1050,27 @@ static uint zx_spa_pktdeal;
 module_param(zx_spa_pktdeal, uint, 0644);
 MODULE_PARM_DESC(zx_spa_pktdeal, "SPA per-entity pktdeal (0=SBRG-forward/HW, 1=trap-to-CPU)");
 
+/* [HW-FWD EXPERIMENT 2026-06-04, branch hw-ack-forward] per-protocol pktdeal.
+ * The stock def_ptl_pkt_action table (zx_pp_pro_actions[]) sets deal=1 (TRAP) for
+ * most protocol-type slots, which is why TCP control segments (ACKs) trap to the
+ * CPU while bulk data HW-forwards. For a pure L2 bridge (our OpenWrt goal) we want
+ * the SPA classifier to FORWARD every protocol slot (deal=0) so TCP HW-forwards
+ * both directions like UDP — no per-protocol CPU trap. Frames addressed to the
+ * device itself still reach the CPU via normal L2 (FDB / unknown-unicast flood,
+ * cpu_port is in PP[0x8340] fwd bitmap). Set =0 to restore the stock trap table.
+ * RE: tasks/00.10.02.re-stock-kmods/findings/decomp_halt_baddata_band.c
+ *     (tm_port_protocol_pktdeal_set @ tm.ko 0x37340 -> SPA 0x921d4300[1:0]).
+ * NEGATIVE RESULT (Iter AF, 2026-06-04): forward-all=1 BREAKS broadcast/ARP —
+ * with every slot deal=0 the ARP/ND broadcasts arrive at the MAC (smac RX climbs)
+ * but are neither flooded nor trapped to the CPU (tm_rx=0, hw_fwd=0), so the bridge
+ * never learns/replies and ping is 100% loss. The stock trap table deliberately
+ * traps broadcast/control to the CPU. The fix must be SURGICAL: flip only the
+ * TCP-pure-ACK ptype slot to forward, leaving broadcast/control trapping. Default
+ * therefore back to 0 (stock table = known-good 354 Mbit/s baseline). */
+static uint zx_proto_fwd_all;
+module_param(zx_proto_fwd_all, uint, 0644);
+MODULE_PARM_DESC(zx_proto_fwd_all, "force all per-protocol pktdeal slots to FORWARD (1=HW-forward all incl TCP; 0=stock trap table)");
+
 static void zx_pp_init(struct zx_eth *e)
 {
 	void __iomem *pp = e->base + PP_OFF;
@@ -2212,8 +2233,9 @@ static void zx_chip_tm_init_pro_action(struct zx_eth *e)
 		for (i = 0; i < ZX_PP_PRO_ACTION_COUNT; i++) {
 			/* Most entries are symmetric PP0 == PP1; we use PP0 action.
 			 * proto 0x14 differs (PP0=1, PP1=0) — pick the trap variant.
+			 * forward-all override: deal=0 so TCP HW-forwards like UDP.
 			 */
-			u8 action = zx_pp_pro_actions[i].action_pp0;
+			u8 action = zx_proto_fwd_all ? 0 : zx_pp_pro_actions[i].action_pp0;
 
 			if (zx_spa_set_enty_pktdeal_cfg(e, port, zx_pp_pro_actions[i].proto, action) == 0)
 				ok++;
@@ -2221,8 +2243,9 @@ static void zx_chip_tm_init_pro_action(struct zx_eth *e)
 				fail++;
 		}
 	}
-	dev_info(e->dev, "pro_action replay: %d ok, %d fail (%d entries × 8 ports)\n",
-		 ok, fail, ZX_PP_PRO_ACTION_COUNT);
+	dev_info(e->dev, "pro_action replay: %d ok, %d fail (%d entries × 8 ports) [%s]\n",
+		 ok, fail, ZX_PP_PRO_ACTION_COUNT,
+		 zx_proto_fwd_all ? "FORWARD-ALL (TCP HW-fwd)" : "stock trap table");
 }
 
 /* chip_tm_init's per-port isolation loop. mask = ports each port may NOT

@@ -1129,3 +1129,52 @@ dup storm + feeds extra frames into the trap path). NOTE: only ethertype was log
 port parse didn't get applied — gate-only change); len=66 IPv4 during a TCP iperf ⇒ almost certainly
 TCP ACKs. Next: the Ghidra decomp of tm_port_protocol_pktdeal_set will show the proto→action map; if
 TCP is set to trap (or not set to forward) per-port, that's the fix point.
+
+## Iter AF (2026-06-04) — per-protocol pktdeal RE landed; FORWARD-ALL experiment = NEGATIVE (broke ARP)
+
+RE COMPLETE (Ghidra agent, decomp_halt_baddata_band.c): the per-protocol trap-vs-forward decision is
+a per-(source-port, protocol-slot) 2-bit "pktdeal" field in the SPA classifier indirect-RAM at HW
+**0x921d4300[1:0]** (reg67), written by `tm_port_protocol_pktdeal_set` (tm.ko 0x37340) →
+`spa_set_enty_pktdeal_cfg` (tm.ko 0x2b1f4) → `tmOnuRegWrite`. Action: 0=FORWARD, 1=TRAP-to-CPU,
+2=DROP, 3=copy. The TCP-traps/UDP-forwards asymmetry is **table data**, not code: stock's
+def_ptl_pkt_action programs deal=1 (trap) for most protocol-type slots. Two layers:
+`zte_api_pp_set_pro_action(group, proto_enum, deal)` translates a vendor proto_enum→hw slot (full
+group-0 enum→slot table recovered, see decomp), then sets that slot on all 8 ports.
+
+EXPERIMENT (forward-all): added module param `zx_proto_fwd_all` (zx-eth-main.c) — when set,
+`zx_chip_tm_init_pro_action` writes deal=0 for ALL slots instead of the stock trap table. Built,
+booted (dmesg "pro_action replay ... [FORWARD-ALL]"), set up br0=lan1(jack2)+lan3(jack4),
+nsA=10.0.0.1 / nsB=10.0.0.2.
+
+RESULT — **NEGATIVE, 100% loss both ways.** Per-MAC RX climbed (smac1 RX=175, smac3 RX=117 during a
+ping flood) so frames DO arrive at the ingress MACs — but `good_uc=0`, `hw_fwd=0`, `hw_trap=0`,
+`tm_rx_count=0`: the ARP/ND broadcasts are neither flooded nor trapped to the CPU. With every slot
+deal=0 the broadcast/control trap is gone, so the Linux bridge never sees ARP, never learns/replies,
+and nothing resolves. **The stock trap table deliberately traps broadcast + control to the CPU; you
+cannot blanket-forward.**
+
+CONTROL (reverted default `zx_proto_fwd_all=0`, rebuilt, rebooted, dmesg "[stock trap table]", SAME
+topology): ping nsB→nsA = **5/5, 0% loss**, `tm_rx_count=16` / `hw_trap=16` (ARP+ICMP trap to CPU,
+software bridge forwards). Proves (a) cabling correct, (b) forward-all was the sole regression,
+(c) baseline (= merged main) intact. High RTT (avg 60 ms) is the CPU-software-bridge cost — exactly
+the symptom we want to remove. Default left at 0 (stock); param kept for the surgical follow-up.
+
+### THE REFINED PLAN — surgical, and it is COUPLED to HW FDB offload (two parts, both required)
+1. **Flip ONLY the TCP-pure-ACK protocol slot** trap→forward, leaving broadcast/multicast/control
+   slots trapping. Iter AC proved TCP *data* frames already HW-forward while small (len-66) ACKs
+   trap → data and pure-ACK land in DIFFERENT ptype slots (likely flag/short-packet variants). Must
+   identify that exact slot: either (a) RE the upstream caller that maps TCP flags→vendor proto_enum
+   in switch.ko/the ACL fast path (decomp left enum→slot known but not which enum is TCP-ACK), or
+   (b) add an RX-descriptor classification-field log to capture the trapped ACK's ptype directly, or
+   (c) dump 0x921d4300 region under the stock table and correlate deal=1 slots with the enum→slot map.
+2. **HW FDB offload is the other half.** "Not trapping" alone is insufficient — for the switch to
+   L2-forward the unicast ACK lan3→lan1 in HW it needs the dest MAC in the switch FDB (SBRAG/CLA),
+   but the bridge FDB is currently empty and the driver is a trap-all DSA conduit (see
+   zte-hw-forwarding-deadend). So this re-converges on the known open CLA/SBRAG HW-offload problem:
+   program the switch FDB from the bridge's learned entries (assisted learning → .port_fdb_add →
+   zx_sbrag_write_entry, already stubbed) so HW-forwarding has a destination. Slot-flip + FDB
+   together = ACKs (and ideally all bridged unicast) HW-forward, CPU offloaded.
+
+Honest status: the L2 streaming GOAL is already met via the CPU software bridge (354 Mbit/s, merged).
+"ACKs via HW" is the optimization, and it is a bigger lift than a one-line slot flip — it needs the
+HW FDB offload too. Branch hw-ack-forward holds the RE + the (reverted-to-safe) param; NOT merged.
