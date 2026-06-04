@@ -52,3 +52,38 @@ and write it via the zx-dsa CLA primitive (priv->pp_regs, ram_id=2, slot) — us
 addr→bank mapping. Verify: clapeek the slot back == our bytes, and hw_trap flat under iperf.
 The exact bit-packing of words5–7 (and word0 action) = next: align tm_acl_get_fastHashRule (tm.c:49213)
 against these concrete entries to pin each field. We now have 2 reference entries to validate against.
+
+## Entry FORMAT decoded (tm_acl_get_fastHashRule tm.c:49213-49465 + matched vs the 2 captured entries)
+The entry `param_4` is a LITTLE-ENDIAN byte array (~0x39 bytes = the 15-word ram2 slot). fpga reads it
+as 32-bit words (BE display) → to map: LE byte offset = stream index of [w&0xff, w>>8, w>>16, w>>24].
+Two regions:
+- **Header/action/match-meta (bytes 0x00–0x12)**, built lines 49312-49421:
+  - byte0: flags (bit6=0x40 set, bit2, + session+0x18 low 2 bits). 
+  - **bytes 1–2: EGRESS target uni/port** — `uVar10` from the switch on session+0xb2 (uni 0..7 → 1..7);
+    `param_4[2]=uVar10>>4`, `param_4[1]=(param_4[1]&0xf)|((uVar10&0xf)<<4)` (dir==1 route case, 49410-411).
+  - byte3 = `(param_3&0x7f)<<1 | 1` (priority/rule id).
+  - bytes4–9: proto/len/flags (param_4[4]=param_3 hi; byte6 inport/outport bits from session+0xb0/0xb1;
+    byte8 |8). **proto** (06=TCP) lands in this region (seen as word4 byte0 in the entries).
+  - bytes 0xb–0xc: inport (session+0xb0 << shifts). byte0xe/0xf: a field (session+0x10 << 6 / >> 2).
+  - **valid**: the captured word3=0x80000000 ⇒ the enable/valid bit is the top bit of that word region.
+- **5-tuple (bytes 0x13–0x37)**, built lines 49445-49464 (fwd, param_1!=0):
+  - bytes **0x15–0x18 = `*(session+0x64)`** (IP A, byte-swapped into two ushorts @0x15,0x17).
+  - bytes **0x19–0x1c = `*(session+0x6c)`** (IP B).
+  - bytes **0x1d–0x20 = `*(session+0x74)`** (ports, src+dst packed).
+  - byte 0x13 = `*(session+0x60)>>16` (a tuple/hash byte). (param_1==0 bridge path 49422-442 writes the
+    full MAC/v6 set instead.)
+Cross-check vs ram2[0x5a]: sport 0xCE4B is byte-aligned at LE-stream offset 29 (=0x1d ✓ ports region);
+src 192.168.1.50 / dst 10.9.9.1 bytes appear in the 0x15–0x1c region (bit-rotated as the ushort packing
+predicts). Reverse entry 0xfc has the tuple swapped + the NAT mapping (10.9.9.2).
+
+## ⇒ Stage 2 implementation options (both now concrete)
+A) **Verbatim replay (fastest proof):** write the EXACT captured 17 words to mainline CLA ram2 slot 0x5a
+   via the zx-dsa primitive, reproduce the EXACT flow (src 192.168.1.50:52811 → dst 10.9.9.1:5201 TCP,
+   same in/out port mapping), and check hw_trap goes flat. Proves "writing this CLA entry ⇒ HW forwards"
+   with ZERO bit-packing risk. Then parameterize.
+B) **Parameterized build:** implement the byte layout above in cls_flower_add (egress uni in [1][2],
+   proto in the byte4-9 region, valid bit, IPs at 0x15/0x19, ports at 0x1d from the flow_rule match),
+   write via zx_cla_write_entry(ram2, slot). Validate the produced bytes == a captured entry for the
+   same tuple before trusting it.
+Recommended: A first (de-risks the "does a CLA hash entry actually override the trap?" question with a
+known-good entry), then B.
