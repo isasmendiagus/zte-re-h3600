@@ -396,10 +396,34 @@
     trapping TCP frames (tcpdump/driver RX log during a TCP iperf) and either stop them trapping or
     fix the ~1024 CPU-RX-halt so the trap path survives. **UDP streaming works on mainline TODAY.**
 
-**Last updated**: 2026-06-04 (Journey #25 — UDP CORRECTION: HW forwarding works BOTH directions
-~300Mbit/s/dir no-wedge; the wedge is TCP/ICMP-trap-specific, NOT a forwarding problem. Branch
-hw-bridge-offload. Prior #24 — HW-forwarding arc + the ~1024 CPU-RX-halt wedge). Prior: 2026-06-03
-(Journey #23 — port1/jack2 ingress→CPU SOLVED, merged main c37e6168f, egress fix intact).
+26. **★ ROOT CAUSE of the TCP wedge = FFE conntrack flow-cache (2026-06-04, RE via 3 background
+    agents on the GPL stock binaries; modem is GPL, ZTE unresponsive).** WHY TCP traps but UDP
+    forwards, settled from the REAL vmlinux bodies (the switch.ko 0x2c1xx "halt_baddata" stubs are
+    just PLT import thunks; the bodies are exported from vmlinux):
+      - `ffe_receive_skb` (vmlinux c0473110) gates RX: returns 0 ⇒ engine HW-forwards, !=0 ⇒ trap-to-CPU.
+      - `ffe_ip_conntrack_check` (vmlinux c0452a7c): **UDP (proto 0x11) binds + forwards immediately;
+        TCP (0x06) is REJECTED→trap UNLESS conntrack state==3 (ESTABLISHED)**:
+        `if ((proto=='\x06') && (state!='\x03')) goto trap;`.
+      - So STOCK relies on the CPU's FFE (a netfilter-conntrack software flow-cache) to process the
+        first trapped TCP packets, reach ESTABLISHED, then install a HW hardfast session
+        (zte_api_fast_l3_session_add → cla_set_hash_table) → subsequent packets HW-forward. MAINLINE
+        has NO FFE → TCP's reverse-dir ACKs trap to the CPU FOREVER → the CPU-RX trap ring latches at
+        ~1024 → wedge. UDP never touches the trap path (plain HW L2-forward via FDB).
+      - The per-protocol SPA pktdeal knob (`tm_port_protocol_pktdeal_set` → HW 0x921d4300 reg67[1:0],
+        0=fwd/1=trap/2=drop/3=copy) is set to forward by mainline for all slots → REFUTED as the cause.
+    ⇒ STRATEGY (do NOT port the FFE — large + unnecessary for L2 bridging): the forwarding already
+    works (UDP proves it). The wedge is a **trap-ring DRAIN bug** — the CPU-RX ring stops re-arming
+    after exactly one TM_RX_DESC_PER_Q(1024) wrap. FIX = pin the ring-wrap/IRQ-rearm off-by-one in
+    `zx_tm_net_poll` against stock `pon_tm_net_poll` (plat decomp @0x1c9f0) and correct it; then the
+    trapped TCP ACKs drain via the CPU and TCP stops collapsing (CPU-assisted but stable). Prior fix
+    attempts at this ring (Iter T full-slot-release, Iter V napi-rearm) failed → a 3rd agent is doing
+    the precise stock-vs-mainline poll diff. Findings: `ffe_tcp_trap_re.md`, `decomp_halt_baddata_band.c`,
+    `rx_ring_wrap_re.md` (pending), + `hw_forwarding_offload.md` Iters AC.
+
+**Last updated**: 2026-06-04 (Journey #26 — TCP-wedge ROOT CAUSE = FFE conntrack flow-cache: TCP
+traps-until-ESTABLISHED, mainline has no FFE so TCP ACKs trap forever → the ~1024 CPU-RX-ring latch;
+fix = drain that ring, NOT port FFE. Branch hw-bridge-offload). Prior #25 — UDP works both dirs
+no-wedge. Prior #23 — port1 ingress SOLVED, merged main c37e6168f, egress fix intact.
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)
