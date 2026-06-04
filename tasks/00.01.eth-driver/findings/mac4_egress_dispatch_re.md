@@ -252,3 +252,31 @@ is npp+0x19000 (i.e. 0x921d9000), giving 0x921d915c+N*4. The existing debugfs re
   port) + GePHY **TX-DAC force-drive** (both needed; MAC2 TX counted but wire=0 without TX-DAC);
   0x19068 ruled out (stock=0 while egressing); DSCH scheduler config fully ruled out; ETH_TM2 mux
   ruled out (stock=0).
+
+---
+
+## LIVE PEEK DIAGNOSTIC (Iter loop-3) — frame IS dispatched to MAC4; MAC4 TX doesn't reach the wire
+
+Used the existing poke-debugfs one-arg PEEK to read the egress path during 8 lan4→host pings
+(device on the zx5201_config + keepalive build):
+- QMG DN sw_fwd (0x9234c044): 0x24→0x2a (+6)        — frame reaches QMG ✓
+- DSCH in  (0x92354200): low byte 0x92→0x98 (+6)     — reaches DSCH ✓
+- DSCH out (0x923541fc): 0x9200→0x9800 (+6)          — dispatched OUT of DSCH ✓
+- **send2smac4 (0x921d916c): 0x15→0x1b (+6)**         — **the SOPC DISPATCHES to MAC4 ✓**
+- **MAC4 TX-ok (0x92340718): 0x00→0x00 (UNCHANGED)**  — **MAC4 does NOT TX to the wire ✗**
+  (caveat: MAC4 window 0x92340000 aliases tm_base — this counter read may be unreliable; but
+   the host tcpdump seeing NOTHING corroborates "no wire TX".)
+
+⟹ The whole fabric path WORKS (QMG → DSCH → SOPC send2smac4 all +6). The frame is handed to MAC4.
+The gap is **MAC4 MAC-TX → RGMII → ZX5201 → copper** — MAC4 gets the frame but it never reaches the
+wire. This is NOT a dispatch/SOPC/QMG problem (all confirmed working).
+
+LEADING CAUSES for the next iteration:
+1. **RGMII TX timing** — the 4 LAN MACs use internal MII/GMII (no clock delay); MAC4 uses RGMII to
+   the external ZX5201, which needs TX/RX clock delay (2ns) on the MAC or PHY side. Mainline sets
+   none. Find stock's RGMII delay config for MAC4 (MAC iface +0xe0 / a CRM/clock reg / a ZX5201 page).
+2. **The CRM reg 0xf060000c** that stock's zx5201_config toggles (`&= 0xffe7f7ff`) around the PHY
+   access — SKIPPED in our port (it's outside the eth ioremap window, ~PON CRM). May be the RGMII
+   clock/delay enable. Needs a separate ioremap to set.
+3. MAC4 iface reg +0xe0 (mac4+0xe0 = 0x00011200 from smac_init) — verify it's the RGMII iface value,
+   not the internal-MII value the GePHY MACs use.
