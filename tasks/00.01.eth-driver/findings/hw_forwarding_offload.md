@@ -913,3 +913,33 @@ it if smaller. NOT committing untested (burned by Iter U/W).
 ### NEXT FIRE: re-check NIC stability; if BOTH NICs present+stable → rebuild reverted tree + boot +
 run the real 2-NIC iperf3 TCP test (the only definitive measure). If still USB-blocked → note it +
 wait. (Host USB hub may need the user to physically reseat — flagged in the status.)
+
+================================================================================
+## Iter Y (2026-06-04 ~03:40 UTC) — STRONG LEAD found offline: mainline never inits the RED block
+
+Productive offline work during the USB block. KEY DISCOVERY (grep-proven): mainline NEVER writes the
+real RED congestion block at phys 0x92344000. Its zx_tm_red_init() writes TM[0x4014] = 0x921c4014 (a
+DIFFERENT TM/SDET block). Stock pon_tm_red_init (decomp_all_tm.c:42509+) does extensive RED-block
+init: red_set_cfg_enable, open_out_en, trap_color_en, share_mode, in_share_max=0x3ff,
+up_out_share_max=0x3fff, + per-queue IN and OUT buffer loops (q0-399). ⇒ mainline's RED per-queue
+OUT-BUFFER thresholds + global share pools run at reset/bootloader defaults → strongly suspected
+cause of the CPU/trap-queue RED drops (RED[0x1a044]) + the ~1024 delivery cap seen all night.
+(Note: Iter R poked only the 2 GLOBAL share-max regs after a wedge — never the per-queue out-buffer
+loop, which is the part that gates per-queue drops. So Iter R did NOT actually test this.)
+
+IMPLEMENTED zx_red_block_init() (zx-eth-main.c, after zx_tm_red_init; called in init): replicates
+stock — globals (RMW cfg 0x184004 = cfg_en2|share|trap|open; in_share_max 0x184040=0x3ff;
+up_out_share_max 0x184074=0x3fff) + the per-queue out-buffer loop via the RED indirect (CMD
+0x184014=addr|ram<<22|rw<<27, DONE 0x184018 bit0, DATA0 0x18401c; entry = guart|(max<<11); stock
+ranges: q0-15=(0x3ff,0), q16-335=(0x40,0x7ff), q336-375=(0x40,0x200/0x80), q376-391=(0x40,0xc00),
+q392-399=(0x40,0x3ff)). Same indirect pattern as the CLA hash (known-working). COMPILES CLEAN.
+
+⚠️ UNTESTED — committed during the host-USB block (jack4 still off the bus, no 2-NIC test possible).
+Ready to build+boot+verify the instant 2 stable NICs return. Risk: contained to the RED/congestion
+(drop) path on the experimental branch; does NOT touch the TX/egress fix; NOT merged to main.
+
+### NEXT FIRE: re-check NICs; if BOTH stable → boot the already-built zImage (has this fix) → single-
+NIC trap-flood AND real 2-NIC iperf3 TCP: does tm_rx now climb PAST 1024 + RED drops stay low +
+throughput sustain? If yes → likely the wedge fix → reverify 3 criteria → WIN. If RED block init has
+a protocol bug (no effect / instability) → read back RED regs (mem/regdump) to debug the indirect
+seq. If still USB-blocked → re-arm long, don't thrash.

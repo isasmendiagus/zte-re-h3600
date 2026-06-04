@@ -2377,6 +2377,65 @@ static void zx_tm_red_init(struct zx_eth *e)
 	dev_info(e->dev, "TM RED init: %d failed of 1168 queue configs (busy timeout)\n", fail);
 }
 
+/* [Iter Y 2026-06-04] zx_red_block_init — init the REAL RED congestion block at phys 0x92344000
+ * (e->base + 0x184000). UNTESTED-PENDING-HW (committed during a host-USB block so it's ready to
+ * build+test the moment 2 stable NICs return). RATIONALE: grep proved mainline NEVER writes the
+ * 0x92344xxx RED block — zx_tm_red_init() above touches TM[0x4014]=0x921c4014 (a DIFFERENT block).
+ * So the RED block's per-queue OUT-BUFFER thresholds + global share pools run at reset/bootloader
+ * defaults → suspected cause of the CPU/trap-queue RED drops + the ~1024 latch under load.
+ * Replicates stock pon_tm_red_init (decomp_all_tm.c:42509+): global enables + per-queue out-buffer.
+ * RED indirect (same pattern as the CLA hash): CMD 0x184014 = addr|ram<<22|rw<<27; DONE 0x184018
+ * bit0; DATA0 0x18401c. Per-queue out-buffer entry = guart | (max_space << 11).
+ */
+#define RED_OFF		0x184000	/* phys 0x92344000 - e->base 0x921c0000 */
+#define RED_CFG		(RED_OFF + 0x04)	/* [1:0]cfg_en [2]share_mode [3]trap_color [4]open_out */
+#define RED_IND_CMD	(RED_OFF + 0x14)
+#define RED_IND_DONE	(RED_OFF + 0x18)
+#define RED_IND_DATA0	(RED_OFF + 0x1c)
+#define RED_IN_SHARE_MAX	(RED_OFF + 0x40)
+#define RED_UP_OUT_SHARE_MAX	(RED_OFF + 0x74)
+
+static void zx_red_set_outbuf(struct zx_eth *e, u32 queid, u32 guart, u32 max_sp)
+{
+	int t = 20;
+
+	while (t-- && !(tm_read(e, RED_IND_DONE) & 1))
+		udelay(2);
+	if (t < 0)
+		return;
+	/* stock red_set_out_buffer_queue_cfg: cmd(rw=0,ram=0,addr=queid) then data0 */
+	tm_write(e, RED_IND_CMD, queid);
+	tm_write(e, RED_IND_DATA0, (guart & 0x7ff) | ((max_sp & 0xffff) << 11));
+}
+
+static void zx_red_block_init(struct zx_eth *e)
+{
+	u32 q, cfg;
+
+	/* Global enables (stock pon_tm_red_init head): cfg_enable[1:0]=2, share_mode[2],
+	 * trap_color_en[3], open_out_en[4]; preserve any reset high bits via RMW. */
+	cfg = tm_read(e, RED_CFG);
+	cfg = (cfg & ~0x3u) | 0x2u;	/* cfg_enable = 2 (mode select) */
+	cfg |= (1u << 2) | (1u << 3) | (1u << 4);	/* share_mode | trap_color_en | open_out_en */
+	tm_write(e, RED_CFG, cfg);
+	tm_write(e, RED_IN_SHARE_MAX, 0x3ff);		/* stock red_set_in_share_max(0x3ff) */
+	tm_write(e, RED_UP_OUT_SHARE_MAX, 0x3fff);	/* stock red_set_up_out_share_max(0x3fff) */
+
+	/* Per-queue OUT buffer (stock ranges, decomp 42523-42556): the CPU/trap queues (q16-335)
+	 * get max_space 0x7ff — vs an uninitialized/small reset default that caps CPU delivery. */
+	for (q = 0; q < 400; q++) {
+		u32 guart = 0x40, max_sp;
+
+		if (q < 0x10)		{ guart = 0x3ff; max_sp = 0; }
+		else if (q < 0x150)	{ max_sp = 0x7ff; }
+		else if (q < 0x178)	{ max_sp = (q & 7) ? 0x80 : 0x200; }
+		else if (q < 0x188)	{ max_sp = 0xc00; }
+		else			{ max_sp = 0x3ff; }
+		zx_red_set_outbuf(e, q, guart, max_sp);
+	}
+	dev_info(e->dev, "RED block init (0x92344000): globals + 400 out-buffer queues [Iter Y, untested]\n");
+}
+
 /* pon_pp_ctrl_init equivalent — 2 writes + 52ms delay.
  * Stock calls this BEFORE pon_pp_brg_init. The write to pp[0] = 2 may
  * be a trigger that starts PP processing (not just state).
@@ -4839,6 +4898,7 @@ static int zx_eth_init_tm_subsystem(struct zx_eth *eth,
 
 	zx_tm_pre_init(eth);
 	zx_tm_red_init(eth);
+	zx_red_block_init(eth);	/* [Iter Y] init the real RED block 0x92344000 (stock does, mainline didn't) */
 	zx_pp_ctrl_init(eth);
 	zx_pp_brg_init(eth);
 	zx_tm_dma_init(eth);
