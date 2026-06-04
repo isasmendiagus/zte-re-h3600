@@ -540,11 +540,30 @@
     GOAL remains MET via the CPU SW bridge (merged main, 354 Mbit/s). Docs: pktdeal_override_re.md,
     hw_broadcast_flood_re.md, alt_trap_levers_re.md, hw_forwarding_offload.md Iters AF–AM.
 
-**Last updated**: 2026-06-04 (Journey #33 — deep RE: full HW-ACK-offload BLOCKED on the HW-forwarding/
-broadcast-flood-replication dead-end. Confirmed: all-0→TCP HW but breaks ARP; CLA-hash can't override
-pktdeal [SPA upstream]; SBRG broadcast-flood recipe didn't enable flood live. Goal MET via SW bridge
-[merged main]. branch hw-ack-forward NOT merged). Prior #32 — retract sticky-NIC-artifact. #30 —
-ACKs=pktdeal. #28 — pruned+merged. #27 — WEDGE SOLVED (bit14). #23 — port1 SOLVED.
+34. **★ CONCLUSIVE (2026-06-04): this chip has NO autonomous HW broadcast flood — stock ALWAYS traps
+    broadcast to the CPU + SW-floods. Our merged solution = stock-equivalent for L2.** Live diagnostic:
+    under all-0, broadcast dies as +N at drop_PP (0x921da040). RE (2 converging agents,
+    pp_broadcast_drop_re.md): drop_PP is NOT a forwarding gate — it's the OPC-top "PP DROP" terminal
+    drop-reason counter (the symptom). A broadcast gets an egress destination ONLY via (1) autonomous
+    HW flood-replication — which STOCK NEVER PROGRAMS (tm_pon_pp_brg_initial calls no broadcast-flood
+    setter; brdcst_fld_en/vl_trans stay 0; no MGID/flood-domain table exists), or (2) trap-to-CPU
+    (pktdeal deal=1) → Linux bridge SW-floods. Stock uses ONLY (2). So all-0 removes the trap and there
+    is no HW-flood fallback → PP-DROP. ⟹ a full-HW L2 bridge (broadcast in HW) is NOT achievable on
+    this silicon — stock itself routes broadcast/control through the CPU. For L2 same-subnet TCP, stock
+    HW-forwards DATA (DA-lookup, like our UDP) and sends CONTROL to the CPU (FFE; CLA-hash empty for L2)
+    — IDENTICAL to our merged result (TCP data HW-fwds + ACKs/broadcast trap+CPU-drain, 354 Mbit/s).
+    "ACKs-via-HW full" is not a real thing on this chip for L2; we are already at stock parity.
+    Bonus bugs found (cleanup, don't unlock full-HW): dueling init writes 0xFF vs 0 to PP[0x8300/0x8304]
+    (zx-eth-main.c:1240-1241 vs 2551-2552; 0xFF = CPU broadcast hairpin); PP[0x863c]=0xaaaaaaaa vs
+    stock 0; PP[0x8008]=0x0000ff00 vs 0x0000dfdf. Docs: pp_broadcast_drop_re.md, hw_broadcast_flood_re.md,
+    pktdeal_override_re.md, alt_trap_levers_re.md. INVESTIGATION CLOSED at stock parity.
+
+**Last updated**: 2026-06-04 (Journey #34 — CONCLUSIVE: chip has NO autonomous HW broadcast flood;
+stock ALWAYS traps broadcast→CPU+SW-flood. drop_PP is just the OPC terminal drop counter. Full-HW L2
+bridge NOT achievable on this silicon; our merged 354Mbit/s [data HW-fwd + control/bcast trap+CPU] =
+stock parity for L2. "ACKs-via-HW full" isn't real here. Found cleanup bugs [dueling 0x8300 0xFF/0,
+0x863c, 0x8008]. INVESTIGATION CLOSED). Prior #33 — converges on dead-end. #28 — pruned+merged. #27 —
+WEDGE SOLVED. #23 — port1 SOLVED.
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)
