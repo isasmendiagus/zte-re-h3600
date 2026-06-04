@@ -140,3 +140,22 @@ NEXT sharper test (on stock fpga): write CMD(addr) then ONE data word at idx=5 (
 read back slot — does idx5 land? Then try CMD-before-each-word. Isolate the minimal working write.
 Recover claRegTable[2]'s actual base/stride/mask/maxidx from the decomp .data (or fpga-probe the
 descriptor at its symbol addr) to rule out a non-4 stride.
+
+## UPDATE 2026-06-04 (Stage 2 loop — CLA indirect commit/refresh semantics are subtle; research-grade nut)
+Single-word test (CMD-write slot 0xef, write idx0=0xDEAD0000 + idx5=0xA5A5A5A5, read back):
+readback = `00000000 bbbb1111 cccc2222 80000000 06100029 ...` — i.e. the DATA registers RETAIN values
+from PRIOR tests (bbbb1111/cccc2222 from a probe 2 iters ago survived), and reading an EMPTY slot
+(0xef) returns the STALE buffer, NOT the slot. ⇒ (a) writing the data-regs works (they hold values),
+(b) the COMMIT of the data-reg buffer INTO the CLA slot is what's not happening, (c) the read-CMD does
+not reliably refresh the buffer for unpopulated slots (only populated boot slots like 0x21/0x79 read
+back real data). The CLA indirect interface has commit/refresh semantics that raw fpga poke + the
+finicky logger_main read channel can't pin down cleanly.
+### Honest assessment + the clean approach (next)
+This is a research-grade HW-protocol nut. Per-iteration dynamic probing is giving inconsistent results.
+The DEFINITIVE path: kotrace `cla_set_indirect_rw_data` (+ cla_set_indirect_rw_cmd, fpga_write_reg)
+during a LIVE stock hardfast install to capture the EXACT (reg,value) write sequence the chip needs —
+including any commit/write-enable reg beyond {CMD,DONE,DATA}. Also read claRegTable's actual contents
+from the chip (its symbol addr is in the kallsyms/nm dumps → fpga-read the 3×0x1c descriptor bytes) to
+get the real base/stride/mask/maxidx. Then replicate that exact sequence in zx_cla_write_entry.
+Everything else for Stage 2 is ready (ram0/ram1/ram2 entries captured, clawrite primitive, netns rig,
+hw_trap metric) — only this write-commit protocol gates the first HW-forward.
