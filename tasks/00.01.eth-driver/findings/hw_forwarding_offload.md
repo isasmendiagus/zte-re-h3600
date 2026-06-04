@@ -883,3 +883,33 @@ collapses → THEN the lever is RED dropping the reverse-ACK trap frames: identi
 index + its per-queue RED out-buffer threshold (red_set_out_buffer_queue_cfg; stock q16-335 max=0x7ff)
 and compare mainline zx_tm_red_init's per-queue values to stock; raise the CPU queue's RED threshold.
 Stop chasing the contaminated single-NIC ICMP proxy.
+
+================================================================================
+## Iter X (2026-06-04 ~03:05 UTC) — TEST BLOCKED on host USB hardware; fix hypothesis prepped
+
+Attempted the clean 2-NIC TCP test. BLOCKED: jack2 (enxc8a362e95900) is stable, but jack4
+(enx6c70cbb68169) is GONE from the USB bus (3 samples, absent) — the whole usb 3-1 hub branch
+disconnected (dmesg: usb 3-1/3-1.2/3/4 disconnect). The only other r8152 (enx2c9975313ea9 on 3-3.1)
+has FLAPPING carrier. A physically-disconnected USB device cannot be recovered from software (needs
+re-plug / hub power-cycle / different port). ⇒ the definitive 2-NIC LAN↔LAN sustained-TCP measurement
+is HARDWARE-BLOCKED this window. Device console (UART /dev/ttyUSB0 → :9999) is on a separate, stable
+link — the H3600 itself is fine.
+
+### State of the investigation (honest):
+- The device-side ~1024 trap-RX latch under flood is REAL (device counters), but whether it actually
+  harms real TCP streaming — vs RED correctly rate-limiting an abusive ICMP flood (stock does this
+  too, Iter P) — is UNPROVEN on clean hardware. The one TCP-collapse datapoint (Iter Q) had USB
+  flakiness in play. So the severity/reality of a TCP "wedge" is currently UNCONFIRMED.
+- Ruled out (with evidence): BP pool size, RED global share-pool, RX slot-release, BMU buffer-free,
+  NAPI re-arm race. Tree currently: pool=8192 (kept, stock-match), Iter W busy-loop reverted.
+
+### PENDING fix hypothesis (ready to test when HW recovers): if real TCP genuinely collapses, the
+lever is the per-queue RED out-buffer threshold for the CPU/trap queue. The trap CPU-queue id is
+per-protocol via zx_def_ptl_pkt_map[].qid0 (zx_chip_tm_init_trap_queues, zx-eth-main.c:2257). Plan:
+identify the qid for generic unicast/IP traffic → check mainline zx_tm_red_init's per-queue
+out-buffer value for that qid vs stock red_set_out_buffer_queue_cfg (stock q16-335 max=0x7ff) → raise
+it if smaller. NOT committing untested (burned by Iter U/W).
+
+### NEXT FIRE: re-check NIC stability; if BOTH NICs present+stable → rebuild reverted tree + boot +
+run the real 2-NIC iperf3 TCP test (the only definitive measure). If still USB-blocked → note it +
+wait. (Host USB hub may need the user to physically reseat — flagged in the status.)
