@@ -119,22 +119,12 @@ static int zx_dsa_setup(struct dsa_switch *ds)
 	/* TODO P1: drive the switch-fabric init (reuse zx-eth init helpers),
 	 * mark the CPU port, set up the conduit relationship. Stub for now.
 	 */
-
-	/* [Iter AB 2026-06-04] Software-assisted FDB learning. This chip traps
-	 * unicast to the CPU (it does not safely HW-auto-learn — that path caused
-	 * the lan2 dup storm). So the switch FDB stays EMPTY → every unicast is
-	 * unknown-DA → trapped/flooded, and the reverse (ACK) direction never gets
-	 * its DA resolved → it traps instead of HW-forwarding (the DN-fwd/UP-trap
-	 * asymmetry). assisted_learning makes the DSA core push every MAC the bridge
-	 * software-learns (from CPU-trapped frames) into the HW FDB via our existing
-	 * .port_fdb_add (→ real SBRAG UC table). Once BOTH host MACs are in the HW
-	 * FDB, both directions resolve DA → both HW-forward, no trap → no wedge.
-	 * Standard DSA idiom for trap-to-CPU switches; reuses the already-tested
-	 * fdb_add path (NOT the dup-storm HW auto-learn). UNTESTED-pending-HW.
-	 */
-	ds->assisted_learning_on_cpu_port = true;
-
-	dev_info(priv->dev, "zx-dsa: setup — %d ports, CPU port %d, assisted FDB learning ON\n",
+	/* [Iter AE 2026-06-04 prune] assisted_learning_on_cpu_port was tried (Iter AB)
+	 * to push bridge-learned MACs into the HW FDB, but it was INERT here (the device
+	 * bridge FDB stayed empty in the static-neigh test) and did NOT contribute to the
+	 * fix — the wedge was the RX-ring bit14 bug (Iter AD). Reverted to keep the merge
+	 * minimal; re-add later as a deliberate HW-FDB-offload feature if/when needed. */
+	dev_info(priv->dev, "zx-dsa: setup (skeleton) — %d ports, CPU port %d\n",
 		 ds->num_ports, ZX_DSA_CPU_PORT);
 	return 0;
 }

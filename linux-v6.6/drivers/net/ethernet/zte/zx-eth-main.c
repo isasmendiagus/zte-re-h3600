@@ -3049,7 +3049,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 						e->sw_dev->stats.rx_bytes += len;
 						netif_receive_skb(skb);
 						e->tm_rx_count++;
-						if (e->tm_rx_count <= 130) {	/* [Iter AC] raised 10->130 to classify the TCP trap-storm */
+						if (e->tm_rx_count <= 10) {	/* first-N trap classifier (kept low; was bumped to 130 for the Iter AC TCP-trap RE) */
 							dev_info(e->dev, "TM RX q=%d idx=%u len=%u bppe=%u src=%pM dst=%pM ethertype=%04x ingress=%d delivered\n",
 								 q, idx, len, bppe_idx,
 								 src + 6, src, ntohs(*(__be16 *)(src + 12)),
