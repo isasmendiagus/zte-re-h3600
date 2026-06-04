@@ -45,7 +45,8 @@ Legend: [SW]=software, works on mainline now · [DRV]=driver/RE chip work · [�
   on lan1) → fake-ISP (192.168.9.2 in a host netns on lan2) got 4/4 replies ttl=63 (routed), WAN-side
   saw src SNAT'd to 192.168.9.1, conntrack un-NAT'd the return. Routing+SNAT+conntrack across the DSA
   fabric all work. Real-internet just needs the WAN jack cabled (swap wan iface lan2→lan4). Finding
-  phase1_3_nat_router.md. TODO: persist the bring-up in an init script (currently applied live).
+  phase1_3_nat_router.md. **PERSISTED [✅ 2026-06-04]:** auto-configures at boot via /etc/rc.router
+  (C-init hook in init.c) — fresh boot = configured, firewalled NAT router with no manual setup.
 - **Phase 2 — LAN services [SW]:** **LAN DHCP [✅ DONE 2026-06-04]** via busybox udhcpd on lan1
   (172.31.9.1/24) — VERIFIED end-to-end: host got a full DHCPOFFER (172.31.9.50, gw/dns/lease all
   correct) over the DSA lan1 port (nmap broadcast-dhcp-discover). Config /etc/udhcpd.conf (staged).
@@ -54,9 +55,11 @@ Legend: [SW]=software, works on mainline now · [DRV]=driver/RE chip work · [�
   only because it doesn't link it). ⇒ use busybox for DHCP; DNS/PPPoE need a clean rebuild or busybox
   alternatives. Remaining Phase 2: LAN DNS (optional — clients can use upstream DNS via DHCP opt 6),
   static routes/leases. (dnsmasq clean-build deferred.)
-- **Phase 3 — Firewall/security [SW]:** zone firewall (iptables/nftables: WAN-in drop, LAN-out
-  accept), IP/port filter, DoS guard, port-forward (DNAT), DMZ, ALG (conntrack helpers), UPnP-IGD
-  (miniupnpd), URL/parental filter.
+- **Phase 3 — Firewall/security [SW]:** **zone firewall + port-forward [✅ DONE 2026-06-04]** —
+  FORWARD policy DROP + LAN→WAN/established allows (stock-style WAN-in-drop), DNAT port-forward
+  verified (WAN-side curl→device WAN:8099→LAN host = HTTP 200); shipped as the secure default in
+  rc.router. Finding phase3_firewall_portforward.md. Remaining: IP/port filter, DoS guard, DMZ, ALG
+  (conntrack helpers), UPnP-IGD (miniupnpd), URL/parental filter — all iptables/SW, add as needed.
 - **Phase 4 — IPv6 [SW]:** WAN DHCPv6-PD / SLAAC, RA on LAN (radvd/odhcpd), prefix delegation, v6 firewall.
 - **Phase 5 — QoS [SW now / DRV later]:** tc queue/shaper/speed; HW shaper (SCH/OPC) offload later.
 - **Phase 6 — HW flow offload [DRV — the big perf piece]:** wire the chip flow engine into Linux

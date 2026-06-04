@@ -15,11 +15,16 @@ $BB ip link set $LAN up
 $BB ip addr add $WANIP dev $WAN 2>/dev/null
 $BB ip link set $WAN up
 
-# NAT router: forward + masquerade LAN -> WAN
+# NAT router with a default-deny FORWARD zone firewall (stock-style: allow
+# LAN->WAN + established WAN->LAN, drop unsolicited WAN->LAN).
 echo 1 > /proc/sys/net/ipv4/ip_forward
+$IPT -P FORWARD DROP
 $IPT -t nat -A POSTROUTING -o $WAN -j MASQUERADE
 $IPT -A FORWARD -i $LAN -o $WAN -j ACCEPT
 $IPT -A FORWARD -i $WAN -o $LAN -m state --state ESTABLISHED,RELATED -j ACCEPT
+# Port-forward example (disabled — uncomment + set host/port to use):
+# $IPT -t nat -A PREROUTING -i $WAN -p tcp --dport 8080 -j DNAT --to-destination 172.31.9.100:8080
+# $IPT -A FORWARD -i $WAN -o $LAN -p tcp -d 172.31.9.100 --dport 8080 -j ACCEPT
 
 # let the LAN link settle before binding the DHCP server (boot race)
 sleep 3
