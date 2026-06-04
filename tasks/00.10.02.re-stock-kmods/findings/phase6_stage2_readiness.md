@@ -102,3 +102,22 @@ Two findings this iteration:
 Reboot STOCK, kotrace/fpga-read the FULL trio for one flow: ram0[0x09], ram1[0x98], ram2[0x5a] (and
 the reverse trio). Then in mainline write all three via clawrite and re-test hw_trap. Also resolve the
 ram2 words1-16 persist issue (compare boot-load timing vs runtime; try writing each word + CMD).
+
+## UPDATE 2026-06-04 (Stage 2 loop — CLA-hash WRITE protocol still resists; data-port semantics)
+- Stock cla_set_hash_table (tm.c:3521-3530) write order = **CMD(addr) FIRST, then 15 words (idx 14→0)**
+  via cla_set_indirect_rw_data. The driver does data-first + 17 words (wrong order/count for hash).
+- BUT a dynamic fpga test on stock (CMD-first write of a pattern to a FREE ram2 slot 0xee, then read
+  back) STILL persisted only word0 (deadbeef); words1-14 read back as STALE (the prior flow's
+  ram2[0x0c]) — so CMD-first alone is NOT the fix; the per-word DATA write isn't landing words1-14.
+- ROOT: tmOnuRegWrite(regtype, val, idx) (tm.c:35356) = `reg = claRegTable[regtype].base +
+  idx*claRegTable[regtype].stride(+0x14)`; then `fpga_write_reg(reg, (cur & ~(mask<<sh)) |
+  (val&mask)<<sh)` — a MASKED read-modify-write (mask=+0xc, shift=+0x10). So the DATA-port write for
+  ram2 depends on claRegTable[2]'s {base, stride, mask, shift}. The driver assumes base=0xC01C,
+  stride=4, full-word — one of those is wrong for the data port (likely stride≠4, OR a single
+  auto-incrementing port, OR mask<32b). 
+- NEXT (dynamic probe, per user's web-UI/experiment suggestion): on stock, write DISTINCT values to
+  0xe3007, 0xe3008, 0xe3009 and read each DIRECTLY (fpga -r, not via the CLA read-CMD) to check if
+  the data regs are independent (stride 4) or aliased/single-port. Also recover claRegTable[2] from
+  the decomp data section (or fpga-read the descriptor). Then fix zx_cla_write_entry's hash path.
+- Tool note (user): can perturb firewall/rules in the stock web UI + read CLA registers to observe
+  table effects — use only if needed.
