@@ -2065,6 +2065,29 @@ static int zx_cla_write_hash(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 	return zx_cla_wait_done(e);
 }
 
+/* CLA HW hash engine (Phase 6, VERIFIED on mainline 2026-06-04). Write the 12-word
+ * (45-byte) flow key to HASH_KEY0.., pulse the trigger, read the 16-bit raw hash. The
+ * HW computes the same 4-poly CRC as the SW cla_acl_hash_addr_gen — so we get the slot
+ * the chip itself will use on ingress, with NO SW CRC reimpl and NO engine init (the
+ * block is live out of reset). The caller masks the raw hash to a ram2-6 slot
+ * (mask = (0x400<<(6-ACL_OUT_SPACE_SEL))-1, + way bits + free-slot probe).
+ * GOTCHA: load the key FIRST, trigger LAST (HASH_TRIG is a control reg, not key data;
+ * triggering before the key is loaded yields 0). See
+ * findings/phase6_cla_hw_hash_CRACKED.md + memory zte-cla-hw-hash-engine. */
+#define CLA_HASH_TRIG		0x1CC2C0	/* fpga 0xe30b0 — write 1 to latch+compute */
+#define CLA_HASH_KEY0		0x1CC2C4	/* fpga 0xe30b1 — 12 key words, stride 4 */
+#define CLA_HASH_OUT		0x1CC2FC	/* fpga 0xe30bf — 16-bit raw hash result */
+
+static u16 zx_cla_hash_raw(struct zx_eth *e, const u32 key[12])
+{
+	int i;
+
+	for (i = 0; i < 12; i++)
+		writel(key[i], e->base + CLA_HASH_KEY0 + i * 4);
+	writel(1, e->base + CLA_HASH_TRIG);	/* trigger AFTER loading the key */
+	return readl(e->base + CLA_HASH_OUT) & 0xffff;
+}
+
 /* Indirect READ of one CLA RAM entry (17 words). Mirror of zx_cla_write_entry
  * with the CLA_RAM_READ bit set: write the cmd (rw=1), wait done, read DATA0..16.
  * Debug-only — used by the cladump/clapeek debugfs to compare per-port classify
@@ -4304,6 +4327,43 @@ static const struct file_operations zx_clawrite_fops = {
 	.llseek = default_llseek,
 };
 
+/* hashcalc: drive the CLA HW hash engine (Phase 6 Stage 2b). Write up to 12 hex key
+ * words "<k0> <k1> ... <k11>"; zx_cla_hash_raw loads them, triggers, and reads the
+ * 16-bit raw hash, logged here. This is the slot oracle the chip uses on ingress —
+ * cls_flower_add builds the key from a flow's 5-tuple+ports and uses the same path.
+ * Verified vs manual poke: key 0x11/0x22../0xcc → 0x4a15. Fewer than 12 words →
+ * the rest are zero. (Slot = raw & mask + way bits; mask from the outspace cfg.) */
+static ssize_t zx_hashcalc_write(struct file *f, const char __user *ubuf,
+				 size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[160], *p;
+	u32 key[12] = {0};
+	int n = 0, consumed;
+	u16 raw;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	p = buf;
+	while (n < 12 && sscanf(p, "%x%n", &key[n], &consumed) == 1) {
+		n++;
+		p += consumed;
+	}
+	raw = zx_cla_hash_raw(e, key);
+	pr_info("[ZXETH] hashcalc %d words -> raw hash 0x%04x\n", n, raw);
+	return count;
+}
+
+static const struct file_operations zx_hashcalc_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_hashcalc_write,
+	.llseek = default_llseek,
+};
+
 /* poke: live register write for reflash-free experiments. Write "<phys> <val>"
  * (hex), e.g.  sh -c "echo '92280008 80000001' > /sys/kernel/debug/zx_eth/poke"
  * phys must be in [0x921c0000, 0x923c0000) (the e->base MMIO window) and 4-aligned.
@@ -4650,6 +4710,7 @@ static void zx_debugfs_init(struct zx_eth *e)
 	debugfs_create_file("cladump", 0444, zx_debugfs_root, e, &zx_cladump_fops);
 	debugfs_create_file("clapeek", 0644, zx_debugfs_root, e, &zx_clapeek_fops);
 	debugfs_create_file("clawrite", 0644, zx_debugfs_root, e, &zx_clawrite_fops);
+	debugfs_create_file("hashcalc", 0644, zx_debugfs_root, e, &zx_hashcalc_fops);
 	debugfs_create_file("poke", 0644, zx_debugfs_root, e, &zx_poke_fops);
 	debugfs_create_file("fdbadd", 0644, zx_debugfs_root, e, &zx_fdbadd_fops);
 	debugfs_create_file("pktdeal", 0644, zx_debugfs_root, e, &zx_pktdeal_fops);
