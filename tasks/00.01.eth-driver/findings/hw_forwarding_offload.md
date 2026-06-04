@@ -1006,3 +1006,81 @@ already-present fdb_add path; does NOT enable the dup-storm HW auto-learn. COMPI
 NEXT (when 2 NICs stable): boot → 2-NIC iperf3 TCP. Best case (AB works): both dirs HW-forward, no
 trap. Fallback (AA works): reverse still traps but the UP queue no longer wedges → sustained TCP.
 Bisect which mattered. NOTE: AA's up_thd=80 IS stock's value — if AB makes UP forward, AA is moot.
+
+================================================================================
+## Iter Z (2026-06-04 ~06:45 UTC) — ★ DEFINITIVE 2-NIC TCP TEST RAN (USB recovered) — fixes did NOT work
+
+jack4 USB NIC came back (stable 5/5). Booted the 3-fix zImage; dmesg CONFIRMED active:
+  "RED block init (0x92344000): globals + 400 out-buffer queues"  (Iter Y)
+  "zx-dsa: setup — 6 ports, CPU port 5, assisted FDB learning ON"  (Iter AB) — and zx-dsa.c IS the
+   active switch driver (not inert), good.
+br0=lan1+lan3, netns nsA(jack2)/nsB(jack4), bidirectional ping clean 4/4 + 2/2.
+
+### RESULT — NEGATIVE. The wedge PERSISTS with all 3 fixes:
+  iperf3 TCP: 1.89 Mbit/s, collapsed to 0 from ~24s (same as before the fixes).
+  QMG: DN hw_fwd 0→4393 then FLAT; UP hw_trap → 1063 then FLAT.
+  tm_rx_count=1063 (latched), tm_irq=tm_napi=246 (frozen), tm_bmu_free_ok=1063/fail=0, RED drops=61 (LOW).
+⇒ The ~1024 CPU-RX latch is ROBUST — it has now survived: BP pool 1024→8192, RED-share-pool,
+RX-slot-release, BMU-free (fine), NAPI-rearm, RED-block-init, QMG up_thd 80→4000, assisted-FDB. None
+moved the ~1024 ceiling. RED is NOT the limiter this run (drops=61, not 5010) → the RED-block-init
+(Iter Y) DID change RED behavior (far fewer drops) but the wedge is upstream of RED: the CPU simply
+STOPS receiving at ~1063 (tm_rx + tm_irq frozen).
+
+### Why assisted-FDB (AB) didn't make UP forward: the DEVICE bridge FDB is EMPTY (`bridge fdb show`
+returned nothing — though the C-init REPL may lack the `bridge` tool, so inconclusive). No
+port_fdb_add/sbrag dmesg fired beyond the self-MAC seed. So either the device br0 isn't learning the
+host MACs (frames not reaching the bridge SW path to learn from), or assisted-learning's trigger
+isn't firing. The reverse direction kept trapping (UP hw_trap climbed) → never forwarded.
+
+### THE REAL WALL (now unambiguous): the CPU-RX trap path STOPS at ~1024 frames (tm_rx + tm_irq
+freeze) — independent of RED/pool/threshold/buffers. This is the TM RX descriptor-ring / RX-IRQ
+engine halting after ~one TM_RX_DESC_PER_Q(1024) cycle. Iter T (slot-release) + Iter V (NAPI-rearm)
+targeted it and failed. The bulk DN forwarding stops as a CONSEQUENCE (no ACKs reach the stalled CPU
+→ TCP stops). So BOTH the CPU-RX-ring halt AND the reverse-traps-instead-of-forwards remain open.
+
+### NEXT SESSION (clear targets, device now testable when jack4 stays up):
+1. CPU-RX-ring halt @~1024: instrument the TM RX ring head/tail + IRQ_STATUS(0x100)/mask LIVE at the
+   exact stall (read via mem-dd or add a debugfs reg-read) — is pending>0 (IRQ not firing = GIC/mask)
+   or pending==0 (HW producer stopped = ring/credit). Compare stock pon_tm_net_poll ring mgmt byte-for-byte.
+2. Reverse-forward (AB follow-up): verify the device bridge actually learns the host MACs (get a real
+   `bridge fdb` readout / add a dmesg in port_fdb_add) — if the bridge FDB never populates,
+   assisted-learning can't help; may need HW SMAC-learn (carefully, vs the dup storm) or static
+   .port_fdb_add seeding for the test.
+
+================================================================================
+## ★★★ FINAL MORNING SUMMARY (2026-06-04 ~06:50 UTC) — overnight autonomous run
+
+GOAL: stable LAN streaming via HW forwarding on the ZTE H3600 mainline DSA driver.
+
+### MAJOR DURABLE WINS (proven on real hardware, won't need redoing):
+- Stock does ~350 Mbit/s LAN↔LAN TCP via PLAIN HW L2 SWITCHING gated by CLA PROTOCOL classification
+  (TCP/UDP forward, ICMP/control trap) — NOT any FFE/CLA-hash/SBRAG-ipv4 offload table (all empty
+  live during the flow). Dissolves the old "this chip can't HW-forward L2" dead-end (that was an
+  ICMP-only artifact — ICMP traps even on stock).
+- Mainline ALREADY HW-forwards the bulk (DN) direction (QMG DN hw_fwd climbs to ~4400).
+- Reliable stock boot (DTR power-cycle, no autoboot-interrupt) + full live tooling: /bin/fpga r/w via
+  /proc/kmsg (idx=(phys-0x92000000)/4), /proc/tm/shell calls any kernel fn, mainline debugfs.
+- Full register map of the forwarding pipeline (CLA/QMG/RED/BMU/SBRAG/SCH), incl. the DN/UP threshold
+  split (QMG 0x9234c000 [12:0]up_ram_thd / [25:13]dn_ram_thd) and the RED block (0x92344000) mainline
+  never initialized.
+
+### THE REMAINING BLOCKER (open, now precisely characterized):
+The unicast→CPU "wedge": under a TCP flow, the reverse (ACK) direction TRAPS to the CPU, and the
+CPU-RX trap path HALTS at ~1024 frames (tm_rx_count + tm_irq_count FREEZE) → no ACKs → TCP collapses
+to ~1.9 Mbit/s. The ~1024 halt is ROBUST: survived 8 distinct fixes/configs (BP pool 1024→8192,
+RED-share-pool, RX-slot-release, BMU-free-verified-OK, NAPI-rearm, RED-block-init, QMG up_thd 80→4000,
+assisted-FDB-learning). It is the TM RX descriptor-ring / RX-IRQ engine stopping after ~one
+TM_RX_DESC_PER_Q(1024) cycle — root not yet cracked.
+
+### COMMITS this run (branch hw-bridge-offload; main + egress fix untouched throughout):
+RE iters K–V (mechanism mapping + 5 ruled-out causes), Iter S (pool 1024→8192, kept), Iter Y
+(zx_red_block_init — mainline never inited the RED block; kept), Iter AA (QMG up_thd 80→4000, kept),
+Iter AB (assisted_learning_on_cpu_port=true, kept). All built+tested; none solved the wedge but all
+are legitimate stock-matching corrections that should stay.
+
+### TWO CLEAR NEXT TARGETS (device now testable):
+1. CPU-RX-ring halt @~1024 — the real wall. Instrument the TM RX ring head/tail + IRQ_STATUS/mask
+   LIVE at the stall; diff stock pon_tm_net_poll ring management byte-for-byte. (pending>0 → IRQ/mask
+   bug; pending==0 → HW producer/credit stop.)
+2. Make the reverse dir HW-forward (sidesteps the CPU path entirely, like stock): verify/fix why the
+   device bridge FDB isn't populating so assisted-learning can offload both MACs.
