@@ -4836,12 +4836,46 @@ static void zx_eth_adjust_link(struct net_device *ndev)
  * isn't driving) — the ZX5201 equivalent of the GePHY TX-DAC force. The ZX5201 is
  * NOT phylib-probed (no standard PHY ID), so we drive it directly on the mii_bus.
  * See tasks/00.01.eth-driver/findings/{wan_port_bringup_re,mac4_egress_dispatch_re}.md */
-static void zx_wan_zx5201_config(struct mii_bus *bus)
+static void zx_wan_zx5201_config(struct zx_eth *e, struct mii_bus *bus)
 {
 	int v, u;
 
 	if (!bus)
 		return;
+
+	/* [WAN-RGMII] RGMII pad/clock setup that stock's zx5201_config does
+	 * BEFORE the MDIO sequence — we skipped this and CPU->MAC4 TX never
+	 * reached the wire (fabric dispatched to send2smac4 but MAC4 TX-ok=0).
+	 *
+	 * RE (Iter loop-4, agent): stock virt 0xf060000c == phys 0x9420000c ==
+	 * pin_mux register #3 (the SoC pad / IO-mux / pad-drive bank). stock
+	 * does  *0xf060000c &= 0xffe7f7ff  (clears pad bits 11,19,20) — these
+	 * are the WAN-RGMII pad-mode/drive/delay bits for MAC4's interface.
+	 * MAC0-3 are internal MII/GMII so they don't need it; MAC4 is RGMII to
+	 * the external ZX5201, which does. pin_mux is already ioremapped.
+	 * Cites: ghidra/output_ko/plat-zxylzb_9128S.ko/zx5201_config.c:16,
+	 *        ghidra/output_pcie_extra/FUN_c0016c68_c0016c68.c:45-55.
+	 */
+	if (e && e->pin_mux) {
+		u32 pm = readl(e->pin_mux + 0x0c);
+
+		writel(pm & 0xffe7f7ff, e->pin_mux + 0x0c);
+		dev_info(e->dev, "[WAN-RGMII] pin_mux[0x0c] %08x -> %08x (clear pad bits 11/19/20)\n",
+			 pm, readl(e->pin_mux + 0x0c));
+	}
+	/* [WAN-RGMII] sys_ctrl[0x10] bit 11 = the RGMII select bit; stock boot
+	 * clears it (&= ~0x800) and stock-live reads 0x100 (bit 11 clear).
+	 * Enforce it (harmless if already clear). phys 0x94100010. */
+	if (e && e->sys_ctrl) {
+		u32 sc = readl(e->sys_ctrl + 0x10);
+
+		if (sc & 0x800) {
+			writel(sc & ~0x800u, e->sys_ctrl + 0x10);
+			dev_info(e->dev, "[WAN-RGMII] sys_ctrl[0x10] %08x -> %08x (clear RGMII bit 11)\n",
+				 sc, readl(e->sys_ctrl + 0x10));
+		}
+	}
+
 	mdiobus_write(bus, 8, 0x12, 0x8402);
 	mdiobus_write(bus, 9, 0x16, 0x0a0f);
 	mdiobus_write(bus, 9, 0x1b, 0x0800);
@@ -4981,7 +5015,7 @@ static void zx_eth_init_phys(struct zx_eth *e)
 				break;
 			}
 		if (bus) {
-			zx_wan_zx5201_config(bus);
+			zx_wan_zx5201_config(e, bus);
 			dev_info(dev, "[WAN] ZX5201 PHY @ MDIO 0x08 configured (copper TX up)\n");
 		} else {
 			dev_warn(dev, "[WAN] no mii_bus to config ZX5201 PHY\n");

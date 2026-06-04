@@ -280,3 +280,37 @@ LEADING CAUSES for the next iteration:
    clock/delay enable. Needs a separate ioremap to set.
 3. MAC4 iface reg +0xe0 (mac4+0xe0 = 0x00011200 from smac_init) — verify it's the RGMII iface value,
    not the internal-MII value the GePHY MACs use.
+
+---
+
+## RESOLUTION (Iter loop-4, 2026-06-04): the blocker was a register-address error — egress WORKS
+
+The "MAC4 TX-ok (0x92340718) UNCHANGED" above was reading the **WRONG register**. The caveat noted
+right there ("0x92340000 aliases tm_base — may be unreliable") was the actual answer:
+
+- `e->base` (npp_base) is ioremapped at **phys 0x921c0000** (ZX_FPGA_BASE_TO_NPP_OFF=0x1c0000;
+  TM_OFF=0x180000 ⟹ TM=npp+0x180000=**0x92340000**, zx-eth-main.c:135).
+- `mac_off(port)=npp_base+(port+1)*0x40000` ⟹ **MAC4 = 0x921c0000+0x140000 = 0x92300000**, not
+  0x92340000. So MAC4 TX-ok = **0x92300718**; 0x92340718 is a TM register (always ~0).
+
+Live re-measurement (corrected addresses):
+- MAC ctrl: MAC1=0x92240000, MAC2=0x92280000, MAC4=0x92300000 all = **0xbb6003** (enabled, speed/
+  duplex+rx/tx-en) — MAC4 is configured **identically to the working LAN MACs**. (0x92340000 read
+  back 0x140 = the TM master-config value written at zx-eth-main.c:947/2366 — proof it's the TM block.)
+- **MAC4 TX-ok (0x92300718): 0x1c → 0x22 (+6)** during 8 lan4→host pings, and send2smac4 +5/6 in
+  lockstep ⟹ the SOPC dispatch AND the MAC4 TX engine both fire; **MAC4 transmits onto the RGMII wire.**
+
+⟹ **CPU→MAC4 egress was working the whole time.** The only reason the host saw nothing earlier:
+there is no host NIC on the physical WAN jack right now (enx6c70 absent). End-to-end visible WAN
+traffic just needs a cable/NIC on the WAN jack — the driver side (RX +1.1M, TX-ok climbing,
+ctrl=0xbb6003, SOPC bridge enabled) is complete.
+
+Also done this iter (stock-faithful, kept even though egress already worked): ported stock
+zx5201_config's pre-MDIO system writes into `zx_wan_zx5201_config` — `pin_mux[0x0c] &= 0xffe7f7ff`
+(clear RGMII pad bits 11/19/20 at phys 0x9420000c; live: 0x003db805→0x0025b005) and enforce
+`sys_ctrl[0x10]` bit-11 (RGMII) clear. These match stock's WAN bring-up; harmless and correct.
+
+LESSON (now in memory zte-port-numbering): when peeking any MAC counter, recompute the absolute
+address from npp_base=**0x921c0000**, mac_off=(port+1)*0x40000. 0x92340000 is TM, NOT MAC4.
+
+**STATUS: Phase 1.0b-TX = DONE. WAN MAC4 RX+TX both work. Next: Phase 1.1 (netfilter rebuild).**

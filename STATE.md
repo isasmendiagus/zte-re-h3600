@@ -25,9 +25,16 @@ Legend: [SW]=software, works on mainline now · [DRV]=driver/RE chip work · [�
 - **Phase 0 — L2 switch foundation [✅ DONE]:** DSA driver, HW L2 forwarding incl. the TCP-ACK
   HW-forward fix (#36), port1 ingress (#23), egress (TX-DAC/eg_port), unicast→CPU wedge (bit14,
   #27), soft-float userland. LAN↔LAN streams in HW; ping/iperf/bridge work. [DRV]
-- **Phase 1 — WAN + NAT router (the spine) [→ NEXT]:** 1.1 designate a port as WAN (eth-WAN is
-  trivial — it's a DSA port) [DRV-config]; 1.2 WAN IPv4 via udhcpc, then PPPoE via pppd [SW];
-  1.3 `ip_forward` + netfilter masquerade LAN→WAN [SW]. ⇒ working NAT router / internet sharing.
+- **Phase 1 — WAN + NAT router (the spine):** 1.0 WAN=MAC4 (RGMII, ext ZX5201 @ MDIO 0x08) brought
+  up + exposed as DSA port lan4 [✅]; **1.0b WAN MAC4 RX+TX [✅ DONE 2026-06-04]** — RX +1.1M, and
+  CPU→MAC4 TX VERIFIED (MAC4 ctrl=0xbb6003 like the LAN MACs, TX-ok 0x92300718 climbs +6/egress,
+  SOPC bridge enabled). The long "MAC4 TX never reaches the wire" blocker was a register-address
+  error (read TM 0x92340718 as MAC4 TX-ok; MAC4 is at npp_base 0x921c0000 + 0x140000 = 0x92300000).
+  Also ported stock zx5201_config's pad-clear (pin_mux[0x0c]&=0xffe7f7ff) — stock-faithful. End-to-end
+  visible WAN just needs a host NIC on the physical WAN jack. — **1.1 [→ NEXT]** rebuild kernel WITH
+  netfilter (CONFIG_NETFILTER/NF_CONNTRACK/NF_NAT/IP_NF_*, ip_forward) + iptables in initramfs;
+  1.2 WAN IPv4 via udhcpc, then PPPoE via pppd [SW]; 1.3 `ip_forward` + masquerade LAN→WAN [SW].
+  ⇒ working NAT router / internet sharing.
 - **Phase 2 — LAN services [SW]:** dnsmasq (DHCP server + DNS + static leases), static routes.
 - **Phase 3 — Firewall/security [SW]:** zone firewall (iptables/nftables: WAN-in drop, LAN-out
   accept), IP/port filter, DoS guard, port-forward (DNAT), DMZ, ALG (conntrack helpers), UPnP-IGD
