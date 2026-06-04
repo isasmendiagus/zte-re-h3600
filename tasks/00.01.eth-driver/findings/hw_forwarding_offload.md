@@ -1178,3 +1178,43 @@ the symptom we want to remove. Default left at 0 (stock); param kept for the sur
 Honest status: the L2 streaming GOAL is already met via the CPU software bridge (354 Mbit/s, merged).
 "ACKs via HW" is the optimization, and it is a bigger lift than a one-line slot flip — it needs the
 HW FDB offload too. Branch hw-ack-forward holds the RE + the (reverted-to-safe) param; NOT merged.
+
+## Iter AG (2026-06-04) — ★★★ DECISIVE live experiment: the ACK trap is the pktdeal classifier, NOT FDB/FFE/direction
+
+Ran a clean per-direction, per-protocol forwarding measurement on the live mainline device (stock
+trap table, bit14 fix). Topology: jack2/ASIX (nsA 10.0.0.1) on lan1, enx2c9975313ea9 (nsB 10.0.0.2)
+on lan2 (cabled there — added lan2 to br0); both bridged. QMG counters (DN sw_fwd/hw_fwd/hw_trap,
+tm_rx_count) snapped before + mid-flow:
+
+| flow | dir | hw_fwd Δ | tm_rx Δ (=CPU trap) | verdict |
+|------|-----|---------:|--------------------:|---------|
+| UDP 100M | lan2→lan1 | +41165 | **+8** | 100% HW |
+| UDP 100M | lan1→lan2 (reverse) | +41240 | **+8** | 100% HW |
+| TCP 331Mbit | lan2→lan1 data | +164389 | +59627 | data HW, **ACKs trap** |
+| TCP (after static fdbadd both MACs) | — | (same) | +104k | static FDB had **NO effect** |
+
+DECISIVE conclusions (each refutes a prior hypothesis):
+1. **The chip HW-forwards unicast L2 in BOTH directions** (UDP, tm_rx flat = CPU untouched). This
+   **refutes the old "CLA traps all regardless of FDB" dead-end** — HW L2 forwarding works today.
+2. **NOT a FDB miss / offload gap.** Seeded static SBRAG FDB entries for both peer MACs via the
+   `fdbadd` debugfs (`echo '1 c8:a3:..' / '2 2c:99:..'`, rc=0) → the TCP ACK trap was UNCHANGED. And
+   UDP HW-forwards both ways with NO static FDB (the chip resolves both MACs on its own). So the
+   "part 2 / HW FDB offload" worry is moot — the FDB already works.
+3. **NOT directional.** UDP lan1→lan2 (the same direction the TCP ACKs take) HW-forwards fine. So the
+   ACK trap is not a DN/UP-direction artifact.
+4. ⟹ **The TCP-ACK trap is the per-protocol pktdeal/SPA classifier.** TCP *data* (large frames) and
+   all UDP HW-forward (deal=0 slots); the small TCP **pure-ACK** frames (len-66) land in a DIFFERENT
+   ptype slot that the stock trap table sets to **deal=1 (trap)**. Confirms the Iter AC hypothesis.
+
+**This collapses the plan to ONE surgical change** (and removes the FFE-port and FDB-offload from the
+critical path entirely):
+   → identify the TCP-pure-ACK ptype slot in the SPA pktdeal RAM (0x921d4300) and flip it deal 1→0,
+     leaving broadcast/control slots trapping (forward-all was too broad — Iter AF). That alone makes
+     the ACKs HW-forward like UDP, fully offloading the CPU. No conntrack, no FFE, no FDB work.
+
+NEXT (slot identification — pick one): (a) extend the RX-trap instrumentation to log the trapped
+frame's classification/ptype field from the RX descriptor; (b) live-poke 0x921d4300 deal=0 slot-by-
+slot (poke debugfs) during a TCP flow and watch tm_rx go flat — bisect the offending slot without a
+rebuild; (c) RE the upstream TCP-flags→vendor-enum map (decomp gave enum→slot, not which enum is the
+short-ACK variant). Once the slot is known, set it deal=0 in zx_pp_pro_actions[] (one entry) and
+re-test: TCP with tm_rx flat = ACKs HW-forward = DONE. Branch hw-ack-forward.

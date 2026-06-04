@@ -481,10 +481,26 @@
     than a one-line flip; the L2 streaming GOAL is already met via the SW bridge (merged main).
     Details in hw_forwarding_offload.md Iter AF; decomp in decomp_halt_baddata_band.c.
 
-**Last updated**: 2026-06-04 (Journey #29 — pktdeal RE done [SPA 0x921d4300[1:0]]; forward-all
-experiment NEGATIVE [breaks broadcast/ARP], baseline reconfirmed 5/5 0% loss; refined plan = surgical
-TCP-ACK-slot flip + HW FDB offload, both required; branch hw-ack-forward NOT merged). Prior #28 —
-pruned+merged to main. #27 — WEDGE SOLVED (bit14). #26 — FFE conntrack. #23 — port1 SOLVED.
+30. **★ DECISIVE live experiment — "ACKs via HW" collapses to ONE surgical pktdeal change
+    (2026-06-04, branch hw-ack-forward).** Measured per-direction/per-protocol on live HW (jack2/lan1
+    nsA ↔ enx2c997/lan2 nsB, both in br0). UDP BOTH directions = 100% HW (hw_fwd climbs, tm_rx flat
+    +8); TCP data HW-forwards but the small pure-ACK frames TRAP (tm_rx +60-100k/run). Seeded static
+    SBRAG FDB for both MACs (fdbadd debugfs) → NO effect on the ACK trap. UDP lan1→lan2 (same dir the
+    ACKs take) HW-forwards fine. ⟹ THREE refutations: (1) chip DOES HW-forward unicast L2 both dirs
+    (kills the "CLA traps all" dead-end), (2) NOT a FDB miss/offload gap (static FDB inert + UDP works
+    with no FDB help), (3) NOT directional. The TCP-ACK trap is the **per-protocol pktdeal/SPA
+    classifier** — the short-ACK ptype slot is deal=1 (trap) while TCP-data + all UDP are deal=0.
+    ⟹ FIX collapses to ONE entry: find the TCP-pure-ACK ptype slot in SPA 0x921d4300 and flip
+    deal 1→0 (keep broadcast/control trapping — forward-all was too broad, #29). **No FFE port, no HW
+    FDB offload needed** (both removed from the critical path). NEXT: identify the slot (RX-desc ptype
+    log / live-poke bisect 0x921d4300 / RE flags→enum), set it in zx_pp_pro_actions[], re-test TCP for
+    tm_rx flat = DONE. Details: hw_forwarding_offload.md Iter AG.
+
+**Last updated**: 2026-06-04 (Journey #30 — ★ DECISIVE: "ACKs via HW" = ONE surgical pktdeal slot
+flip, NOT FFE/FDB-offload. Live proof: UDP 100% HW both dirs + static-FDB inert + non-directional ⟹
+TCP short-ACK ptype slot=trap is the only cause. NEXT: ID the slot + flip deal 1→0. branch
+hw-ack-forward). Prior #29 — pktdeal RE + forward-all NEGATIVE. #28 — pruned+merged. #27 — WEDGE
+SOLVED (bit14). #23 — port1 SOLVED.
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)
