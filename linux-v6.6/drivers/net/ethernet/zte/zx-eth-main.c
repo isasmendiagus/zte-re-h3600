@@ -4234,6 +4234,50 @@ static const struct file_operations zx_clapeek_fops = {
 	.llseek = default_llseek,
 };
 
+/* clawrite: ad-hoc indirect WRITE of any CLA entry (Phase 6 HW flow-offload).
+ * Write "<ram_id> <addr> <w0> <w1> ... <w16>" (all hex) — installs the 17-word
+ * entry via zx_cla_write_entry, then reads it back to the log to confirm. Used
+ * to replay stock-captured hardfast hash entries (findings/phase6_stock_hardfast_
+ * trace.md) into ram2 and measure whether the chip then HW-forwards (hw_trap flat).
+ * Fewer than 17 words → the rest are zero-filled. */
+static ssize_t zx_clawrite_write(struct file *f, const char __user *ubuf,
+				 size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[320];
+	u32 ram_id = 0, addr = 0, data[17] = {0};
+	int n = 0, pos = 0, consumed, rc;
+	char *p;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (sscanf(buf, "%x %x%n", &ram_id, &addr, &pos) != 2)
+		return -EINVAL;
+	p = buf + pos;
+	while (n < 17 && sscanf(p, "%x%n", &data[n], &consumed) == 1) {
+		n++;
+		p += consumed;
+	}
+	rc = zx_cla_write_entry(e, ram_id & 0xff, addr, data);
+	pr_info("[ZXETH] clawrite ram%u addr%#x: %d words, rc=%d\n",
+		ram_id, addr, n, rc);
+	if (rc == 0 && zx_cla_read_entry(e, ram_id & 0xff, addr, data) == 0)
+		pr_info("[ZXETH]   clawrite readback: %08x %08x %08x %08x %08x %08x %08x %08x %08x\n",
+			data[0], data[1], data[2], data[3], data[4],
+			data[5], data[6], data[7], data[8]);
+	return rc ? rc : count;
+}
+
+static const struct file_operations zx_clawrite_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_clawrite_write,
+	.llseek = default_llseek,
+};
+
 /* poke: live register write for reflash-free experiments. Write "<phys> <val>"
  * (hex), e.g.  sh -c "echo '92280008 80000001' > /sys/kernel/debug/zx_eth/poke"
  * phys must be in [0x921c0000, 0x923c0000) (the e->base MMIO window) and 4-aligned.
@@ -4579,6 +4623,7 @@ static void zx_debugfs_init(struct zx_eth *e)
 	debugfs_create_file("regdump", 0444, zx_debugfs_root, e, &zx_regdump_fops);
 	debugfs_create_file("cladump", 0444, zx_debugfs_root, e, &zx_cladump_fops);
 	debugfs_create_file("clapeek", 0644, zx_debugfs_root, e, &zx_clapeek_fops);
+	debugfs_create_file("clawrite", 0644, zx_debugfs_root, e, &zx_clawrite_fops);
 	debugfs_create_file("poke", 0644, zx_debugfs_root, e, &zx_poke_fops);
 	debugfs_create_file("fdbadd", 0644, zx_debugfs_root, e, &zx_fdbadd_fops);
 	debugfs_create_file("pktdeal", 0644, zx_debugfs_root, e, &zx_pktdeal_fops);

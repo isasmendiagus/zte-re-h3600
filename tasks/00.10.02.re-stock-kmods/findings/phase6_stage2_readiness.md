@@ -63,3 +63,20 @@ stock gets a WAN, a real flow goes ESTABLISHED, and koprobe captures the EXACT h
 to copy. Without that, Stage 2 is a slow blind-decode/experiment grind. The entire SW router (Phases
 0-4) + all Phase 6 RE + the verified cls_flower plumbing (Stage 1) are already delivered; Stage 2 (the
 actual chip offload) is the remaining frontier and is gated on this.
+
+## UPDATE 2026-06-04 (Stage 2 — clawrite primitive added; ram2 write doesn't persist yet)
+Added a `clawrite` debugfs to the mainline driver (zx-eth-main.c): `echo "<ram_id> <addr> <w0..w16>"`
+→ zx_cla_write_entry + readback. Builds clean, debugfs present after boot. Findings on HW:
+- **ram2 READ works + is populated** at boot: clapeek ram2 0x21/0x79/0xcb/0x121 read the live boot
+  classification entries (e.g. 0x79 = 01005055 00154000 80000408 80000c17 80000043 00c20001 ...).
+  Note: word3 = 8000_xx17 / 9000_xx17 (valid bit31 + inport), word4 = 42/43 (outport) — matches
+  cla_ram_layout_re.md ram2 field map.
+- **clawrite to a FREE ram2 slot (0xaa) did NOT persist** (rc=0 but readback + neighbors all zero).
+  Boot-load uses the SAME zx_cla_write_entry and those entries DO persist → so a fresh-slot direct
+  write needs something more. LEADS: (a) the kotrace showed stock writes the entry via PER-WORD
+  cla_set_indirect_rw_cmd calls (r0=rw, r1=word_idx, r2=data), NOT "17 data regs then one CMD" — the
+  ram2 hash write protocol may be per-word/commit-per-word; (b) a hash-valid addr / tag bit may be
+  required (the slot must be the hash of the key); (c) a possible read off-by-one (review) — but
+  neighbors a8..ac all zero rules out a simple ±1. NEXT: diff zx_cla_write_entry vs the boot-load path
+  vs the stock cla_set_indirect_rw_cmd per-word sequence; fix the write; then re-test (write a boot
+  entry's bytes to its own slot and confirm round-trip, then a fresh slot).
