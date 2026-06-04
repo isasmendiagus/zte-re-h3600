@@ -1920,3 +1920,14 @@ table + interface. ⇒ Phase 6 write primitive ALREADY EXISTS in-driver. finding
   HW-forward used the SPA pktdeal field (0x921d4300), NOT a CLA action — Stage 2 must verify
   experimentally + may need to also flip SPA pktdeal. CLA cmd encoding (addr|ram_id<<22|rw<<27)
   independently CONFIRMED in stock (tm.c:324) + our driver.
+
+## CLA HW hash slot function (Phase 6, cracked 2026-06-04) — findings/phase6_cla_hw_hash_CRACKED.md
+ram2-6 flow-hash SLOT = `cla_acl_hash_addr_gen(hash_mode, key45, &h)`: 45-byte structured KEY
+{outport,inport,tag_level,l2_type,pppoe,ex_rule_id,ex_rule_mode,direct,extra_data0..19} copied
+REVERSED, then byte-wise CRC-32 (MSB-first, init 0, no final xor), poly by hash_mode:
+0=0x04C11DB7 1=0x1EDC6F41(C) 2=0xF4ACFB13(K) 3=0x32583499(Q); out=h&0xffff. Then aclGetAvailableHashAddr
+masks `(0x400<<(6-ACL_OUT_SPACE_SEL))-1`, multi-way probes (ways=1<<(2-ACL_OUT_HASH_NUM)) for a free
+slot via s_aclHashUsedCnt[slot+0x208]. poly/outspace cfg in HW regs (cla_get_hash_poly_config /
+cla_get_outspace_cfg). KEY includes inport/outport ⇒ slot is port-numbering dependent.
+GOTCHA: cla_list_hash_addr_gen (CRC 0x04C11DB7 over 40-byte session+4 tuple) is ONLY the SW dedup
+shadow, NOT the HW slot — don't confuse them.
