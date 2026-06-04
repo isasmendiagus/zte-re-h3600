@@ -572,10 +572,27 @@
     Details: hw_broadcast_flood_re.md Iter AP. (Note: Journey #34's "no HW broadcast flood" still
     stands — that's broadcast; this is unicast-TCP-ACK, a different path.)
 
-**Last updated**: 2026-06-04 (Journey #35 — DECISIVE: stock HW-forwards TCP ACKs [hw_trap +53 vs
-mainline +62k], NOT at parity, goal ACHIEVABLE, NOT the FFE [static config diff]. #34 parity retracted.
-NEXT: diff stock-vs-mainline forward/trap config [ring-less path] to find the lever. Stock booted for
-reads. branch hw-ack-forward). Earlier #34 — no HW broadcast flood [broadcast, separate]. #28 —
+36. **★★★ SOLVED — TCP ACKs HW-forward; CPU offloaded; stock parity achieved + IMPLEMENTED
+    (2026-06-04, branch hw-ack-forward).** Root cause (RE agent stock_ack_forward_lever_re.md + live
+    confirm): `zx_chip_tm_init_pro_action` wrote the kotrace `proto` value DIRECTLY as the SPA pktdeal
+    slot index, but stock's `zte_api_pp_set_pro_action` REMAPS proto→ptype-slot first (71-case switch).
+    So mainline's forward/trap actions landed on the WRONG slots → TCP control frames (pure-ACK/SYN/FIN)
+    trapped to CPU (~62k/flow). FIX: force stock's actual forward-slot set
+    {0x0c,0x0d,0x17,0x1f,0x22,0x24,0x25,0x26,0x2c,0x2d,0x2f,0x40-0x45} to deal=0 via
+    `zx_spa_set_enty_pktdeal_cfg` (the INDIRECT write — a direct poke of 0x921d4300 does NOT update the
+    live classifier; that's why the first poke-test failed). Slot set read LIVE from stock's pktdeal RAM.
+    VERIFIED ON HW from boot (no runtime poke, commit 05e12e13a): TCP **354 Mbit/s, 20s, 0 retransmits,
+    tm_rx delta=13** (was +60884) = ACKs HW-forward CPU-offloaded; ARP/ping 4/4 = broadcast still traps
+    (bridge intact). Why prior attempts failed: forward-all broke broadcast (too broad); the bisect used
+    contiguous ranges but stock's forward set is SCATTERED across both halves; direct poke missed the
+    indirect classifier. NOT merged yet (verify egress + clean before merge). Details:
+    stock_ack_forward_lever_re.md, hw_broadcast_flood_re.md Iter AP.
+
+**Last updated**: 2026-06-04 (Journey #36 — ★★★ SOLVED: TCP ACKs HW-forward [tm_rx delta 13 vs +60884],
+CPU offloaded, 354Mbit/s 0-retr, ARP/broadcast still traps. Root cause = missing proto→ptype remap in
+zx_chip_tm_init_pro_action; fix = force stock's scattered forward-slot set via spa_set_enty_pktdeal_cfg.
+Stock parity achieved + implemented [commit 05e12e13a, branch hw-ack-forward NOT merged]). Prior #35 —
+stock forwards ACKs [decisive]. #34 — no HW bcast flood. #28 — pruned+merged. #27 — WEDGE SOLVED. Earlier #34 — no HW broadcast flood [broadcast, separate]. #28 —
 pruned+merged. #27 — WEDGE SOLVED. #23 — port1 SOLVED.
 
 **(superseded) Journey #34**: 2026-06-04 — CONCLUSIVE: chip has NO autonomous HW broadcast flood;
