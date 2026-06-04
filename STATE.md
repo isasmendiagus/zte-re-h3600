@@ -40,7 +40,12 @@ Legend: [SW]=software, works on mainline now · [DRV]=driver/RE chip work · [�
   (Known deferred: kernel now exceeds the 0xc00000 NAND write size — TFTP/RAM boot unaffected; trim
   before flashing.) — **1.2 [→ NEXT, cable-blocked for live test]** WAN IPv4 via udhcpc (busybox; script
   staged), then PPPoE via pppd (needs CLEAN BUILD — see blocker below); 1.3 `ip_forward` + masquerade
-  LAN→WAN [SW]. ⇒ working NAT router / internet sharing.
+  LAN→WAN [SW]. ⇒ working NAT router / internet sharing. **1.3 NAT [✅ DONE 2026-06-04] — FULLY
+  verified end-to-end:** ip_forward=1 + `MASQUERADE -o <wan>` + FORWARD rules; LAN client (172.31.9.100
+  on lan1) → fake-ISP (192.168.9.2 in a host netns on lan2) got 4/4 replies ttl=63 (routed), WAN-side
+  saw src SNAT'd to 192.168.9.1, conntrack un-NAT'd the return. Routing+SNAT+conntrack across the DSA
+  fabric all work. Real-internet just needs the WAN jack cabled (swap wan iface lan2→lan4). Finding
+  phase1_3_nat_router.md. TODO: persist the bring-up in an init script (currently applied live).
 - **Phase 2 — LAN services [SW]:** **LAN DHCP [✅ DONE 2026-06-04]** via busybox udhcpd on lan1
   (172.31.9.1/24) — VERIFIED end-to-end: host got a full DHCPOFFER (172.31.9.50, gw/dns/lease all
   correct) over the DSA lan1 port (nmap broadcast-dhcp-discover). Config /etc/udhcpd.conf (staged).
