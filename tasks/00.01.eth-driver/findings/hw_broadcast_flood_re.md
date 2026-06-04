@@ -312,3 +312,32 @@ trap it / need the FFE). The SPA matchram is therefore probably NOT the lever �
 matchram init settles it: if stock's matchram traps TCP-control → confirms it's the FFE bind; if it
 forwards TCP → the matchram IS the lever and mainline (which leaves matchram at HW-default) just
 needs to replicate it. Open question; pursuing via matchram RE.
+
+---
+
+## ★★★ DECISIVE LIVE STOCK MEASUREMENT (Iter AP) — stock HW-forwards TCP ACKs (NOT at parity)
+
+Booted stock NAND (DTR power-cycle, no autoboot interrupt; SSH admin@.1). Two hosts on stock LAN
+ports (jack2=192.168.1.50, jack4/nsB=192.168.1.51), iperf3 TCP .51→.50 through stock's bridge.
+Read stock QMG counters via /bin/fpga→/dev/logger_main (hw_trap widx 0xd3018, hw_fwd 0xd3017,
+sw_fwd 0xd3011):
+- BEFORE (idle): hw_trap=188, hw_fwd=0, sw_fwd=310.
+- DURING (mid 353 Mbit/s TCP flow): hw_trap=241, hw_fwd=0, sw_fwd=367.
+- ⟹ **hw_trap delta = +53** over ~6s of a 353 Mbit/s flow (hundreds of thousands of frames).
+  Negligible = background ARP/control. **Stock does NOT trap the TCP ACK stream — it HW-forwards it.**
+
+CONTRAST: on MAINLINE the identical flow traps **+62000** (the whole ACK stream) to the CPU.
+Both hit 353-354 Mbit/s (same throughput, single flow) but stock's CPU is ~idle, mainline's drains
+62k ACKs/flow. hw_fwd=0 on BOTH → the bulk L2 forward bypasses QMG (ring-less fabric path).
+
+CONCLUSIONS (decisive, ends the contradictions):
+1. **We are NOT at stock parity** — stock HW-forwards TCP ACKs; mainline traps them.
+2. **The goal IS achievable** (stock proves it on this exact silicon).
+3. Stock forwards ACKs **statically from t=0** (hw_trap delta is flat/background, no learning burst) ⟹
+   **NOT the FFE** (no trap-then-install). It is a **static chip-config difference** mainline doesn't
+   replicate. (This also overrides the matchram agent's "stock traps generic TCP" inference — the
+   live chip forwards it.)
+NEXT: diff stock's LIVE forward/trap config vs mainline's programmed config to find the lever that
+routes TCP-ACK to the ring-less L2 fabric (forward) instead of the SPA-pktdeal-trap path. Stock 2MiB
+dump exists (regs/stock_eth_2mib.txt); read stock's pktdeal RAM (0x921d4300) + SADM/transfer/da_lookup
++ ring-less-path enables live and compare to zx_pp_pro_actions / the mainline init.

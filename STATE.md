@@ -558,7 +558,27 @@
     stock 0; PP[0x8008]=0x0000ff00 vs 0x0000dfdf. Docs: pp_broadcast_drop_re.md, hw_broadcast_flood_re.md,
     pktdeal_override_re.md, alt_trap_levers_re.md. INVESTIGATION CLOSED at stock parity.
 
-**Last updated**: 2026-06-04 (Journey #34 — CONCLUSIVE: chip has NO autonomous HW broadcast flood;
+35. **★★★ DECISIVE live stock measurement: stock HW-forwards TCP ACKs — we are NOT at parity, goal IS
+    achievable, and it's NOT the FFE (2026-06-04).** Booted stock NAND (SSH admin@.1), iperf TCP
+    between two hosts on stock LAN ports, read QMG via /bin/fpga: hw_trap 188→241 = **+53** over ~6s of
+    a 353 Mbit/s flow (negligible/background) — stock does NOT trap the ACK stream, it HW-forwards it
+    (hw_fwd=0 on both → bulk bypasses QMG = ring-less fabric). MAINLINE traps the SAME flow +62000.
+    Same throughput (single flow) but stock's CPU is idle. Stock forwards ACKs STATICALLY from t=0 (no
+    learning burst) ⟹ NOT the FFE — a static chip-config difference mainline doesn't replicate (also
+    overrides this session's matchram/parity inferences — the LIVE chip forwards). ⟹ #34's "stock
+    parity" RETRACTED. The lever routes TCP-ACK to the ring-less L2 fabric (forward) instead of the
+    SPA-pktdeal-trap path. NEXT: diff stock LIVE config (regs/stock_eth_2mib.txt + fresh fpga reads)
+    vs mainline init — pktdeal RAM 0x921d4300 / SADM / transfer / ring-less-path enables — to find it.
+    Details: hw_broadcast_flood_re.md Iter AP. (Note: Journey #34's "no HW broadcast flood" still
+    stands — that's broadcast; this is unicast-TCP-ACK, a different path.)
+
+**Last updated**: 2026-06-04 (Journey #35 — DECISIVE: stock HW-forwards TCP ACKs [hw_trap +53 vs
+mainline +62k], NOT at parity, goal ACHIEVABLE, NOT the FFE [static config diff]. #34 parity retracted.
+NEXT: diff stock-vs-mainline forward/trap config [ring-less path] to find the lever. Stock booted for
+reads. branch hw-ack-forward). Earlier #34 — no HW broadcast flood [broadcast, separate]. #28 —
+pruned+merged. #27 — WEDGE SOLVED. #23 — port1 SOLVED.
+
+**(superseded) Journey #34**: 2026-06-04 — CONCLUSIVE: chip has NO autonomous HW broadcast flood;
 stock ALWAYS traps broadcast→CPU+SW-flood. drop_PP is just the OPC terminal drop counter. Full-HW L2
 bridge NOT achievable on this silicon; our merged 354Mbit/s [data HW-fwd + control/bcast trap+CPU] =
 stock parity for L2. "ACKs-via-HW full" isn't real here. Found cleanup bugs [dueling 0x8300 0xFF/0,
