@@ -2859,7 +2859,15 @@ static void zx_tm_release_rx_desc_raw(struct zx_eth *e, u8 q, u16 count, u8 sop)
 		dev_warn_ratelimited(e->dev, "TM release_rx_desc not ready\n");
 		return;
 	}
-	tm_write(e, 0x4068, (1u << 14) | ((u32)count << 4) | (u32)q | ((u32)sop << 3));
+	/* [Iter AD 2026-06-04] WEDGE FIX — tm[0x4068] bit14 = RX-ring SELECTOR (HIGH-16 vs
+	 * LOW-16 of the packed per-q count tm[0x10100+q*4]). The poll reads pending from the
+	 * LOW-16 (ring 0): `status & 0xffff` — but this release HARDCODED bit14=1 (ring 1),
+	 * so it drained ring 0 yet ACKed ring 1. Ring 0's consumer count never advanced → after
+	 * HW fills one ~1024 ring with no consumer progress it STOPS producing + stops the RX IRQ
+	 * → tm_rx_count/tm_irq freeze at ~1024 = the unicast→CPU wedge. Stock soft_release_rx_desc
+	 * (plat decomp @0x1a8e8) sets bit14 to MATCH the ring it consumed. Fix: bit14=0 to ack the
+	 * ring 0 the poll actually drains. (Explains why Iter U failed: right count, wrong ring.) */
+	tm_write(e, 0x4068, ((u32)count << 4) | (u32)q | ((u32)sop << 3));
 	tm_write(e, 0x4064, 1);
 }
 
