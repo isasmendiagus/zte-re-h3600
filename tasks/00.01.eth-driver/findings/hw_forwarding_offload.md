@@ -1294,6 +1294,37 @@ with ZERO CPU trap. Remaining = pick the delivery: (a) reboot-per-trial bisect �
 TCP-control slot deal=0 in zx_pp_pro_actions[]; or (b) lean on the autonomous flow-learning (seed +
 self-sustain). Either keeps broadcast/control trapping (forward-all breaks ARP, Iter AF).
 
+## Iter AJ (2026-06-04) — the sticky flow-forward state SURVIVES warm reboot + OVERRIDES pktdeal (scan blocked)
+
+Tried to run the clean minimal-slot scan. Recovered the flaky nsB NIC (enx2c997, broken RX after
+reboot) with the **driver-level rebind** that worked before: `echo 3-3.1:1.0 >
+/sys/bus/usb/drivers/r8152/{unbind,bind}` (recreates the netdev fresh; USB-level reset gives I/O
+errors, driver-level works). RX restored, ping 2.0 ms 0% loss.
+
+BUT the scan is blocked: after a fresh TFTP reboot (DTR "cold reset"), the very first TCP baseline
+already read tm_rx delta = **0** (no trap), and forcing `all 1` (every pktdeal slot → trap) STILL
+forwards TCP (delta 0). So:
+- The autonomous HW flow-forward entry (Iter AI) **survives the warm TFTP/DTR reboot** and
+  **overrides pktdeal** — once installed (by the earlier `all 0`), nothing short of a full **cold
+  power-cycle** (or FDB/flow aging) re-arms the trap. The DTR "cold reset" in the boot script is not
+  cold enough to clear it.
+- Therefore the runtime pktdeal bisect cannot localize the slot right now: the chip forwards the flow
+  regardless of pktdeal, so every per-slot test reads delta 0.
+
+INTERPRETATION (leading, reconciles most data): the pktdeal trap likely fires for **unknown-DA**
+unicast (flood path), and once the chip has a learned/installed forward entry for the flow it bypasses
+pktdeal entirely. The 62235-delta trap was measured before that entry existed; now it persists. (The
+one wrinkle this doesn't cleanly explain remains Iter AG's small-UDP-forwards-while-TCP-control-traps
+in the same warmed state — so a TCP-flag/ptype component is still in play. Genuinely state-dependent.)
+
+TO FINISH THE MINIMAL-SLOT SCAN: need clean (trap-armed) state per trial. Options:
+  - **Cold power-cycle the device** (physical power off/on, not DTR) to clear the flow entry, then a
+    single-boot linear scan (flip slot N, TCP, measure; misses stay trap-armed, first hit = the slot)
+    — but verify a cold boot actually re-arms the trap first.
+  - Or wait out FDB/flow aging (minutes of idle) between trials.
+NIC-recovery recipe (works): driver-level r8152 unbind/bind on 3-3.1:1.0, then re-add to nsB +
+ethtool autoneg on + link bounce. Branch hw-ack-forward.
+
 ⚠️ HW caveat this boot: the link came up DEGRADED — ping 71 ms (vs 2.5 ms pre-reboot) and TCP
 collapsed to 11.9 Kbit/s. The chronic host-USB-hub flakiness (NICs re-enumerate dirty on reboot).
 The TCPTRAP capture is still valid (it only needs frames to trap, which they did), but clean
