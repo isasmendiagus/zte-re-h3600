@@ -420,10 +420,32 @@
     the precise stock-vs-mainline poll diff. Findings: `ffe_tcp_trap_re.md`, `decomp_halt_baddata_band.c`,
     `rx_ring_wrap_re.md` (pending), + `hw_forwarding_offload.md` Iters AC.
 
-**Last updated**: 2026-06-04 (Journey #26 — TCP-wedge ROOT CAUSE = FFE conntrack flow-cache: TCP
-traps-until-ESTABLISHED, mainline has no FFE so TCP ACKs trap forever → the ~1024 CPU-RX-ring latch;
-fix = drain that ring, NOT port FFE. Branch hw-bridge-offload). Prior #25 — UDP works both dirs
-no-wedge. Prior #23 — port1 ingress SOLVED, merged main c37e6168f, egress fix intact.
+27. **★★★ unicast→CPU WEDGE SOLVED → stable LAN streaming achieved (2026-06-04). One-bit fix.**
+    The long-standing wedge (CPU-RX trap path halts at ~1024 frames) is FIXED. ROOT CAUSE: the per-q
+    RX count `tm[0x10100+q*4]` is a PACKED PAIR — LOW16=ring0 pending, HIGH16=ring1 (this is the
+    long-unexplained `high16=??` in pipeline_stats — user spotted the connection). The release reg
+    `tm[0x4068]` bit14 = ring SELECTOR. The poll reads pending from LOW16/ring0 but
+    `zx_tm_release_rx_desc_raw` HARDCODED bit14=1 (ring1) → it drained ring0 but ACKed ring1 → ring0's
+    consumer index never advanced → after HW fills one ~1024 ring it stops producing + stops the RX
+    IRQ → tm_rx_count/tm_irq freeze at ~1024. FIX (commit ce365bd): bit14=0 so the release acks the
+    ring0 the poll drains (matches stock soft_release_rx_desc @ plat 0x1a8e8). VERIFIED ON HW: ICMP
+    flood 4000 → tm_rx_count=3925 (was ~1024), 5% loss (was 82-100%); **iperf3 TCP SUSTAINED 354
+    Mbit/s for 20s/844MB** (was collapsing to 1.8) = STOCK-LEVEL; ping-after clean. UDP still 300
+    Mbit/s both dirs. Data HW-forwards (QMG hw_fwd), TCP ACKs CPU-drain (now that the ring works,
+    ~12k/s, no wedge, RED=0). The 3 acceptance criteria MET: ping ✅, bridge comm ✅, sustained TCP ✅.
+    Found via 3 background RE agents (halt_baddata band = PLT thunks; FFE = conntrack flow-cache,
+    TCP-traps-until-ESTABLISHED — explains stock, ruled out porting FFE; the precise ring-wrap diff vs
+    stock pon_tm_net_poll). NOTE: the ACK path is CPU-assisted (not pure-HW-both-dirs like stock's FFE
+    hardfast), but achieves stock throughput because ACKs are sparse/small; a future FFE-style HW
+    session-install would offload the CPU entirely (optional). Branch hw-bridge-offload (also has the
+    earlier stock-matching attempts: pool 1024→8192, RED-block-init, QMG up_thd, assisted-FDB — should
+    be audited/trimmed before merge; bit14 is THE fix). main + egress fix untouched, NOT yet merged.
+    Findings: rx_ring_wrap_re.md, ffe_tcp_trap_re.md, hw_forwarding_offload.md (Iters K–AD).
+
+**Last updated**: 2026-06-04 (Journey #27 — ★ unicast→CPU WEDGE SOLVED: tm[0x4068] bit14 ring-selector
+fix; TCP sustains 354 Mbit/s, UDP 300 both dirs, no wedge = stable LAN streaming. Branch
+hw-bridge-offload, NOT merged). Prior #26 — root cause = FFE conntrack. #25 — UDP works both dirs.
+#23 — port1 ingress SOLVED, merged main c37e6168f, egress fix intact.
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)
