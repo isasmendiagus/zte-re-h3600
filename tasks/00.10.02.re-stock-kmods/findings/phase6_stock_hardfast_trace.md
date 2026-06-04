@@ -123,3 +123,23 @@ write; clawrite routes ram1-6 through it (nwords 17 for ram1, 15 for ram2-6). VE
 not just word0). The write primitive now works — Stage 2's blocker is cleared.
 NEXT: write the full trio ram0[0x09]+ram1[0x98]+ram2[slot] in mainline + reproduce the flow (netns rig,
 bound sport→captured slot) → pipeline_stats/hw_trap FLAT = HW forwards. Then parameterize in cls_flower_add.
+
+## UPDATE 2026-06-04 (Stage 2 — verbatim replay attempt: entries TAKE EFFECT but clobber the live classifier)
+Wrote the verbatim trio (ram0[0x09]+ram1[0x98]+ram2[0x5a], the captured stock entries) into mainline's
+CLA via clawrite (all rc=0, persisted). Set up a mainline NAT rig (lan1=192.168.1.99 gw, lan2=10.9.9.2,
+host 192.168.1.50→netns 10.9.9.1). RESULT: LAN→WAN AND even host→lan1-gw went to 100% loss, while
+hw_trap (0x9234c060) kept climbing (+9) and drop_PP (0x921da040)=0x1b. ⇒ TWO conclusions:
+1. ✅ The injected CLA entries DO take effect on the live datapath (writing them changed forwarding/
+   trapping behaviour) — confirms the write primitive + that CLA entries control the datapath.
+2. ✗ VERBATIM replay is NOT viable: the captured ram1[0x98] is a stock IP-classification rule and the
+   entries encode STOCK port numbering (WAN=port0) — injecting them CLOBBERS mainline's own boot ram1
+   rules / classification → broke the LAN path. Don't overwrite the live ram1 classifier with stock's.
+### Refined Stage-2 approach (next)
+Mainline ALREADY has boot ram1 IP rules + ram0 extract that route IP into the hash (it reads ram2
+entries fine). So DON'T re-inject stock's ram1[0x98]/ram0[0x09]. Instead: (a) write ONLY a ram2 hash
+entry, (b) built with MAINLINE's port numbering (inport/outport = mainline regports, memory
+zte-port-numbering) for the egress action, (c) at the slot = hash of a mainline test flow's 5-tuple
+(needs the hash poly: RE cla_get_hash_poly_config / cla_list_hash_addr_gen, OR read where mainline's
+own first-packet lands in the hash), (d) test in ISOLATION (one flow, watch hw_trap for THAT flow only,
+don't disturb other classification). This is the parameterized path (Stage 2b) — the verbatim shortcut
+is dead. CLA writes are RAM-only → reboot restores the clean working router.
