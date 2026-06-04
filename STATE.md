@@ -1,5 +1,54 @@
 # STATE — what's on the device RIGHT NOW
 
+## ★ ROADMAP — stock features, brought up one-by-one on MAINLINE (added 2026-06-04)
+
+**★ OBJECTIVE (the north star):** match stock's HYBRID model — **configure everything on the CPU
+(software control plane: routing/firewall/NAT/DHCP/DNS/PPPoE), and let the HARDWARE do the actual
+forwarding (offload).** So for every data-path feature the recipe is: (1) bring it up in SOFTWARE on
+mainline (works now, CPU forwards — proves functionality), then (2) OFFLOAD its data path to HW
+(the chip forwards, CPU just sets up). NOT "SW-only" and NOT "HW-only" — the stock hybrid. The CPU
+must never be the forwarding bottleneck once a flow is established.
+
+**Architecture truth (RE'd + measured): stock is HYBRID.** Control plane = CPU/software
+(standard Linux: `iptables`/`ip6tables` firewall+NAT, conntrack, `pppd` PPPoE, `dnsmasq`
+DHCP+DNS, kernel routing — all present in ext/rootfs). Data plane = HARDWARE (switch fabric
+for L2; the **FFE** flow-offload for L3/NAT once a conntrack flow is ESTABLISHED). The FFE
+(`ffe_ip_conntrack_check`, vmlinux) is the glue: CPU/conntrack decides, then it installs a HW
+hardfast session so the bulk forwards in HW = ZTE's own version of Linux `flow_offload`/flowtable.
+⟹ **Functionality = software on the CPU → works on mainline NOW with the same tools (no chip RE).
+Performance (wire-speed routed/NAT) = needs the FFE-equivalent HW offload (flowtable + the chip
+CLA-hash hardfast we mapped).** A single armv7 core won't route gigabit in pure SW — that's WHY
+stock has the FFE.
+
+Legend: [SW]=software, works on mainline now · [DRV]=driver/RE chip work · [✅]=done · [→]=next.
+
+- **Phase 0 — L2 switch foundation [✅ DONE]:** DSA driver, HW L2 forwarding incl. the TCP-ACK
+  HW-forward fix (#36), port1 ingress (#23), egress (TX-DAC/eg_port), unicast→CPU wedge (bit14,
+  #27), soft-float userland. LAN↔LAN streams in HW; ping/iperf/bridge work. [DRV]
+- **Phase 1 — WAN + NAT router (the spine) [→ NEXT]:** 1.1 designate a port as WAN (eth-WAN is
+  trivial — it's a DSA port) [DRV-config]; 1.2 WAN IPv4 via udhcpc, then PPPoE via pppd [SW];
+  1.3 `ip_forward` + netfilter masquerade LAN→WAN [SW]. ⇒ working NAT router / internet sharing.
+- **Phase 2 — LAN services [SW]:** dnsmasq (DHCP server + DNS + static leases), static routes.
+- **Phase 3 — Firewall/security [SW]:** zone firewall (iptables/nftables: WAN-in drop, LAN-out
+  accept), IP/port filter, DoS guard, port-forward (DNAT), DMZ, ALG (conntrack helpers), UPnP-IGD
+  (miniupnpd), URL/parental filter.
+- **Phase 4 — IPv6 [SW]:** WAN DHCPv6-PD / SLAAC, RA on LAN (radvd/odhcpd), prefix delegation, v6 firewall.
+- **Phase 5 — QoS [SW now / DRV later]:** tc queue/shaper/speed; HW shaper (SCH/OPC) offload later.
+- **Phase 6 — HW flow offload [DRV — the big perf piece]:** wire the chip flow engine into Linux
+  `flow_offload`/flowtable (the FFE-equivalent: conntrack-ESTABLISHED → CLA-hash hardfast session,
+  chain mapped in hw_forwarding_offload.md Iter L). Gives wire-speed routed/NAT. Only needed if
+  software routing on the armv7 core can't keep up.
+- **Phase 7 — Multicast [DRV+SW]:** IGMP/MLD snooping (DSA offload) + proxy (for IPTV).
+- **Phase 8 — DSA polish [DRV]:** VLAN offload, port mirroring, FDB-offload sync (bridge↔SBRAG) —
+  mainline-quality switch.
+- **Phase 9 — WiFi [DRV — big]:** WiFi driver (mt7915 refs seen) + hostapd; SSIDs, mesh, band-steering, DFS.
+- **Phase 10 — WAN GPON [DRV — big]:** the PON MAC uplink datapath (only if GPON WAN needed vs eth-WAN).
+- **Phase 11 — extras [SW]:** VoIP (SIP), USB/Samba/DLNA, TR-069 mgmt, web UI.
+
+**Working style: one feature at a time on mainline, verify each before the next.** Immediate next =
+Phase 1 (WAN eth + NAT). Most of Phases 1–4 are software the CPU runs today (stock uses the same
+binaries); the chip-specific lifts are Phase 6 (HW offload), 9 (WiFi), 10 (GPON).
+
 ## Journey-to-date (so future-you remembers why)
 
 1. Tried mainline 6.6 with PCIe / WiFi / wpa_supplicant — none worked.
