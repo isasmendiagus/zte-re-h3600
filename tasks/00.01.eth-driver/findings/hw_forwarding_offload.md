@@ -971,3 +971,38 @@ irrelevant — that requires finding why mainline traps the reverse direction (p
 forward-decision for the reverse 5-tuple?). NEXT (when 2 NICs stable): boot the built zImage (RED +
 up_thd fixes) → 2-NIC iperf3 TCP -t30 → does it sustain now? If partial, bisect RED vs up_thd; if the
 UP dir still traps, chase the forward-vs-trap decision for the reverse direction.
+
+================================================================================
+## Iter AB (2026-06-04 ~06:05 UTC) — DEEP FIX (user "fix it"): assisted FDB learning → both dirs forward
+
+Traced "make the UP/reverse direction HW-forward" to its real root (not a register tweak):
+- A frame HW-forwards only if its DA is KNOWN in the switch SBRAG FDB; unknown-DA → trap/flood.
+- This chip traps unicast to the CPU and does NOT safely HW-auto-learn (that path caused the lan2
+  dup storm in prior work → disabled). So the HW FDB stays EMPTY.
+- The DSA driver drivers/net/dsa/zte/zx-dsa.c HAS the offload machinery: .port_fdb_add →
+  zx_sbrag_write_entry (the REAL SBRAG UC FDB), .port_bridge_join, etc. But nothing was pushing
+  the bridge's learned MACs into it: ds->assisted_learning_on_cpu_port was NOT set, and
+  zx_dsa_setup is a stub.
+⇒ Result: switch FDB empty → reverse-direction DA unknown → trap (the DN-fwd/UP-trap asymmetry).
+
+FIX (commit pending): set `ds->assisted_learning_on_cpu_port = true` in zx_dsa_setup. Standard DSA
+idiom for trap-to-CPU switches: the DSA core pushes every MAC the bridge software-learns (from
+CPU-trapped frames) into the HW FDB via the existing .port_fdb_add. Once BOTH host MACs are in the
+HW FDB, both directions resolve DA → both HW-forward → no trap → no wedge. LOW RISK: reuses the
+already-present fdb_add path; does NOT enable the dup-storm HW auto-learn. COMPILES CLEAN.
+
+⚠️ HONEST CAVEATS (untestable now, 2-NIC USB-blocked):
+- zx_dsa_setup is documented as a STUB ("TODO P1 ... Stub for now"), so it's unconfirmed whether
+  zx-dsa.c is the ACTIVE forwarding switch driver vs zx-eth-main.c (the trap-all conduit). If
+  zx-dsa.c isn't fully bound/driving the fabric, this is inert (harmless).
+- Even if active, the chain (bridge offloads → .port_fdb_add writes a correct entry → HW lookup
+  hits → forward) has links only verifiable on HW.
+- Prior HW-FDB work regressed (dup storm) — must watch for that on the 2-NIC test.
+
+### THREE fixes now built into the zImage, ready for the 2-NIC TCP test when jack4 returns:
+  (Y) RED block init (0x92344000) — per-queue out-buffer thresholds.
+  (AA) QMG up_ram_thd 80→4000 — un-starve the UP/CPU queue (mitigation; reverse=sparse ACKs).
+  (AB) assisted FDB learning — make the reverse direction HW-forward (the deep, stock-faithful fix).
+NEXT (when 2 NICs stable): boot → 2-NIC iperf3 TCP. Best case (AB works): both dirs HW-forward, no
+trap. Fallback (AA works): reverse still traps but the UP queue no longer wedges → sustained TCP.
+Bisect which mattered. NOTE: AA's up_thd=80 IS stock's value — if AB makes UP forward, AA is moot.
