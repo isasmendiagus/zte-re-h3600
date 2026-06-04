@@ -32,6 +32,11 @@ for b in iptables ip6tables pppd dnsmasq; do
   cp -a "$SRC/bin/$b" "$DST/sbin/$b" && echo "  sbin/$b"
 done
 
+# tc: a MODERN static iproute2 tc we cross-built (the stock tc is iproute2-2012,
+# no `flower`; busybox tc has no flower either). Needed for Phase 6 HW-offload
+# (tc-flower) + Phase 5 QoS. Build recipe: tasks/00.01.eth-driver/configs/bin/README-tc.md.
+[ -f "$CFG/bin/tc" ] && cp -a "$CFG/bin/tc" "$DST/sbin/tc" && echo "  sbin/tc (static iproute2-6.1.0, flower built-in)"
+
 # config + scripts (the durable artifacts)
 cp -a "$CFG/passwd" "$DST/etc/passwd"
 cp -a "$CFG/group"  "$DST/etc/group"
