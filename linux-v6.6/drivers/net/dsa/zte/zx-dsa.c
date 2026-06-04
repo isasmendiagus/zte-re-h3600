@@ -36,7 +36,7 @@
  * wired (P0 cont.).
  */
 #define ZX_DSA_NUM_PORTS	6
-#define ZX_DSA_USER_PORTS	4	/* lan0..3 */
+#define ZX_DSA_USER_PORTS	5	/* lan0..3 (MAC0-3 GePHY) + lan4 = WAN (MAC4, RGMII/ZX5201). lan4 left standalone (un-bridged) = the L3 WAN interface. */
 #define ZX_DSA_CPU_PORT		5
 
 /* Port isolation (SBRAG reg 0x39 @ PP 0x83c0 + regport*4, 1 byte/port).
