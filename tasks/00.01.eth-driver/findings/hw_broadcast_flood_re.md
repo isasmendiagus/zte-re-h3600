@@ -271,3 +271,25 @@ cannot be used because broadcast/ARP dies.
 
 NET: the "all-0 + HW-broadcast-flood" clean-solution path is BLOCKED at the broadcast
 flood-replication wiring — same root as the open HW-forwarding-offload problem.
+
+---
+
+## LIVE DIAGNOSTIC (Iter AN) — broadcast dies at drop_PP (0x921da040), NOT flooded
+
+Under all-0, generated a sustained broadcast flood (`ping -b -f 10.0.0.255` from nsB) and
+diffed the FULL pipeline chain. Clean result:
+- smac3 RX_pkts +341 (the broadcast frames arrived at the MAC).
+- **`drops: PP[0x1a040]` +341** (EXACTLY matches) — every broadcast frame is DROPPED at the
+  PP forwarding/policy stage (drop_PP, phys 0x921da040).
+- RED[0x1a044], DSCH[0x1a04c] unchanged; QMG hw_fwd/hw_trap unchanged (no flood, no trap).
+
+⟹ The broadcast-flood failure is NOT a missing SBRG flood register (those were poked with
+no effect) — it is the **PP forwarding decision DROPPING broadcast** instead of replicating
+it. This is the SAME drop_PP stage where port1 ingress died (DATASHEET errata). With the
+stock pktdeal table broadcast WORKS only because it TRAPS to the CPU (deal=1 → bridge SW-
+floods); the autonomous HW flood-replication path is what drop_PP is refusing.
+
+NEXT RE TARGET (precise): the PP / drop_PP (0x921da040) forwarding-and-flood-replication
+decision — what makes PP DROP a broadcast (DA=ff:ff:ff) vs REPLICATE it to the VLAN member
+ports. This is the real lever for autonomous HW broadcast flood (and, once it floods,
+all-0 forwards TCP too with no broadcast cost).
