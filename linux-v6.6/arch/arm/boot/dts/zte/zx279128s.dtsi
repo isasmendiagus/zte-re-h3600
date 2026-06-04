@@ -222,7 +222,7 @@
 			 * during probe — that runs the vendor LDO + TX DAC
 			 * power-up sequence in drivers/net/phy/phy-zte-gephy.c.
 			 */
-			zte,gephys = <&gephy0>, <&gephy1>, <&gephy2>, <&gephy3>;
+			zte,gephys = <&gephy0>, <&gephy1>, <&gephy2>, <&gephy3>, <&wanphy>;
 			status = "disabled";
 
 			/* [HW test 2026-05-31] Unique anchor node for the CPU-side
@@ -277,6 +277,14 @@
 				reg = <13>;
 				interrupt-parent = <&gic>;
 				interrupts = <GIC_SPI 0x4a IRQ_TYPE_LEVEL_HIGH>;
+			};
+			/* [WAN] MAC4's external PHY = the WAN RJ45 jack. Stock's
+			 * uni_phy[4]=0x08 (the "ZX5201" dual-page external PHY at
+			 * MDIO 0x08, companion page 0x09), same MDIO bus. Driver
+			 * polls it (PHY_POLL) like the GePHYs; no link IRQ wired.
+			 * See tasks/00.01.eth-driver/findings/wan_port_bringup_re.md. */
+			wanphy: ethernet-phy@8 {
+				reg = <8>;
 			};
 		};
 

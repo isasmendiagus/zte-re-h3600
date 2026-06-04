@@ -230,7 +230,7 @@
 #define MAC_REG_D00		0x0D00
 #define MAC_REG_D30		0x0D30
 
-#define ZX_NUM_MACS		4	/* skip MAC4 (RGMII WAN) — not on H3600 LAN-only */
+#define ZX_NUM_MACS		5	/* MAC0..3 = LAN GePHYs; MAC4 = WAN (external ZX5201 PHY @ MDIO 0x08, RGMII). WAN port bring-up: wan_port_bringup_re.md */
 
 /* IRQ bits in IDM_REG_IRQ_STATUS / IRQ_MASK.
  * Per stock idm_net_int / idm_net_poll, masking semantics is unclear:
@@ -376,8 +376,8 @@ struct zx_eth {
 	 * sw netdev. Last-known link state cached so adjust_link can
 	 * detect transitions and write MAC[port].ctrl accordingly.
 	 */
-	struct phy_device *gephy[4];
-	bool phy_was_link[4];
+	struct phy_device *gephy[5];	/* [0..3]=LAN GePHYs, [4]=WAN ZX5201 (MDIO 0x08) */
+	bool phy_was_link[5];
 
 	/* Stock-init replay snapshots (CLA, PM, stock-bursts) are embedded
 	 * as static tables in zx_{cla,pm,stock}_table.h — applied directly
@@ -3311,7 +3311,7 @@ static void zx_mac_keepalive_fn(struct work_struct *w)
 
 	if (!e)
 		goto resched;
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < 5; i++) {	/* [WAN] incl. MAC4/WAN; NULL gephy[i] skipped below */
 		struct phy_device *phy = e->gephy[i];
 		void __iomem *mc = e->base + mac_off(i, MAC_REG_CONTROL);
 		void __iomem *br = e->base + 0x19068;
@@ -4643,13 +4643,23 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 	struct zx_eth *e = *(struct zx_eth **)netdev_priv(ndev);
 	int i;
 
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < 5; i++) {	/* [WAN] incl. MAC4/WAN link-up bring-up */
 		struct phy_device *phy = e->gephy[i];
-		bool now;
+		bool now, is_wan, full;
+		int spd;
 
-		if (!phy)
+		/* [WAN] MAC4's PHY (external ZX5201 @ MDIO 0x08) is NOT phylib-
+		 * probed — it doesn't present a standard PHY ID, so gephy[4]==NULL.
+		 * Treat the WAN port as a FIXED 1G/full link that's always up: the
+		 * external PHY auto-negotiates with the peer on its own (host gets
+		 * carrier). This brings up MAC4 (smac_init + speed/duplex + SOPC
+		 * admit) whenever a LAN PHY link event fires zx_eth_adjust_link. */
+		is_wan = (i == 4 && !phy);
+		if (!phy && !is_wan)
 			continue;
-		now = phy->link;
+		now  = is_wan ? true : phy->link;
+		spd  = is_wan ? SPEED_1000 : phy->speed;
+		full = is_wan ? true : (phy->duplex == DUPLEX_FULL);
 		if (now == e->phy_was_link[i])
 			continue;
 
@@ -4692,13 +4702,13 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 			 * handshake and before MAC enable — NOT later in the TX path. This is the
 			 * piece the old code skipped (it left ctrl at 0xBAE003). */
 			c = readl(mc);
-			if (phy->speed == SPEED_1000) {
+			if (spd == SPEED_1000) {
 				c = (c & ~0x8000u) | 0x2000u;
 			} else {
-				c = (phy->duplex == DUPLEX_FULL) ? (c | 0xa000u)
-								 : ((c & ~0x2000u) | 0x8000u);
-				c = (phy->speed == SPEED_100) ? (c | 0x4000u)
-							      : (c & ~0x4000u);
+				c = full ? (c | 0xa000u)
+					 : ((c & ~0x2000u) | 0x8000u);
+				c = (spd == SPEED_100) ? (c | 0x4000u)
+						       : (c & ~0x4000u);
 			}
 			writel(c, mc);
 		} else {
@@ -4781,7 +4791,7 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 			 * For our 1000/FD this should be cleared.
 			 */
 			reg = readl(e->base + 0x19038);
-			if (phy->duplex == DUPLEX_FULL)
+			if (full)
 				writel(reg & ~duplex_bit, e->base + 0x19038);
 			else
 				writel(reg | duplex_bit, e->base + 0x19038);
@@ -4797,10 +4807,10 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 			writel(reg & ~(1u << i), e->base + 0x19068);
 		}
 
-		netdev_info(ndev, "PHY[%d] link %s @ %d/%s → MAC[%d].ctrl=%#x (port-reset bit %d pulsed)\n",
-			    i, now ? "UP" : "DOWN",
-			    now ? phy->speed : 0,
-			    now ? (phy->duplex ? "FD" : "HD") : "-",
+		netdev_info(ndev, "PHY[%d]%s link %s @ %d/%s → MAC[%d].ctrl=%#x (port-reset bit %d pulsed)\n",
+			    i, is_wan ? "(WAN)" : "", now ? "UP" : "DOWN",
+			    now ? spd : 0,
+			    now ? (full ? "FD" : "HD") : "-",
 			    i,
 			    now ? MAC_CTRL_LINK_UP : MAC_CTRL_LINK_DOWN,
 			    i + 6);
@@ -4844,8 +4854,8 @@ static void zx_eth_init_phys(struct zx_eth *e)
 		dev_info(dev, "no zte,gephys phandles in DT (n=%d)\n", n);
 		return;
 	}
-	if (n > 4)
-		n = 4;
+	if (n > 5)		/* [WAN] up to 5: 4 LAN GePHYs + the WAN ZX5201 @ MDIO 0x08 */
+		n = 5;
 
 	if (ZX_SKIP_PHY_INIT) {
 		dev_info(dev, "ZX_SKIP_PHY_INIT=1 — leaving PHYs in U-Boot state, no phy_init_hw/attach\n");
