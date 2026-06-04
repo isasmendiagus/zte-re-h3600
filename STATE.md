@@ -331,10 +331,57 @@
     (full RE trail), DATASHEET errata, stock CLA golden captures. **Device was rebooted
     after the test → currently on stock NAND** (RAM-boot mainline to re-verify).
 
-**Last updated**: 2026-06-03 (Journey #23 — port1/jack2 ingress→CPU SOLVED: SPA
-port_vlan_filter cleared to match stock + napi bppe bound-check; committed & merged to
-main c37e6168f, egress fix intact). Prior: 2026-05-29 (Journey #22 — egress 0x19068
-READY-handshake diagnosis).
+24. **HW-forwarding / stable-LAN-streaming arc + the unicast→CPU WEDGE (2026-06-04, branch
+    hw-bridge-offload, NOT merged to main)**: Goal = sustained LAN↔LAN streaming via HW forwarding.
+
+    **THE PACKET FLOW (how it works + where it breaks):**
+    A frame ingresses a LAN port → MAC-RX → SPA(admit) → SDET → **CLA (classifier)** → QMG (queues)
+    → then ONE of two paths:
+      • **FORWARD (HW L2 switch):** if the dst MAC is KNOWN in the switch SBRAG FDB → DSCH → SOPC →
+        MAC-TX out the egress LAN port, entirely in hardware. Counter: QMG `hw_fwd` (counts as "DN"
+        = toward LAN). CPU not involved.
+      • **TRAP (to CPU):** if dst unknown / control proto → SIPC/SMCT → **TM RX descriptor ring →
+        IRQ → NAPI → Linux bridge** (software-forwards). Counter: QMG `hw_trap` ("UP" = toward CPU).
+    (UP/DN = PON heritage: UP=toward CPU/WAN, DN=toward LAN.)
+
+    **What we PROVED on real HW:** (a) STOCK does ~350 Mbit/s LAN↔LAN TCP via PLAIN HW L2 switching
+    gated by CLA *protocol* classification (TCP/UDP forward, ICMP/control trap) — NOT any
+    FFE/CLA-hash/SBRAG-ipv4 offload table (all empty live during the flow). The old "this chip can't
+    HW-forward L2" dead-end was an ICMP-only artifact (ICMP traps even on stock). (b) MAINLINE already
+    HW-forwards the bulk (DN) direction (QMG DN hw_fwd→~4400 during a TCP flow). (c) End-to-end the
+    iperf moved ~6 MB before collapsing (so both directions carried real packets initially — data
+    lan3→lan1 + ACKs lan1→lan3, since TCP can't advance without returning ACKs).
+
+    **THE WEDGE (open blocker):** under a TCP flow the reverse (ACK) direction TRAPS to the CPU, and
+    the **CPU-RX trap path HALTS at ~1024 frames** (tm_rx_count + tm_irq_count FREEZE) → no ACKs reach
+    the server's TCP → TCP collapses to ~1.9 Mbit/s. The bulk DN forward stops as a *consequence* (no
+    ACKs → TCP stops sending). Stock avoids this by HW-forwarding BOTH directions (CPU path idle).
+
+    **The ~1024 halt is ROBUST** — survived 8 fixes/configs: BP pool 1024→8192 (Iter S, kept), RED
+    global share-pool poke, RX slot-release (Iter U, reverted), BMU-free (verified OK, ruled out),
+    NAPI-rearm (Iter V/W, reverted), **RED-block-init** (Iter Y: mainline NEVER inited the real RED
+    block 0x92344000 — zx_tm_red_init writes TM[0x4014]=a different block; kept, lowered RED drops
+    5010→61 but didn't fix the wedge), **QMG up_ram_thd 80→4000** (Iter AA: QMG 0x9234c000 [12:0]=up
+    [25:13]=dn, link-UP starves the UP/CPU queue at 80 vs dn 8096; kept), **assisted FDB learning**
+    (Iter AB: ds->assisted_learning_on_cpu_port=true so bridge-learned MACs offload to the real SBRAG
+    FDB via the existing .port_fdb_add; kept). Iter Z = the DEFINITIVE 2-NIC iperf3 TCP test with all
+    3 code fixes active in dmesg → STILL collapsed 1.9 Mbit/s, tm_rx latched 1063, tm_irq frozen.
+    assisted-FDB didn't make the reverse forward — the device bridge FDB stays empty (nothing to
+    offload). ⚠️ Reproducing the test is gated by a flaky HOST USB hub (jack4 enx6c70cbb68169 keeps
+    dropping off the bus).
+
+    **TWO OPEN TARGETS for next session (device testable when jack4 stays up):** (1) THE WALL — the
+    TM RX desc-ring / RX-IRQ engine halting at ~1024: instrument ring head/tail + IRQ_STATUS(0x100)/
+    mask LIVE at the stall, diff stock pon_tm_net_poll byte-for-byte (pending>0→IRQ/mask bug;
+    ==0→HW producer/credit stop). (2) Make the reverse dir HW-forward (sidesteps the CPU like stock):
+    fix why the device bridge FDB doesn't populate so assisted-learning can offload both MACs.
+    Full trail: `tasks/00.01.eth-driver/findings/hw_forwarding_offload.md` (Iters K–Z + MORNING
+    SUMMARY). Fixes are stock-matching corrections, kept on the branch; main + egress fix untouched.
+
+**Last updated**: 2026-06-04 (Journey #24 — HW-forwarding arc: stock=protocol HW-L2-switch proven,
+mainline forwards bulk DN, but the unicast→CPU WEDGE = CPU-RX trap path halts ~1024 frames; survived
+8 fixes; 3 kept on branch hw-bridge-offload, NOT merged; 2 open targets). Prior: 2026-06-03 (Journey
+#23 — port1/jack2 ingress→CPU SOLVED, merged main c37e6168f, egress fix intact).
 Manually maintained; update when you change slot A or boot a different kernel.
 
 ## Slot A NAND (kernel + rootfs)
