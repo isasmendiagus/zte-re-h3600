@@ -112,3 +112,31 @@ mask `(0x400<<(6-ACL_OUT_SPACE_SEL))-1` + way bits to get the ram2 slot. NO CRC 
 NEXT: (a) read ACL_OUT_SPACE_SEL/ACL_OUT_HASH_NUM (cla_get_outspace_cfg reg) on mainline for the mask;
 (b) pin the 12-word key BUILDER (extra_dataN↔5-tuple from tm_acl_get_fastHashRule + the calculatehashaddr
 packing); (c) wire into cls_flower_add: build key→HW-hash→slot→clawrite ram2→isolated hw_trap test.
+
+## UPDATE 2026-06-04f — the KEY EXTRACT MAPPING (v4) decoded (tm_acl_get_fastHashRule @49445-49465)
+For an IPv4 flow, tm_acl_get_fastHashRule writes the flow's 5-tuple into the ENTRY/KEY extra_data
+region param_4[0x13..0x1f] (param_4 = the 15-word buffer; its bytes 0x13+ become the key's extra_dataN,
+repacked by the caller tm_acl_fast_add_v4v6 @52631-52703 with the 1-bit-shift). Source = the flow
+descriptor param_2:
+- `uVar5 = *(u32*)(param_2 + 0x64)` (IP_A), `uVar9 = *(u32*)(param_2 + 0x6c)` (IP_B)
+- `*(u32*)(param_2 + 0x74)` = the two L4 ports (low16 + high16)
+- `*(u32*)(param_2 + 0x60)` byte>>0x10 → param_4[0x13]
+Writes (each a ushort, little-end byte0+byte1*0x100):
+- param_4[0x13] = (param_2[0x60]>>16)&0xff                 [misc: proto/flags]
+- param_4[0x15] = IP_A bytes [ (uVar5>>8)&ff , uVar5&ff ]   ; param_4[0x17] = IP_A [ (uVar5>>24), (uVar5>>16) ]
+- param_4[0x19] = IP_B bytes [ (uVar9>>8)&ff , uVar9&ff ]   ; param_4[0x1b] = IP_B [ (uVar9>>24), (uVar9>>16) ]
+- param_4[0x1d] = port_lo16(*(param_2+0x74)) ; param_4[0x1f] = port_hi16(*(param_2+0x74))
+⇒ v4 key uses ~7 extra_data shorts (extra_data0..6): {misc, IP_A.hi, IP_A.lo, IP_B.hi, IP_B.lo, portX,
+portY}; extra_data7..19 = 0. (The IPv6/other branch @49430-49442 fills param_4[0x1f..0x37] = more shorts.)
+OPEN (resolve empirically on mainline w/ the 4 captured sport->slot pairs): which IP is src vs dst
+(0x64 vs 0x6c), port order at 0x74, and the byte-endianness into the key — build the key both ways,
+run mainline `hashcalc`, pick the combo whose raw hash masks to the captured slot. Then the MASK:
+try M∈{0xff,0x1ff,0x3ff,0x207} so all 4 (sport->slot) pairs reproduce.
+
+### Stage 2b assembly status — discovery DONE, remaining = assembly
+HAVE (verified): HW hash engine (zx_cla_hash_raw), CLA write protocol (zx_cla_write_hash), key
+structure (45B: outport/inport/tag/l2/pppoe/ex_rule/direct/extra_data0..19), v4 extract mapping.
+TODO (mechanical): (a) python/C key-builder = pack {mainline outport,inport, extra_data from 5-tuple}
+into 12 words w/ the 1-bit-shift; (b) find mask via the 4 captured pairs on mainline hashcalc;
+(c) cls_flower_add: build key->zx_cla_hash_raw->slot->build 15-word ram2 entry->clawrite; (d) isolated
+hw_trap test.
