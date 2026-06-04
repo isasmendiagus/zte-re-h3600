@@ -1874,3 +1874,19 @@ The stock HW flow-offload ("FFE") is internally **HFF**, engine namespace **NPU*
 - **Slow→fast**: first pkt misses CLA hash → trap to CPU → conntrack ESTABLISHED → hf_set_l3_entry
   installs hash entry → subsequent pkts hit hash → forward in HW (this is why mainline, which never
   installs entries, has the CLA trap-all behaviour of [[zte-hw-forwarding-deadend]]).
+
+### 🆕 2026-06-04 (Stage 0a-deep) — HFF install = CLA HASH-TABLE entry (5-tuple → fwd action)
+🟡 inferred-from-decomp (exact CLA reg offsets pending 0a-deeper/koprobe). findings/ffe_hardfast_regwrites_re.md.
+Install stack (tm_acl_v2.c): zte_api_fast_l3_session_add → tm_add_acl_flow_rule (tm.c:54261) →
+addFlowOperInfo + tm_acl_fast_add (tm.c:54225) → tm_acl_fast_add_v4v6 (tm.c:52521) →
+{tm_acl_get_fastHashRule builds rule; cla_get_hash_poly_config; aclGetAvailableHashAddr} →
+**cla_set_hash_table(slot&0x7fff, rule)** [INTERNAL hash, 0x7fff=32768 slots] or
+**cla_set_external_hash_table(slot&0xffff,…)** [EXTERNAL, 0xffff=65536 slots] →
+**cla_set_indirect_rw_cmd(0, slot, entry)** = the CLA indirect cmd/addr/data MMIO (busy-wait poll).
+- Action fields in the hash rule (printk tm.c:~3415): e8_en, cmd_flow_id, tcnt_gpid_rp_en,
+  gemport_uni_id — egress gemport/uni + counter/policer enables (GPON-aware), not just a LAN port.
+- SW shadow: cla_list_hash_addr_gen(tuple,0x28)&0x1ff = 9-bit/512-bucket index over a 40-byte tuple;
+  flow idx stored at node+0x30 (kmem_cache 0x20B). Del = tm_del_acl_flow_rule (tm.c:54092).
+- ⇒ a hardfast flow = ONE CLA hash slot (5-tuple key → fwd+rewrite action). This is the gate
+  mainline never programs (→ CLA trap-all, [[zte-hw-forwarding-deadend]]). The fast path is gated by
+  g_fast_opti and the entry "type" field +0xc (must be in [3..8]).
