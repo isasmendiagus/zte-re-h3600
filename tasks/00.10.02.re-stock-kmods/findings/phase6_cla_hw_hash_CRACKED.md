@@ -94,3 +94,21 @@ returns a slot. Then the driver: build key from 5-tuple+mainline ports → HW-ha
 - RECIPE on mainline: write key `poke 0x9238C2C0 <w0>` … `poke 0x9238C2F0 <w12>` (13 words), then read
   slot `poke 0x9238C2FC` (peek) → kmsg → UART :9999. First test: vary the key, confirm the slot changes
   (engine live). Then match a stock flow's key fields → expect a known slot. Then driver integration.
+
+## ★ UPDATE 2026-06-04e — HW HASH ENGINE VERIFIED WORKING ON MAINLINE
+Booted mainline, drove the engine via debugfs poke. WORKING PROTOCOL:
+1. Load 12 key data words to **0x9238c2c4 .. 0x9238c2f0** (fpga 0xe30b1..0xe30bc) — the 45-byte key.
+2. **Trigger**: write `1` to **0x9238c2c0** (fpga 0xe30b0) — this latches + computes (it is a control
+   reg, NOT key data; writing deadbeef read back 0x3 = idle/status). MUST load data FIRST, trigger LAST.
+   (My first attempts returned 0 because I wrote the trigger reg before loading the data.)
+3. Read the 16-bit hash from **0x9238c2fc** (fpga 0xe30bf).
+RESULTS (mainline, no extra init needed — the engine is live out of the box):
+- key=0 → hash 0x0000 ; key(pattern 0x11..0xcc) → 0x4a15 (deterministic, repeated) ;
+  key(w0=1) → **0x6f41** = low16 of CRC-32C poly 0x1EDC6F41 ⇒ confirms a lane uses hash_mode=1 and the
+  engine == the cla_acl_hash_addr_gen CRC model.
+⇒ The driver computes the slot in HW: write the 12-word key (built from 5-tuple+ports) to
+0x9238c2c4.., trigger 0x9238c2c0=1, read raw hash @0x9238c2fc, then apply the aclGetAvailableHashAddr
+mask `(0x400<<(6-ACL_OUT_SPACE_SEL))-1` + way bits to get the ram2 slot. NO CRC reimpl, NO engine init.
+NEXT: (a) read ACL_OUT_SPACE_SEL/ACL_OUT_HASH_NUM (cla_get_outspace_cfg reg) on mainline for the mask;
+(b) pin the 12-word key BUILDER (extra_dataN↔5-tuple from tm_acl_get_fastHashRule + the calculatehashaddr
+packing); (c) wire into cls_flower_add: build key→HW-hash→slot→clawrite ram2→isolated hw_trap test.
