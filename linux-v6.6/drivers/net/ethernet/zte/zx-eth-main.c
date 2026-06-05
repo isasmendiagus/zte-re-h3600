@@ -2145,6 +2145,48 @@ static void zx_cla_apply_replay(struct zx_eth *e)
 		 ok, fail, ZX_CLA_INIT_TABLE_LEN, ZX_CLA_RAM7_LAST);
 }
 
+/* ===================================================================
+ * Phase 6 — FFE extract-infrastructure init (zx_cla_ffe_extract_init).
+ *
+ * Ports the stock tm_acl_fast_init / tm_acl_l2_fast_init /
+ * tm_acl_3tuple_fast_init one-time setup: write the CLA ram1 extract
+ * RULES (5-tuple/3-tuple window descriptors) + the ram0 extract-INDEX
+ * tables (with the index_valid "fast-enable" bits). Without this the CLA
+ * has no extract rules, cannot compute the 5-tuple hash, and traps every
+ * routed flow to the CPU. See zx_ffe_table.h header for full provenance.
+ *
+ * The table is verified byte-exact against the live stock CLA dump. Each
+ * ram1 rule is 17 words (zx_cla_write_hash ram_id=1), each ram0 index is 5
+ * words (zx_cla_write_hash ram_id=0) — both CMD-first + descending.
+ * ===================================================================
+ */
+#include "zx_ffe_table.h"
+
+static void zx_cla_ffe_extract_init(struct zx_eth *e)
+{
+	u32 ok = 0, fail = 0, i;
+
+	/* ram1 extract rules first (the window descriptors the index points at) */
+	for (i = 0; i < ARRAY_SIZE(zx_ffe_rules); i++) {
+		if (zx_cla_write_hash(e, 1, zx_ffe_rules[i].id,
+				      zx_ffe_rules[i].w, 17) == 0)
+			ok++;
+		else
+			fail++;
+	}
+	/* ram0 extract-index tables (carry the index_valid fast-enable bits) */
+	for (i = 0; i < ARRAY_SIZE(zx_ffe_index); i++) {
+		if (zx_cla_write_hash(e, 0, zx_ffe_index[i].id,
+				      zx_ffe_index[i].w, 5) == 0)
+			ok++;
+		else
+			fail++;
+	}
+	dev_info(e->dev,
+		 "CLA FFE extract init: %u ok, %u fail (%zu ram1 rules + %zu ram0 index)\n",
+		 ok, fail, ARRAY_SIZE(zx_ffe_rules), ARRAY_SIZE(zx_ffe_index));
+}
+
 /* chip_tm_init's trap_queue setup — replays def_ptl_pkt_map via cla_set_cpu_queue_id.
  * RE'd from switch.ko:chip_tm_init @ 0x36ac calling tm.ko functions.
  * Per stock, maps each (ptype, port) → CPU queue id. Port 5 is CPU (skipped).
@@ -5374,6 +5416,7 @@ err_pools:
 static void zx_eth_init_chip_tm(struct zx_eth *eth)
 {
 	zx_cla_apply_replay(eth);
+	zx_cla_ffe_extract_init(eth);	/* Phase 6: FFE 5-tuple extract rules + index (HW fast-classify) */
 	zx_chip_tm_init_trap_queues(eth);
 	zx_chip_tm_init_isolate(eth);
 	zx_chip_tm_init_pro_action(eth);
