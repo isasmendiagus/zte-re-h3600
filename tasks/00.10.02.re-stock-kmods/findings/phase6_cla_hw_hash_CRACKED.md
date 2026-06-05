@@ -219,3 +219,30 @@ NEXT RE TARGET: the ram1 rule-selection mechanism — find what picks rule_id 0x
 classifier stage upstream of cla_set_extra_rule_table / the extr_index linkage / how stock installs the
 ram1 rule for a learned flow and what selects it on ingress). This is the last unknown layer between
 the validated hash and a working forward.
+
+## ★★★ UPDATE 2026-06-05d — THE MISSING PIECE: the FFE extract-infrastructure init (tm_acl_fast_init)
+RE of the rule-selection / extract-enable question is RESOLVED. The ram0 extract + ram1 rules are NOT
+per-flow — they are INFRASTRUCTURE written once by the FFE init, which mainline never runs:
+- `tm_acl_fast_init` (tm.c:54140) — the L3/5-tuple FFE init; writes cla_set_extra_rule_table(0x90,..)
+  (line 54209) + the ram0 index tables. The captured ram1[0x98] lives in this 0x90+ rule range.
+- `tm_acl_l2_fast_init` (tm.c:49785) — L2 variant: a loop (idx 1..8 = per port/dir) writing ram1 rules
+  0x10/0x20../0x80 + 0x11/0x21../0x81 all with the SAME 5-tuple extract content
+  (local_b0 = 0x22038608.. = exactly the captured ram1[0x98] word0) + ram0 index tables (cla_set_
+  extra_index_table idx 1..8 with valid bits).
+- `tm_acl_3tuple_fast_init` (tm.c:54578) — 3-tuple variant.
+- Called together at the FFE-enable site (tm.c:54773-54774).
+- `aclGetExtIdxRuleRamAddrByPort` (tm.c:50137): for g_ipv4FastEn returns extract-index 9 (=ram0[0x09])
+  for ANY port; g_ipv6FastEn → 10. So ram0[0x09] is the right IPv4 index (mine was correct); what was
+  missing is the RULE SET + index-table valids + the HW fast-enable that these init fns establish.
+### ROOT CAUSE OF THE WHOLE "CLA TRAPS ALL" DEADEND (fully explained now)
+Mainline never runs tm_acl_fast_init/_l2_/_3tuple_, so the ingress pipeline has NO extract rules
+enabling the 5-tuple hash → the HW can't fast-classify → every routed/forwarded flow traps to the CPU.
+Writing a single ram1[0x98]/ram0[0x09] by hand is not the setup; the init writes a structured rule set
+across all ports/dirs + sets the fast-enable.
+### ACTIONABLE NEXT STEP (clear, bounded)
+Port tm_acl_fast_init (+ _l2_ + _3tuple_, ~430 lines, all in tm.c, all using the already-implemented
+cla_set_extra_rule_table/cla_set_extra_index_table = clawrite primitives) into the mainline driver as a
+one-time FFE-extract init, plus whatever sets the IPv4/IPv6 fast-enable HW bit (g_ipv4FastEn analog).
+THEN the validated per-flow ram2 hash entries (this session's hash engine + key builder) will be
+consulted and flows will HW-forward. This is the concrete bridge from the validated hash to a working
+offload — a bounded port of 3 decompiled init functions.
