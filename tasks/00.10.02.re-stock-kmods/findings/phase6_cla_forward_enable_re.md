@@ -49,3 +49,31 @@ packet. Candidates to focus the diff: the parser/ingress→fast-path SELECT (wha
 the CLA hash stage vs the trap path), the SADM forward routing (SADM drop counter 0x1c4208 was huge in
 pipeline_stats), and any per-port "fast/acl forward" mode bit. The hash side + extract are done; this is
 purely "what makes the CLA consult+forward vs trap."
+
+## ★★★ UPDATE 2026-06-05 — STOCK CLA CONFIG == MAINLINE (the forward-gate is NOT a config register)
+Booted stock and read the CLA config block live via fpga -r (the subagent's stock values were
+static-decomp INFERENCES, never read from the device). Live stock (which FORWARDS) vs mainline (traps):
+| reg (phys / fpga) | stock | mainline | match? |
+|---|---|---|---|
+| config 0x9238c080 / e3020 | 0x00000600 | 0x00000600 | SAME |
+| l3 mtu 0x9238c088 / e3022 | 0x00007fff | 0x00007fff | SAME |
+| poly  0x9238c090 / e3024 | 0x00e400e4 | 0x00e400e4 | SAME |
+| outspace 0x9238c094 / e3025 | 0x00000004 | 0x00000004 | SAME |
+| up/dn mtu 0x9238c098 / e3026 | 0x7fff7fff | 0x7fff7fff | SAME |
+| oth_l3 0x9238c0cc / e3033 | 0x00000000 | 0x00000000 | SAME |
+ALL SIX MATCH. The subagent's inferred stock values (config 0xE00, outspace 0x8, MTU 0x3fff) were
+WRONG — live stock = mainline exactly. ⇒ the CLA config block is DEFINITIVELY NOT the forward-gate;
+stock forwards and mainline traps with byte-identical CLA config. The subagent's zx_cla_fast_forward_
+enable() set NON-stock values (outspace 0x8 ≠ stock 0x4, MTU 0x3fff ≠ stock 0x7fff) — REVERTED (removed
+the function + call from zx-eth-main.c; FFE extract init kept).
+### New direction (config diff exhausted)
+Since every static CLA config reg matches, the stock-forwards-vs-mainline-traps difference is NOT a
+static register — it is DYNAMIC: stock's FFE software installs the per-flow forwarding STATE (the ram2
+hardfast entry + likely SBRAG L3 route + the correct entry ACTION) when a flow is learned; mainline
+writes a ram2 entry but it apparently isn't a valid FORWARD entry (or needs a companion SBRAG/da_known
+state). PRIME LEAD: decode the ram2 entry ACTION fields — our entry (copied from the stock fwd template
++ substituted 5-tuple) may actually be a TRAP entry, or be missing da_known/direct/act_val=forward.
+That alone explains CLA fwd=0 with the entry written everywhere. (Subagent RE in progress on this.)
+Secondary: confirm on stock whether CLA fwd[0x9238c3c0] climbs during a routed flow (CLA-hash path) or
+stays 0 (then stock forwards routed flows via SBRAG, not the CLA hash — meaning we targeted the wrong
+table for L3 routing).
