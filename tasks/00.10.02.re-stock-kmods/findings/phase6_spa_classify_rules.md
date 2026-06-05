@@ -86,3 +86,27 @@ matchram packing decoded (tm.c:26206-26248). REMAINING = pure implementation: re
 via the indirect iface, in zx_spa_classify_init() (driver) OR live-poke, readback-verify, test the
 routed flow (hw_trap / CLA fwd). Hypothesis (SPA-classify = the L3 forward gate) still UNPROVEN until
 the port-and-test — but now it's a clean implementation task, not blocked on any unknown.
+
+## ★ UPDATE 2026-06-05 — SPA classify LOADED on mainline, readback OK, but NO forward (6th candidate refuted)
+Computed the 3 matchram banks (best-effort packing replication, cases 2/3 low-confidence) + 8 hashram
+slots; loaded via the indirect iface on mainline; matchram bank readback = computed words EXACTLY (the
+writes landed). Then the routed flow: CLA_fwd[0x9238c3c0]=0 (delta 0), hw_trap +80 — STILL TRAPS.
+⇒ loading the SPA classify rules does NOT enable the L3 forward. AMBIGUOUS root (matchram packing
+cases 2/3 may be wrong, OR the SPA classify hashram action isn't the L3-forward gate) — but after 6
+HW-refuted candidates the SPA-classify hypothesis is weak.
+
+## META-CONCLUSION (static-RE-candidate approach exhausted)
+On mainline, EVERY candidate loaded/tested produces the SAME result: hw_trap climbs (traps 100%),
+CLA fwd=0. Candidates HW-refuted this arc: (1) CLA config regs (==stock), (2) outspace/MTU, (3) config
+bit11, (4) match_mode (already on), (5) ram2 entry at all 520 buckets, (6) SPA classify matchram+hashram.
+The extract chain (ram0/ram1 FFE init) + the full hash path are built/validated but never reached.
+The static-decomp-candidate method has hit its limit — guessing registers/tables and HW-testing keeps
+failing because the actual forward path isn't being localized.
+DEFINITIVE methods left (all fresh-session, deeper): (a) kotrace stock DURING a live forward to capture
+the actual per-packet forward decision/path (blocked-ish: boot-init not catchable, but the dynamic FFE
+install path IS — re-trace what stock writes when a flow starts forwarding, beyond cla_set_hash_table);
+(b) test whether stock's CLA fwd counter even climbs during forward (if it stays 0, the offload bypasses
+the CLA→QMG path entirely per Iter O, and L3 routing forwards via SBRAG (sbrg_add_ipv4table, base
+0x92388000) — a DIFFERENT table we have NOT targeted); (c) full ingress-region reg diff stock-vs-mainline
+via the indirect-read recipe (SPA range needs indirect reads, not fpga -r). Lead (b) is the highest-value
+re-frame: we may have targeted the wrong forward table (CLA hash) for L3 ROUTING all along.
