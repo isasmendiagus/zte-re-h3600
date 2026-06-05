@@ -104,3 +104,18 @@ CLA fwd=0 means the classify never reaches/acts-on the hash. Upstream candidates
 DEFINITIVE METHOD (deferred earlier, now clearly needed): kotrace stock ingress for a HW-forwarded
 routed flow to see which stage/register makes stock consult the hash + forward, vs mainline trapping —
 the static config diff is exhausted (everything matches) so only the live forward path reveals the gate.
+
+## UPDATE 2026-06-05 — stock forwarding confirmed live; CLA hash IS the mechanism (gate-upstream conclusion reinforced)
+Booted stock, rebuilt the routing rig (LAN host 192.168.1.50 ↔ br0; WAN host 10.9.9.1 in netns ↔
+nbif1=10.9.9.2 capWAN; default via 10.9.9.1, ip_forward=0). iperf3 LAN→WAN = **570 MB @ 318 Mbit/s**
+with **ip_forward=0** → stock HW-forwards routed L3 (Linux SW routing is OFF; the HW does it). Combined
+with this session's live kotrace (stock hardfast install goes through cla_set_hash_table → ram2), the
+**CLA ram2 hash IS stock's L3-routing forward mechanism** — our approach targets the right table.
+Could NOT read stock's CLA fwd counter during/after the flow: under FFE activity /dev/logger_main is
+flooded (345 KB in 2 s) and the printk rate-limiter drops the fpga-read lines (reads only work at idle).
+Not needed for the conclusion: mainline traps 100% (hw_trap reliable) with the full hash path present,
+so the gate is upstream of the hash consult regardless.
+NET: hash mechanism confirmed correct; gate is the ingress consult/select upstream of the CLA hash.
+The remaining RE is a broad INGRESS-region diff stock-vs-mainline (SPA 0x921d4xxx, the ingress
+classify/admit, transfer_en/da_lookup 0x92388xxx, the parser→extract SELECT) at idle (when stock reads
+are reliable) — NOT the CLA config block (already proven identical). This is the focused next effort.
