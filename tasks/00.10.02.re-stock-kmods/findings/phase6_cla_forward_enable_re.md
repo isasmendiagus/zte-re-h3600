@@ -171,3 +171,22 @@ device can resolve the egress dest MAC. Then run the routed flow:
      rig prevented all session.
 Also: seed the device's SBRG FDB with the dest MAC (debugfs fdbadd) so DA-lookup hits, mirroring the
 working L2 rig (Iter AB used assisted-learning / static FDB).
+
+## UPDATE 2026-06-05 — reachable-dest L3 rig test: routed transit NEITHER forwards NOR traps (drops)
+Built the corrected rig: enx6c70 in netns L = 172.31.9.50/24 (lan1, ingress confirmed working — ICMP
+to 172.31.9.1 climbed hw_trap +20), enx2c99 in netns W = 192.168.9.50/24 (lan4), device firewall
+FLUSHED (iptables ACCEPT) + ip_forward=1 + static ARP both sides + device neigh seeded for both hosts
+(172.31.9.50->lan1, 192.168.9.50->lan4). Ran UDP L->W (172.31.9.50 -> 192.168.9.50, routed lan1->lan4).
+RESULT: hw_trap FLAT (not trapped), W rx delta = 0 (not forwarded), lan1 netdev rx flat. netns L tx
+climbs (host IS sending). ⇒ the routed transit flow is DROPPED in the HW pipeline — it neither
+HW-forwards, nor traps to the CPU, nor reaches W. (Contrast: ICMP TO the device IP on lan1 DOES trap
++ reach CPU; routed TRANSIT does not.)
+NEW understanding (re-frames again): the L3-routed TRANSIT case (user-port -> user-port, different
+subnets) is not "trap-all" and not "unreachable-dest-trap" — it's a silent DROP. Candidates: SPA
+pktdeal=drop(2) for the transit ptype on lan1; a routing-miss HW drop; or the to-device-MAC transit
+packet not being delivered to the CPU routing path on a user port. Also unverified: whether SW routing
+(CPU-forward lan1->lan4) works AT ALL on mainline (the merged router may only have been exercised via
+the conduit, not inter-user-port). NEXT (fresh session): (1) confirm whether the CPU even receives the
+routed transit packet (tcpdump the conduit / check FORWARD counters) — if not, it's an HW drop pre-CPU;
+(2) check the SPA pktdeal deal value for the transit ptype on lan1 (the #36 lever); (3) verify
+inter-user-port SW routing works before chasing HW offload.
