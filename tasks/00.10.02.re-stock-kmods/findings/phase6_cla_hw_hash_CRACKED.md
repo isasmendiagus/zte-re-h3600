@@ -157,3 +157,29 @@ CONSEQUENCES (de-risks Stage 2b):
 - we now have a stock hash oracle too: load 0xe30b1..0xe30bc via fpga -w, trigger fpga -w 0xe30b0 1,
   read fpga -r 0xe30bf (logs to /dev/logger_main with the right protocol).
 Stock-driver fpga recipe (verified): zero 0xe30b1..0xe30bc, write key words, write 0xe30b0=1, read 0xe30bf.
+
+## ★★ UPDATE 2026-06-05 — slot-sweep NEGATIVE → ram2-alone insufficient; ram0/ram1 extract chain MISSING on mainline
+End-to-end slot-sweep on mainline (hashcalc-verified key builder, branch phase6-hw-offload):
+- Built the v4 key + the 15-word ram2 fwd entry for a real flow (192.168.9.50:40000->172.31.9.50:5201
+  TCP, ingress lan4). KEY EXTRACT byte-order pinned by matching the captured stock template: entry/key
+  shorts = [proto, IP_A.hi=(o0<<8|o1), IP_A.lo=(o2<<8|o3), IP_B.hi, IP_B.lo, sport, dport] (natural
+  order, NO bswap). Offline CRC-32C == HW engine confirmed for this flow's key (raw 0xf8ad etc.).
+- Wrote the entry at all 6 inport-candidate buckets (mask 0xff: 0x89/0x6a/0x41/0xa2/0xc6/0x25) — all
+  were EMPTY pre-write (no clobber). Drove 60 SYNs on the matched 5-tuple + 60 on a control sport.
+- RESULT: matched-flow hw_trap delta = 60, control delta = 60 → **NO forward; the flow still traps
+  every packet, identical to control.**
+- ROOT CAUSE (confirmed): `clapeek ram0 0x9` on mainline = ALL ZEROS. The stock extract descriptor
+  (ram0[0x09] = 93929190 97969594 9b9a9998 9f9e9d9c 00150051) is ABSENT on mainline. Without the ram0
+  extract config + a ram1 rule to trigger it, the HW never computes the ram2 hash for routed flows and
+  traps everything — exactly the long-standing "CLA traps all" deadend (memory zte-hw-forwarding-deadend).
+### Conclusion / re-scope
+A HW forward needs the FULL classification chain, not just a ram2 entry:
+  (1) ram0 extract config (so the HW pulls the same packet bytes my key-builder assumes),
+  (2) a ram1 rule that matches the flow class and routes it into the ram2 hash (with MAINLINE ports),
+  (3) the ram2 forward entry at the computed slot.
+The verbatim-replay set all three but with STOCK ports (clobbered mainline's classifier). Stage 2b's
+real remaining work = parameterize ram0 + ram1 for mainline (extract config can reuse stock's
+ram0[0x09]; the ram1 rule needs mainline winoffsets/inport), THEN the ram2 entry + slot from the
+(now-validated) HW hash. The hash engine, write protocol, key builder, and extract byte-order are all
+validated; the gap is the ram0/ram1 enablement of the hash path.
+Tools added: scripts/hw_slot_sweep.py (key/entry/bucket builder), scripts/hw_slot_sweep_run.py (sweep).
