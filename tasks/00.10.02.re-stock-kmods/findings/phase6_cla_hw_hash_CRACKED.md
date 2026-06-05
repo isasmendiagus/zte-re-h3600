@@ -198,3 +198,24 @@ rule does not match a mainline lan4 ingress flow (it carries stock's inport / wi
 HW never triggers the ram2 hash for my flow. Need to DECODE ram1[0x98] (winoffset0..19 / winmask /
 inport_mask byte0x39 / hash_len) and rebuild it to match the mainline flow class + inport, OR find the
 mainline ram1 rule that already covers routed TCP and point it at ram0[0x09]+the hash.
+
+## UPDATE 2026-06-05c — ram1[0x98] decoded = GENERIC 5-tuple extractor (not flow-specific) → blocker is RULE SELECTION
+Decoded the captured ram1[0x98] via cla_set_extra_rule_table formulas (tm.c:2870-3060):
+- winoffset0..6 = 8, 12, 14, 16, 18, 20, 22 (winoffset7..19 = 0); offset_type = 2 (L3-relative);
+  winmask0..6 = 0xff/0xffff (full match of those windows).
+- Those L3-relative offsets are the IPv4+TCP 5-tuple: byte8≈proto/ttl region, byte12=src IP,
+  byte16=dst IP, byte20=TCP sport, byte22=TCP dport. winmask full ⇒ it EXTRACTS the 5-tuple into the
+  hash key. inport_mask=0 / outport_mask=0 (byte0x39=0) ⇒ NOT inport-filtered. hash_len=7 (hash on).
+- ⇒ ram1[0x98] is a GENERIC IPv4-TCP 5-tuple extractor, not tied to a specific flow. It should apply
+  to the mainline test flow too.
+CONSEQUENCE: the chain-test no-forward is NOT because ram1 fails to match. The remaining blockers are
+one of: (a) RULE SELECTION — how the pipeline decides to apply ram1 rule_id 0x98 (vs the other ~723
+boot rules) to a given packet; there is an upstream pre-classifier (by inport/ethertype/parse result)
+that picks the rule_id, and the mainline test flow may select a different (empty) rule; (b) the ram2
+BUCKET — my key-builder must match the EXACT bytes ram0[0x09]+ram1[0x98] extract (ram0 extract indices
+0x90-0x9f; the 6-bucket sweep assumed the template layout); (c) entry validation (the stored entry's
+header inport/extr_index vs the packet).
+NEXT RE TARGET: the ram1 rule-selection mechanism — find what picks rule_id 0x98 (decomp the
+classifier stage upstream of cla_set_extra_rule_table / the extr_index linkage / how stock installs the
+ram1 rule for a learned flow and what selects it on ingress). This is the last unknown layer between
+the validated hash and a working forward.
