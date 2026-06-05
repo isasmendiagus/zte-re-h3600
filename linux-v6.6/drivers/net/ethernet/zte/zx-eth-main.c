@@ -2187,6 +2187,79 @@ static void zx_cla_ffe_extract_init(struct zx_eth *e)
 		 ok, fail, ARRAY_SIZE(zx_ffe_rules), ARRAY_SIZE(zx_ffe_index));
 }
 
+/* ===================================================================
+ * Phase 6 — CLA fast-path FORWARD enable (zx_cla_fast_forward_enable).
+ *
+ * The FFE extract tables (ram0/ram1) + the per-flow ram2 hash entry are
+ * necessary but NOT sufficient: on-device the CLA still trapped every
+ * routed flow and the CLA fwd counter (0x9238c3c0) stayed at 0 — i.e. the
+ * CLA never consulted the hash to make a forward decision.
+ *
+ * Static RE of stock `tm_pon_pp_cla_initial` (decomp_all_tm.c @0x4dc08)
+ * shows the CLA global init writes FIVE config registers; mainline only
+ * replicated two of them (cla_set_config -> 0x9238c080, and
+ * cla_set_oth_l3_pkt_action_cfg(0) -> 0x9238c0cc). The THREE that mainline
+ * never wrote are exactly the ones that gate the hash-out path:
+ *
+ *   cla_set_outspace_cfg(hash_num=2, space_sel=0)  -> claRegTable[0x0d]
+ *        reg fpga-word 0x0e3025 = phys 0x9238c094, mask 0xf, shift 0.
+ *        Packed value = (space_sel & 3) | ((hash_num & 3) << 2) = 0x8.
+ *        This selects the ACL hash OUTPUT space / way count. If it reads 0
+ *        (mainline never set it), the CLA's hash result is mapped into the
+ *        wrong out-space and is never used to forward => the prime suspect
+ *        for "CLA fwd = 0". (NOTE: this is a DIFFERENT register from the
+ *        hash *poly* cfg at 0x9238c090 that the hash-engine test already
+ *        validated as matching stock — the poly cfg only governs the CRC
+ *        compute, not whether the pipeline consults the result.)
+ *
+ *   cla_set_up_mtu_length_cfg(0x3fff) -> claRegTable[0x0e]
+ *        reg 0x0e3026 = phys 0x9238c098, mask 0x3fff, shift 16.
+ *   cla_set_dn_mtu_length_cfg(0x3fff) -> claRegTable[0x10]
+ *        reg 0x0e3026 = phys 0x9238c098, mask 0x3fff, shift 0.
+ *   cla_set_l3_mtu_length_cfg(0x3fff) -> claRegTable[0x06]
+ *        reg 0x0e3022 = phys 0x9238c088, mask 0x3fff, shift 0.
+ *        These set the CLA MTU thresholds to max (0x3fff). If left at 0,
+ *        the CLA can treat every routed packet as MTU-violating and divert
+ *        it (drop/trap) instead of forwarding.
+ *
+ * All writes are READ-MODIFY-WRITE within the masked field only (exactly
+ * what stock's tmOnuRegWrite does) so no neighbouring bits are disturbed.
+ * Conservative: this does NOT blanket-forward anything — it only completes
+ * the CLA global config to stock's values so the (already-installed) hash
+ * path can actually produce a forward decision.
+ *
+ * off = phys - 0x921c0000 (e->base). 0x9238c094 - 0x921c0000 = 0x1cc094.
+ * ===================================================================
+ */
+static void zx_cla_set_field(struct zx_eth *e, u32 off, u32 mask,
+			     u32 shift, u32 val)
+{
+	u32 cur = npp_read(e, off);
+	u32 new_v = (cur & ~(mask << shift)) | ((val & mask) << shift);
+
+	npp_write(e, off, new_v);
+}
+
+static void zx_cla_fast_forward_enable(struct zx_eth *e)
+{
+	/* cla_set_outspace_cfg(2, 0): outer_hash_num=2, outer_space_sel=0
+	 *   -> packed 0x8 in 0x9238c094[3:0].  PRIME forward-enable candidate. */
+	zx_cla_set_field(e, 0x1cc094, 0xf, 0,
+			 ((0 & 3) | ((2 & 3) << 2)));   /* = 0x8 */
+
+	/* cla_set_l3_mtu_length_cfg(0x3fff)  -> 0x9238c088[13:0]  */
+	zx_cla_set_field(e, 0x1cc088, 0x3fff, 0,  0x3fff);
+	/* cla_set_up_mtu_length_cfg(0x3fff)  -> 0x9238c098[29:16] */
+	zx_cla_set_field(e, 0x1cc098, 0x3fff, 16, 0x3fff);
+	/* cla_set_dn_mtu_length_cfg(0x3fff)  -> 0x9238c098[13:0]  */
+	zx_cla_set_field(e, 0x1cc098, 0x3fff, 0,  0x3fff);
+
+	dev_info(e->dev,
+		 "CLA fast-fwd enable: outspace(0x1cc094)=%#x mtu_l3(0x1cc088)=%#x mtu_updn(0x1cc098)=%#x\n",
+		 npp_read(e, 0x1cc094), npp_read(e, 0x1cc088),
+		 npp_read(e, 0x1cc098));
+}
+
 /* chip_tm_init's trap_queue setup — replays def_ptl_pkt_map via cla_set_cpu_queue_id.
  * RE'd from switch.ko:chip_tm_init @ 0x36ac calling tm.ko functions.
  * Per stock, maps each (ptype, port) → CPU queue id. Port 5 is CPU (skipped).
@@ -5417,6 +5490,7 @@ static void zx_eth_init_chip_tm(struct zx_eth *eth)
 {
 	zx_cla_apply_replay(eth);
 	zx_cla_ffe_extract_init(eth);	/* Phase 6: FFE 5-tuple extract rules + index (HW fast-classify) */
+	zx_cla_fast_forward_enable(eth);	/* Phase 6: CLA outspace + MTU cfg — gates the hash-forward decision */
 	zx_chip_tm_init_trap_queues(eth);
 	zx_chip_tm_init_isolate(eth);
 	zx_chip_tm_init_pro_action(eth);
