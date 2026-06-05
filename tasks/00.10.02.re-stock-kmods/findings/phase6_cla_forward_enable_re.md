@@ -77,3 +77,30 @@ That alone explains CLA fwd=0 with the entry written everywhere. (Subagent RE in
 Secondary: confirm on stock whether CLA fwd[0x9238c3c0] climbs during a routed flow (CLA-hash path) or
 stays 0 (then stock forwards routed flows via SBRAG, not the CLA hash — meaning we targeted the wrong
 table for L3 routing).
+
+## ★★★★ UPDATE 2026-06-05 — 520-SLOT TEST: gate is UPSTREAM of the hash consult (definitive)
+Wrote the (verified-forward) ram2 entry at ALL 520 hash slots across EVERY bank
+(ram2[0..0xff]+ram3[0..0x7f]+ram4[0..0x3f]+ram5[0..0x3f]+ram6[0..7]), restored outspace to stock 0x4,
+sent the matched routed flow. RESULT: **CLA fwd[0x9238c3c0] delta = 0, hw_trap +80** — still 100% traps.
+Combined with: (entry = valid forward, agent-decoded) + (CLA config block byte-identical to stock) +
+(extract ram0/ram1 present + run at boot) + (now: entry at every possible bucket in every bank), the
+ONLY remaining explanation is that **the CLA never CONSULTS the hash for this flow — an ingress stage
+UPSTREAM of the hash lookup traps the packet first.** The entire CLA hash-forward path we built this
+session (extract tables, hash engine, write protocol, key builder, per-flow entry) is correct but
+NEVER REACHED.
+### Where the upstream gate lives (next RE)
+The packet path: MAC RX → SPA admit → ingress classify (extract-rule SELECT → ram1 → ram2 hash) → fwd.
+CLA fwd=0 means the classify never reaches/acts-on the hash. Upstream candidates, in order:
+1. **The ingress extract-rule SELECT** — what makes a packet USE extract-index 9 / a populated ram1
+   rule on INGRESS (the HW front-end per-port/per-ptype → extract-index mapping), distinct from the
+   ram0/ram1 TABLES (which are present). If mainline never configures the ingress→extract SELECT, the
+   hash stage is skipped → trap. RE: how the HW picks the extract path per packet (parser/port config),
+   not the API tables.
+2. **SPA pktdeal** (0x921d4300, per-(port,ptype) trap/forward) — the #36 merged fix forced the
+   forward-slot set to deal=0 for TCP ACKs (CPU-forward); for user→user HW-forward the routed flow's
+   ptype may still be deal=trap, trapping BEFORE the CLA. Needs the indirect write
+   (zx_spa_set_enty_pktdeal_cfg), not a direct poke.
+3. The per-port routing / fast-forward mode set at capWAN/routing provisioning on stock.
+DEFINITIVE METHOD (deferred earlier, now clearly needed): kotrace stock ingress for a HW-forwarded
+routed flow to see which stage/register makes stock consult the hash + forward, vs mainline trapping —
+the static config diff is exhausted (everything matches) so only the live forward path reveals the gate.
