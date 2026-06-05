@@ -144,3 +144,30 @@ indirect-read recipe or kotrace).
 ### Reads gotcha (for next session)
 Stock fpga -r reads the CLA/NPP range (0xe3xxx) but NOT the SPA range (0x75xxx) — and /dev/logger_main
 floods under any FFE activity (rate-limiter drops read lines). Mainline poke reads ANY reg reliably.
+
+## ★★★ UPDATE 2026-06-05 — METHODOLOGY RE-FRAME (user lead "review old findings"): the test rig was FLAWED
+Reviewing the OLD findings (hw_forwarding_offload.md Iter AB/AC): **HW L2 same-subnet forwarding ALREADY
+WORKS on mainline** — UDP lan1<->lan3 ~300 Mbit/s both dirs, hw_fwd=450761 / hw_trap=143 / no wedge,
+via the SBRG DA-lookup path; it REQUIRES the dest MAC be known (static ARP so DA-lookup HITS).
+⇒ THE FORWARD PATH IS ENABLED on mainline today (refutes "CLA traps all").
+CRITICAL FLAW in THIS session's tests: the L3-routed test flow was 192.168.9.50 -> 172.31.9.50, but
+**NO host existed at 172.31.9.50 (lan1)**. With no dest host, the device routes lan4->lan1, ARPs for
+172.31.9.50, gets NO reply, cannot resolve the dest MAC, and TRAPS every packet to the CPU (which also
+can't ARP it) — REGARDLESS of any CLA-hash/forward gate. So hw_trap climbing was the unreachable-dest
+ARP-trap, not proof the gate is missing. The stock test that DID forward (192.168.1.50->10.9.9.1) had a
+REAL host at the dest.
+⇒ THIS SESSION'S "6 refuted candidates" are INCONCLUSIVE for L3 — the flow could not forward under any
+config because the destination was unreachable. The CLA hash work (engine/write/extract/entry) is still
+valid + built; it was just tested against a broken rig.
+### CORRECTED NEXT TEST (high-value, likely the real path)
+Set up a proper 2-host L3-routed rig with a REACHABLE dest: real host on lan1 (e.g. 172.31.9.50) AND on
+lan4 (192.168.9.50), static ARP/neigh on BOTH the host side AND seed the device FDB if needed, so the
+device can resolve the egress dest MAC. Then run the routed flow:
+ (a) BASELINE: does it HW-forward at all (hw_trap flat) once the dest is reachable + FDB populated? L2
+     same-subnet already works; the L3-routed case may "just work" via the route + DA-lookup once the
+     dest MAC is known — OR it traps until the FFE/CLA-hash entry is installed.
+ (b) If it traps: install the CLA-hash fwd entry at the engine-computed slot (now that the dest is
+     reachable) and re-check hw_trap — THIS is the real test of the CLA hash offload, which the broken
+     rig prevented all session.
+Also: seed the device's SBRG FDB with the dest MAC (debugfs fdbadd) so DA-lookup hits, mirroring the
+working L2 rig (Iter AB used assisted-learning / static FDB).
