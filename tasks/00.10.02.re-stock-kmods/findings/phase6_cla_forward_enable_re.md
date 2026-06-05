@@ -190,3 +190,30 @@ the conduit, not inter-user-port). NEXT (fresh session): (1) confirm whether the
 routed transit packet (tcpdump the conduit / check FORWARD counters) — if not, it's an HW drop pre-CPU;
 (2) check the SPA pktdeal deal value for the transit ptype on lan1 (the #36 lever); (3) verify
 inter-user-port SW routing works before chasing HW offload.
+
+## ★★★★ UPDATE 2026-06-05 — VALID RIG at last: routed transit TRAPS + SW path also broken (DSA demux)
+The earlier netns tests were INVALID (I had broken the USB NICs by juggling netns — the user caught it;
+`ip netns del` returned the trapped NIC enx2c99 to the default ns, restoring it). Found that the
+cdc_ncm NIC enxc8a362 is dead, but the two r8152 NICs work: enx2c99->lan1(LAN), enx6c70->lan4(WAN).
+enx2c99 TOLERATES netns (carrier=1, tx works); enx6c70 does NOT (carrier drops in netns). So the VALID
+rig = enx2c99 in netns SRC (172.31.9.50, lan1, tx confirmed) + enx6c70 in main ns (192.168.9.50, lan4).
+CLEAN RESULT (300 UDP lan1->lan4, firewall flushed, ip_forward=1, neigh seeded both ways):
+- hw_trap +300 (ALL trapped), dest enx6c70 rx +0.
+- conduit sw rx +301 (packets REACH the CPU), but lan4 tx +0 (CPU does NOT forward out lan4).
+- lan1 netdev rx flat (packets hit the conduit but are NOT demuxed to the lan1 user-port netdev).
+- device route get 192.168.9.50 -> dev lan4 (correct), ip_forward=1.
+TWO confirmed findings:
+1. **No HW forward of the L3-routed flow** (traps 100%) — the genuine Phase 6 gap, now confirmed with a
+   VALID rig (not a rig artifact). My earlier "6 refuted candidates" were on the invalid rig (no tx) and
+   need re-testing.
+2. **The CPU/SW inter-user-port routing is ALSO broken**: trapped packets reach the conduit (sw rx
+   climbs) but Linux does not forward them out lan4 (lan4 tx=0). Likely a DSA RX-demux/tag issue —
+   ingress-lan1 packets aren't presented on the lan1 netdev, so Linux routing (lan1->lan4) never fires.
+   (The merged SW router may only route conduit<->user-port, not user-port<->user-port.)
+### NEXT (valid rig available now)
+(a) Re-test the CLA hash offload PROPERLY: with FFE extract loaded (this boot) + the ram2 fwd entry for
+    THIS flow (172.31.9.50:sport->192.168.9.50:5201) at the engine-computed slot (or all 520 buckets),
+    re-run + measure hw_trap. The earlier all-520 test was on the invalid (no-tx) rig.
+(b) Separately debug the DSA RX demux (why ingress-lan1 traffic isn't on the lan1 netdev) — needed for
+    the SW baseline + assisted offload. RIG GOTCHA: use enx2c99 (r8152) for netns; enx6c70 drops carrier
+    in netns; enxc8a362 (cdc_ncm) is dead; never leave NICs in a netns (del returns them but down).
