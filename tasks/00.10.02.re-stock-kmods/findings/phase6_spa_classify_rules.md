@@ -68,3 +68,21 @@ The matchram bit-packing (4 cases on rule&3, decomp tm.c:26206-26248) is decoded
 STATUS: SPA-classify-rules-empty remains the best lead for the upstream forward-gate, the port is
 proven SAFE, the rules are extracted — blocked only on the data-port addressing (a bounded binary read).
 (Live mainline matchram bank0 left with test junk; reboot restores.)
+
+## ★ UPDATE 2026-06-05 — DATA-PORT RESOLVED (round-trip confirmed); SPA classify port fully unblocked
+zx_sparegtable (driver zx-fpga-reg-tables.h:629) reg_id 6 (data): base_off 0x75007, stride 1,
+max_sub_idx 6 → data_id N at phys 0x921d401c + N*4 (= 0x1401c+N*4 NPP-rel). reg_id 4 (cmd) 0x75005=
+0x921d4014, reg_id 5 (status) 0x75006=0x921d4018. My earlier "addressing failed" was an ORDER bug
+(extra cmd-write). CLEAN round-trip on mainline (poke) CONFIRMS the protocol + addressing:
+  WRITE: cmd(0x921d4014 = addr|ram_id<<22|0<<27)  THEN  data_id 0..5 at 0x921d401c+N*4
+  READ:  cmd(0x921d4014 = addr|ram_id<<22|1<<27)  THEN  read 0x921d401c+N*4
+  → wrote 0x11/0x22/.../0x66 to data_id0..5, read back 0x11111111,0x22222222,0x33333333,0x44444444,
+    0x55555555,0x00066666 (data_id5 top bits truncated = the matchram bank is <192 bits wide). 5/6
+    exact = addressing + protocol PROVEN.
+⇒ ALL structural unknowns resolved: port-safe (SPA 0x921d4014 ≠ SCH 0x92354014), data-port =
+0x1401c+N*4, cmd-first protocol, matchram ram_id=0 / hashram ram_id=5, rules extracted (this file),
+matchram packing decoded (tm.c:26206-26248). REMAINING = pure implementation: replicate the matchram
+4-case bit-packing (compute the 3 banks from the 11 rules), then load matchram(banks) + hashram(8 slots)
+via the indirect iface, in zx_spa_classify_init() (driver) OR live-poke, readback-verify, test the
+routed flow (hw_trap / CLA fwd). Hypothesis (SPA-classify = the L3 forward gate) still UNPROVEN until
+the port-and-test — but now it's a clean implementation task, not blocked on any unknown.
