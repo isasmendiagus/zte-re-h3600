@@ -113,3 +113,28 @@ warnings/errors; zx279128-eth.ko rebuilt + embedded; zImage 14,380,999 bytes.
 Tooling added: `tasks/00.01.eth-driver/scripts/ffe_gen_table.py` (generator +
 verifier), `tasks/00.01.eth-driver/scripts/ffe_build_words.py` (field-by-field
 reconstruction cross-check).
+
+## ON-DEVICE REVIEW (2026-06-05, interactive session) — port is CORRECT but NOT SUFFICIENT
+Reviewed + tested the subagent's port on hardware:
+- Code review: clean, uses the validated zx_cla_write_hash primitive, call-site after zx_cla_apply_replay
+  is sane. Table data VERIFIED byte-exact vs ground truth: ram1[0x90]=22038608 000058a1 0 0 f00ff000
+  ffffffff ffffffff 0fffffff 0 0 0 0 0 0 00700000 00092492 0; ram0[9]=93929190 97969594 9b9a9998
+  9f9e9d9c 00150051. Committed 31e98ecc5.
+- BOOT VERIFIED: the FFE init runs automatically — clapeek ram0[0x9] reads back the config at boot
+  (was all-zeros before). The extract infrastructure is now present on mainline. ✓ (real milestone)
+- FORWARD TEST: NEGATIVE. Wrote the per-flow ram2 fwd entry at all 6 candidate buckets → still traps
+  60/60. Then wrote it at ALL 256 ram2 buckets (covers any bucket) → STILL traps 80/80. So bucket
+  prediction is NOT the gap.
+- ROOT (pipeline_stats during the flow): **CLA fwd[0x1cc3c0]=0, drop=0, copy=0** — the CLA never makes
+  a forward decision; everything goes to UP hw_trap. ⇒ even with ram0/ram1 extract tables present and a
+  matching ram2 entry, the CLA is not CONSULTING the hash to forward. The missing piece is a CLA
+  fast-path FORWARD-ENABLE (the mode/register that switches the CLA from trap-all to hash-forward),
+  which is NOT among the 3 ported init functions.
+### NEXT RE TARGET
+Find what enables the CLA forward/hash-consult path (vs trap-all). Candidates: a per-port or global
+CLA "fast/acl forward enable" register set at FFE-enable time or capWAN/routing provisioning; the
+oth_l3_pkt_action / default-flow action (0x9238c0cc/fc); trap_acl_en; or the SADM/QMG forward routing.
+This is the same "trap-all pipeline" enable the deadend history (Iter K-AD) circled — now narrowed to:
+extract tables ARE present, hash engine + entry write WORK, but CLA fwd=0 → the forward ACTION/enable
+is the last switch. Look at what tm_acl_fast_init's CALLER (tm.c:54773) does around the init calls, and
+any cla_set_config / acl-enable writes in that path.
