@@ -48,3 +48,23 @@ The numeric action->forward/trap meaning is consumed DOWNSTREAM (not in this fn)
 3. hashram: per slot, write data_id1 then data_id0, then cmd (rw=0,ram_id=5,slot). slot7 data1 hi16 read-live.
 4. boot + re-run the L3-routed flow + read hw_trap / CLA fwd. CAVEAT: best lead but UNPROVEN (prior
    candidates all HW-refuted) — port-and-test, do not assume.
+
+## UPDATE 2026-06-05 — port-safety RESOLVED; SPA indirect DATA-PORT addressing = open structural unknown
+★ CRITICAL SAFETY RESOLUTION: the driver's zx_sch_indirect_write uses 0x14014 too, but via tm_write
+(= e->base + TM_OFF 0x180000 + off = phys 0x92354014, the SCH/scheduler port). The SPA classify
+indirect (npp_write, phys 0x921d4014) is a DIFFERENT physical register. So porting the SPA classify with
+ram_id 0/5 does NOT collide with the SCH (ram_id 5 there = tcont-fill at 0x92354014, unrelated). Porting
+is SAFE — won't corrupt egress/QoS. (This conflict, if real, would have broken the scheduler.)
+OPEN: the SPA indirect DATA-port addressing (how spa_set_indirect_rw_data(data_id,value) maps data_id
+0..5 to a register). Live round-trip tests on mainline (poke, phys 0x921d4014 cmd / 0x921d401c data):
+- data_id N at 0x1401c + N*4 → only data_id 0 (0x1401c) round-trips; 0x14020+ read 0. WRONG.
+- FIFO (all 6 words to 0x1401c sequentially, then read 6×) → all reads return the LAST word
+  (0x66666666). So 0x1401c is a single 1-word reg, NOT a FIFO, NOT auto-incrementing.
+⇒ neither obvious pattern. The data_id→reg mapping must be read from spaRegTable[6] (base_off + the
+data_id stride/multiplier) in the tm.ko binary — tmOnuRegWrite(6,val,data_id) computes
+reg = tbl[6].stride*data_id + tbl[6].base (decomp tmOnuRegWrite). NEXT SESSION: objdump spaRegTable[6]
+(and [4]=cmd,[5]=status) from tm.ko to get the exact base+stride, THEN the matchram-bank write works.
+The matchram bit-packing (4 cases on rule&3, decomp tm.c:26206-26248) is decoded but not yet ported.
+STATUS: SPA-classify-rules-empty remains the best lead for the upstream forward-gate, the port is
+proven SAFE, the rules are extracted — blocked only on the data-port addressing (a bounded binary read).
+(Live mainline matchram bank0 left with test junk; reboot restores.)
