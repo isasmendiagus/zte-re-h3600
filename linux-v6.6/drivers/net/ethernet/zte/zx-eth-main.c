@@ -4304,9 +4304,14 @@ static ssize_t zx_clawrite_write(struct file *f, const char __user *ubuf,
 		n++;
 		p += consumed;
 	}
-	/* ram2-6 (hash) + ram1 (rule) use the CMD-first/descending hash protocol;
-	 * others (ram0/ram7) use the plain data-first write. */
-	if (ram_id >= 1 && ram_id <= 6)
+	/* ALL CLA indirect rams use the CMD-first/descending protocol (verified from
+	 * decomp): ram0 = cla_set_extra_index_table (CMD-first, 5 words desc, tm.c:2650);
+	 * ram1 = rule TCAM (17 words); ram2-6 = hash (15 words). The old plain data-first
+	 * path (zx_cla_write_entry) did NOT persist ram0 — that's why the ram0 extract
+	 * write silently failed. ram7 (cpu_queue) still uses the plain path. */
+	if (ram_id == 0)
+		rc = zx_cla_write_hash(e, 0, addr, data, 5);
+	else if (ram_id >= 1 && ram_id <= 6)
 		rc = zx_cla_write_hash(e, ram_id & 0xff, addr, data,
 				       (ram_id == 1) ? 17 : 15);
 	else

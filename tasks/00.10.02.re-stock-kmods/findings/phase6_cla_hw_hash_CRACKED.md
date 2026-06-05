@@ -183,3 +183,18 @@ ram0[0x09]; the ram1 rule needs mainline winoffsets/inport), THEN the ram2 entry
 (now-validated) HW hash. The hash engine, write protocol, key builder, and extract byte-order are all
 validated; the gap is the ram0/ram1 enablement of the hash path.
 Tools added: scripts/hw_slot_sweep.py (key/entry/bucket builder), scripts/hw_slot_sweep_run.py (sweep).
+
+## UPDATE 2026-06-05b — ram0 WRITE BUG FIXED (CMD-first for ALL rams) + chain still gated by ram1 match
+BUG found (user-prompted): clawrite routed ram_id 0 to the plain data-first zx_cla_write_entry, but
+cla_set_extra_index_table (tm.c:2650) shows ram0 ALSO uses CMD-first + DESCENDING (cla_set_indirect_rw_cmd
+first, then data_id 4..0, 5 words) — same protocol as the hash. So the ram0 extract write SILENTLY
+FAILED (read back all zeros). FIX (zx-eth-main.c clawrite): route ram_id 0 through zx_cla_write_hash
+with nwords=5. VERIFIED: after the fix, `clawrite 0 9 <extract>` reads back the full config
+(93929190 97969594 9b9a9998 9f9e9d9c 00150051). ⇒ ALL CLA indirect rams (0/1/2-6) are CMD-first+desc;
+only ram7 uses the plain path. (phase6_stock_hardfast_trace.md:116 documented this for ram1-6 but not ram0.)
+CHAIN TEST with working ram0: wrote ram0[0x09] + ram1[0x98] (stock) + ram2 fwd entry at all 6 buckets,
+sent the matched flow + control → STILL traps 60/60 (no forward). NEXT BLOCKER: the stock ram1[0x98]
+rule does not match a mainline lan4 ingress flow (it carries stock's inport / winoffset match), so the
+HW never triggers the ram2 hash for my flow. Need to DECODE ram1[0x98] (winoffset0..19 / winmask /
+inport_mask byte0x39 / hash_len) and rebuild it to match the mainline flow class + inport, OR find the
+mainline ram1 rule that already covers routed TCP and point it at ram0[0x09]+the hash.
