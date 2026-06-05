@@ -119,3 +119,28 @@ NET: hash mechanism confirmed correct; gate is the ingress consult/select upstre
 The remaining RE is a broad INGRESS-region diff stock-vs-mainline (SPA 0x921d4xxx, the ingress
 classify/admit, transfer_en/da_lookup 0x92388xxx, the parser→extract SELECT) at idle (when stock reads
 are reliable) — NOT the CLA config block (already proven identical). This is the focused next effort.
+
+## UPDATE 2026-06-05 — SPA classify engine: ON but RULE RAMs EMPTY on mainline (current best lead)
+Agent RE flagged the SPA classify/match engine (spa_set_match_mode + matchram + hashram, the hashram
+`action` field = per-packet forward-vs-trap) as configured by stock's tm_pon_pp_initial but absent from
+the mainline driver's flat replay (indirect-RAM loads a register dump can't capture). ON-DEVICE VERIFY
+(mainline, poke — reliable; stock SPA range 0x75xxx is NOT readable via fpga -r, different access domain):
+- match_mode 0x921d407c = **0x1** (engine ON — agent's "off" guess REFUTED; bootloader/other init sets it)
+- reg_pkt_up 0x921d4000 = 0xffffffff, reg_pkt_dn 0x921d4040 = 0xffffffff (ptype enables ON)
+- 0x921d4054 = 0x03ff05dc ; indirect status 0x921d4018 = 1 (idle)
+- **SPA matchram slot0 (indirect ram_id=0) = all zero; hashram slot0 (ram_id=5) = all zero** → the SPA
+  CLASSIFY RULE RAMs are EMPTY on mainline (read via cmd 0x921d4014 = addr|ram_id<<22|rw<<27, data
+  0x921d401c). Stock loads them (spa_set_matchram from _LANCHOR1 0x160B + spa_set_hashram from
+  DAT_0004eee4) — mainline never does.
+HYPOTHESIS (best current lead): the SPA classify engine is enabled but rule-less on mainline, so it
+emits no classify/forward action for L3-routed unicast → those flows trap, never reaching the CLA hash
+(L2 still forwards via the separate SBRG DA-lookup path, which is why L2 works but L3-routed doesn't).
+CAVEAT: like the prior agent candidates (CLA config, match_mode — all refuted on HW), this needs
+port-and-test to confirm, not just decomp. NEXT: port the SPA matchram + hashram rule loading
+(templates _LANCHOR1 + DAT_0004eee4 from stock spa init, via the SPA indirect iface 0x921d4014/401c),
+then re-test the routed flow. If still traps, the gate is elsewhere (DPA protocol-analyze, or kotrace
+the live stock forward decision — the SPA range being fpga-unreadable means a live stock diff needs the
+indirect-read recipe or kotrace).
+### Reads gotcha (for next session)
+Stock fpga -r reads the CLA/NPP range (0xe3xxx) but NOT the SPA range (0x75xxx) — and /dev/logger_main
+floods under any FFE activity (rate-limiter drops read lines). Mainline poke reads ANY reg reliably.
