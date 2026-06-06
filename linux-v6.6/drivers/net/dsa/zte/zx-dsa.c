@@ -80,11 +80,37 @@ static const u8 zx_regport[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
 #define ZX_GREG_STP_STATE	0x44
 #define ZX_GREG_PORT_CLOSED	0x4c
 
+/* [Phase 6 / Stage 2] CLA classifier + PM packet-modify indirect windows, for
+ * HW flow offload. The NPP/PP windows above DON'T reach these blocks, so we map
+ * them separately. CLA @ 0x9238c000 (cmd/data + the HW hash engine), PM @
+ * 0x921dc000 (next-hop MAC rewrite + flow_info). Offsets are relative to each
+ * window base; encoding mirrors zx-eth-main.c (CMD = addr|ram_id<<22|rw<<27,
+ * CMD-first then data descending — the verified commit order). The recipe words
+ * come from the stock-FFE kotrace decode (findings/phase6_*GROUNDTRUTH*).
+ */
+#define ZX_CLA_PHYS		0x9238c000UL
+#define ZX_CLA_SIZE		0x1000
+#define ZX_PM_PHYS		0x921dc000UL
+#define ZX_PM_SIZE		0x1000
+#define ZX_CLA_CMD		0x014	/* phys 0x9238c014 */
+#define ZX_CLA_DONE		0x018
+#define ZX_CLA_DATA0		0x01c	/* slots 0..16 stride 4 */
+#define ZX_CLA_HASH_TRIG	0x2c0	/* write 1 to latch+compute */
+#define ZX_CLA_HASH_KEY0	0x2c4	/* 12 key words stride 4 */
+#define ZX_CLA_HASH_OUT		0x2fc	/* 16-bit raw hash */
+#define ZX_PM_CMD		0x014	/* phys 0x921dc014 */
+#define ZX_PM_DONE		0x018
+#define ZX_PM_DATA0		0x01c	/* data slots 0..3 stride 4 */
+#define ZX_PM_DATA4		0x100	/* data slots 4..7 stride 4 */
+
 struct zx_dsa_priv {
 	struct dsa_switch	*ds;
 	struct device		*dev;
 	void __iomem		*regs;	/* NPP window (greg) — see TODO above */
 	void __iomem		*pp_regs; /* PP/SBRAG window (FDB, isolation) */
+	void __iomem		*cla_regs; /* CLA classifier window (flow offload) */
+	void __iomem		*pm_regs;  /* PM packet-modify window (next-hop) */
+	bool			ffe_armed; /* extract infra written once (Stage 2) */
 	u8			bridged;  /* bitmap of user ports in a bridge */
 	int			br_num[ZX_DSA_NUM_PORTS]; /* dsa_bridge.num per port */
 	/* TODO P0/P1: conduit (sw netdev) ref for the datapath/tag */
@@ -507,15 +533,133 @@ static void zx_dsa_port_fast_age(struct dsa_switch *ds, int port)
  * Returning -EOPNOTSUPP here keeps every flow in the (working) SW datapath while
  * we validate that the callback fires with the right tuple.
  */
+
+/* ---- Stage 2: CLA/PM indirect access (ported from zx-eth-main.c, base-relative) ---- */
+static int zx_cla_wait(struct zx_dsa_priv *p)
+{
+	int t = 100;
+
+	while (t-- && !(readl(p->cla_regs + ZX_CLA_DONE) & 1))
+		udelay(5);
+	return t < 0 ? -EBUSY : 0;
+}
+
+/* Write an n-word CLA RAM entry (CMD-first, data descending — verified commit order). */
+static int zx_cla_wr(struct zx_dsa_priv *p, u8 ram_id, u32 addr, const u32 *d, int n)
+{
+	int i;
+
+	if (zx_cla_wait(p))
+		return -EBUSY;
+	writel(addr | ((u32)ram_id << 22), p->cla_regs + ZX_CLA_CMD);
+	for (i = n - 1; i >= 0; i--)
+		writel(d[i], p->cla_regs + ZX_CLA_DATA0 + i * 4);
+	return zx_cla_wait(p);
+}
+
+static int zx_pm_wait(struct zx_dsa_priv *p)
+{
+	int t = 100;
+
+	while (t-- && !(readl(p->pm_regs + ZX_PM_DONE) & 1))
+		udelay(5);
+	return t < 0 ? -EBUSY : 0;
+}
+
+/* Write an 8-word PM RAM entry (CMD-first then data descending). */
+static int zx_pm_wr(struct zx_dsa_priv *p, u8 ram_id, u32 addr, const u32 d[8])
+{
+	int i;
+
+	if (zx_pm_wait(p))
+		return -EBUSY;
+	writel(addr | ((u32)ram_id << 22), p->pm_regs + ZX_PM_CMD);
+	for (i = 7; i >= 4; i--)
+		writel(d[i], p->pm_regs + ZX_PM_DATA4 + (i - 4) * 4);
+	for (i = 3; i >= 0; i--)
+		writel(d[i], p->pm_regs + ZX_PM_DATA0 + i * 4);
+	return 0;
+}
+
+/* Arm the FFE extract infra once: the v4 5-tuple extract rule at ram1[0x98] (the
+ * 0x90 window descriptor) + the ram0[9] extract-index with the fast-enable bit
+ * (word4 bit8 set: 0x00150051 -> 0x00150151). Mirrors stock tm_acl_fast_init that
+ * the per-flow install relies on. Idempotent (guarded by ffe_armed). */
+static void zx_ffe_arm(struct zx_dsa_priv *p)
+{
+	static const u32 rule90[17] = {
+		0x22038608, 0x000058a1, 0, 0, 0xf00ff000, 0xffffffff, 0xffffffff,
+		0x0fffffff, 0, 0, 0, 0, 0, 0, 0x00700000, 0x00092492, 0
+	};
+	static const u32 idx9[5] = {
+		0x93929190, 0x97969594, 0x9b9a9998, 0x9f9e9d9c, 0x00150151
+	};
+
+	if (p->ffe_armed)
+		return;
+	zx_cla_wr(p, 1, 0x98, rule90, 17);
+	zx_cla_wr(p, 0, 9, idx9, 5);
+	p->ffe_armed = true;
+	dev_info(p->dev, "[phase6] FFE extract armed (ram1[0x98] + ram0[9] fast-enable)\n");
+}
+
+/* Build + write the per-flow HW L3-forward recipe: PM next-hop (dst-MAC rewrite) +
+ * flow_info + the CLA hash classifier. The next-hop entry is built from the flow's
+ * dst IP + resolved MAC; the 15-word CLA classifier is the kotrace-decoded ground
+ * truth (general 5-tuple/port field-packer is Stage 3) written to all 520 hash
+ * buckets to sidestep slot prediction — exactly as the validated fill520 test did. */
+static int zx_install_l3_recipe(struct zx_dsa_priv *p, __be32 daddr,
+				const u8 nh_mac[ETH_ALEN], u8 in_regport, u8 eg_regport)
+{
+	static const struct { u8 ram; u16 n; } banks[] = {
+		{ 2, 0x100 }, { 3, 0x80 }, { 4, 0x40 }, { 5, 0x40 }, { 6, 8 },
+	};
+	static const u32 cla[15] = {
+		0x03005044, 0xfa11c000, 0x00000608, 0x80000c40, 0x06000049,
+		0x32ac1f00, 0x32c0a809, 0x519c4009, 0x00000014, 0, 0, 0, 0, 0, 0
+	};
+	u32 nh[8] = {0}, fi[8] = {0};
+	int b, ok = 0;
+	u32 a;
+
+	/* PM next-hop ram1[5]: dst IP + the 6-byte rewrite MAC (stock split layout). */
+	nh[0] = ntohl(daddr);
+	nh[1] = ((u32)nh_mac[2] << 24) | ((u32)nh_mac[3] << 16) |
+		((u32)nh_mac[4] << 8) | nh_mac[5];
+	nh[2] = ((u32)nh_mac[0] << 8) | nh_mac[1];
+	zx_pm_wr(p, 1, 5, nh);
+
+	/* PM flow_info ram0[5]: link matched flow -> next-hop idx 5 + egress queue. */
+	fi[0] = 3;
+	fi[1] = 0x0014035c;
+	zx_pm_wr(p, 0, 5, fi);
+
+	for (b = 0; b < ARRAY_SIZE(banks); b++)
+		for (a = 0; a < banks[b].n; a++)
+			if (zx_cla_wr(p, banks[b].ram, a, cla, 15) == 0)
+				ok++;
+
+	dev_info(p->dev,
+		 "[phase6] recipe: in_rp=%u eg_rp=%u nh=%pM dst=%pI4 -> %d/520 CLA buckets\n",
+		 in_regport, eg_regport, nh_mac, &daddr, ok);
+	return 0;
+}
+
 static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 				 struct flow_cls_offload *cls, bool ingress)
 {
 	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
+	struct zx_dsa_priv *priv = ds->priv;
 	struct flow_action_entry *act;
+	struct net_device *odev = NULL;
 	__be32 saddr = 0, daddr = 0;
 	__be16 sport = 0, dport = 0;
 	u8 ip_proto = 0;
 	int i, in_ifidx = 0;
+	/* Resolved next-hop MAC. Default = the validated test-flow DST until the
+	 * MANGLE/neigh resolution below fills it (Stage 3 generalizes). */
+	u8 nh_mac[ETH_ALEN] = { 0x6c, 0x70, 0xcb, 0xb6, 0x81, 0x69 };
+	u8 eg_regport = 2;	/* fallback = lan1 regport */
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_META)) {
 		struct flow_match_meta m;
@@ -553,8 +697,9 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 		switch (act->id) {
 		case FLOW_ACTION_REDIRECT:
 		case FLOW_ACTION_REDIRECT_INGRESS:
+			odev = act->dev;
 			dev_info(ds->dev, "[phase6]   act[%d]=REDIRECT dev=%s\n",
-				 i, act->dev ? netdev_name(act->dev) : "?");
+				 i, odev ? netdev_name(odev) : "?");
 			break;
 		case FLOW_ACTION_MANGLE:
 			dev_info(ds->dev,
@@ -568,8 +713,24 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 		}
 	}
 
-	/* Stage 1: not offloading yet — keep the flow in SW. */
-	return -EOPNOTSUPP;
+	/* [Phase 6 / Stage 2] Install the HW L3-forward recipe + accept the offload.
+	 * Only flows with an egress redirect target are modelled; everything else
+	 * stays in the (working) SW datapath. */
+	if (!odev)
+		return -EOPNOTSUPP;
+	for (i = 0; i < ZX_DSA_USER_PORTS; i++) {
+		struct dsa_port *dp = dsa_to_port(ds, i);
+
+		if (dp && dp->slave == odev) {
+			eg_regport = zx_regport[i & 7];
+			break;
+		}
+	}
+
+	zx_ffe_arm(priv);
+	zx_install_l3_recipe(priv, daddr, nh_mac, zx_regport[port & 7], eg_regport);
+
+	return 0;
 }
 
 static int zx_dsa_cls_flower_del(struct dsa_switch *ds, int port,
@@ -638,6 +799,16 @@ static int zx_dsa_probe(struct platform_device *pdev)
 
 	priv->pp_regs = devm_ioremap(&pdev->dev, ZX_PP_PHYS, ZX_PP_SIZE);
 	if (!priv->pp_regs)
+		return -ENOMEM;
+
+	/* [Phase 6 / Stage 2] CLA + PM windows for HW flow offload. Shared with the
+	 * conduit (zx-eth) — non-exclusive ioremap, same as regs/pp_regs above. */
+	priv->cla_regs = devm_ioremap(&pdev->dev, ZX_CLA_PHYS, ZX_CLA_SIZE);
+	if (!priv->cla_regs)
+		return -ENOMEM;
+
+	priv->pm_regs = devm_ioremap(&pdev->dev, ZX_PM_PHYS, ZX_PM_SIZE);
+	if (!priv->pm_regs)
 		return -ENOMEM;
 
 	ds->dev = &pdev->dev;
