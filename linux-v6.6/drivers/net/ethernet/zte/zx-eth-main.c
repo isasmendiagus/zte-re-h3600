@@ -318,12 +318,14 @@ struct zx_eth {
 	void __iomem *carved_va;	/* memremap_wc(0x4C000000, 64 MiB) */
 	void *bppe_cpu;		dma_addr_t bppe_dma;	/* u16 index array (carved offset) */
 	void *bp_cpu;		dma_addr_t bp_dma;	/* BP backing store (carved offset) */
-	void *rxdesc_cpu;	dma_addr_t rxdesc_dma;	/* RX desc ring (carved offset) */
+	void *rxdesc_cpu;	dma_addr_t rxdesc_dma;	/* RX desc ring 0 (UP) — carved offset */
+	void *rxdesc_dn_cpu;	dma_addr_t rxdesc_dn_dma; /* RX desc ring 1 (DN/WAN) = rxdesc + 0x20000 */
 	void *txdesc_cpu;	dma_addr_t txdesc_dma;	/* TX UP desc ring (carved offset) */
 	void *dndesc_cpu;	dma_addr_t dndesc_dma;	/* TX DN desc ring (carved offset) */
 	u32 tx_head;		/* current TX desc write index (0..1023) */
 	spinlock_t tm_tx_lock;
-	u32 rx_head[TM_NUM_RX_QUEUES];
+	u32 rx_head[TM_NUM_RX_QUEUES];		/* ring 0 (UP) per-q cursor */
+	u32 rx_head_dn[TM_NUM_RX_QUEUES];	/* ring 1 (DN/WAN) per-q cursor */
 	u32 tm_irq_count;
 	u32 tm_napi_count;
 	u32 tm_rx_count;
@@ -1799,6 +1801,13 @@ static int zx_tm_alloc_pools(struct zx_eth *e)
 	e->bp_dma     = CARVED_BASE_PHYS + CARVED_BP_OFF;
 	e->rxdesc_cpu = (void *)(base + CARVED_RXDESC_OFF);
 	e->rxdesc_dma = CARVED_BASE_PHYS + CARVED_RXDESC_OFF;
+	/* RX ring 1 (DN/WAN): the HW derives it as the ring-0 region + 0x20000 (no
+	 * separate base register — only TM[+0xF0] is programmed; stock queue_init
+	 * RE). The DN/uplink (MAC4/WAN) ingress→CPU frames land here. Zero both rings
+	 * (0x40000) so stale VALID/len bits don't make the scan deliver phantoms. */
+	e->rxdesc_dn_cpu = (void *)(base + CARVED_RXDESC_OFF + 0x20000);
+	e->rxdesc_dn_dma = CARVED_BASE_PHYS + CARVED_RXDESC_OFF + 0x20000;
+	memset_io(base + CARVED_RXDESC_OFF, 0, 0x40000);
 	e->txdesc_cpu = (void *)(base + CARVED_TXUP_OFF);
 	e->txdesc_dma = CARVED_BASE_PHYS + CARVED_TXUP_OFF;
 	e->dndesc_cpu = (void *)(base + CARVED_TXDN_OFF);
@@ -1960,12 +1969,33 @@ static int zx_pp_pm_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 
 	if (zx_pp_pm_wait_done(e))
 		return -EBUSY;
-	for (i = 0; i < 4; i++)
-		writel(data[i], e->base + PP_PM_REG_DATA0 + i * 4);
-	for (i = 4; i < 8; i++)
-		writel(data[i], e->base + PP_PM_REG_DATA4 + (i - 4) * 4);
+	/* CMD-FIRST then data (descending) — matches stock pp_pm_set_*_ram_info
+	 * (kotrace: X cmd then Y data_id 2,1,0) and the verified zx_pp_pm_set_cpu_mac.
+	 * The old data-first order did NOT commit PM entries. */
 	zx_pp_pm_set_cmd(e, 0, ram_id, ram_addr);
-	return zx_pp_pm_wait_done(e);
+	for (i = 7; i >= 4; i--)
+		writel(data[i], e->base + PP_PM_REG_DATA4 + (i - 4) * 4);
+	for (i = 3; i >= 0; i--)
+		writel(data[i], e->base + PP_PM_REG_DATA0 + i * 4);
+	return 0;
+}
+
+/* Read an 8-word pp_pm RAM entry via the indirect iface (rw=1). */
+static int zx_pp_pm_read_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
+			       u32 data[8])
+{
+	int i;
+
+	if (zx_pp_pm_wait_done(e))
+		return -EBUSY;
+	zx_pp_pm_set_cmd(e, 1, ram_id, ram_addr);	/* rw=1 read */
+	if (zx_pp_pm_wait_done(e))
+		return -EBUSY;
+	for (i = 0; i < 4; i++)
+		data[i] = readl(e->base + PP_PM_REG_DATA0 + i * 4);
+	for (i = 4; i < 8; i++)
+		data[i] = readl(e->base + PP_PM_REG_DATA4 + (i - 4) * 4);
+	return 0;
 }
 
 /* Replay all pp_pm entries dumped from stock (ram=3 default flow_info
@@ -2569,7 +2599,23 @@ static void zx_red_block_init(struct zx_eth *e)
 		else			{ max_sp = 0x3ff; }
 		zx_red_set_outbuf(e, q, guart, max_sp);
 	}
-	dev_info(e->dev, "RED block init (0x92344000): globals + 400 out-buffer queues [Iter Y, untested]\n");
+
+	/* IN-buffer per-queue (stock red_set_in_buffer_queue_cfg, q<0x180, guart=0x20 max_sp=0x200).
+	 * THE INGRESS RED buffer — mainline omitted it, so each queue's in-buffer max_space stayed at
+	 * the reset default (≈0) and RED REJECTED frames at QMG-ingress. This is why the WAN DN→CPU
+	 * path drops (lan4 rx=0, RED[0x1a044] climbs) and is the same ingress reject as the LAN
+	 * redwedge. type=2 in the RED indirect cmd (q | 2<<22); data = guart | (max_sp << 13). */
+	for (q = 0; q < 0x180; q++) {
+		int t = 20;
+
+		while (t-- && !(tm_read(e, RED_IND_DONE) & 1))
+			udelay(2);
+		if (t < 0)
+			break;
+		tm_write(e, RED_IND_CMD, q | (2u << 22));
+		tm_write(e, RED_IND_DATA0, (0x20u & 0x1fff) | ((0x200u & 0x7ffff) << 13));
+	}
+	dev_info(e->dev, "RED block init (0x92344000): globals + 400 out-buffer + 0x180 in-buffer queues\n");
 }
 
 /* pon_pp_ctrl_init equivalent — 2 writes + 52ms delay.
@@ -2985,7 +3031,8 @@ static void zx_tm_dma_init(struct zx_eth *e)
  */
 static int zx_bmu_free_bp(struct zx_eth *e, u16 bp_idx, u8 is_pon);
 
-static void zx_tm_release_rx_desc_raw(struct zx_eth *e, u8 q, u16 count, u8 sop)
+static void zx_tm_release_rx_desc_raw(struct zx_eth *e, u8 q, u16 count, u8 sop,
+				      u8 ring)
 {
 	int t = 100;
 
@@ -3003,7 +3050,8 @@ static void zx_tm_release_rx_desc_raw(struct zx_eth *e, u8 q, u16 count, u8 sop)
 	 * → tm_rx_count/tm_irq freeze at ~1024 = the unicast→CPU wedge. Stock soft_release_rx_desc
 	 * (plat decomp @0x1a8e8) sets bit14 to MATCH the ring it consumed. Fix: bit14=0 to ack the
 	 * ring 0 the poll actually drains. (Explains why Iter U failed: right count, wrong ring.) */
-	tm_write(e, 0x4068, ((u32)count << 4) | (u32)q | ((u32)sop << 3));
+	tm_write(e, 0x4068, ((u32)ring << 14) | ((u32)count << 4) | (u32)q |
+			    ((u32)sop << 3));
 	tm_write(e, 0x4064, 1);
 }
 
@@ -3012,7 +3060,7 @@ static void zx_tm_release_rx_desc(struct zx_eth *e, u8 q, u16 count)
 	/* For single-buffer packets, all descs are SOPs (sop=1).
 	 * Stock would also do soft_release_rx_desc(1, q, 0, 0) but that's a no-op.
 	 */
-	zx_tm_release_rx_desc_raw(e, q, count, 1);
+	zx_tm_release_rx_desc_raw(e, q, count, 1, 0);
 }
 
 /* NAPI poll — based on pon_tm_net_poll RE, simplified for first iteration */
@@ -3036,17 +3084,20 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 	RXCP(e, 1, "enter budget=%d tm_irq_count=%u tm_rx_count=%u",
 	     budget, e->tm_irq_count, e->tm_rx_count);
 
-	/* Check each of 8 RX queues for pending descriptors */
-	for (q = 0; q < TM_NUM_RX_QUEUES && done < budget; q++) {
+	/* Drain BOTH RX rings per queue. ring 0 (LOW16) = UP/LAN trap path (works);
+	 * ring 1 (HIGH16) = DN path for the WAN/MAC4 uplink ingress→CPU. The HW writes
+	 * ring 1 at rxdesc + 0x20000 (stock queue_init: single TM[+0xF0] base, ring1 =
+	 * region + 0x20000). Mainline read only LOW16 → WAN/DN frames piled in ring 1
+	 * (q7 HIGH16) undrained → WAN RX→CPU never worked. Release tm[0x4068] bit14=ring.
+	 * (2026-06-06, stock pon_tm_net_poll dual-ring; root cause via user "check main".) */
+	for (int ring = 0; ring < 2 && done < budget; ring++) {
+	 u8  *desc_base = ring ? (u8 *)e->rxdesc_dn_cpu : (u8 *)e->rxdesc_cpu;
+	 u32 *heads     = ring ? e->rx_head_dn : e->rx_head;
+
+	 for (q = 0; q < TM_NUM_RX_QUEUES && done < budget; q++) {
 		u32 status = tm_read(e, TM_RX_QCNT_BASE + q * 4);
-		u32 pending = status & 0xffff;	/* [Iter 30] pending is LOW16
-						 * not high16. Empirical 2026-05-28
-						 * with PP CLA + QMG fixes in place:
-						 * TM[0x10114] read 0x0000000d under
-						 * ping, queue 5 had 13 packets pending
-						 * in LOW16. Prior `status >> 16` was
-						 * always 0 → NAPI saw no work.
-						 */
+		u32 pending = ring ? (status >> 16) : (status & 0xffff);
+		u8  rxring = (u8)ring;
 		u32 take, n, ack = 0, start_head, slots;
 
 		if (!pending) {
@@ -3058,7 +3109,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 
 		take = min_t(u32, pending, (u32)(budget - done));
 		take = min_t(u32, take, TM_RX_DESC_PER_Q);
-		start_head = e->rx_head[q];	/* [Iter U] remember ring pos to release the FULL advance */
+		start_head = heads[q];	/* [Iter U] remember ring pos to release the FULL advance */
 
 		/* [Iter 31] HW writes RX descs out-of-order: in queue 5, first
 		 * frame at idx 0, subsequent at idx 12+. SW rx_head[q] advance
@@ -3066,14 +3117,14 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 		 * looking for valid desc (len > 0) — skip empty/stale entries.
 		 */
 		for (n = 0; n < take; n++) {
-			u32 idx = e->rx_head[q];
+			u32 idx = heads[q];
 			u8 *desc;
 			u16 len;
 			int scan;
 
 			/* Skip empty descs (len=0) up to a full ring scan */
 			for (scan = 0; scan < TM_RX_DESC_PER_Q; scan++) {
-				desc = (u8 *)e->rxdesc_cpu +
+				desc = desc_base +
 					(q * TM_RX_DESC_PER_Q + idx) * TM_DESC_SIZE;
 				len = le16_to_cpu(*(__le16 *)(desc + 12)) >> 2;
 				if (len > 0 && len < 1600)
@@ -3084,7 +3135,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 				/* Scanned whole ring, no valid desc → stop */
 				break;
 			}
-			e->rx_head[q] = idx;
+			heads[q] = idx;
 			/* bp_idx is 10 bits split: low 7 in desc[7]>>1, high 7 in desc[8].
 			 * Stock pon_tm_net_poll @ +0x8754:
 			 *   uVar11 = (desc[7]>>1) | (desc[8]<<7);
@@ -3254,7 +3305,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 			 * dma_wmb so the HW sees it before re-filling the slot. */
 			*(__le16 *)(desc + 12) = 0;
 			dma_wmb();
-			e->rx_head[q] = (idx + 1) & (TM_RX_DESC_PER_Q - 1);
+			heads[q] = (idx + 1) & (TM_RX_DESC_PER_Q - 1);
 			done++;
 			ack++;
 		}
@@ -3268,11 +3319,12 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 		 * freezes) — the unicast→CPU wedge. Stock pon_tm_net_poll releases the
 		 * full scanned range in two calls (sop=0 non-delivered + sop=1 delivered).
 		 */
-		slots = (e->rx_head[q] - start_head) & (TM_RX_DESC_PER_Q - 1);
+		slots = (heads[q] - start_head) & (TM_RX_DESC_PER_Q - 1);
 		if (slots > ack)
-			zx_tm_release_rx_desc_raw(e, (u8)q, (u16)(slots - ack), 0);
+			zx_tm_release_rx_desc_raw(e, (u8)q, (u16)(slots - ack), 0, rxring);
 		if (ack)
-			zx_tm_release_rx_desc_raw(e, (u8)q, (u16)ack, 1);
+			zx_tm_release_rx_desc_raw(e, (u8)q, (u16)ack, 1, rxring);
+	 }
 	}
 
 	if (done < budget) {
@@ -4374,6 +4426,202 @@ static const struct file_operations zx_clawrite_fops = {
 	.llseek = default_llseek,
 };
 
+/* fill520: write ONE ram2-hash entry (15 words) into ALL 520 hash buckets
+ * (ram2[0..0xff] ram3[0..0x7f] ram4[0..0x3f] ram5[0..0x3f] ram6[0..7]) IN-KERNEL,
+ * instantly — instead of 520 slow UART pokes. Phase 6 slot-sweep test accelerator.
+ * Write "<w0> <w1> ... <w14>" (hex). Removes the slot-prediction dimension so a
+ * routed flow that the FFE extract now classifies will match SOMEWHERE and HW-forward. */
+static ssize_t zx_fill520_write(struct file *f, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	static const struct { u8 ram; u16 n; } banks[] = {
+		{ 2, 0x100 }, { 3, 0x80 }, { 4, 0x40 }, { 5, 0x40 }, { 6, 8 },
+	};
+	char buf[320];
+	u32 data[15] = {0};
+	int n = 0, consumed, b, ok = 0;
+	unsigned int a;
+	char *p;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	p = buf;
+	while (n < 15 && sscanf(p, "%x%n", &data[n], &consumed) == 1) {
+		n++;
+		p += consumed;
+	}
+	for (b = 0; b < ARRAY_SIZE(banks); b++)
+		for (a = 0; a < banks[b].n; a++)
+			if (zx_cla_write_hash(e, banks[b].ram, a, data, 15) == 0)
+				ok++;
+	pr_info("[ZXETH] fill520: wrote entry (%d words) to %d/520 hash buckets\n",
+		n, ok);
+	return count;
+}
+
+static const struct file_operations zx_fill520_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_fill520_write,
+	.llseek = default_llseek,
+};
+
+/* pmwrite: write a PM (packet-modify) RAM entry via the pp_pm indirect iface
+ * (Phase 6 HW L3 forward). "<ram_id> <addr> <w0> ... <w7>" (hex). ram_id 1 = next-hop
+ * (MAC rewrite), 0 = flow_info. Mirrors stock pp_pm_set_next_hop_ram_info / set_flow_info,
+ * the per-flow L3 action mainline's replay never writes. <8 words → zero-filled. */
+static ssize_t zx_pmwrite_write(struct file *f, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[160];
+	u32 ram_id = 0, addr = 0, data[8] = {0};
+	int n = 0, pos = 0, consumed, rc;
+	char *p;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (sscanf(buf, "%x %x%n", &ram_id, &addr, &pos) != 2)
+		return -EINVAL;
+	p = buf + pos;
+	while (n < 8 && sscanf(p, "%x%n", &data[n], &consumed) == 1) {
+		n++;
+		p += consumed;
+	}
+	rc = zx_pp_pm_write_entry(e, ram_id & 0xff, addr, data);
+	pr_info("[ZXETH] pmwrite pm-ram%u addr%#x: %d words, rc=%d\n",
+		ram_id, addr, n, rc);
+	return rc ? rc : count;
+}
+
+static const struct file_operations zx_pmwrite_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_pmwrite_write,
+	.llseek = default_llseek,
+};
+
+/* pmpeek: read back a PM RAM entry. "<ram_id> <addr>" (hex) → logs 8 words. */
+static ssize_t zx_pmpeek_write(struct file *f, const char __user *ubuf,
+			       size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[64];
+	u32 ram_id = 0, addr = 0, data[8] = {0};
+	int rc;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (sscanf(buf, "%x %x", &ram_id, &addr) != 2)
+		return -EINVAL;
+	rc = zx_pp_pm_read_entry(e, ram_id & 0xff, addr, data);
+	pr_info("[ZXETH] pmpeek pm-ram%u addr%#x rc=%d: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+		ram_id, addr, rc, data[0], data[1], data[2], data[3],
+		data[4], data[5], data[6], data[7]);
+	return rc ? rc : count;
+}
+
+static const struct file_operations zx_pmpeek_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_pmpeek_write,
+	.llseek = default_llseek,
+};
+
+/* pmfill: write ONE PM flow_info entry (8 words) to ALL in-PM ram0 slots [0..0x3ff],
+ * to brute-force the CLA→flow_info linkage index (analogue of fill520 for the CLA hash).
+ * "<w0> ... <w7>" hex. Used to test whether a routed flow HW-forwards once the flow_info
+ * (→next-hop) is present at whatever index the CLA match links to. */
+static ssize_t zx_pmfill_write(struct file *f, const char __user *ubuf,
+			       size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[160];
+	u32 data[8] = {0};
+	int n = 0, consumed, ok = 0;
+	unsigned int a;
+	char *p;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	p = buf;
+	while (n < 8 && sscanf(p, "%x%n", &data[n], &consumed) == 1) {
+		n++;
+		p += consumed;
+	}
+	for (a = 0; a < 0x400; a++)
+		if (zx_pp_pm_write_entry(e, 0, a, data) == 0)
+			ok++;
+	pr_info("[ZXETH] pmfill: flow_info (%d words) -> %d ram0 slots\n", n, ok);
+	return count;
+}
+
+static const struct file_operations zx_pmfill_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_pmfill_write,
+	.llseek = default_llseek,
+};
+
+/* mdio: live read/write of a PHY register via the mii_bus (WAN ZX5201 = phy 8).
+ * "<phy> <reg>" reads (logs value); "<phy> <reg> <val>" writes. For diagnosing +
+ * bringing up the WAN copper link without a rebuild per attempt. */
+static ssize_t zx_mdio_write(struct file *f, const char __user *ubuf,
+			     size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	struct mii_bus *bus = NULL;
+	char buf[64];
+	u32 phy = 0, reg = 0, val = 0;
+	int n, k, v;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	n = sscanf(buf, "%x %x %x", &phy, &reg, &val);
+	if (n < 2)
+		return -EINVAL;
+	for (k = 0; k < 5; k++)
+		if (e->gephy[k]) {
+			bus = e->gephy[k]->mdio.bus;
+			break;
+		}
+	if (!bus) {
+		pr_err("[ZXETH] mdio: no mii_bus\n");
+		return -ENODEV;
+	}
+	if (n == 3) {
+		mdiobus_write(bus, phy, reg, val);
+		pr_info("[ZXETH] mdio W phy%u reg%#x = %#06x\n", phy, reg, val);
+	} else {
+		v = mdiobus_read(bus, phy, reg);
+		pr_info("[ZXETH] mdio R phy%u reg%#x = %#06x\n", phy, reg, v);
+	}
+	return count;
+}
+
+static const struct file_operations zx_mdio_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_mdio_write,
+	.llseek = default_llseek,
+};
+
 /* hashcalc: drive the CLA HW hash engine (Phase 6 Stage 2b). Write up to 12 hex key
  * words "<k0> <k1> ... <k11>"; zx_cla_hash_raw loads them, triggers, and reads the
  * 16-bit raw hash, logged here. This is the slot oracle the chip uses on ingress —
@@ -4758,6 +5006,11 @@ static void zx_debugfs_init(struct zx_eth *e)
 	debugfs_create_file("clapeek", 0644, zx_debugfs_root, e, &zx_clapeek_fops);
 	debugfs_create_file("clawrite", 0644, zx_debugfs_root, e, &zx_clawrite_fops);
 	debugfs_create_file("hashcalc", 0644, zx_debugfs_root, e, &zx_hashcalc_fops);
+	debugfs_create_file("fill520", 0644, zx_debugfs_root, e, &zx_fill520_fops);
+	debugfs_create_file("pmwrite", 0644, zx_debugfs_root, e, &zx_pmwrite_fops);
+	debugfs_create_file("mdio", 0644, zx_debugfs_root, e, &zx_mdio_fops);
+	debugfs_create_file("pmpeek", 0644, zx_debugfs_root, e, &zx_pmpeek_fops);
+	debugfs_create_file("pmfill", 0644, zx_debugfs_root, e, &zx_pmfill_fops);
 	debugfs_create_file("poke", 0644, zx_debugfs_root, e, &zx_poke_fops);
 	debugfs_create_file("fdbadd", 0644, zx_debugfs_root, e, &zx_fdbadd_fops);
 	debugfs_create_file("pktdeal", 0644, zx_debugfs_root, e, &zx_pktdeal_fops);
@@ -5069,9 +5322,15 @@ static void zx_wan_zx5201_config(struct zx_eth *e, struct mii_bus *bus)
 	mdiobus_write(bus, 9, 0x12, 0x0204);
 	v = mdiobus_read(bus, 9, 0x16);
 	mdiobus_write(bus, 9, 0x16, (((v < 0) ? 0 : v) & 0xfff3) | 4);
-	/* power-up: BMCR reg0 |= 0x800 (stock plat:3317) */
+	/* Bring the copper link UP. The old `BMCR |= 0x800` (mis-annotated "power-up"
+	 * from stock plat:3317) actually SET bit11 = POWER-DOWN, leaving the ZX5201
+	 * powered down so the host PHY never linked (carrier=0). CLEAR bit11 + enable
+	 * & restart autoneg. VERIFIED LIVE 2026-06-06 (debugfs mdio): clearing bit11
+	 * brings the host link up at 1000/FD. */
 	v = mdiobus_read(bus, 8, 0);
-	mdiobus_write(bus, 8, 0, ((v < 0) ? 0 : v) | 0x800);
+	if (v < 0)
+		v = 0;
+	mdiobus_write(bus, 8, 0, (v & ~0x800u) | 0x1200u);	/* ~power-down | AN-en | AN-restart */
 }
 
 /*
