@@ -614,8 +614,13 @@ static int zx_install_l3_recipe(struct zx_dsa_priv *p, __be32 daddr,
 	static const struct { u8 ram; u16 n; } banks[] = {
 		{ 2, 0x100 }, { 3, 0x80 }, { 4, 0x40 }, { 5, 0x40 }, { 6, 8 },
 	};
+	/* word3 = 0x80000000 EXACTLY (bit31 = VALID; low bits zero — confirmed
+	 * constant across stock fwd+rev captures, NOT egress-dependent; the old
+	 * 0x80000c40 low bits were a spurious decode). word4 inport/outport (the
+	 * 0x06xxxxYY low byte) + the 5-tuple words5-7 are still the unsolved
+	 * field-packer (Stage 3 — align tm_acl_get_fastHashRule vs the captures). */
 	static const u32 cla[15] = {
-		0x03005044, 0xfa11c000, 0x00000608, 0x80000c40, 0x06000049,
+		0x03005044, 0xfa11c000, 0x00000608, 0x80000000, 0x06000049,
 		0x32ac1f00, 0x32c0a809, 0x519c4009, 0x00000014, 0, 0, 0, 0, 0, 0
 	};
 	u32 nh[8] = {0}, fi[8] = {0};
