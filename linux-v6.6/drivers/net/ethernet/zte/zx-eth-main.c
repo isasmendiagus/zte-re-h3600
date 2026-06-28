@@ -51,7 +51,13 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/dsa/zte.h>
+#include <linux/list.h>
+#include <linux/rtnetlink.h>
 #include <net/dsa.h>
+#include <net/flow_offload.h>
+#include <net/neighbour.h>
+#include <net/route.h>
+#include <net/pkt_cls.h>
 
 /* Descriptor tables decoded from stock tm.ko's *RegTable symbols
  * (zx-fpga-reg-tables.h) and an older curated subset (zx_reg_tables.h);
@@ -1699,12 +1705,20 @@ static int zx_eth_stop(struct net_device *ndev)
 	return 0;
 }
 
+/* HW flow-offload entry (Workstream B). Defined after the CLA/PM helpers below;
+ * forward-declared here so it can be wired into the conduit's netdev ops. This is
+ * the ndo_setup_tc that DSA delegates TC_SETUP_FT (nf_flow_table/conntrack offload)
+ * to — see net/dsa/slave.c dsa_slave_setup_tc -> conduit master ndo_setup_tc. */
+static int zx_eth_setup_tc(struct net_device *ndev, enum tc_setup_type type,
+			   void *type_data);
+
 static const struct net_device_ops zx_eth_netdev_ops = {
 	.ndo_open	= zx_eth_open,
 	.ndo_stop	= zx_eth_stop,
 	.ndo_start_xmit	= zx_idm_xmit,
 	.ndo_set_mac_address = eth_mac_addr,
 	.ndo_validate_addr   = eth_validate_addr,
+	.ndo_setup_tc	= zx_eth_setup_tc,
 };
 
 /* ============================================================
@@ -1932,6 +1946,19 @@ static void zx_tm_bmu_enable(struct zx_eth *e)
  * When switch sees frame with dst_mac matching a slot → routes to CPU port.
  */
 #define ZX_SPA_ONU_MAC_BASE	0x14120
+/* SPA destination-MAC filter table ("trap_dmac"): 4 slots x 8 bytes at
+ * NPP+0x141A0. Same byte layout as ONU-MAC. When a slot holds a device MAC,
+ * the SPA parser sends frames with that dst_mac to the CPU (action_rsn
+ * UDF_DMAC0) *before* the CLA forward hash, which prevents HW L3 forwarding of
+ * routed to-me-MAC transit. Stock leaves this table EMPTY (it is populated only
+ * on demand at runtime by tm_soft_protocol_dmac_set, never by init); the SoC
+ * boot ROM, however, pre-loads it with the device MACs from fuses. We clear it
+ * to match stock so routed transit reaches the CLA (first packet -> LOOK_UP_MISS
+ * -> CPU routes, subsequent packets -> CLA HW forward). To-me management traffic
+ * is unaffected: it reaches the CPU via the L3-local (dst-IP) path, not this
+ * dst-MAC trap. See findings/trap_dmac_clear_HW_FORWARD_2026-06-28.md.
+ */
+#define ZX_SPA_TRAP_DMAC_BASE	0x141A0
 /* pp_pm indirect access regs (relative to npp_base). From ppPmRegTable decode:
  *   [0] cmd        0x1dc014 (mask fcfffff)
  *   [1] done_bit   0x1dc018 (mask 1)
@@ -1997,6 +2024,33 @@ static int zx_pp_pm_read_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 		data[i] = readl(e->base + PP_PM_REG_DATA4 + (i - 4) * 4);
 	return 0;
 }
+
+/* ---- PM-ops bridge to the built-in DSA flow-offload binder ----
+ *
+ * The binder (zx-dsa.c, built-in) cannot commit PM RAM through its own ioremap;
+ * the conduit's zx_pp_pm_write_entry/read_entry (via e->base) provably do. We
+ * register a {write,read} pair the binder calls. Capture `e` in a module-global
+ * set at probe (single instance — like zx_bmu_dump_eth above). */
+static struct zx_eth *zx_pm_ops_eth;
+
+static int zx_pm_ops_write(u8 ram_id, u32 addr, const u32 d[8])
+{
+	if (!zx_pm_ops_eth)
+		return -ENODEV;
+	return zx_pp_pm_write_entry(zx_pm_ops_eth, ram_id, addr, d);
+}
+
+static int zx_pm_ops_read(u8 ram_id, u32 addr, u32 d[8])
+{
+	if (!zx_pm_ops_eth)
+		return -ENODEV;
+	return zx_pp_pm_read_entry(zx_pm_ops_eth, ram_id, addr, d);
+}
+
+static struct zx_pm_ops zx_eth_pm_ops = {
+	.write = zx_pm_ops_write,
+	.read  = zx_pm_ops_read,
+};
 
 /* Replay all pp_pm entries dumped from stock (ram=3 default flow_info
  * + ram=6 global). Embedded static C array — see zx_pm_table.h for the
@@ -2083,7 +2137,7 @@ static int zx_cla_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
  * This differs from zx_cla_write_entry (data-first, ascending) which only commits
  * word0 for the hash rams. nwords = 15 for ram2-6 hash, 17 for ram1. */
 static int zx_cla_write_hash(struct zx_eth *e, u8 ram_id, u32 ram_addr,
-			     const u32 data[17], int nwords)
+			     const u32 *data, int nwords)
 {
 	int i;
 
@@ -2215,6 +2269,276 @@ static void zx_cla_ffe_extract_init(struct zx_eth *e)
 	dev_info(e->dev,
 		 "CLA FFE extract init: %u ok, %u fail (%zu ram1 rules + %zu ram0 index)\n",
 		 ok, fail, ARRAY_SIZE(zx_ffe_rules), ARRAY_SIZE(zx_ffe_index));
+}
+
+/* ===================================================================
+ * Phase 6 / Workstream B — HW flow-offload binder (conduit side).
+ *
+ * The conduit netdev (idm0/idm1) is the DSA conduit master. DSA delegates the
+ * nf_flow_table / conntrack HW-offload path (TC_SETUP_FT) to the conduit master's
+ * ndo_setup_tc (net/dsa/slave.c dsa_slave_setup_tc), which previously dead-ended at
+ * -EOPNOTSUPP. We now bind a flow_block_cb that handles TC_SETUP_CLSFLOWER and
+ * writes the PROVEN HW L3-forward recipe (CLA ram2 5-tuple entry brute-filled to all
+ * 520 hash buckets + PM ram1 next-hop + ram0 flow_info + ram6 sub_ram + ram3 cmd_ram),
+ * mirroring the DSA-side zx-dsa.c binder but using the conduit's own CLA/PM helpers.
+ * findings: trap_dmac_clear_HW_FORWARD_2026-06-28 + ffe_install_port_spec_2026-06-24.
+ * ===================================================================
+ */
+#define ZX_FT_FLOW_IDX		5	/* PM flow_info / next-hop slot */
+#define ZX_FT_SUBRAM_IDX	5	/* PM ram6 sub_ram slot */
+#define ZX_FT_CMD_IDX		5	/* PM ram3 cmd_ram (rewrite microcode) slot */
+
+/* Build the 15-word CLA ram2 forward entry for the 5-tuple (byte-exact reproduction
+ * of the HW-validated forwarding entries; see zx-dsa.c zx_cla_pack_entry). */
+static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
+			   __be16 sport, __be16 dport)
+{
+	u32 s = ntohl(saddr), d = ntohl(daddr);
+	u8 s0 = (s >> 24) & 0xff, s1 = (s >> 16) & 0xff, s2 = (s >> 8) & 0xff, s3 = s & 0xff;
+	u8 d0 = (d >> 24) & 0xff, d1 = (d >> 16) & 0xff, d2 = (d >> 8) & 0xff, d3 = d & 0xff;
+	u16 sp = ntohs(sport), dp = ntohs(dport);
+
+	cla[0] = 0x03005044;
+	cla[1] = (0xfau << 24) | (0x11u << 16) | (0xc0u << 8);	/* byte0x05=0xc0 e8_en */
+	cla[2] = 0x00000608;
+	cla[3] = 0x80000000;					/* valid */
+	cla[4] = ((u32)ip_proto << 24) | 0x00000049;		/* byte0x13=proto */
+	cla[5] = ((u32)s3 << 24) | ((u32)s0 << 16) | ((u32)s1 << 8);
+	cla[6] = ((u32)d3 << 24) | ((u32)d0 << 16) | ((u32)d1 << 8) | s2;
+	cla[7] = ((u32)(dp & 0xff) << 24) | ((u32)(sp >> 8) << 16) |
+		 ((u32)(sp & 0xff) << 8) | d2;
+	/* byte0x20 = dport HIGH byte. windata6 (CLA hash compare, tm.c:3433) = LE16 at
+	 * 0x1f/0x20 = the live dport; the old constant 0x14 only matched dport 0x14xx and
+	 * corrupted the key-compare for any other dport (verified on-device). */
+	cla[8] = (u32)(dp >> 8) & 0xff;
+	cla[9] = cla[10] = cla[11] = cla[12] = cla[13] = cla[14] = 0;
+}
+
+/* Write the full proven recipe (PM tables + CLA hash brute-fill). */
+static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
+				__be32 daddr, __be16 sport, __be16 dport,
+				const u8 nh_mac[ETH_ALEN], u8 eg_regport)
+{
+	static const struct { u8 ram; u16 n; } banks[] = {
+		{ 2, 0x100 }, { 3, 0x80 }, { 4, 0x40 }, { 5, 0x40 }, { 6, 8 },
+	};
+	u32 cla[15];
+	u32 nh[8] = {0}, fi[8] = {0}, sub[8] = {0}, cmd[8] = {0};
+	int b, ok = 0;
+	u32 a;
+
+	nh[0] = ntohl(daddr);
+	nh[1] = ((u32)nh_mac[2] << 24) | ((u32)nh_mac[3] << 16) |
+		((u32)nh_mac[4] << 8) | nh_mac[5];
+	nh[2] = ((u32)nh_mac[0] << 8) | nh_mac[1];
+	zx_pp_pm_write_entry(e, 1, ZX_FT_FLOW_IDX, nh);
+
+	fi[0] = (0x0de8u << 16) | ZX_FT_FLOW_IDX;	/* rewrite-arm | next_hop_idx */
+	fi[1] = 0x0014035c;
+	zx_pp_pm_write_entry(e, 0, ZX_FT_FLOW_IDX, fi);
+
+	sub[0] = ZX_FT_CMD_IDX;				/* ram6 sub_ram -> ram3 cmd idx */
+	zx_pp_pm_write_entry(e, 6, ZX_FT_SUBRAM_IDX, sub);
+
+	cmd[0] = 0x00800000;				/* ram3 cmd: last_cmd=1 (no-op fwd) */
+	zx_pp_pm_write_entry(e, 3, ZX_FT_CMD_IDX, cmd);
+
+	zx_ft_pack_cla(cla, ip_proto, saddr, daddr, sport, dport);
+	for (b = 0; b < ARRAY_SIZE(banks); b++)
+		for (a = 0; a < banks[b].n; a++)
+			if (zx_cla_write_hash(e, banks[b].ram, a, cla, 15) == 0)
+				ok++;
+
+	dev_info(e->dev,
+		 "[phase6/ft] recipe: proto=%u %pI4:%u->%pI4:%u eg_rp=%u nh=%pM -> %d/520 CLA buckets\n",
+		 ip_proto, &saddr, ntohs(sport), &daddr, ntohs(dport),
+		 eg_regport, nh_mac, ok);
+	return 0;
+}
+
+/* Resolve the next-hop MAC via route + neigh on the egress dev (mirrors stock FFE). */
+static bool zx_ft_resolve_nh(struct net_device *odev, __be32 daddr, u8 nh_mac[ETH_ALEN])
+{
+	struct neighbour *n;
+	struct rtable *rt;
+	__be32 nh_ip = daddr;
+	bool ok = false;
+
+	if (!odev)
+		return false;
+	rt = ip_route_output(dev_net(odev), daddr, 0, 0, odev->ifindex);
+	if (!IS_ERR(rt)) {
+		if (rt->rt_gw_family == AF_INET && rt->rt_gw4)
+			nh_ip = rt->rt_gw4;
+		ip_rt_put(rt);
+	}
+	n = neigh_lookup(&arp_tbl, &nh_ip, odev);
+	if (n) {
+		if (n->nud_state & NUD_VALID) {
+			read_lock_bh(&n->lock);
+			ether_addr_copy(nh_mac, n->ha);
+			read_unlock_bh(&n->lock);
+			ok = !is_zero_ether_addr(nh_mac);
+		}
+		neigh_release(n);
+	}
+	return ok;
+}
+
+/* Map a redirect/egress netdev to its chip regport. DSA per-port (lanN) slaves
+ * carry their port index via dsa_user_to_port(); fall back to lan1 (regport 2). */
+static const u8 zx_ft_regport[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
+static u8 zx_ft_egress_regport(struct net_device *odev)
+{
+	if (odev && dsa_slave_dev_check(odev)) {
+		struct dsa_port *dp = dsa_port_from_netdev(odev);
+
+		if (!IS_ERR_OR_NULL(dp))
+			return zx_ft_regport[dp->index & 7];
+	}
+	return 2;	/* fallback = lan1 */
+}
+
+/* Parse a flow_cls_offload 5-tuple + actions and install/remove the HW recipe. */
+static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
+{
+	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
+	struct flow_action_entry *act;
+	struct net_device *odev = NULL;
+	__be32 saddr = 0, daddr = 0;
+	__be16 sport = 0, dport = 0;
+	u8 nh_mac[ETH_ALEN] = {0};
+	bool have_mac = false;
+	u8 ip_proto = 0;
+	int i;
+
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
+		struct flow_match_basic m;
+
+		flow_rule_match_basic(rule, &m);
+		ip_proto = m.key->ip_proto;
+	}
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IPV4_ADDRS)) {
+		struct flow_match_ipv4_addrs m;
+
+		flow_rule_match_ipv4_addrs(rule, &m);
+		saddr = m.key->src;
+		daddr = m.key->dst;
+	}
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_PORTS)) {
+		struct flow_match_ports m;
+
+		flow_rule_match_ports(rule, &m);
+		sport = m.key->src;
+		dport = m.key->dst;
+	}
+
+	/* Only L3 5-tuple flows (TCP/UDP) are offloadable; ICMP/no-port -> SW. */
+	if ((ip_proto != IPPROTO_TCP && ip_proto != IPPROTO_UDP) || !daddr)
+		return -EOPNOTSUPP;
+
+	flow_action_for_each(i, act, &rule->action) {
+		switch (act->id) {
+		case FLOW_ACTION_REDIRECT:
+		case FLOW_ACTION_REDIRECT_INGRESS:
+			odev = act->dev;
+			break;
+		case FLOW_ACTION_MANGLE:
+			if (act->mangle.htype == FLOW_ACT_MANGLE_HDR_TYPE_ETH) {
+				u32 v = act->mangle.val;
+
+				if (act->mangle.offset == 0) {
+					nh_mac[0] = v & 0xff;
+					nh_mac[1] = (v >> 8) & 0xff;
+					nh_mac[2] = (v >> 16) & 0xff;
+					nh_mac[3] = (v >> 24) & 0xff;
+				} else if (act->mangle.offset == 4) {
+					nh_mac[4] = v & 0xff;
+					nh_mac[5] = (v >> 8) & 0xff;
+				}
+				have_mac = true;
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
+	if (!have_mac && !zx_ft_resolve_nh(odev, daddr, nh_mac)) {
+		dev_info(e->dev,
+			 "[phase6/ft] cookie=%lx %pI4:%u->%pI4:%u no resolved nh-MAC, skip\n",
+			 cls->cookie, &saddr, ntohs(sport), &daddr, ntohs(dport));
+		return -EOPNOTSUPP;
+	}
+
+	return zx_ft_install_recipe(e, ip_proto, saddr, daddr, sport, dport,
+				    nh_mac, zx_ft_egress_regport(odev));
+}
+
+static int zx_ft_setup_cb(enum tc_setup_type type, void *type_data, void *cb_priv)
+{
+	struct zx_eth *e = cb_priv;
+	struct flow_cls_offload *cls = type_data;
+
+	if (type != TC_SETUP_CLSFLOWER)
+		return -EOPNOTSUPP;
+
+	switch (cls->command) {
+	case FLOW_CLS_REPLACE:
+		return zx_ft_flower_replace(e, cls);
+	case FLOW_CLS_DESTROY:
+		dev_info(e->dev, "[phase6/ft] flower destroy cookie=%lx\n", cls->cookie);
+		return 0;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static LIST_HEAD(zx_ft_block_cb_list);
+
+static int zx_eth_setup_block(struct zx_eth *e, struct flow_block_offload *f)
+{
+	struct flow_block_cb *block_cb;
+
+	if (f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS &&
+	    f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_EGRESS)
+		return -EOPNOTSUPP;
+
+	f->driver_block_list = &zx_ft_block_cb_list;
+
+	switch (f->command) {
+	case FLOW_BLOCK_BIND:
+		block_cb = flow_block_cb_alloc(zx_ft_setup_cb, e, e, NULL);
+		if (IS_ERR(block_cb))
+			return PTR_ERR(block_cb);
+		flow_block_cb_add(block_cb, f);
+		list_add_tail(&block_cb->driver_list, &zx_ft_block_cb_list);
+		return 0;
+	case FLOW_BLOCK_UNBIND:
+		block_cb = flow_block_cb_lookup(f->block, zx_ft_setup_cb, e);
+		if (!block_cb)
+			return -ENOENT;
+		flow_block_cb_remove(block_cb, f);
+		list_del(&block_cb->driver_list);
+		return 0;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static int zx_eth_setup_tc(struct net_device *ndev, enum tc_setup_type type,
+			   void *type_data)
+{
+	struct zx_eth_port *port = *(struct zx_eth_port **)netdev_priv(ndev);
+	struct zx_eth *e = port->eth;
+
+	switch (type) {
+	case TC_SETUP_BLOCK:
+	case TC_SETUP_FT:
+		return zx_eth_setup_block(e, type_data);
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
 /* chip_tm_init's trap_queue setup — replays def_ptl_pkt_map via cla_set_cpu_queue_id.
@@ -5039,6 +5363,10 @@ static int zx_eth_probe_port(struct zx_eth *eth, int idx)
 	ndev->netdev_ops = &zx_eth_netdev_ops;
 	ndev->watchdog_timeo = msecs_to_jiffies(5000);
 	ndev->hw_features = NETIF_F_SG;
+	/* NETIF_F_HW_TC gates tc_can_offload() so the flow_block binds (MTK pattern).
+	 * Enables HW flow-offload (nf_flow_table) delegation into ndo_setup_tc. */
+	ndev->hw_features |= NETIF_F_HW_TC;
+	ndev->features |= NETIF_F_HW_TC;
 	snprintf(ndev->name, IFNAMSIZ, "idm%d", idx);
 
 	port = &eth->ports[idx];
@@ -5476,6 +5804,7 @@ static void zx_eth_init_phys(struct zx_eth *e)
 static void zx_eth_init_chip_tm(struct zx_eth *eth);
 static void zx_eth_repoint_tm_descriptors(struct zx_eth *eth);
 static void zx_eth_register_cpu_mac_slots(struct zx_eth *eth);
+static void zx_eth_clear_spa_trap_dmac(struct zx_eth *eth);
 
 /*
  * Replay the captured stock init sequence per HW block, in the same
@@ -5632,9 +5961,15 @@ static int zx_eth_init_tm_subsystem(struct zx_eth *eth,
 	}
 
 	zx_eth_register_cpu_mac_slots(eth);
+	zx_eth_clear_spa_trap_dmac(eth);
 	zx_eth_init_chip_tm(eth);
 	zx_pp_pm_apply_replay(eth);   /* replay pp_pm flow_info / sub_ram */
 	zx_eth_repoint_tm_descriptors(eth);
+
+	/* Hand the binder (built-in zx-dsa) our working PM indirect-RAM path so its
+	 * per-flow next-hop/flow_info writes commit to the live datapath PM RAM. */
+	zx_pm_ops_eth = eth;
+	zx_dsa_register_pm_ops(&zx_eth_pm_ops);
 
 	dev_info(dev, "TM ready: IRQ=%d, sw netdev up, CPU MAC + CLA + pp_pm replay done\n",
 		 eth->irq_tm);
@@ -5745,6 +6080,23 @@ static void zx_eth_register_cpu_mac_slots(struct zx_eth *eth)
 		mac[5] += (sl & 0x03);
 		zx_register_cpu_mac(eth, (u8)sl, mac);
 	}
+}
+
+/* Clear the SPA destination-MAC filter table to match stock (empty).
+ * The boot ROM pre-loads trap_dmac[0..3] with the device MACs (from fuses),
+ * which makes the SPA parser send routed to-me-MAC transit to the CPU before
+ * the CLA forward hash, blocking HW L3 forwarding. Stock keeps it empty; we do
+ * too. ONU-MAC (registered above) stays populated so l3_en still arms.
+ */
+static void zx_eth_clear_spa_trap_dmac(struct zx_eth *eth)
+{
+	int sl;
+
+	for (sl = 0; sl < 4; sl++) {
+		writel(0, eth->base + ZX_SPA_TRAP_DMAC_BASE + sl * 8);
+		writel(0, eth->base + ZX_SPA_TRAP_DMAC_BASE + sl * 8 + 4);
+	}
+	dev_info(eth->dev, "SPA trap_dmac filter cleared (match stock; enables HW L3 forward)\n");
 }
 
 /*
@@ -6098,6 +6450,10 @@ static int zx_eth_remove(struct platform_device *pdev)
 {
 	struct zx_eth *eth = platform_get_drvdata(pdev);
 	int i;
+
+	/* 0. Stop the binder from calling into us once we tear down. */
+	zx_dsa_register_pm_ops(NULL);
+	zx_pm_ops_eth = NULL;
 
 	/* 1. Mask ALL IDM IRQs at HW (don't rely on devm_free_irq alone) */
 	npp_write(eth, IDM_REG_IRQ_MASK, IDM_IRQ_ALL_MASKED);

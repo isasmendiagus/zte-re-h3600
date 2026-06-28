@@ -28,9 +28,12 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/inetdevice.h>
 #include <net/dsa.h>
 #include <net/flow_offload.h>
+#include <net/neighbour.h>
 #include <net/pkt_cls.h>
+#include <net/route.h>
 #include <uapi/linux/if_bridge.h>
 
 /* 4 user LAN ports (0..3) + CPU port (5). Port 4 is the unused RGMII WAN MAC on
@@ -115,6 +118,20 @@ struct zx_dsa_priv {
 	int			br_num[ZX_DSA_NUM_PORTS]; /* dsa_bridge.num per port */
 	/* TODO P0/P1: conduit (sw netdev) ref for the datapath/tag */
 };
+
+/* PM indirect-RAM bridge to the conduit module's working path (see
+ * include/linux/dsa/zte.h). The conduit registers these at its probe; the
+ * binder routes its PM next-hop/flow_info writes through them because the
+ * binder's own pm_regs ioremap does NOT commit to the live PM RAM. */
+struct zx_pm_ops *zx_pm_ops;
+EXPORT_SYMBOL_GPL(zx_pm_ops);
+
+void zx_dsa_register_pm_ops(struct zx_pm_ops *ops)
+{
+	zx_pm_ops = ops;
+	pr_info("[zx-dsa] PM ops %s by conduit\n", ops ? "registered" : "cleared");
+}
+EXPORT_SYMBOL_GPL(zx_dsa_register_pm_ops);
 
 static void zx_greg_rmw(struct zx_dsa_priv *priv, u32 off, u32 mask, u32 val)
 {
@@ -561,24 +578,90 @@ static int zx_pm_wait(struct zx_dsa_priv *p)
 {
 	int t = 100;
 
+	/* udelay(50) — must match the proven conduit helper zx_pp_pm_wait_done.
+	 * A 10x-shorter poll (the old udelay(5)) does not give the indirect-RAM
+	 * commit enough settle time in the binder's back-to-back write loop, so
+	 * consecutive PM writes raced and dropped (3/4 banks landed nothing, 1
+	 * corrupted) — diagnosed 2026-06-28. */
 	while (t-- && !(readl(p->pm_regs + ZX_PM_DONE) & 1))
-		udelay(5);
+		udelay(50);
 	return t < 0 ? -EBUSY : 0;
 }
 
-/* Write an 8-word PM RAM entry (CMD-first then data descending). */
-static int zx_pm_wr(struct zx_dsa_priv *p, u8 ram_id, u32 addr, const u32 d[8])
+/* Read back an 8-word PM RAM entry via the indirect iface (rw=1). */
+static int zx_pm_rd(struct zx_dsa_priv *p, u8 ram_id, u32 addr, u32 d[8])
 {
 	int i;
 
 	if (zx_pm_wait(p))
 		return -EBUSY;
-	writel(addr | ((u32)ram_id << 22), p->pm_regs + ZX_PM_CMD);
-	for (i = 7; i >= 4; i--)
-		writel(d[i], p->pm_regs + ZX_PM_DATA4 + (i - 4) * 4);
-	for (i = 3; i >= 0; i--)
-		writel(d[i], p->pm_regs + ZX_PM_DATA0 + i * 4);
+	writel(addr | ((u32)ram_id << 22) | (1u << 27), p->pm_regs + ZX_PM_CMD);
+	if (zx_pm_wait(p))
+		return -EBUSY;
+	for (i = 0; i < 4; i++)
+		d[i] = readl(p->pm_regs + ZX_PM_DATA0 + i * 4);
+	for (i = 4; i < 8; i++)
+		d[i] = readl(p->pm_regs + ZX_PM_DATA4 + (i - 4) * 4);
 	return 0;
+}
+
+/* Write an 8-word PM RAM entry (CMD-first then data descending), then
+ * read-back-verify and retry. The bare write was observed not to commit from
+ * the DSA mapping (PM read back zero) while the conduit's identical sequence
+ * persisted — so verify the indirect-RAM actually took and retry a few times.
+ */
+static int zx_pm_wr(struct zx_dsa_priv *p, u8 ram_id, u32 addr, const u32 d[8])
+{
+	u32 rb[8];
+	int i, try;
+
+	for (try = 0; try < 8; try++) {
+		if (zx_pm_wait(p))
+			return -EBUSY;
+		writel(addr | ((u32)ram_id << 22), p->pm_regs + ZX_PM_CMD);
+		for (i = 7; i >= 4; i--)
+			writel(d[i], p->pm_regs + ZX_PM_DATA4 + (i - 4) * 4);
+		for (i = 3; i >= 0; i--)
+			writel(d[i], p->pm_regs + ZX_PM_DATA0 + i * 4);
+		if (zx_pm_wait(p))
+			return -EBUSY;
+		/* Verify the entry committed (word0+word1 are enough to tell). */
+		if (zx_pm_rd(p, ram_id, addr, rb))
+			return -EBUSY;
+		if (rb[0] == d[0] && rb[1] == d[1]) {
+			if (try)
+				pr_info("[zx-dsa] pm_wr ram%u[%#x] took after %d retries\n",
+					ram_id, addr, try);
+			return 0;
+		}
+		pr_warn("[zx-dsa] pm_wr ram%u[%#x] try%d: wrote %08x %08x readback %08x %08x\n",
+			ram_id, addr, try, d[0], d[1], rb[0], rb[1]);
+	}
+	return -EIO;
+}
+
+/* Commit a PM entry through the conduit's PROVEN path if it has registered its
+ * ops; otherwise fall back to the local (non-committing-on-this-HW) zx_pm_wr so
+ * the binder still runs. The conduit's path writes the same indirect iface
+ * (ram_id, addr, data[8]) but via its working e->base mapping. */
+static int zx_pm_commit(struct zx_dsa_priv *p, u8 ram_id, u32 addr, const u32 d[8])
+{
+	if (zx_pm_ops && zx_pm_ops->write) {
+		int rc = zx_pm_ops->write(ram_id, addr, d);
+		u32 rb[8] = {0};
+
+		/* Keep the readback-verify diagnostic on the conduit path too, so a
+		 * regression is visible in dmesg (was: "readback 00000000"). */
+		if (zx_pm_ops->read && zx_pm_ops->read(ram_id, addr, rb) == 0)
+			pr_info("[zx-dsa] pm_commit(conduit) ram%u[%#x]: wrote %08x %08x readback %08x %08x\n",
+				ram_id, addr, d[0], d[1], rb[0], rb[1]);
+		else
+			pr_info("[zx-dsa] pm_commit(conduit) ram%u[%#x]: wrote %08x %08x (read n/a) rc=%d\n",
+				ram_id, addr, d[0], d[1], rc);
+		return rc;
+	}
+	pr_warn("[zx-dsa] pm_commit: no conduit ops registered, falling back to local pm_regs (may not commit)\n");
+	return zx_pm_wr(p, ram_id, addr, d);
 }
 
 /* Arm the FFE extract infra once: the v4 5-tuple extract rule at ram1[0x98] (the
@@ -603,51 +686,151 @@ static void zx_ffe_arm(struct zx_dsa_priv *p)
 	dev_info(p->dev, "[phase6] FFE extract armed (ram1[0x98] + ram0[9] fast-enable)\n");
 }
 
-/* Build + write the per-flow HW L3-forward recipe: PM next-hop (dst-MAC rewrite) +
- * flow_info + the CLA hash classifier. The next-hop entry is built from the flow's
- * dst IP + resolved MAC; the 15-word CLA classifier is the kotrace-decoded ground
- * truth (general 5-tuple/port field-packer is Stage 3) written to all 520 hash
- * buckets to sidestep slot prediction — exactly as the validated fill520 test did. */
-static int zx_install_l3_recipe(struct zx_dsa_priv *p, __be32 daddr,
+/* Per-flow CLA forward-entry field-packer. Builds the 15-word ram2 hash entry for
+ * the {proto, src, dst, sport, dport} 5-tuple, reproducing the kotrace-decoded and
+ * HW-validated byte layout EXACTLY (findings/trap_dmac_clear_HW_FORWARD_2026-06-28 +
+ * phase6_cla_keybuilder_SPEC). Derived & verified against the two ground-truth
+ * forwarding entries (STEP2 192.168.9.50 + 4b 10.44.66.250): words 0-4 constant
+ * header, words 5-7 carry the IPs/ports interleaved as the 0x90-window extractor
+ * stores them, word8 = 0x14 trailer.
+ *
+ *   word5 = s3<<24 | s0<<16 | s1<<8 | 0          (src octets [.,o2,o1,o4])
+ *   word6 = d3<<24 | d0<<16 | d1<<8 | s2          (src o3 + dst [o2,o1,o4])
+ *   word7 = dport_lo<<24 | sport_hi<<16 | sport_lo<<8 | d2
+ *
+ * Critical proven constants: byte0x05 = 0xc0 (e8_en/modify arm — REQUIRED), word3 =
+ * 0x80000000 (valid), byte0x13 = real IP proto (UDP 0x11 / TCP 0x06), byte0x04 =
+ * cmd_flow_id linking to the PM flow_info index. saddr/daddr are __be32 (network). */
+static void zx_cla_pack_entry(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
+			      __be16 sport, __be16 dport, u8 flow_id)
+{
+	u8 s0 = (ntohl(saddr) >> 24) & 0xff, s1 = (ntohl(saddr) >> 16) & 0xff;
+	u8 s2 = (ntohl(saddr) >>  8) & 0xff, s3 =  ntohl(saddr)        & 0xff;
+	u8 d0 = (ntohl(daddr) >> 24) & 0xff, d1 = (ntohl(daddr) >> 16) & 0xff;
+	u8 d2 = (ntohl(daddr) >>  8) & 0xff, d3 =  ntohl(daddr)        & 0xff;
+	u16 sp = ntohs(sport), dp = ntohs(dport);
+
+	/* Word 0-4 header: const template with byte0x04=flow_id, byte0x05=0xc0
+	 * (e8_en arm), byte0x13=ip_proto. word3=0x80000000 (valid). */
+	cla[0] = 0x03005044;
+	/* word1 bytes: [0x04]=cmd_flow_id [0x05]=0xc0(e8_en) [0x06]=0x11 [0x07]=0xfa */
+	cla[1] = (0xfau << 24) | (0x11u << 16) | (0xc0u << 8) | (flow_id & 0xff);
+	cla[2] = 0x00000608;
+	cla[3] = 0x80000000;
+	cla[4] = ((u32)ip_proto << 24) | 0x00000049;	/* byte0x13=proto, byte0x10=0x49 */
+	/* Word 5-7: the verified IP/port interleave. */
+	cla[5] = ((u32)s3 << 24) | ((u32)s0 << 16) | ((u32)s1 << 8);
+	cla[6] = ((u32)d3 << 24) | ((u32)d0 << 16) | ((u32)d1 << 8) | s2;
+	cla[7] = ((u32)(dp & 0xff) << 24) | ((u32)(sp >> 8) << 16) |
+		 ((u32)(sp & 0xff) << 8) | d2;
+	/* byte0x20 = dport HIGH byte (NOT a constant 0x14). The CLA hash COMPARE reads
+	 * windata6 = the plain LE16 at entry bytes 0x1f/0x20 (cla_set_hash_table tm.c:3433)
+	 * and matches it against the live packet's L4-window @IP-offset 22 = dport (BE,
+	 * winmask 0xffff). dport_lo lands at 0x1f (above); dport_hi MUST be at 0x20.
+	 * The old hardcoded 0x14 only coincidentally matched the capture flow whose
+	 * dport=5201=0x1451 (hi byte 0x14); for any other dport it corrupts windata6 and
+	 * the bucket key-compare MISSES (verified on-device: dport 53 → stored windata6
+	 * 0x1435 vs HW-extracted 0x0035). */
+	cla[8] = (u32)(dp >> 8) & 0xff;
+	cla[9] = cla[10] = cla[11] = cla[12] = cla[13] = cla[14] = 0;
+}
+
+/* Build + write the per-flow HW L3-forward recipe (the full PROVEN recipe):
+ *   - CLA ram2 forward entry for the 5-tuple (zx_cla_pack_entry), brute-filled to
+ *     all 520 hash buckets to sidestep slot prediction (the validated fill520 path).
+ *   - PM ram1[N] next-hop: dst IP + the resolved next-hop MAC (DMAC rewrite source).
+ *   - PM ram0[N] flow_info: fi[0]=(0x0de8<<16)|next_hop_idx (rewrite-enable bits),
+ *     fi[1]=0x0014035c with sub_ram_index encoded.
+ *   - PM ram6[sub] sub_ram: cmd_addr -> the ram3 microcode index.
+ *   - PM ram3[cmd] cmd_ram: minimal valid last_cmd=1 rewrite (DMAC-set/TTL--).
+ * idx is the shared flow_info / next-hop slot (matches cmd_flow_id in the CLA entry). */
+#define ZX_FLOW_IDX	5	/* PM flow_info / next-hop slot (proven test used 5) */
+#define ZX_SUBRAM_IDX	5	/* PM ram6 sub_ram slot */
+#define ZX_CMD_IDX	5	/* PM ram3 cmd_ram (rewrite microcode) slot */
+static int zx_install_l3_recipe(struct zx_dsa_priv *p, u8 ip_proto, __be32 saddr,
+				__be32 daddr, __be16 sport, __be16 dport,
 				const u8 nh_mac[ETH_ALEN], u8 in_regport, u8 eg_regport)
 {
 	static const struct { u8 ram; u16 n; } banks[] = {
 		{ 2, 0x100 }, { 3, 0x80 }, { 4, 0x40 }, { 5, 0x40 }, { 6, 8 },
 	};
-	/* word3 = 0x80000000 EXACTLY (bit31 = VALID; low bits zero — confirmed
-	 * constant across stock fwd+rev captures, NOT egress-dependent; the old
-	 * 0x80000c40 low bits were a spurious decode). word4 inport/outport (the
-	 * 0x06xxxxYY low byte) + the 5-tuple words5-7 are still the unsolved
-	 * field-packer (Stage 3 — align tm_acl_get_fastHashRule vs the captures). */
-	static const u32 cla[15] = {
-		0x03005044, 0xfa11c000, 0x00000608, 0x80000000, 0x06000049,
-		0x32ac1f00, 0x32c0a809, 0x519c4009, 0x00000014, 0, 0, 0, 0, 0, 0
-	};
-	u32 nh[8] = {0}, fi[8] = {0};
+	u32 cla[15];
+	u32 nh[8] = {0}, fi[8] = {0}, sub[8] = {0}, cmd[8] = {0};
 	int b, ok = 0;
 	u32 a;
 
-	/* PM next-hop ram1[5]: dst IP + the 6-byte rewrite MAC (stock split layout). */
+	/* PM next-hop ram1[idx]: dst IP + the 6-byte rewrite MAC (stock split layout). */
 	nh[0] = ntohl(daddr);
 	nh[1] = ((u32)nh_mac[2] << 24) | ((u32)nh_mac[3] << 16) |
 		((u32)nh_mac[4] << 8) | nh_mac[5];
 	nh[2] = ((u32)nh_mac[0] << 8) | nh_mac[1];
-	zx_pm_wr(p, 1, 5, nh);
+	zx_pm_commit(p, 1, ZX_FLOW_IDX, nh);
 
-	/* PM flow_info ram0[5]: link matched flow -> next-hop idx 5 + egress queue. */
-	fi[0] = 3;
+	/* PM flow_info ram0[idx]: rewrite-enable bits (0x0de8) | next_hop_idx in word0;
+	 * word1 carries the egress queue + sub_ram_index (proven 0x0014035c). */
+	fi[0] = (0x0de8u << 16) | ZX_FLOW_IDX;
 	fi[1] = 0x0014035c;
-	zx_pm_wr(p, 0, 5, fi);
+	zx_pm_commit(p, 0, ZX_FLOW_IDX, fi);
 
+	/* PM ram6 sub_ram: cmd_addr -> the ram3 microcode index (links flow_info to the
+	 * DMAC-set/TTL-- rewrite). Minimal: word0 low = cmd_addr (the ram3 slot). */
+	sub[0] = ZX_CMD_IDX;
+	zx_pm_commit(p, 6, ZX_SUBRAM_IDX, sub);
+
+	/* PM ram3 cmd_ram: the rewrite microcode. Minimal valid last_cmd=1 entry
+	 * (0x00800000) = a no-op terminate that lets the forward proceed (the proven
+	 * minimal forward; a full DMAC-set/TTL-- microcode is the productization). */
+	cmd[0] = 0x00800000;
+	zx_pm_commit(p, 3, ZX_CMD_IDX, cmd);
+
+	/* CLA forward entry — packed per-flow, brute-filled to all 520 hash buckets.
+	 * cmd_flow_id (byte0x04) = 0: the HW-validated forwarding entries used 0 here
+	 * (the proven link to flow_info@idx5 was via the PM tables + fill520 brute, not
+	 * this byte). Kept 0 to reproduce the proven entry byte-exact and not regress. */
+	zx_cla_pack_entry(cla, ip_proto, saddr, daddr, sport, dport, 0);
 	for (b = 0; b < ARRAY_SIZE(banks); b++)
 		for (a = 0; a < banks[b].n; a++)
 			if (zx_cla_wr(p, banks[b].ram, a, cla, 15) == 0)
 				ok++;
 
 	dev_info(p->dev,
-		 "[phase6] recipe: in_rp=%u eg_rp=%u nh=%pM dst=%pI4 -> %d/520 CLA buckets\n",
-		 in_regport, eg_regport, nh_mac, &daddr, ok);
+		 "[phase6] recipe: proto=%u %pI4:%u->%pI4:%u in_rp=%u eg_rp=%u nh=%pM -> %d/520 CLA buckets\n",
+		 ip_proto, &saddr, ntohs(sport), &daddr, ntohs(dport),
+		 in_regport, eg_regport, nh_mac, ok);
 	return 0;
+}
+
+/* Resolve the next-hop MAC for an L3-routed flow: route lookup on the dst IP, then
+ * a neighbour lookup on the resolved gateway (or the dst itself when on-link). Falls
+ * back to the caller's pre-seeded MAC if resolution fails (e.g. neigh not yet
+ * populated). Mirrors how stock's FFE install pulls the resolved neighbour. */
+static bool zx_resolve_nh_mac(struct net_device *odev, __be32 daddr,
+			      u8 nh_mac[ETH_ALEN])
+{
+	struct neighbour *n;
+	struct rtable *rt;
+	__be32 nh_ip = daddr;
+	bool ok = false;
+
+	if (!odev)
+		return false;
+	rt = ip_route_output(dev_net(odev), daddr, 0, 0, odev->ifindex);
+	if (!IS_ERR(rt)) {
+		if (rt->rt_gw_family == AF_INET && rt->rt_gw4)
+			nh_ip = rt->rt_gw4;
+		ip_rt_put(rt);
+	}
+	n = neigh_lookup(&arp_tbl, &nh_ip, odev);
+	if (n) {
+		if (n->nud_state & NUD_VALID) {
+			read_lock_bh(&n->lock);
+			ether_addr_copy(nh_mac, n->ha);
+			read_unlock_bh(&n->lock);
+			ok = !is_zero_ether_addr(nh_mac);
+		}
+		neigh_release(n);
+	}
+	return ok;
 }
 
 static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
@@ -665,6 +848,7 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 	 * MANGLE/neigh resolution below fills it (Stage 3 generalizes). */
 	u8 nh_mac[ETH_ALEN] = { 0x6c, 0x70, 0xcb, 0xb6, 0x81, 0x69 };
 	u8 eg_regport = 2;	/* fallback = lan1 regport */
+	bool mangle_dmac = false;
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_META)) {
 		struct flow_match_meta m;
@@ -707,6 +891,23 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 				 i, odev ? netdev_name(odev) : "?");
 			break;
 		case FLOW_ACTION_MANGLE:
+			/* NAT/eth-dst rewrite: capture the new dst-MAC if present.
+			 * Ethernet header mangle at offset 0 = dst MAC bytes [0..3],
+			 * offset 4 = dst[4..5] | src[0..1]. */
+			if (act->mangle.htype == FLOW_ACT_MANGLE_HDR_TYPE_ETH) {
+				u32 v = act->mangle.val;
+
+				if (act->mangle.offset == 0) {
+					nh_mac[0] = v & 0xff;
+					nh_mac[1] = (v >> 8) & 0xff;
+					nh_mac[2] = (v >> 16) & 0xff;
+					nh_mac[3] = (v >> 24) & 0xff;
+				} else if (act->mangle.offset == 4) {
+					nh_mac[4] = v & 0xff;
+					nh_mac[5] = (v >> 8) & 0xff;
+				}
+				mangle_dmac = true;
+			}
 			dev_info(ds->dev,
 				 "[phase6]   act[%d]=MANGLE(NAT) htype=%u off=%u val=%08x\n",
 				 i, act->mangle.htype, act->mangle.offset,
@@ -732,8 +933,15 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 		}
 	}
 
+	/* Resolve the real next-hop MAC: a MANGLE eth-dst action (NAT path) wins;
+	 * otherwise do a route+neigh lookup on the egress dev. Keep the seeded
+	 * fallback if neither resolves (neigh may not be populated yet). */
+	if (!mangle_dmac)
+		zx_resolve_nh_mac(odev, daddr, nh_mac);
+
 	zx_ffe_arm(priv);
-	zx_install_l3_recipe(priv, daddr, nh_mac, zx_regport[port & 7], eg_regport);
+	zx_install_l3_recipe(priv, ip_proto, saddr, daddr, sport, dport,
+			     nh_mac, zx_regport[port & 7], eg_regport);
 
 	return 0;
 }
