@@ -770,6 +770,46 @@ static u16 zx_cla_flow_hash(struct zx_dsa_priv *p, u8 ip_proto, __be32 saddr,
 	return zx_cla_hash_raw(p, key);
 }
 
+/* SW CRC-32 (poly 0x04C11DB7 = hash0_poly, init 0, MSB-first, no xorout) over the
+ * reversed 45-byte key — reproduces stock cla_acl_hash_addr_gen(hash_mode=0). The
+ * WAN/RGMII-ingress ram2 lookup probes THIS poly-0 slot, but zx_cla_hash_raw (the HW
+ * hash engine) computes poly1 (0x1EDC6F41). The WAN-ingress DN entry must be installed
+ * at the poly-0 slot or it MISSES (mirror of zx-eth-main.c zx_cla_hash_sw_poly0;
+ * verified on-device 2026-07-03, findings/stock_exact_install_replicate_2026-07-03.md). */
+static u16 zx_cla_flow_hash_poly0(u8 ip_proto, __be32 saddr, __be32 daddr,
+				  __be16 sport, __be16 dport, bool is_wan)
+{
+	u32 s = ntohl(saddr), d = ntohl(daddr);
+	u16 fields[7] = {
+		ip_proto, (s >> 16) & 0xffff, s & 0xffff,
+		(d >> 16) & 0xffff, d & 0xffff, ntohs(sport), ntohs(dport),
+	};
+	u8 kb[48] = {0};
+	u32 crc = 0;
+	int n, i, b;
+
+	kb[3] = 0x48;
+	if (is_wan)
+		kb[4] |= 1;
+	for (n = 0; n < 7; n++) {
+		u32 base = 33 + 16 * n;
+
+		for (i = 0; i < 16; i++)
+			if (fields[n] & (1u << i)) {
+				u32 pos = base + i;
+
+				kb[pos >> 3] |= 1u << (pos & 7);
+			}
+	}
+	for (b = 44; b >= 0; b--) {
+		crc ^= (u32)kb[b] << 24;
+		for (i = 0; i < 8; i++)
+			crc = (crc & 0x80000000) ? (crc << 1) ^ 0x04C11DB7
+						 : (crc << 1);
+	}
+	return crc & 0xffff;
+}
+
 /* The CLA hash lookup is multi-way: a raw hash maps to one bucket in EACH bank
  * (ram2..ram6), and the HW probes across ways. So a per-flow entry must be placed
  * at the flow's bucket in ALL banks, not just ram2 (verified on-device: ram2[slot]
@@ -803,7 +843,8 @@ static void zx_cla_way_slots(u16 raw, u8 ram[5], u16 addr[5])
  * 0x80000000 (valid), byte0x13 = real IP proto (UDP 0x11 / TCP 0x06), byte0x04 =
  * cmd_flow_id linking to the PM flow_info index. saddr/daddr are __be32 (network). */
 static void zx_cla_pack_entry(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
-			      __be16 sport, __be16 dport, u8 flow_id, bool is_wan)
+			      __be16 sport, __be16 dport, u8 flow_id, bool is_wan,
+			      u8 eg_regport)
 {
 	u8 s0 = (ntohl(saddr) >> 24) & 0xff, s1 = (ntohl(saddr) >> 16) & 0xff;
 	u8 s2 = (ntohl(saddr) >>  8) & 0xff, s3 =  ntohl(saddr)        & 0xff;
@@ -812,8 +853,12 @@ static void zx_cla_pack_entry(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 dad
 	u16 sp = ntohs(sport), dp = ntohs(dport);
 
 	/* Word 0-4 header: const template with byte0x04=flow_id, byte0x05=0xc0
-	 * (e8_en arm), byte0x13=ip_proto. word3=0x80000000 (valid). */
-	cla[0] = 0x03005044;
+	 * (e8_en arm), byte0x13=ip_proto. word3=0x80000000 (valid).
+	 * word0 byte0x01 hi-nibble/byte0x02 = gemport_uni_id = the egress port's regport
+	 * (the CLA action's direct egress port under da_known=1). Was hardcoded 5 (=WAN
+	 * regport), misrouting downstream frames to WAN; now = eg_regport. Mirror of
+	 * zx-eth-main.c zx_ft_pack_cla; verified on-device 2026-07-03 (uni=3 -> lan2). */
+	cla[0] = 0x03000044 | (((u32)eg_regport & 0xf) << 12);
 	/* word1 bytes: [0x04]=cmd_flow_id [0x05]=0xc0(e8_en) [0x06]=0x11 [0x07]=0xfa */
 	cla[1] = (0xfau << 24) | (0x11u << 16) | (0xc0u << 8) | (flow_id & 0xff);
 	cla[2] = 0x00000608;
@@ -824,11 +869,12 @@ static void zx_cla_pack_entry(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 dad
 	 * The stock-captured 0x80000000 made byte0xf=0x80 => extr_index 0x98 != 0x90 =>
 	 * LOOK_UP_MISS on every packet (verified on-device 2026-07-02). Must be 0. */
 	cla[3] = 0;
-	/* byte0x10 bit5 = `direct` (0x49->0x69) for the WAN/download-ingress entry — see
-	 * zx-eth-main.c zx_ft_pack_cla: necessary+sufficient to flip WAN-ingress
-	 * trap->forward (bisected on-device 2026-07-03). LAN-ingress forwards without it,
-	 * so gate on is_wan. extr_index stays 0x90 (word3=0). */
-	cla[4] = ((u32)ip_proto << 24) | (is_wan ? 0x00000069 : 0x00000049);
+	/* byte0x10 bit5 = `direct` (0x49->0x69) AND byte0x12 bit4 = `da_known` (+0x00100000)
+	 * for the WAN/download-ingress entry — see zx-eth-main.c zx_ft_pack_cla: da_known is
+	 * part of the WAN-ingress key-compare (a WAN-ingress DN pkt only matches an entry
+	 * with da_known=1; verified on-device 2026-07-03). LAN-ingress forwards without
+	 * either, so gate on is_wan. extr_index stays 0x90 (word3=0). */
+	cla[4] = ((u32)ip_proto << 24) | (is_wan ? 0x00100069 : 0x00000049);
 	/* Word 5-7: the verified IP/port interleave. */
 	cla[5] = ((u32)s3 << 24) | ((u32)s0 << 16) | ((u32)s1 << 8);
 	cla[6] = ((u32)d3 << 24) | ((u32)d0 << 16) | ((u32)d1 << 8) | s2;
@@ -901,7 +947,7 @@ static int zx_install_l3_recipe(struct zx_dsa_priv *p, u8 ip_proto, __be32 saddr
 	 * 5 buckets are distinct per distinct 5-tuple, so flows coexist.
 	 * cmd_flow_id (byte0x04) = 0: the HW-validated forwarding entries used 0 here. */
 	zx_cla_pack_entry(cla, ip_proto, saddr, daddr, sport, dport, 0,
-			  in_regport == ZX_WAN_REGPORT);
+			  in_regport == ZX_WAN_REGPORT, eg_regport);
 	/* Ingress-aware hash: packets matching this entry ingress in_regport; a
 	 * WAN/RGMII ingress sets key pos32. (Local tc-flower tests inject on a GePHY
 	 * LAN port -> in_regport != WAN -> pos32=0, unchanged.) */
@@ -910,6 +956,18 @@ static int zx_install_l3_recipe(struct zx_dsa_priv *p, u8 ip_proto, __be32 saddr
 	zx_cla_way_slots(raw, ram, addr);
 	for (w = 0; w < 5; w++) {
 		int r = zx_cla_wr(p, ram[w], addr[w], cla, 15);
+
+		if (r)
+			rc = r;
+	}
+
+	/* WAN-ingress entries: the ram2 lookup probes the poly-0 slot (hash0_poly), NOT the
+	 * poly1 slot the HW hash engine (raw) computes — ALSO install at the poly-0 ram2 slot
+	 * or every WAN-ingress DN packet LOOK_UP_MISSes. Mirror of zx-eth-main.c. */
+	if (in_regport == ZX_WAN_REGPORT) {
+		u16 raw0 = zx_cla_flow_hash_poly0(ip_proto, saddr, daddr,
+						  sport, dport, true);
+		int r = zx_cla_wr(p, 2, raw0 & 0xff, cla, 15);
 
 		if (r)
 			rc = r;
