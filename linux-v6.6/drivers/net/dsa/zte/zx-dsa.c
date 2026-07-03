@@ -106,6 +106,16 @@ static const u8 zx_regport[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
 #define ZX_PM_DATA0		0x01c	/* data slots 0..3 stride 4 */
 #define ZX_PM_DATA4		0x100	/* data slots 4..7 stride 4 */
 
+/* Per-flow offload tracking: the tc cookie -> the ram2 hash bucket the flow's
+ * entry was placed in. Needed so FLOW_CLS_DESTROY can invalidate exactly the
+ * bucket that flow occupies (multi-flow per-slot placement, not fill520). */
+#define ZX_MAX_OFFLOAD_FLOWS	32
+struct zx_flow_ent {
+	unsigned long	cookie;
+	u16		raw;	/* raw HW hash (derives all 5 way buckets) */
+	bool		used;
+};
+
 struct zx_dsa_priv {
 	struct dsa_switch	*ds;
 	struct device		*dev;
@@ -116,6 +126,7 @@ struct zx_dsa_priv {
 	bool			ffe_armed; /* extract infra written once (Stage 2) */
 	u8			bridged;  /* bitmap of user ports in a bridge */
 	int			br_num[ZX_DSA_NUM_PORTS]; /* dsa_bridge.num per port */
+	struct zx_flow_ent	flows[ZX_MAX_OFFLOAD_FLOWS]; /* offload slot map */
 	/* TODO P0/P1: conduit (sw netdev) ref for the datapath/tag */
 };
 
@@ -664,10 +675,16 @@ static int zx_pm_commit(struct zx_dsa_priv *p, u8 ram_id, u32 addr, const u32 d[
 	return zx_pm_wr(p, ram_id, addr, d);
 }
 
-/* Arm the FFE extract infra once: the v4 5-tuple extract rule at ram1[0x98] (the
- * 0x90 window descriptor) + the ram0[9] extract-index with the fast-enable bit
- * (word4 bit8 set: 0x00150051 -> 0x00150151). Mirrors stock tm_acl_fast_init that
- * the per-flow install relies on. Idempotent (guarded by ffe_armed). */
+/* Arm the FFE extract infra once: the v4 5-tuple extract rule + the ram0[9]
+ * extract-index. ram0[9] word4 MUST be 0x00150001 (enable ONLY slot 0 -> rule
+ * 0x90), matching zx_ffe_table.h zx_ffe_index[9] and the packer's extr_index low
+ * byte 0x90 (cla[3]=0). Using 0x00150151 (the old value) would enable slot 8 ->
+ * the HW selects the highest-enabled rule 0x98, whose ex_rule_id 0x98 != the
+ * stored extr_index 0x90 -> LOOK_UP_MISS (code review C1 / c1_reconciliation
+ * 2026-07-03: this write did not commit on the DSA mapping so it was masked, but
+ * align it so it is correct-by-construction). The rule content lives at ram1[0x90]
+ * (armed by the conduit's zx_cla_ffe_extract_init); the ram1[0x98] write below is
+ * inert (slot 8 disabled) but harmless. Idempotent (guarded by ffe_armed). */
 static void zx_ffe_arm(struct zx_dsa_priv *p)
 {
 	static const u32 rule90[17] = {
@@ -675,7 +692,7 @@ static void zx_ffe_arm(struct zx_dsa_priv *p)
 		0x0fffffff, 0, 0, 0, 0, 0, 0, 0x00700000, 0x00092492, 0
 	};
 	static const u32 idx9[5] = {
-		0x93929190, 0x97969594, 0x9b9a9998, 0x9f9e9d9c, 0x00150151
+		0x93929190, 0x97969594, 0x9b9a9998, 0x9f9e9d9c, 0x00150001
 	};
 
 	if (p->ffe_armed)
@@ -684,6 +701,81 @@ static void zx_ffe_arm(struct zx_dsa_priv *p)
 	zx_cla_wr(p, 0, 9, idx9, 5);
 	p->ffe_armed = true;
 	dev_info(p->dev, "[phase6] FFE extract armed (ram1[0x98] + ram0[9] fast-enable)\n");
+}
+
+/* Drive the CLA HW hash engine: load the 12-word (45-byte) flow key, pulse the
+ * trigger, read the 16-bit raw hash. The chip computes the same 4-poly CRC it uses
+ * on ingress, so we get the exact bucket the HW will probe. Load the key FIRST,
+ * trigger LAST (the trigger is a control reg; triggering before the key -> 0).
+ * Mirrors the conduit's zx_cla_hash_raw / the hashcalc debugfs. */
+static u16 zx_cla_hash_raw(struct zx_dsa_priv *p, const u32 key[12])
+{
+	int i;
+
+	for (i = 0; i < 12; i++)
+		writel(key[i], p->cla_regs + ZX_CLA_HASH_KEY0 + i * 4);
+	writel(1, p->cla_regs + ZX_CLA_HASH_TRIG);	/* trigger AFTER loading */
+	return readl(p->cla_regs + ZX_CLA_HASH_OUT) & 0xffff;
+}
+
+/* Build the flow's 12-word HW hash key and return its raw 16-bit hash.
+ *
+ * The key is the flow's EXTRACTED-key form (NOT the raw stored windata):
+ *   word0 = 0x48000000 = ex_rule_id 0x90 (v4-5tuple), inport/outport 0 — the HW
+ *           zeroes inport in the extracted key for this rule (verified: the live
+ *           gparsehashkey word0 = 0x48000000 regardless of ingress port).
+ *   then the 7 fields {proto, srcHi, srcLo, dstHi, dstLo, sport, dport} are
+ *   bit-packed at bit anchor 33 + 16*n in a little-endian byte stream (the "1-bit
+ *   left shift" — each 16-bit field value is the RAW field, only the bit anchor is
+ *   shifted; cla_gate2/cla_windata_packer findings).
+ *
+ * SELF-CHECK (offline-verified): for UDP 172.31.9.50:50010 -> 192.168.9.50:53 this
+ * reproduces the live key 48000000 583e0022 81501265 86b41265 0000006b, which the
+ * HW hashes to raw 0xf6d5 -> ram2 slot 0xd5 (matches on-device gparsehashkey). */
+static u16 zx_cla_flow_hash(struct zx_dsa_priv *p, u8 ip_proto, __be32 saddr,
+			    __be32 daddr, __be16 sport, __be16 dport)
+{
+	u32 s = ntohl(saddr), d = ntohl(daddr);
+	u16 fields[7] = {
+		ip_proto, (s >> 16) & 0xffff, s & 0xffff,
+		(d >> 16) & 0xffff, d & 0xffff, ntohs(sport), ntohs(dport),
+	};
+	u8 kb[48] = {0};
+	u32 key[12];
+	int n, i;
+
+	kb[3] = 0x48;		/* word0 = 0x48000000 (ex_rule_id 0x90) */
+	for (n = 0; n < 7; n++) {
+		u32 base = 33 + 16 * n;
+
+		for (i = 0; i < 16; i++)
+			if (fields[n] & (1u << i)) {
+				u32 pos = base + i;
+
+				kb[pos >> 3] |= 1u << (pos & 7);
+			}
+	}
+	for (i = 0; i < 12; i++)
+		key[i] = kb[4 * i] | (kb[4 * i + 1] << 8) |
+			 (kb[4 * i + 2] << 16) | (kb[4 * i + 3] << 24);
+	return zx_cla_hash_raw(p, key);
+}
+
+/* The CLA hash lookup is multi-way: a raw hash maps to one bucket in EACH bank
+ * (ram2..ram6), and the HW probes across ways. So a per-flow entry must be placed
+ * at the flow's bucket in ALL banks, not just ram2 (verified on-device: ram2[slot]
+ * alone MISSES; adding the ram3/4/5/6 ways -> HW forwards). The per-bank slot masks
+ * come from aclGetAvailableHashAddr (cla ram-layout): way0=ram2 raw&0xff,
+ * way1=ram3 0x100+raw&0x7f, way2=ram4 0x180+raw&0x3f, way3=ram5 0x1c0+raw&0x3f,
+ * ext=ram6 0x200+raw&7. These 5 buckets are distinct per distinct raw hash, so
+ * different flows still occupy disjoint buckets and coexist. */
+static void zx_cla_way_slots(u16 raw, u8 ram[5], u16 addr[5])
+{
+	ram[0] = 2; addr[0] = raw & 0xff;
+	ram[1] = 3; addr[1] = 0x100 + (raw & 0x7f);
+	ram[2] = 4; addr[2] = 0x180 + (raw & 0x3f);
+	ram[3] = 5; addr[3] = 0x1c0 + (raw & 0x3f);
+	ram[4] = 6; addr[4] = 0x200 + (raw & 0x7);
 }
 
 /* Per-flow CLA forward-entry field-packer. Builds the 15-word ram2 hash entry for
@@ -716,7 +808,13 @@ static void zx_cla_pack_entry(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 dad
 	/* word1 bytes: [0x04]=cmd_flow_id [0x05]=0xc0(e8_en) [0x06]=0x11 [0x07]=0xfa */
 	cla[1] = (0xfau << 24) | (0x11u << 16) | (0xc0u << 8) | (flow_id & 0xff);
 	cla[2] = 0x00000608;
-	cla[3] = 0x80000000;
+	/* word3 is NOT a valid bit — it is the high part of extr_index
+	 * (extr_index = byte0x10<<4 | byte0xf>>4, cla_set_hash_table tm.c:3444).
+	 * byte0x10=0x49 (word4) + byte0xf=0x00 (this word) => extr_index low byte 0x90,
+	 * which MUST equal the ex_rule_id the HW classifies the flow under (rule 0x90).
+	 * The stock-captured 0x80000000 made byte0xf=0x80 => extr_index 0x98 != 0x90 =>
+	 * LOOK_UP_MISS on every packet (verified on-device 2026-07-02). Must be 0. */
+	cla[3] = 0;
 	cla[4] = ((u32)ip_proto << 24) | 0x00000049;	/* byte0x13=proto, byte0x10=0x49 */
 	/* Word 5-7: the verified IP/port interleave. */
 	cla[5] = ((u32)s3 << 24) | ((u32)s0 << 16) | ((u32)s1 << 8);
@@ -751,13 +849,12 @@ static int zx_install_l3_recipe(struct zx_dsa_priv *p, u8 ip_proto, __be32 saddr
 				__be32 daddr, __be16 sport, __be16 dport,
 				const u8 nh_mac[ETH_ALEN], u8 in_regport, u8 eg_regport)
 {
-	static const struct { u8 ram; u16 n; } banks[] = {
-		{ 2, 0x100 }, { 3, 0x80 }, { 4, 0x40 }, { 5, 0x40 }, { 6, 8 },
-	};
 	u32 cla[15];
 	u32 nh[8] = {0}, fi[8] = {0}, sub[8] = {0}, cmd[8] = {0};
-	int b, ok = 0;
-	u32 a;
+	u8 ram[5];
+	u16 addr[5];
+	u16 raw;
+	int w, rc = 0;
 
 	/* PM next-hop ram1[idx]: dst IP + the 6-byte rewrite MAC (stock split layout). */
 	nh[0] = ntohl(daddr);
@@ -783,21 +880,29 @@ static int zx_install_l3_recipe(struct zx_dsa_priv *p, u8 ip_proto, __be32 saddr
 	cmd[0] = 0x00800000;
 	zx_pm_commit(p, 3, ZX_CMD_IDX, cmd);
 
-	/* CLA forward entry — packed per-flow, brute-filled to all 520 hash buckets.
-	 * cmd_flow_id (byte0x04) = 0: the HW-validated forwarding entries used 0 here
-	 * (the proven link to flow_info@idx5 was via the PM tables + fill520 brute, not
-	 * this byte). Kept 0 to reproduce the proven entry byte-exact and not regress. */
+	/* CLA forward entry — packed per-flow, written at the flow's own hash bucket
+	 * in ALL 5 banks (per-slot placement, replacing the fill520 all-buckets hack
+	 * that let a 2nd flow clobber the 1st). The HW hash engine gives the exact
+	 * bucket the chip probes on ingress; the multi-way lookup requires the entry in
+	 * every bank at the flow's hash (ram2 alone MISSES — verified on-device). The
+	 * 5 buckets are distinct per distinct 5-tuple, so flows coexist.
+	 * cmd_flow_id (byte0x04) = 0: the HW-validated forwarding entries used 0 here. */
 	zx_cla_pack_entry(cla, ip_proto, saddr, daddr, sport, dport, 0);
-	for (b = 0; b < ARRAY_SIZE(banks); b++)
-		for (a = 0; a < banks[b].n; a++)
-			if (zx_cla_wr(p, banks[b].ram, a, cla, 15) == 0)
-				ok++;
+	raw = zx_cla_flow_hash(p, ip_proto, saddr, daddr, sport, dport);
+	zx_cla_way_slots(raw, ram, addr);
+	for (w = 0; w < 5; w++) {
+		int r = zx_cla_wr(p, ram[w], addr[w], cla, 15);
+
+		if (r)
+			rc = r;
+	}
 
 	dev_info(p->dev,
-		 "[phase6] recipe: proto=%u %pI4:%u->%pI4:%u in_rp=%u eg_rp=%u nh=%pM -> %d/520 CLA buckets\n",
+		 "[phase6] recipe: proto=%u %pI4:%u->%pI4:%u in_rp=%u eg_rp=%u nh=%pM -> raw=0x%04x buckets ram2[0x%02x]/3[0x%03x]/4[0x%03x]/5[0x%03x]/6[0x%03x] rc=%d\n",
 		 ip_proto, &saddr, ntohs(sport), &daddr, ntohs(dport),
-		 in_regport, eg_regport, nh_mac, ok);
-	return 0;
+		 in_regport, eg_regport, nh_mac, raw,
+		 addr[0], addr[1], addr[2], addr[3], addr[4], rc);
+	return rc ? rc : raw;
 }
 
 /* Resolve the next-hop MAC for an L3-routed flow: route lookup on the dst IP, then
@@ -833,6 +938,91 @@ static bool zx_resolve_nh_mac(struct net_device *odev, __be32 daddr,
 	return ok;
 }
 
+/* Reserve a tracking slot for a flow (identified by its tc cookie) at HW hash
+ * raw, recording {cookie, raw} so FLOW_CLS_DESTROY can invalidate exactly this
+ * flow's 5 way buckets. Called BEFORE the CLA entry is written, so a DECLINED
+ * offload leaves both flows[] and the CLA banks untouched (flow stays in SW):
+ *   -EOPNOTSUPP  another tracked flow (different cookie) already owns raw's CLA
+ *                bucket. All 5 ways derive from the low byte, and way0 = ram2
+ *                (raw & 0xff) is the 256-slot primary that the HW resolves on;
+ *                two flows sharing it clobber each other and delete-either kills
+ *                both, so a same-way0 collision is rejected (kept in SW). (Higher
+ *                ways can alias between distinct raw&0xff without harm — the HW
+ *                hits the distinct way0 entry; verified on-device with 11 flows.)
+ *   -ENOSPC      the tracking table is full and this cookie is not already known.
+ * Re-uses the slot on REPLACE (same cookie), still checking collisions vs others.
+ * Returns 0 and records the slot on success. */
+static int zx_flow_reserve(struct zx_dsa_priv *p, unsigned long cookie, u16 raw)
+{
+	int i, self = -1, free = -1;
+
+	for (i = 0; i < ZX_MAX_OFFLOAD_FLOWS; i++) {
+		if (!p->flows[i].used) {
+			if (free < 0)
+				free = i;
+			continue;
+		}
+		if (p->flows[i].cookie == cookie) {
+			self = i;
+			continue;
+		}
+		if ((p->flows[i].raw & 0xff) == (raw & 0xff))
+			return -EOPNOTSUPP;	/* CLA way0 bucket collision */
+	}
+	if (self >= 0) {			/* REPLACE existing cookie */
+		p->flows[self].raw = raw;
+		return 0;
+	}
+	if (free < 0)
+		return -ENOSPC;			/* tracking table full */
+	p->flows[free].cookie = cookie;
+	p->flows[free].raw = raw;
+	p->flows[free].used = true;
+	return 0;
+}
+
+/* Undo a reservation (no CLA write occurred / a later HW write failed): free the
+ * slot so flows[] does not leak a phantom entry. */
+static void zx_flow_release(struct zx_dsa_priv *p, unsigned long cookie)
+{
+	int i;
+
+	for (i = 0; i < ZX_MAX_OFFLOAD_FLOWS; i++)
+		if (p->flows[i].used && p->flows[i].cookie == cookie) {
+			p->flows[i].used = false;
+			return;
+		}
+}
+
+/* Invalidate the buckets a tracked flow occupies: zero the 15-word entry in all 5
+ * way banks so valid_en (byte0x10 bit6) clears and the bucket key-compare misses
+ * -> the flow TRAPS again. Returns 0 if a tracked flow was found+cleared, -ENOENT. */
+static int zx_flow_untrack(struct zx_dsa_priv *p, unsigned long cookie)
+{
+	u32 zero[15] = {0};
+	u8 ram[5];
+	u16 addr[5];
+	int i, w, rc = 0;
+
+	for (i = 0; i < ZX_MAX_OFFLOAD_FLOWS; i++) {
+		if (p->flows[i].used && p->flows[i].cookie == cookie) {
+			zx_cla_way_slots(p->flows[i].raw, ram, addr);
+			for (w = 0; w < 5; w++) {
+				int r = zx_cla_wr(p, ram[w], addr[w], zero, 15);
+
+				if (r)
+					rc = r;
+			}
+			dev_info(p->dev,
+				 "[phase6] flow del cookie=%lx -> cleared raw=0x%04x (5 ways) rc=%d\n",
+				 cookie, p->flows[i].raw, rc);
+			p->flows[i].used = false;
+			return rc;
+		}
+	}
+	return -ENOENT;
+}
+
 static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 				 struct flow_cls_offload *cls, bool ingress)
 {
@@ -843,7 +1033,8 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 	__be32 saddr = 0, daddr = 0;
 	__be16 sport = 0, dport = 0;
 	u8 ip_proto = 0;
-	int i, in_ifidx = 0;
+	u16 raw;
+	int i, rc, in_ifidx = 0;
 	/* Resolved next-hop MAC. Default = the validated test-flow DST until the
 	 * MANGLE/neigh resolution below fills it (Stage 3 generalizes). */
 	u8 nh_mac[ETH_ALEN] = { 0x6c, 0x70, 0xcb, 0xb6, 0x81, 0x69 };
@@ -939,9 +1130,32 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 	if (!mangle_dmac)
 		zx_resolve_nh_mac(odev, daddr, nh_mac);
 
+	/* Compute the flow's HW hash up-front and RESERVE a tracking slot BEFORE
+	 * touching the CLA. A declined offload (bucket collision or full table)
+	 * must leave both flows[] and the CLA banks untouched and stay in the
+	 * (working) SW datapath — never clobber an existing entry, never leak. */
+	raw = zx_cla_flow_hash(priv, ip_proto, saddr, daddr, sport, dport);
+	rc = zx_flow_reserve(priv, cls->cookie, raw);
+	if (rc == -EOPNOTSUPP) {
+		dev_info(ds->dev,
+			 "[phase6] offload declined: CLA bucket collision cookie=%lx raw 0x%04x (way0 0x%02x already owned) -> stays in SW\n",
+			 cls->cookie, raw, raw & 0xff);
+		return rc;
+	}
+	if (rc < 0) {
+		dev_info(ds->dev,
+			 "[phase6] offload declined: flow table full (max %d) cookie=%lx raw 0x%04x -> stays in SW\n",
+			 ZX_MAX_OFFLOAD_FLOWS, cls->cookie, raw);
+		return -EOPNOTSUPP;
+	}
+
 	zx_ffe_arm(priv);
-	zx_install_l3_recipe(priv, ip_proto, saddr, daddr, sport, dport,
-			     nh_mac, zx_regport[port & 7], eg_regport);
+	rc = zx_install_l3_recipe(priv, ip_proto, saddr, daddr, sport, dport,
+				  nh_mac, zx_regport[port & 7], eg_regport);
+	if (rc < 0) {
+		zx_flow_release(priv, cls->cookie);	/* undo reservation on HW error */
+		return rc;
+	}
 
 	return 0;
 }
@@ -949,9 +1163,14 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 static int zx_dsa_cls_flower_del(struct dsa_switch *ds, int port,
 				 struct flow_cls_offload *cls, bool ingress)
 {
+	struct zx_dsa_priv *priv = ds->priv;
+	int rc;
+
 	dev_info(ds->dev, "[phase6] cls_flower_del port%d cookie=%lx\n",
 		 port, cls->cookie);
-	return -EOPNOTSUPP;
+	rc = zx_flow_untrack(priv, cls->cookie);
+	/* Not a tracked offload flow (e.g. one we declined) -> nothing to undo. */
+	return rc == -ENOENT ? 0 : rc;
 }
 
 static int zx_dsa_cls_flower_stats(struct dsa_switch *ds, int port,

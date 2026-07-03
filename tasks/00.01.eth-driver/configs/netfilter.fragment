@@ -38,6 +38,16 @@ CONFIG_IP6_NF_TARGET_REJECT=y
 CONFIG_IP6_NF_MANGLE=y
 CONFIG_IP6_NF_NAT=y
 CONFIG_IP6_NF_TARGET_MASQUERADE=y
+# Phase 6b — nf_tables front-end for the conntrack auto-offload flowtable.
+#   nf_tables core (NF_TABLES) + flow-offload (NFT_FLOW_OFFLOAD) + NF_FLOW_TABLE
+#   were already on, but WITHOUT a table address-family the `nft` binary can open
+#   the netlink socket yet cannot `add table ip/inet ...`, and without NFT_CT it
+#   cannot express `ct state established flow add @ft` — the exact rule that fires
+#   the driver's flow_offload_add. These four enable the offload flowtable ruleset.
+CONFIG_NF_TABLES_INET=y
+CONFIG_NF_TABLES_IPV4=y
+CONFIG_NF_TABLES_IPV6=y
+CONFIG_NFT_CT=y
 # Phase 6 — tc flower HW-offload front-end (Stage 1)
 CONFIG_NET_SCHED=y
 CONFIG_NET_CLS=y

@@ -391,6 +391,16 @@ struct zx_eth {
 	 * as static tables in zx_{cla,pm,stock}_table.h — applied directly
 	 * during probe, no firmware_request().
 	 */
+
+	/* [phase6/ft] per-flow offload slot map: tc cookie -> ram2 hash bucket,
+	 * so FLOW_CLS_DESTROY can invalidate exactly that flow's bucket. */
+#define ZX_FT_MAX_FLOWS	32
+	struct {
+		unsigned long	cookie;
+		u16		raw;	/* raw HW hash (derives all 5 way buckets) */
+		u16		pm_slot;	/* per-(flow,dir) PM flow_info/next-hop slot */
+		bool		used;
+	} ft_flows[ZX_FT_MAX_FLOWS];
 };
 
 /* ============================================================
@@ -2284,14 +2294,22 @@ static void zx_cla_ffe_extract_init(struct zx_eth *e)
  * findings: trap_dmac_clear_HW_FORWARD_2026-06-28 + ffe_install_port_spec_2026-06-24.
  * ===================================================================
  */
-#define ZX_FT_FLOW_IDX		5	/* PM flow_info / next-hop slot */
-#define ZX_FT_SUBRAM_IDX	5	/* PM ram6 sub_ram slot */
-#define ZX_FT_CMD_IDX		5	/* PM ram3 cmd_ram (rewrite microcode) slot */
+/* Per-(flow,direction) PM slot allocation. The old design wrote flow_info /
+ * next-hop / sub_ram / cmd_ram all at the single hardcoded slot 5 for EVERY flow
+ * and BOTH directions, so a bidirectional NAT flow's UP entry (next-hop = modem
+ * MAC, egress WAN) and DN entry (next-hop = client MAC, egress lan2) clobbered each
+ * other -> one direction always carried the wrong next-hop -> trapped to SW -> the
+ * download crawled. Each direction is a distinct tc cookie, so a distinct PM slot
+ * per tracked ft_flows[] entry gives a distinct slot per direction automatically.
+ * pm_slot = ZX_FT_PM_BASE + tracking-index (base>0 avoids slot 0; 32 flows ->
+ * slots 8..39, well within PM ram0/1/6/3's ~0x400 addresses). */
+#define ZX_FT_PM_BASE		8
 
 /* Build the 15-word CLA ram2 forward entry for the 5-tuple (byte-exact reproduction
- * of the HW-validated forwarding entries; see zx-dsa.c zx_cla_pack_entry). */
+ * of the HW-validated forwarding entries; see zx-dsa.c zx_cla_pack_entry).
+ * flow_id = the PM flow_info slot this entry's cmd_flow_id (byte0x04) must point at. */
 static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
-			   __be16 sport, __be16 dport)
+			   __be16 sport, __be16 dport, u8 flow_id)
 {
 	u32 s = ntohl(saddr), d = ntohl(daddr);
 	u8 s0 = (s >> 24) & 0xff, s1 = (s >> 16) & 0xff, s2 = (s >> 8) & 0xff, s3 = s & 0xff;
@@ -2299,9 +2317,19 @@ static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
 	u16 sp = ntohs(sport), dp = ntohs(dport);
 
 	cla[0] = 0x03005044;
-	cla[1] = (0xfau << 24) | (0x11u << 16) | (0xc0u << 8);	/* byte0x05=0xc0 e8_en */
+	/* word1 bytes: [0x04]=cmd_flow_id (PM flow_info slot) [0x05]=0xc0(e8_en)
+	 * [0x06]=0x11 [0x07]=0xfa. cmd_flow_id MUST equal the slot the recipe writes
+	 * flow_info/next-hop to (mirror zx-dsa.c zx_cla_pack_entry); hardcoding 0 while
+	 * PM was written at slot 5 pointed the CLA entry at the wrong next-hop. */
+	cla[1] = (0xfau << 24) | (0x11u << 16) | (0xc0u << 8) | (flow_id & 0xff);
 	cla[2] = 0x00000608;
-	cla[3] = 0x80000000;					/* valid */
+	/* word3 is NOT a valid bit — it is the high part of extr_index
+	 * (extr_index = byte0x10<<4 | byte0xf>>4, cla_set_hash_table tm.c:3444).
+	 * byte0x10=0x49 (word4) + byte0xf=0x00 (this word) => extr_index low byte 0x90,
+	 * which MUST equal the ex_rule_id the HW classifies the flow under (rule 0x90).
+	 * The stock-captured 0x80000000 made byte0xf=0x80 => extr_index 0x98 != 0x90 =>
+	 * LOOK_UP_MISS on every packet (verified on-device 2026-07-02). Must be 0. */
+	cla[3] = 0;
 	cla[4] = ((u32)ip_proto << 24) | 0x00000049;		/* byte0x13=proto */
 	cla[5] = ((u32)s3 << 24) | ((u32)s0 << 16) | ((u32)s1 << 8);
 	cla[6] = ((u32)d3 << 24) | ((u32)d0 << 16) | ((u32)d1 << 8) | s2;
@@ -2314,46 +2342,182 @@ static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
 	cla[9] = cla[10] = cla[11] = cla[12] = cla[13] = cla[14] = 0;
 }
 
-/* Write the full proven recipe (PM tables + CLA hash brute-fill). */
+/* Build the flow's 12-word HW hash key (ex_rule_id 0x90 v4-5tuple extracted-key
+ * form: word0=0x48000000, then {proto,srcHi,srcLo,dstHi,dstLo,sport,dport} bit-
+ * packed at bit anchor 33+16*n, LE byte stream) and return its raw 16-bit hash.
+ * Mirrors zx-dsa.c zx_cla_flow_hash. */
+static u16 zx_ft_flow_hash(struct zx_eth *e, u8 ip_proto, __be32 saddr,
+			   __be32 daddr, __be16 sport, __be16 dport)
+{
+	u32 s = ntohl(saddr), d = ntohl(daddr);
+	u16 fields[7] = {
+		ip_proto, (s >> 16) & 0xffff, s & 0xffff,
+		(d >> 16) & 0xffff, d & 0xffff, ntohs(sport), ntohs(dport),
+	};
+	u8 kb[48] = {0};
+	u32 key[12];
+	int n, i;
+
+	kb[3] = 0x48;		/* word0 = 0x48000000 (ex_rule_id 0x90) */
+	for (n = 0; n < 7; n++) {
+		u32 base = 33 + 16 * n;
+
+		for (i = 0; i < 16; i++)
+			if (fields[n] & (1u << i)) {
+				u32 pos = base + i;
+
+				kb[pos >> 3] |= 1u << (pos & 7);
+			}
+	}
+	for (i = 0; i < 12; i++)
+		key[i] = kb[4 * i] | (kb[4 * i + 1] << 8) |
+			 (kb[4 * i + 2] << 16) | (kb[4 * i + 3] << 24);
+	return zx_cla_hash_raw(e, key);
+}
+
+/* The 5 per-flow way buckets (one per bank) for a raw hash. Mirrors
+ * zx-dsa.c zx_cla_way_slots (the CLA hash lookup is multi-way; an entry must be in
+ * every bank at the flow's hash — ram2 alone MISSES, verified on-device). */
+static void zx_ft_way_slots(u16 raw, u8 ram[5], u16 addr[5])
+{
+	ram[0] = 2; addr[0] = raw & 0xff;
+	ram[1] = 3; addr[1] = 0x100 + (raw & 0x7f);
+	ram[2] = 4; addr[2] = 0x180 + (raw & 0x3f);
+	ram[3] = 5; addr[3] = 0x1c0 + (raw & 0x3f);
+	ram[4] = 6; addr[4] = 0x200 + (raw & 0x7);
+}
+
+/* Write the proven recipe (PM tables + the CLA hash entry at the flow's own bucket
+ * in all 5 way banks) for per-slot multi-flow coexistence. Returns raw hash or errno. */
 static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 				__be32 daddr, __be16 sport, __be16 dport,
-				const u8 nh_mac[ETH_ALEN], u8 eg_regport)
+				const u8 nh_mac[ETH_ALEN], u8 eg_regport,
+				u16 pm_slot)
 {
-	static const struct { u8 ram; u16 n; } banks[] = {
-		{ 2, 0x100 }, { 3, 0x80 }, { 4, 0x40 }, { 5, 0x40 }, { 6, 8 },
-	};
 	u32 cla[15];
 	u32 nh[8] = {0}, fi[8] = {0}, sub[8] = {0}, cmd[8] = {0};
-	int b, ok = 0;
-	u32 a;
+	u8 ram[5];
+	u16 addr[5];
+	u16 raw;
+	int w, rc = 0;
 
 	nh[0] = ntohl(daddr);
 	nh[1] = ((u32)nh_mac[2] << 24) | ((u32)nh_mac[3] << 16) |
 		((u32)nh_mac[4] << 8) | nh_mac[5];
 	nh[2] = ((u32)nh_mac[0] << 8) | nh_mac[1];
-	zx_pp_pm_write_entry(e, 1, ZX_FT_FLOW_IDX, nh);
+	zx_pp_pm_write_entry(e, 1, pm_slot, nh);
 
-	fi[0] = (0x0de8u << 16) | ZX_FT_FLOW_IDX;	/* rewrite-arm | next_hop_idx */
+	fi[0] = (0x0de8u << 16) | pm_slot;		/* rewrite-arm | next_hop_idx */
 	fi[1] = 0x0014035c;
-	zx_pp_pm_write_entry(e, 0, ZX_FT_FLOW_IDX, fi);
+	zx_pp_pm_write_entry(e, 0, pm_slot, fi);
 
-	sub[0] = ZX_FT_CMD_IDX;				/* ram6 sub_ram -> ram3 cmd idx */
-	zx_pp_pm_write_entry(e, 6, ZX_FT_SUBRAM_IDX, sub);
+	sub[0] = pm_slot;				/* ram6 sub_ram -> ram3 cmd idx */
+	zx_pp_pm_write_entry(e, 6, pm_slot, sub);
 
 	cmd[0] = 0x00800000;				/* ram3 cmd: last_cmd=1 (no-op fwd) */
-	zx_pp_pm_write_entry(e, 3, ZX_FT_CMD_IDX, cmd);
+	zx_pp_pm_write_entry(e, 3, pm_slot, cmd);
 
-	zx_ft_pack_cla(cla, ip_proto, saddr, daddr, sport, dport);
-	for (b = 0; b < ARRAY_SIZE(banks); b++)
-		for (a = 0; a < banks[b].n; a++)
-			if (zx_cla_write_hash(e, banks[b].ram, a, cla, 15) == 0)
-				ok++;
+	zx_ft_pack_cla(cla, ip_proto, saddr, daddr, sport, dport, pm_slot & 0xff);
+	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport);
+	zx_ft_way_slots(raw, ram, addr);
+	for (w = 0; w < 5; w++) {
+		int r = zx_cla_write_hash(e, ram[w], addr[w], cla, 15);
+
+		if (r)
+			rc = r;
+	}
 
 	dev_info(e->dev,
-		 "[phase6/ft] recipe: proto=%u %pI4:%u->%pI4:%u eg_rp=%u nh=%pM -> %d/520 CLA buckets\n",
+		 "[phase6/ft] recipe: proto=%u %pI4:%u->%pI4:%u eg_rp=%u nh=%pM pm_slot=%u -> raw=0x%04x buckets ram2[0x%02x]/3[0x%03x]/4[0x%03x]/5[0x%03x]/6[0x%03x] rc=%d\n",
 		 ip_proto, &saddr, ntohs(sport), &daddr, ntohs(dport),
-		 eg_regport, nh_mac, ok);
+		 eg_regport, nh_mac, pm_slot, raw, addr[0], addr[1], addr[2],
+		 addr[3], addr[4], rc);
+	return rc ? rc : raw;
+}
+
+/* Reserve a FT tracking slot at HW hash raw, recording {cookie, raw} BEFORE the
+ * CLA entry is written so a declined offload leaves ft_flows[]/CLA untouched:
+ *   -EOPNOTSUPP  another tracked flow (different cookie) already owns raw's CLA
+ *                way0 bucket (raw & 0xff = ram2 primary) -> reject (stay SW),
+ *                never clobber; delete-either-kills-both is thus impossible.
+ *   -ENOSPC      the tracking table is full and this cookie is not already known.
+ * Re-uses the slot on REPLACE (same cookie). On success records {cookie,raw},
+ * assigns a per-entry PM slot (ZX_FT_PM_BASE + tracking-index -> distinct per
+ * direction, since each direction is a distinct cookie/entry), returns it via
+ * *pm_slot, and returns 0. */
+static int zx_ft_flow_reserve(struct zx_eth *e, unsigned long cookie, u16 raw,
+			      u16 *pm_slot)
+{
+	int i, self = -1, free = -1;
+
+	for (i = 0; i < ZX_FT_MAX_FLOWS; i++) {
+		if (!e->ft_flows[i].used) {
+			if (free < 0)
+				free = i;
+			continue;
+		}
+		if (e->ft_flows[i].cookie == cookie) {
+			self = i;
+			continue;
+		}
+		if ((e->ft_flows[i].raw & 0xff) == (raw & 0xff))
+			return -EOPNOTSUPP;	/* CLA way0 bucket collision */
+	}
+	if (self >= 0) {			/* REPLACE existing cookie */
+		e->ft_flows[self].raw = raw;
+		*pm_slot = e->ft_flows[self].pm_slot;
+		return 0;
+	}
+	if (free < 0)
+		return -ENOSPC;			/* tracking table full */
+	e->ft_flows[free].cookie = cookie;
+	e->ft_flows[free].raw = raw;
+	e->ft_flows[free].pm_slot = ZX_FT_PM_BASE + free;
+	e->ft_flows[free].used = true;
+	*pm_slot = e->ft_flows[free].pm_slot;
 	return 0;
+}
+
+/* Undo a reservation (no CLA write / HW write failed): free the slot. */
+static void zx_ft_flow_release(struct zx_eth *e, unsigned long cookie)
+{
+	int i;
+
+	for (i = 0; i < ZX_FT_MAX_FLOWS; i++)
+		if (e->ft_flows[i].used && e->ft_flows[i].cookie == cookie) {
+			e->ft_flows[i].used = false;
+			return;
+		}
+}
+
+/* Invalidate the buckets a tracked FT flow occupies (zero the entry in all 5 way
+ * banks -> valid_en off -> key-compare misses -> flow traps). Returns 0 if
+ * found+cleared, -ENOENT else. */
+static int zx_ft_flow_untrack(struct zx_eth *e, unsigned long cookie)
+{
+	u32 zero[15] = {0};
+	u8 ram[5];
+	u16 addr[5];
+	int i, w, rc = 0;
+
+	for (i = 0; i < ZX_FT_MAX_FLOWS; i++) {
+		if (e->ft_flows[i].used && e->ft_flows[i].cookie == cookie) {
+			zx_ft_way_slots(e->ft_flows[i].raw, ram, addr);
+			for (w = 0; w < 5; w++) {
+				int r = zx_cla_write_hash(e, ram[w], addr[w],
+							  zero, 15);
+
+				if (r)
+					rc = r;
+			}
+			dev_info(e->dev,
+				 "[phase6/ft] flow del cookie=%lx -> cleared raw=0x%04x (5 ways) rc=%d\n",
+				 cookie, e->ft_flows[i].raw, rc);
+			e->ft_flows[i].used = false;
+			return rc;
+		}
+	}
+	return -ENOENT;
 }
 
 /* Resolve the next-hop MAC via route + neigh on the egress dev (mirrors stock FFE). */
@@ -2410,7 +2574,8 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	u8 nh_mac[ETH_ALEN] = {0};
 	bool have_mac = false;
 	u8 ip_proto = 0;
-	int i;
+	u16 raw, pm_slot = 0;
+	int i, rc;
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
 		struct flow_match_basic m;
@@ -2471,8 +2636,30 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 		return -EOPNOTSUPP;
 	}
 
-	return zx_ft_install_recipe(e, ip_proto, saddr, daddr, sport, dport,
-				    nh_mac, zx_ft_egress_regport(odev));
+	/* Reserve a tracking slot BEFORE writing the CLA: decline (stay SW) on a
+	 * bucket collision or a full table instead of clobbering/leaking. */
+	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport);
+	rc = zx_ft_flow_reserve(e, cls->cookie, raw, &pm_slot);
+	if (rc == -EOPNOTSUPP) {
+		dev_info(e->dev,
+			 "[phase6/ft] offload declined: CLA bucket collision cookie=%lx raw 0x%04x (way0 0x%02x owned) -> stays in SW\n",
+			 cls->cookie, raw, raw & 0xff);
+		return rc;
+	}
+	if (rc < 0) {
+		dev_info(e->dev,
+			 "[phase6/ft] offload declined: flow table full (max %d) cookie=%lx -> stays in SW\n",
+			 ZX_FT_MAX_FLOWS, cls->cookie);
+		return -EOPNOTSUPP;
+	}
+
+	rc = zx_ft_install_recipe(e, ip_proto, saddr, daddr, sport, dport,
+				  nh_mac, zx_ft_egress_regport(odev), pm_slot);
+	if (rc < 0) {
+		zx_ft_flow_release(e, cls->cookie);
+		return rc;
+	}
+	return 0;
 }
 
 static int zx_ft_setup_cb(enum tc_setup_type type, void *type_data, void *cb_priv)
@@ -2488,6 +2675,7 @@ static int zx_ft_setup_cb(enum tc_setup_type type, void *type_data, void *cb_pri
 		return zx_ft_flower_replace(e, cls);
 	case FLOW_CLS_DESTROY:
 		dev_info(e->dev, "[phase6/ft] flower destroy cookie=%lx\n", cls->cookie);
+		zx_ft_flow_untrack(e, cls->cookie);
 		return 0;
 	default:
 		return -EOPNOTSUPP;
@@ -2500,6 +2688,14 @@ static int zx_eth_setup_block(struct zx_eth *e, struct flow_block_offload *f)
 {
 	struct flow_block_cb *block_cb;
 
+	/* NB: on Linux 6.6 the nf_flow_table offload core binds its block with
+	 * binder_type = FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS (see
+	 * nf_flow_table_block_offload_init(), nf_flow_table_offload.c) and
+	 * dispatches it via ndo_setup_tc(dev, TC_SETUP_FT, bo). There is NO
+	 * distinct FLOW_BLOCK_BINDER_TYPE_FT in this kernel, so the FT flowtable
+	 * block is accepted by the CLSACT_INGRESS arm below — no extra case
+	 * needed. (Newer kernels add FLOW_BLOCK_BINDER_TYPE_FT; add it here if
+	 * this driver is forward-ported.) */
 	if (f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS &&
 	    f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_EGRESS)
 		return -EOPNOTSUPP;
@@ -2529,8 +2725,20 @@ static int zx_eth_setup_block(struct zx_eth *e, struct flow_block_offload *f)
 static int zx_eth_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 			   void *type_data)
 {
-	struct zx_eth_port *port = *(struct zx_eth_port **)netdev_priv(ndev);
-	struct zx_eth *e = port->eth;
+	struct zx_eth *e;
+
+	/* Two netdev flavours share this hook with DIFFERENT netdev_priv
+	 * layouts: the idm%d user netdevs store a (struct zx_eth_port *),
+	 * while the `sw` conduit stores a (struct zx_eth *) directly. DSA's
+	 * TC_SETUP_FT delegation targets the conduit (sw), so detect it and
+	 * decode priv accordingly — misreading it here would deref garbage. */
+	if (ndev->netdev_ops == &zx_eth_netdev_ops) {
+		struct zx_eth_port *port = *(struct zx_eth_port **)netdev_priv(ndev);
+
+		e = port->eth;
+	} else {
+		e = *(struct zx_eth **)netdev_priv(ndev);
+	}
 
 	switch (type) {
 	case TC_SETUP_BLOCK:
@@ -4247,6 +4455,10 @@ static const struct net_device_ops zx_sw_netdev_ops = {
 	.ndo_start_xmit	= zx_sw_xmit,
 	.ndo_set_mac_address = eth_mac_addr,
 	.ndo_validate_addr   = eth_validate_addr,
+	/* [phase6/ft] DSA delegates TC_SETUP_FT (nf_flow_table/conntrack
+	 * offload) to the conduit master's ndo_setup_tc. sw IS the conduit
+	 * (lan1..lanN -> lower_sw), so the FT flow_block binds here. */
+	.ndo_setup_tc	= zx_eth_setup_tc,
 };
 
 static int zx_sw_netdev_create(struct zx_eth *e)
@@ -4282,6 +4494,11 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	}
 	*(struct zx_eth **)netdev_priv(ndev) = e;
 	ndev->netdev_ops = &zx_sw_netdev_ops;
+	/* [phase6/ft] NETIF_F_HW_TC gates tc_can_offload()/flow_block binding
+	 * on the conduit so nf_flow_table (TC_SETUP_FT) delegation offloads
+	 * here. Mirror the idm%d user netdevs (MTK pattern). */
+	ndev->hw_features |= NETIF_F_HW_TC;
+	ndev->features |= NETIF_F_HW_TC;
 	ndev->watchdog_timeo = msecs_to_jiffies(5000);
 	snprintf(ndev->name, IFNAMSIZ, "sw");
 	eth_hw_addr_set(ndev, mac);

@@ -361,6 +361,17 @@ static void nft_flow_offload_eval(const struct nft_expr *expr,
 		ct->proto.tcp.seen[1].flags |= IP_CT_TCP_FLAG_BE_LIBERAL;
 	}
 
+	/* HW flow-offload is unidirectional by default: flow_offload_rule_add()
+	 * only installs the REPLY direction to hardware when NF_FLOW_HW_BIDIRECTIONAL
+	 * is set, and only the tc act_ct path ever sets it. Without this, an
+	 * nft-flowtable-offloaded connection HW-forwards only the ORIGINAL
+	 * direction while every reply packet falls back to the SW slow-path
+	 * (observed on the ZTE H3600 DSA offload: download/WAN-ingress crawled).
+	 * nft only offloads confirmed flows (and established TCP), so the reply
+	 * tuple is valid — mark the flow bidirectional so both directions are
+	 * programmed into the classifier. */
+	__set_bit(NF_FLOW_HW_BIDIRECTIONAL, &flow->flags);
+
 	ret = flow_offload_add(flowtable, flow);
 	if (ret < 0)
 		goto err_flow_add;

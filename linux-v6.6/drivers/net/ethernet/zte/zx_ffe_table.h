@@ -122,6 +122,12 @@ static const struct zx_ffe_index { u8 id; u32 w[5]; } zx_ffe_index[] = {
 	{  6, { 0x63626160, 0x67666564, 0x6b6a6968, 0x6f6e6d6c, 0x00150055 } },
 	{  7, { 0x73727170, 0x77767574, 0x7b7a7978, 0x7f7e7d7c, 0x00150055 } },
 	{  8, { 0x83828180, 0x87868584, 0x8b8a8988, 0x8f8e8d8c, 0x00150755 } },
-	{  9, { 0x93929190, 0x97969594, 0x9b9a9998, 0x9f9e9d9c, 0x00150051 } },
+	/* word4 index_valid low16: enable ONLY rule slot 0 (ram1 addr 0x90 = the clean
+	 * L3-relative 5-tuple extract rule). The HW selects the HIGHEST enabled rule; the
+	 * stock/HW default 0x00150051 also enables slots 4,6 (0x94,0x96) so it picks 0x96
+	 * — whose window extracts a VOLATILE per-packet key => every 5-tuple lookup MISSES.
+	 * 0x00150001 forces rule 0x90, giving a stable key; the ram2 entry's extr_index
+	 * (cla[3]=0 => low byte 0x90) then matches. Verified on-device 2026-07-02. */
+	{  9, { 0x93929190, 0x97969594, 0x9b9a9998, 0x9f9e9d9c, 0x00150001 } },
 	{ 10, { 0x03020100, 0x07060504, 0x0b0a0908, 0x0f0e0d0c, 0x00150004 } },
 };
