@@ -52,6 +52,13 @@
 #define ZX_ISOLATE_BASE		0x3c0	/* PP window offset (phys 0x923883c0) */
 static const u8 zx_regport[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
 
+/* The WAN/RGMII regport (lan4 = MAC4 = modem uplink; zx_regport[4]=5). WAN-ingress
+ * packets extract the CLA hash key with an extra bit at key position 32 (kb[4] bit0)
+ * that GePHY LAN-ingress packets lack; the key builder must set it for entries whose
+ * matching packets ingress the WAN or they land at the wrong hash bucket and MISS
+ * (findings/wan_ingress_data_hitrate_2026-07-03). */
+#define ZX_WAN_REGPORT		5
+
 /* NPP register window base (greg per-port control lives here). TODO: obtain
  * from DT reg / share with the conduit (zx-eth) instead of hardcoding.
  */
@@ -733,7 +740,7 @@ static u16 zx_cla_hash_raw(struct zx_dsa_priv *p, const u32 key[12])
  * reproduces the live key 48000000 583e0022 81501265 86b41265 0000006b, which the
  * HW hashes to raw 0xf6d5 -> ram2 slot 0xd5 (matches on-device gparsehashkey). */
 static u16 zx_cla_flow_hash(struct zx_dsa_priv *p, u8 ip_proto, __be32 saddr,
-			    __be32 daddr, __be16 sport, __be16 dport)
+			    __be32 daddr, __be16 sport, __be16 dport, bool is_wan)
 {
 	u32 s = ntohl(saddr), d = ntohl(daddr);
 	u16 fields[7] = {
@@ -745,6 +752,8 @@ static u16 zx_cla_flow_hash(struct zx_dsa_priv *p, u8 ip_proto, __be32 saddr,
 	int n, i;
 
 	kb[3] = 0x48;		/* word0 = 0x48000000 (ex_rule_id 0x90) */
+	if (is_wan)
+		kb[4] |= 1;	/* key pos32: WAN/RGMII-ingress extraction bit */
 	for (n = 0; n < 7; n++) {
 		u32 base = 33 + 16 * n;
 
@@ -794,7 +803,7 @@ static void zx_cla_way_slots(u16 raw, u8 ram[5], u16 addr[5])
  * 0x80000000 (valid), byte0x13 = real IP proto (UDP 0x11 / TCP 0x06), byte0x04 =
  * cmd_flow_id linking to the PM flow_info index. saddr/daddr are __be32 (network). */
 static void zx_cla_pack_entry(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
-			      __be16 sport, __be16 dport, u8 flow_id)
+			      __be16 sport, __be16 dport, u8 flow_id, bool is_wan)
 {
 	u8 s0 = (ntohl(saddr) >> 24) & 0xff, s1 = (ntohl(saddr) >> 16) & 0xff;
 	u8 s2 = (ntohl(saddr) >>  8) & 0xff, s3 =  ntohl(saddr)        & 0xff;
@@ -815,7 +824,11 @@ static void zx_cla_pack_entry(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 dad
 	 * The stock-captured 0x80000000 made byte0xf=0x80 => extr_index 0x98 != 0x90 =>
 	 * LOOK_UP_MISS on every packet (verified on-device 2026-07-02). Must be 0. */
 	cla[3] = 0;
-	cla[4] = ((u32)ip_proto << 24) | 0x00000049;	/* byte0x13=proto, byte0x10=0x49 */
+	/* byte0x10 bit5 = `direct` (0x49->0x69) for the WAN/download-ingress entry — see
+	 * zx-eth-main.c zx_ft_pack_cla: necessary+sufficient to flip WAN-ingress
+	 * trap->forward (bisected on-device 2026-07-03). LAN-ingress forwards without it,
+	 * so gate on is_wan. extr_index stays 0x90 (word3=0). */
+	cla[4] = ((u32)ip_proto << 24) | (is_wan ? 0x00000069 : 0x00000049);
 	/* Word 5-7: the verified IP/port interleave. */
 	cla[5] = ((u32)s3 << 24) | ((u32)s0 << 16) | ((u32)s1 << 8);
 	cla[6] = ((u32)d3 << 24) | ((u32)d0 << 16) | ((u32)d1 << 8) | s2;
@@ -887,8 +900,13 @@ static int zx_install_l3_recipe(struct zx_dsa_priv *p, u8 ip_proto, __be32 saddr
 	 * every bank at the flow's hash (ram2 alone MISSES — verified on-device). The
 	 * 5 buckets are distinct per distinct 5-tuple, so flows coexist.
 	 * cmd_flow_id (byte0x04) = 0: the HW-validated forwarding entries used 0 here. */
-	zx_cla_pack_entry(cla, ip_proto, saddr, daddr, sport, dport, 0);
-	raw = zx_cla_flow_hash(p, ip_proto, saddr, daddr, sport, dport);
+	zx_cla_pack_entry(cla, ip_proto, saddr, daddr, sport, dport, 0,
+			  in_regport == ZX_WAN_REGPORT);
+	/* Ingress-aware hash: packets matching this entry ingress in_regport; a
+	 * WAN/RGMII ingress sets key pos32. (Local tc-flower tests inject on a GePHY
+	 * LAN port -> in_regport != WAN -> pos32=0, unchanged.) */
+	raw = zx_cla_flow_hash(p, ip_proto, saddr, daddr, sport, dport,
+			       in_regport == ZX_WAN_REGPORT);
 	zx_cla_way_slots(raw, ram, addr);
 	for (w = 0; w < 5; w++) {
 		int r = zx_cla_wr(p, ram[w], addr[w], cla, 15);
@@ -1134,7 +1152,8 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 	 * touching the CLA. A declined offload (bucket collision or full table)
 	 * must leave both flows[] and the CLA banks untouched and stay in the
 	 * (working) SW datapath — never clobber an existing entry, never leak. */
-	raw = zx_cla_flow_hash(priv, ip_proto, saddr, daddr, sport, dport);
+	raw = zx_cla_flow_hash(priv, ip_proto, saddr, daddr, sport, dport,
+			       zx_regport[port & 7] == ZX_WAN_REGPORT);
 	rc = zx_flow_reserve(priv, cls->cookie, raw);
 	if (rc == -EOPNOTSUPP) {
 		dev_info(ds->dev,
@@ -1173,9 +1192,24 @@ static int zx_dsa_cls_flower_del(struct dsa_switch *ds, int port,
 	return rc == -ENOENT ? 0 : rc;
 }
 
+/* Report keepalive stats for a resident tracked flow so the flowtable/tc core
+ * refreshes lastused and does not age out a HW entry whose packets bypass the CPU
+ * (see zx_ft_flower_stats in zx-eth-main.c for the full rationale). This DSA
+ * tc-flower path is the manual test path (filters persist until userspace deletes
+ * them, so it is not GC-churned like the FT path) -- the keepalive is kept for
+ * consistency and to make `tc -s filter` show the flow as used. */
 static int zx_dsa_cls_flower_stats(struct dsa_switch *ds, int port,
 				   struct flow_cls_offload *cls, bool ingress)
 {
+	struct zx_dsa_priv *priv = ds->priv;
+	int i;
+
+	for (i = 0; i < ZX_MAX_OFFLOAD_FLOWS; i++)
+		if (priv->flows[i].used && priv->flows[i].cookie == cls->cookie) {
+			flow_stats_update(&cls->stats, 0, 0, 0, jiffies,
+					  FLOW_ACTION_HW_STATS_DELAYED);
+			return 0;
+		}
 	return -EOPNOTSUPP;
 }
 #endif /* CONFIG_NET_CLS_FLOWER */

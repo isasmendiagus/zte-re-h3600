@@ -2305,11 +2305,19 @@ static void zx_cla_ffe_extract_init(struct zx_eth *e)
  * slots 8..39, well within PM ram0/1/6/3's ~0x400 addresses). */
 #define ZX_FT_PM_BASE		8
 
+/* The WAN/RGMII regport (lan4 = MAC4 = the modem uplink). WAN-ingress packets
+ * (the DN/reply direction of a routed flow) extract the CLA hash key with an extra
+ * bit set at key position 32 (kb[4] bit0, one bit below the proto field at base
+ * bit 33); GePHY LAN-ingress packets do not. The key builder must set that bit for
+ * the entry whose matching packets ingress the WAN, or the entry lands at the wrong
+ * hash bucket and WAN-ingress data MISSES (findings/wan_ingress_data_hitrate). */
+#define ZX_WAN_REGPORT		5
+
 /* Build the 15-word CLA ram2 forward entry for the 5-tuple (byte-exact reproduction
  * of the HW-validated forwarding entries; see zx-dsa.c zx_cla_pack_entry).
  * flow_id = the PM flow_info slot this entry's cmd_flow_id (byte0x04) must point at. */
 static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
-			   __be16 sport, __be16 dport, u8 flow_id)
+			   __be16 sport, __be16 dport, u8 flow_id, bool is_wan)
 {
 	u32 s = ntohl(saddr), d = ntohl(daddr);
 	u8 s0 = (s >> 24) & 0xff, s1 = (s >> 16) & 0xff, s2 = (s >> 8) & 0xff, s3 = s & 0xff;
@@ -2330,7 +2338,14 @@ static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
 	 * The stock-captured 0x80000000 made byte0xf=0x80 => extr_index 0x98 != 0x90 =>
 	 * LOOK_UP_MISS on every packet (verified on-device 2026-07-02). Must be 0. */
 	cla[3] = 0;
-	cla[4] = ((u32)ip_proto << 24) | 0x00000049;		/* byte0x13=proto */
+	/* byte0x10 = 0x49 = valid_en(bit6) + extr_index nibble(→rule 0x90). For the
+	 * WAN/download-ingress entry ALSO set bit5 = `direct` (0x49→0x69): the reference
+	 * firmware sets it on the download-direction entry, and without it a WAN-ingress
+	 * packet reaches the CLA lookup but the verdict TRAPS (LOOK_UP_MISS) instead of
+	 * forwarding. `direct` is necessary AND sufficient to flip trap→forward for
+	 * WAN-ingress (bisected on-device 2026-07-03: da_known irrelevant, extr_index must
+	 * stay 0x90). LAN-ingress (upload) forwards without it, so gate on is_wan. */
+	cla[4] = ((u32)ip_proto << 24) | (is_wan ? 0x00000069 : 0x00000049);
 	cla[5] = ((u32)s3 << 24) | ((u32)s0 << 16) | ((u32)s1 << 8);
 	cla[6] = ((u32)d3 << 24) | ((u32)d0 << 16) | ((u32)d1 << 8) | s2;
 	cla[7] = ((u32)(dp & 0xff) << 24) | ((u32)(sp >> 8) << 16) |
@@ -2345,9 +2360,17 @@ static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
 /* Build the flow's 12-word HW hash key (ex_rule_id 0x90 v4-5tuple extracted-key
  * form: word0=0x48000000, then {proto,srcHi,srcLo,dstHi,dstLo,sport,dport} bit-
  * packed at bit anchor 33+16*n, LE byte stream) and return its raw 16-bit hash.
- * Mirrors zx-dsa.c zx_cla_flow_hash. */
+ * Mirrors zx-dsa.c zx_cla_flow_hash.
+ *
+ * is_wan makes the key INGRESS-AWARE: WAN/RGMII-ingress packets (the DN/reply
+ * direction of a routed flow, ingress lan4/MAC4) extract the key with kb[4] bit0
+ * (key position 32, one bit below the proto field at base 33) SET; GePHY LAN
+ * ingress leaves it 0. Setting it moves the entry to the bucket the WAN-ingress
+ * extraction probes, so WAN-ingress DN data HITS instead of LOOK_UP_MISSing
+ * (proven: driver key pos32=0 -> raw 0x7b38 = installed slot, but the live
+ * WAN-ingress DN key pos32=1 -> raw 0x3e4e; findings/wan_ingress_data_hitrate). */
 static u16 zx_ft_flow_hash(struct zx_eth *e, u8 ip_proto, __be32 saddr,
-			   __be32 daddr, __be16 sport, __be16 dport)
+			   __be32 daddr, __be16 sport, __be16 dport, bool is_wan)
 {
 	u32 s = ntohl(saddr), d = ntohl(daddr);
 	u16 fields[7] = {
@@ -2359,6 +2382,8 @@ static u16 zx_ft_flow_hash(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	int n, i;
 
 	kb[3] = 0x48;		/* word0 = 0x48000000 (ex_rule_id 0x90) */
+	if (is_wan)
+		kb[4] |= 1;	/* key pos32: WAN/RGMII-ingress extraction bit */
 	for (n = 0; n < 7; n++) {
 		u32 base = 33 + 16 * n;
 
@@ -2417,8 +2442,14 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	cmd[0] = 0x00800000;				/* ram3 cmd: last_cmd=1 (no-op fwd) */
 	zx_pp_pm_write_entry(e, 3, pm_slot, cmd);
 
-	zx_ft_pack_cla(cla, ip_proto, saddr, daddr, sport, dport, pm_slot & 0xff);
-	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport);
+	/* WAN-ingress (is_wan) = this entry's matching packets ingress the WAN/RGMII
+	 * port, which for a routed flow is the direction that egresses toward a LAN
+	 * port (eg_regport != WAN). Those packets extract the key with pos32=1 (hash)
+	 * AND need the `direct` verdict bit set in the entry (see zx_ft_pack_cla). */
+	zx_ft_pack_cla(cla, ip_proto, saddr, daddr, sport, dport, pm_slot & 0xff,
+		       eg_regport != ZX_WAN_REGPORT);
+	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport,
+			      eg_regport != ZX_WAN_REGPORT);
 	zx_ft_way_slots(raw, ram, addr);
 	for (w = 0; w < 5; w++) {
 		int r = zx_cla_write_hash(e, ram[w], addr[w], cla, 15);
@@ -2428,10 +2459,10 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	}
 
 	dev_info(e->dev,
-		 "[phase6/ft] recipe: proto=%u %pI4:%u->%pI4:%u eg_rp=%u nh=%pM pm_slot=%u -> raw=0x%04x buckets ram2[0x%02x]/3[0x%03x]/4[0x%03x]/5[0x%03x]/6[0x%03x] rc=%d\n",
+		 "[phase6/ft] recipe: proto=%u %pI4:%u->%pI4:%u eg_rp=%u wan_ing=%d nh=%pM pm_slot=%u -> raw=0x%04x buckets ram2[0x%02x]/3[0x%03x]/4[0x%03x]/5[0x%03x]/6[0x%03x] rc=%d\n",
 		 ip_proto, &saddr, ntohs(sport), &daddr, ntohs(dport),
-		 eg_regport, nh_mac, pm_slot, raw, addr[0], addr[1], addr[2],
-		 addr[3], addr[4], rc);
+		 eg_regport, eg_regport != ZX_WAN_REGPORT, nh_mac, pm_slot, raw,
+		 addr[0], addr[1], addr[2], addr[3], addr[4], rc);
 	return rc ? rc : raw;
 }
 
@@ -2574,6 +2605,7 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	u8 nh_mac[ETH_ALEN] = {0};
 	bool have_mac = false;
 	u8 ip_proto = 0;
+	u8 eg_regport;
 	u16 raw, pm_slot = 0;
 	int i, rc;
 
@@ -2637,8 +2669,12 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	}
 
 	/* Reserve a tracking slot BEFORE writing the CLA: decline (stay SW) on a
-	 * bucket collision or a full table instead of clobbering/leaking. */
-	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport);
+	 * bucket collision or a full table instead of clobbering/leaking. The
+	 * reserve-time hash MUST match the install-time hash, so derive the same
+	 * ingress-awareness (WAN-ingress = egress toward a LAN port) here. */
+	eg_regport = zx_ft_egress_regport(odev);
+	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport,
+			      eg_regport != ZX_WAN_REGPORT);
 	rc = zx_ft_flow_reserve(e, cls->cookie, raw, &pm_slot);
 	if (rc == -EOPNOTSUPP) {
 		dev_info(e->dev,
@@ -2654,12 +2690,42 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	}
 
 	rc = zx_ft_install_recipe(e, ip_proto, saddr, daddr, sport, dport,
-				  nh_mac, zx_ft_egress_regport(odev), pm_slot);
+				  nh_mac, eg_regport, pm_slot);
 	if (rc < 0) {
 		zx_ft_flow_release(e, cls->cookie);
 		return rc;
 	}
 	return 0;
+}
+
+/* FLOW_CLS_STATS: the nf_flow_table GC polls every HW-offloaded flow for activity
+ * and refreshes flow->timeout from the reported lastused
+ * (nf_flow_table_core.c:nf_flow_offload_gc_step -> nf_flow_offload_stats ->
+ * flow_offload_work_stats: flow->timeout = max(timeout, lastused + get_timeout)).
+ * HW-forwarded packets BYPASS the CPU, so with no stats report the core sees the
+ * flow as idle, ages it out (FLOW_CLS_DESTROY) and re-installs on the next trapped
+ * packet (FLOW_CLS_REPLACE) -> the heavy install/destroy churn that leaves the HW
+ * entry absent most of the time (the ~17 % hit-rate). For a resident tracked flow
+ * report lastused = now (keepalive) so the core keeps it offloaded and does NOT GC
+ * it while our HW entry is installed.
+ *
+ * The CLA exposes no per-flow/per-bucket HW hit counter indexable by pm_slot (only
+ * the global cla_tx_fwd 0x9238c3c0 and a per-entry age bit in ram2 byte0x10 bit6),
+ * so pkts/bytes are reported 0; the keepalive relies on conntrack teardown /
+ * FLOW_CLS_DESTROY and the 32-entry cap to release a flow. FLOW_ACTION_HW_STATS_
+ * DELAYED matches the GC-poll cadence (mtk_ppe/mlx5 pattern). Returns -EOPNOTSUPP
+ * for a cookie we do not track so the core never refreshes a flow we don't own. */
+static int zx_ft_flower_stats(struct zx_eth *e, struct flow_cls_offload *cls)
+{
+	int i;
+
+	for (i = 0; i < ZX_FT_MAX_FLOWS; i++)
+		if (e->ft_flows[i].used && e->ft_flows[i].cookie == cls->cookie) {
+			flow_stats_update(&cls->stats, 0, 0, 0, jiffies,
+					  FLOW_ACTION_HW_STATS_DELAYED);
+			return 0;
+		}
+	return -EOPNOTSUPP;
 }
 
 static int zx_ft_setup_cb(enum tc_setup_type type, void *type_data, void *cb_priv)
@@ -2677,6 +2743,8 @@ static int zx_ft_setup_cb(enum tc_setup_type type, void *type_data, void *cb_pri
 		dev_info(e->dev, "[phase6/ft] flower destroy cookie=%lx\n", cls->cookie);
 		zx_ft_flow_untrack(e, cls->cookie);
 		return 0;
+	case FLOW_CLS_STATS:
+		return zx_ft_flower_stats(e, cls);
 	default:
 		return -EOPNOTSUPP;
 	}
