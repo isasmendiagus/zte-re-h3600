@@ -2789,6 +2789,26 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
  *                buckets) both got admitted and the second install's poly-0
  *                write silently clobbered the first's WAN-ingress-facing
  *                entry (findings/qa_static_bughunt_2026-07-04.md C2 fail#2).
+ *                [H2 fix] Also extended to the HIGHER way buckets (ram3/4/5/6
+ *                -- zx_ft_way_slots' way index 1..4). Those banks fold `raw`
+ *                into much smaller spaces than ram2's 256 (ram3=128, ram4/5=
+ *                64, ram6=only 8) for up to ZX_FT_MAX_FLOWS=32 concurrent
+ *                flows, so a distinct-raw&0xff pair can still share a ram6/
+ *                ram3/4/5 bucket. zx_ft_flow_untrack unconditionally zeroes
+ *                a destroyed flow's own 5 way buckets; if a live OTHER flow
+ *                still maps to one of those higher-way buckets (raw&0xff
+ *                differs, but e.g. raw&0x7 coincides), destroying flow A
+ *                wipes flow B's higher-way entry out from under it (the
+ *                driver's own model requires the entry "in every bank" --
+ *                comment above zx_ft_way_slots) -- a cross-flow write with no
+ *                install-time collision check to prevent it
+ *                (findings/qa_static_bughunt_2026-07-04.md H2). Fixed the
+ *                same way as C2: decline the new flow at reserve() time
+ *                instead of sharing-then-clobbering, so untrack's unconditional
+ *                5-way zero is provably safe -- no two tracked flows are ever
+ *                admitted with any way address (index 0..4, any ram bank) in
+ *                common, so no destroy can ever zero a bucket another live
+ *                flow depends on.
  *   -ENOSPC      the tracking table is full and this cookie is not already known.
  * @has_raw0/@raw0: the caller's DN-only poly-0 hash (zx_ft_flow_hash_poly0),
  * mirroring exactly what zx_ft_install_recipe will write when eg_regport !=
@@ -2802,6 +2822,14 @@ static int zx_ft_flow_reserve(struct zx_eth *e, unsigned long cookie, u16 raw,
 			      bool has_raw0, u16 raw0, u16 *pm_slot)
 {
 	int i, self = -1, free = -1;
+	/* [H2 fix] this flow's 5 way (ram,addr) pairs, computed once so every
+	 * tracked flow below can be checked against all of them, not just
+	 * way0 (ram2). */
+	u8 ram[5], ram_t[5];
+	u16 addr[5], addr_t[5];
+	int w;
+
+	zx_ft_way_slots(raw, ram, addr);
 
 	for (i = 0; i < ZX_FT_MAX_FLOWS; i++) {
 		if (!e->ft_flows[i].used) {
@@ -2846,6 +2874,26 @@ static int zx_ft_flow_reserve(struct zx_eth *e, unsigned long cookie, u16 raw,
 					 cookie, raw0, e->ft_flows[i].raw0);
 				return -EOPNOTSUPP;	/* poly-0 vs poly-0 */
 			}
+		}
+		/* [H2 fix] Higher-way collision check (ram3/4/5/6, way index
+		 * 1..4 -- way0/ram2 is already fully covered by the four checks
+		 * above, so start at w=1 to avoid a redundant duplicate decline
+		 * reason for the same bucket). ram[w]/ram_t[w] are always equal
+		 * for a given w (zx_ft_way_slots maps way index -> ram bank
+		 * unconditionally), so only the addr needs comparing. Distinct
+		 * "higher-way" log tag purely for testability (regress.py's
+		 * high_way_collision test greps for it to confirm this new
+		 * check -- not just the pre-existing way0/poly0 checks --
+		 * actually fires). */
+		zx_ft_way_slots(e->ft_flows[i].raw, ram_t, addr_t);
+		for (w = 1; w < 5; w++) {
+			if (addr[w] != addr_t[w])
+				continue;
+			dev_info(e->dev,
+				 "[phase6/ft] reserve decline: higher-way collision (ram%u addr=0x%03x) cookie=%lx raw=0x%04x vs tracked raw=0x%04x\n",
+				 ram[w], addr[w], cookie, raw,
+				 e->ft_flows[i].raw);
+			return -EOPNOTSUPP;
 		}
 	}
 	if (self >= 0) {			/* REPLACE existing cookie */
@@ -2913,7 +2961,15 @@ static void zx_ft_flow_release(struct zx_eth *e, unsigned long cookie)
  * (stale poly-0 hit) until its pm_slot got reused by an unrelated new flow,
  * at which point the stale entry started applying the NEW flow's NAT to the
  * OLD (supposedly dead) tuple's traffic (findings/qa_static_bughunt_2026-07-04.md
- * C2 fail#1). */
+ * C2 fail#1).
+ *
+ * [H2 fix] The unconditional 5-way zero below is safe against wiping a LIVE
+ * other flow's higher-way bucket (ram3/4/5/6) only because zx_ft_flow_reserve
+ * now declines (never admits) any two tracked flows that would ever share a
+ * way address in any of the 5 banks (findings/qa_static_bughunt_2026-07-04.md
+ * H2) -- i.e. the collision is prevented at install time, not papered over
+ * here at destroy time. Do not relax reserve()'s higher-way check without
+ * revisiting this loop. */
 static int zx_ft_flow_untrack(struct zx_eth *e, unsigned long cookie)
 {
 	u32 zero[15] = {0};
