@@ -411,6 +411,22 @@ struct zx_eth {
 	struct {
 		unsigned long	cookie;
 		u16		raw;	/* raw HW hash (derives all 5 way buckets) */
+		/* [C2 fix 2026-07-04] the poly-0 ram2 bucket (findings/
+		 * qa_static_bughunt_2026-07-04.md C2): for DN flows,
+		 * zx_ft_install_recipe ALSO writes the flow's entry at
+		 * ram2[raw0 & 0xff] (poly-0 hash) because that is the slot the
+		 * WAN-ingress lookup actually consults -- a SEPARATE ram2
+		 * address from way0 (raw & 0xff) above. raw0/has_raw0 must be
+		 * tracked per-flow so reserve() can collision-check it and
+		 * untrack() can clear it; before this fix the poly-0 entry
+		 * outlived FLOW_CLS_DESTROY (stale HW-forward of a dead tuple)
+		 * and was never checked for collisions (two DN flows with
+		 * distinct raw&0xff but equal raw0&0xff silently clobbered
+		 * each other). has_raw0 is false for UP-direction entries
+		 * (no poly-0 write happens for those, see zx_ft_install_recipe)
+		 * so untrack must not blindly zero ram2[raw0&0xff] for them. */
+		u16		raw0;
+		bool		has_raw0;
 		u16		pm_slot;	/* per-(flow,dir) PM flow_info/next-hop slot */
 		bool		used;
 	} ft_flows[ZX_FT_MAX_FLOWS];
@@ -2755,18 +2771,35 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	return rc ? rc : raw;
 }
 
-/* Reserve a FT tracking slot at HW hash raw, recording {cookie, raw} BEFORE the
- * CLA entry is written so a declined offload leaves ft_flows[]/CLA untouched:
+/* Reserve a FT tracking slot at HW hash raw, recording {cookie, raw[, raw0]}
+ * BEFORE the CLA entry is written so a declined offload leaves ft_flows[]/CLA
+ * untouched:
  *   -EOPNOTSUPP  another tracked flow (different cookie) already owns raw's CLA
  *                way0 bucket (raw & 0xff = ram2 primary) -> reject (stay SW),
  *                never clobber; delete-either-kills-both is thus impossible.
+ *                [C2 fix] Extended to the poly-0 ram2 bucket too: way0
+ *                (raw & 0xff) and the DN-only poly-0 slot (raw0 & 0xff) are
+ *                BOTH addresses in the same ram_id=2 space
+ *                (zx_ft_install_recipe writes both), so a new flow's slot(s)
+ *                must be checked against every tracked flow's raw&0xff AND
+ *                raw0&0xff (when the tracked flow has one) -- not just
+ *                raw&0xff vs raw&0xff. Without this, two DN flows whose
+ *                raw&0xff differ but whose raw0&0xff coincide (~53%
+ *                probability by 20 concurrent flows, birthday bound over 256
+ *                buckets) both got admitted and the second install's poly-0
+ *                write silently clobbered the first's WAN-ingress-facing
+ *                entry (findings/qa_static_bughunt_2026-07-04.md C2 fail#2).
  *   -ENOSPC      the tracking table is full and this cookie is not already known.
- * Re-uses the slot on REPLACE (same cookie). On success records {cookie,raw},
- * assigns a per-entry PM slot (ZX_FT_PM_BASE + tracking-index -> distinct per
- * direction, since each direction is a distinct cookie/entry), returns it via
- * *pm_slot, and returns 0. */
+ * @has_raw0/@raw0: the caller's DN-only poly-0 hash (zx_ft_flow_hash_poly0),
+ * mirroring exactly what zx_ft_install_recipe will write when eg_regport !=
+ * ZX_WAN_REGPORT; pass has_raw0=false for UP-direction installs (no poly-0
+ * write happens for those).
+ * Re-uses the slot on REPLACE (same cookie). On success records
+ * {cookie,raw,raw0,has_raw0}, assigns a per-entry PM slot (ZX_FT_PM_BASE +
+ * tracking-index -> distinct per direction, since each direction is a
+ * distinct cookie/entry), returns it via *pm_slot, and returns 0. */
 static int zx_ft_flow_reserve(struct zx_eth *e, unsigned long cookie, u16 raw,
-			      u16 *pm_slot)
+			      bool has_raw0, u16 raw0, u16 *pm_slot)
 {
 	int i, self = -1, free = -1;
 
@@ -2780,8 +2813,40 @@ static int zx_ft_flow_reserve(struct zx_eth *e, unsigned long cookie, u16 raw,
 			self = i;
 			continue;
 		}
-		if ((e->ft_flows[i].raw & 0xff) == (raw & 0xff))
+		/* [C2 fix] Each branch below logs a DISTINCT tag purely for
+		 * testability (findings/fix_c2_poly0_2026-07-04.md /
+		 * scratchpad/regress.py's poly0_stale test greps for
+		 * "poly0" to confirm the NEW raw0-based checks -- not just
+		 * the pre-existing way0-vs-way0 check -- actually fire and
+		 * decline instead of clobbering). No behavior difference
+		 * between branches; all four return -EOPNOTSUPP identically. */
+		if ((e->ft_flows[i].raw & 0xff) == (raw & 0xff)) {
+			dev_info(e->dev,
+				 "[phase6/ft] reserve decline: way0 collision cookie=%lx raw=0x%04x vs tracked raw=0x%04x\n",
+				 cookie, raw, e->ft_flows[i].raw);
 			return -EOPNOTSUPP;	/* CLA way0 bucket collision */
+		}
+		if (has_raw0 && (raw0 & 0xff) == (e->ft_flows[i].raw & 0xff)) {
+			dev_info(e->dev,
+				 "[phase6/ft] reserve decline: poly0-vs-way0 collision cookie=%lx raw0=0x%04x vs tracked raw=0x%04x\n",
+				 cookie, raw0, e->ft_flows[i].raw);
+			return -EOPNOTSUPP;	/* new poly-0 vs tracked way0 */
+		}
+		if (e->ft_flows[i].has_raw0) {
+			if ((raw & 0xff) == (e->ft_flows[i].raw0 & 0xff)) {
+				dev_info(e->dev,
+					 "[phase6/ft] reserve decline: way0-vs-poly0 collision cookie=%lx raw=0x%04x vs tracked raw0=0x%04x\n",
+					 cookie, raw, e->ft_flows[i].raw0);
+				return -EOPNOTSUPP;	/* new way0 vs tracked poly-0 */
+			}
+			if (has_raw0 &&
+			    (raw0 & 0xff) == (e->ft_flows[i].raw0 & 0xff)) {
+				dev_info(e->dev,
+					 "[phase6/ft] reserve decline: poly0 collision cookie=%lx raw0=0x%04x vs tracked raw0=0x%04x\n",
+					 cookie, raw0, e->ft_flows[i].raw0);
+				return -EOPNOTSUPP;	/* poly-0 vs poly-0 */
+			}
+		}
 	}
 	if (self >= 0) {			/* REPLACE existing cookie */
 		/* Re-REPLACE of an identical live flow: nf_flow_table re-delivers
@@ -2803,6 +2868,11 @@ static int zx_ft_flow_reserve(struct zx_eth *e, unsigned long cookie, u16 raw,
 			return 1;
 		}
 		e->ft_flows[self].raw = raw;
+		/* [C2 fix] keep raw0/has_raw0 in sync with the (rare, H3a-class)
+		 * in-place raw change; does NOT clear the OLD poly-0 slot -- that
+		 * orphan-on-self-REPLACE case is finding H3a, out of scope here. */
+		e->ft_flows[self].raw0 = raw0;
+		e->ft_flows[self].has_raw0 = has_raw0;
 		*pm_slot = e->ft_flows[self].pm_slot;
 		return 0;
 	}
@@ -2810,6 +2880,8 @@ static int zx_ft_flow_reserve(struct zx_eth *e, unsigned long cookie, u16 raw,
 		return -ENOSPC;			/* tracking table full */
 	e->ft_flows[free].cookie = cookie;
 	e->ft_flows[free].raw = raw;
+	e->ft_flows[free].raw0 = raw0;
+	e->ft_flows[free].has_raw0 = has_raw0;
 	e->ft_flows[free].pm_slot = ZX_FT_PM_BASE + free;
 	e->ft_flows[free].used = true;
 	*pm_slot = e->ft_flows[free].pm_slot;
@@ -2830,7 +2902,18 @@ static void zx_ft_flow_release(struct zx_eth *e, unsigned long cookie)
 
 /* Invalidate the buckets a tracked FT flow occupies (zero the entry in all 5 way
  * banks -> valid_en off -> key-compare misses -> flow traps). Returns 0 if
- * found+cleared, -ENOENT else. */
+ * found+cleared, -ENOENT else.
+ *
+ * [C2 fix] Also zero the DN-only poly-0 ram2 bucket (raw0 & 0xff) when the
+ * flow has one. That bucket is a SEPARATE ram2 address from way0
+ * (raw & 0xff, cleared by the 5-way loop below) -- it is the entry
+ * zx_ft_install_recipe additionally writes for DN flows because it's the
+ * slot the WAN-ingress lookup actually consults. Before this fix it was
+ * never cleared here, so a destroyed flow's dead tuple kept HW-forwarding
+ * (stale poly-0 hit) until its pm_slot got reused by an unrelated new flow,
+ * at which point the stale entry started applying the NEW flow's NAT to the
+ * OLD (supposedly dead) tuple's traffic (findings/qa_static_bughunt_2026-07-04.md
+ * C2 fail#1). */
 static int zx_ft_flow_untrack(struct zx_eth *e, unsigned long cookie)
 {
 	u32 zero[15] = {0};
@@ -2848,12 +2931,23 @@ static int zx_ft_flow_untrack(struct zx_eth *e, unsigned long cookie)
 				if (r)
 					rc = r;
 			}
+			if (e->ft_flows[i].has_raw0) {
+				int r = zx_cla_write_hash(e, 2,
+						e->ft_flows[i].raw0 & 0xff,
+						zero, 15);
+
+				if (r)
+					rc = r;
+			}
 			zx_ft_ext_flow_clear(e, e->ft_flows[i].pm_slot & 0xff);
 			dev_info(e->dev,
-				 "[phase6/ft] flow del cookie=%lx -> cleared raw=0x%04x (5 ways + ext blk %u) rc=%d\n",
+				 "[phase6/ft] flow del cookie=%lx -> cleared raw=0x%04x (5 ways) poly0=%s(ram2[0x%02x]) ext blk %u rc=%d\n",
 				 cookie, e->ft_flows[i].raw,
+				 e->ft_flows[i].has_raw0 ? "cleared" : "n/a",
+				 e->ft_flows[i].raw0 & 0xff,
 				 e->ft_flows[i].pm_slot & 0xff, rc);
 			e->ft_flows[i].used = false;
+			e->ft_flows[i].has_raw0 = false;
 			return rc;
 		}
 	}
@@ -2915,7 +3009,8 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	bool have_mac = false;
 	u8 ip_proto = 0;
 	u8 eg_regport;
-	u16 raw, pm_slot = 0;
+	u16 raw, raw0 = 0, pm_slot = 0;
+	bool is_dn;
 	struct zx_ft_nat nat = {0};
 	int i, rc;
 
@@ -3044,10 +3139,20 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	/* Reserve a tracking slot BEFORE writing the CLA: decline (stay SW) on a
 	 * bucket collision or a full table instead of clobbering/leaking. The
 	 * reserve-time hash MUST match the install-time hash, so derive the same
-	 * ingress-awareness (WAN-ingress = egress toward a LAN port) here. */
-	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport,
-			      eg_regport != ZX_WAN_REGPORT);
-	rc = zx_ft_flow_reserve(e, cls->cookie, raw, &pm_slot);
+	 * ingress-awareness (WAN-ingress = egress toward a LAN port) here.
+	 *
+	 * [C2 fix] zx_ft_install_recipe ALSO writes a poly-0 ram2 entry
+	 * (raw0 & 0xff) for DN flows (eg_regport != ZX_WAN_REGPORT) -- the slot
+	 * the WAN-ingress lookup actually consults. Compute that same raw0 here
+	 * (pure SW CRC, no HW engine access, same pattern already used for
+	 * `raw` which install_recipe independently recomputes too) so reserve()
+	 * can collision-check it and untrack() can later clear it. */
+	is_dn = eg_regport != ZX_WAN_REGPORT;
+	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport, is_dn);
+	if (is_dn)
+		raw0 = zx_ft_flow_hash_poly0(ip_proto, saddr, daddr, sport,
+					     dport, true);
+	rc = zx_ft_flow_reserve(e, cls->cookie, raw, is_dn, raw0, &pm_slot);
 	if (rc == 1)		/* identical flow already live: idempotent no-op */
 		return 0;
 	if (rc == -EOPNOTSUPP) {

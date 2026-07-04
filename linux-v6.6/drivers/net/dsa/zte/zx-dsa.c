@@ -971,7 +971,20 @@ static int zx_install_l3_recipe(struct zx_dsa_priv *p, u8 ip_proto, __be32 saddr
 
 	/* WAN-ingress entries: the ram2 lookup probes the poly-0 slot (hash0_poly), NOT the
 	 * poly1 slot the HW hash engine (raw) computes — ALSO install at the poly-0 ram2 slot
-	 * or every WAN-ingress DN packet LOOK_UP_MISSes. Mirror of zx-eth-main.c. */
+	 * or every WAN-ingress DN packet LOOK_UP_MISSes. Mirror of zx-eth-main.c.
+	 *
+	 * [C2 NOTE 2026-07-04, NOT fixed here] This mirrors the exact defect fixed on the
+	 * FT/conduit path in findings/fix_c2_poly0_2026-07-04.md: `struct zx_flow_ent`
+	 * (flows[], ~line 137) tracks only {cookie, raw}, no raw0 — zx_flow_reserve()
+	 * below never collision-checks this poly-0 slot and zx_flow_untrack() never
+	 * clears it, so a DESTROYed tc-flower flow leaks a live poly-0 entry (stale
+	 * HW-forward, later cross-flow NAT corruption when the pm slot is reused) —
+	 * the exact same bug class as the pre-fix conduit path. Left un-fixed
+	 * intentionally this pass: the task scoped the validated fix to the FT path
+	 * only; H1 already tracks this mirror's broader divergence for a later dedup
+	 * pass (route zx-dsa.c's flow tracking through the conduit's
+	 * ft_flows[]/reserve/untrack instead of maintaining two copies of the same
+	 * raw0 logic) rather than patching two independent implementations now. */
 	if (in_regport == ZX_WAN_REGPORT) {
 		u16 raw0 = zx_cla_flow_hash_poly0(ip_proto, saddr, daddr,
 						  sport, dport, true);
