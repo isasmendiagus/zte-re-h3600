@@ -24,7 +24,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-SRC = Path("linux-v6.6/drivers/net/ethernet/zte/zx_stock_table.h")
+SRC = Path("tasks/00.01.eth-driver/captures/stock_state/zx_stock_table.h")
 DST = Path("linux-v6.6/drivers/net/ethernet/zte/zx_npp_twin_data.h")
 
 STRIDE = 0x2000

@@ -36,7 +36,7 @@ from pathlib import Path
 
 SRC = Path("tasks/00.01.eth-driver/initramfs/lib/firmware/zx-replay/stock.bin")
 # stock.bin was deleted in Phase 3. Source-of-truth is the embedded header.
-HDR = Path("linux-v6.6/drivers/net/ethernet/zte/zx_stock_table.h")
+HDR = Path("tasks/00.01.eth-driver/captures/stock_state/zx_stock_table.h")
 OUT = HDR  # rewrites in place
 
 # Block ranges expressed in driver-offset terms (signed s32 off from

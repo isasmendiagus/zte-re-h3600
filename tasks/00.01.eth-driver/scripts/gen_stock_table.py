@@ -18,7 +18,7 @@ import struct
 from pathlib import Path
 
 SRC = Path("tasks/00.01.eth-driver/initramfs/lib/firmware/zx-replay/stock.bin")
-DST = Path("linux-v6.6/drivers/net/ethernet/zte/zx_stock_table.h")
+DST = Path("tasks/00.01.eth-driver/captures/stock_state/zx_stock_table.h")
 
 HDR_SZ = 8
 ENTRY_SZ = 8
