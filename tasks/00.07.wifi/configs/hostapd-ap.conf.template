@@ -1,0 +1,47 @@
+# hostapd AP config — STAGE 2 AP bring-up on the H3600's own MT7915 (5 GHz).
+# TEMPLATE: @WIFI_PSK@ is substituted by scripts/gen_wifi_configs.sh from the
+# git-ignored secret scratchpad/.wifi_psk. NEVER put the passphrase here.
+#
+# NOTE: SSID "Dino-WiFi-5GHz" was specified for staging, but it is ALSO the
+# owner's home AP SSID — running this AP within radio range of the home AP
+# will confuse clients. Consider renaming (e.g. "H3600-AP-Test") at bring-up.
+#
+# 5 GHz radio = wlan1 on this board (wlan0 = 2.4 GHz).
+# Kernel cmdline REQUIREMENT: pci=nomsi pcie_aspm=off (front of bootargs).
+#
+# REGULATORY: 5 GHz AP requires a non-world regdom or all 5 GHz channels are
+# NO-IR (AP refused). Ensure /lib/firmware/regulatory.db{,.p7s} are present
+# (CONFIG_CFG80211_REQUIRE_SIGNED_REGDB=y) and set country_code below.
+
+interface=wlan1
+driver=nl80211
+ctrl_interface=/var/run/hostapd
+
+ssid=Dino-WiFi-5GHz
+
+# Set to the local regulatory domain before first run (required for 5 GHz AP).
+#country_code=ES
+#ieee80211d=1
+
+hw_mode=a
+channel=36              # non-DFS; avoid DFS channels for first bring-up
+
+# 802.11n/ac/ax (MT7915 = WiFi 6), 80 MHz around channel 42
+ieee80211n=1
+ht_capab=[HT40+]
+ieee80211ac=1
+vht_oper_chwidth=1
+vht_oper_centr_freq_seg0_idx=42
+ieee80211ax=1
+he_oper_chwidth=1
+he_oper_centr_freq_seg0_idx=42
+
+wmm_enabled=1
+auth_algs=1
+
+# WPA2-PSK / CCMP (matches the proven STA crypto path; PMF optional)
+wpa=2
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+ieee80211w=1
+wpa_passphrase=@WIFI_PSK@

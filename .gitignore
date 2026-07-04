@@ -7,3 +7,5 @@ tasks/00.01.eth-driver/initramfs/lib/firmware/zx-replay/fpga.bin
 tasks/00.01.eth-driver/captures/spliced_logs/
 tftp/
 scratchpad/.sudo_pw
+scratchpad/.wifi_psk
+tasks/00.07.wifi/out/
