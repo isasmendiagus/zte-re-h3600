@@ -451,6 +451,17 @@ struct zx_eth {
 	 * RED-starve, TCP collapses and the trap queue wedges, QA 2026-07-04).
 	 * 1 = install the UP recipe in HW too (debugfs "ftup"). */
 	u32		ft_up_en;
+
+	/* [H5 fix 2026-07-04] PM indirect-RAM write-verify accounting
+	 * (findings/qa_static_bughunt_2026-07-04.md H5). zx_pp_pm_write_verify()
+	 * reads each FT-install PM write back and retries on mismatch; these
+	 * count readback-confirmed commits / commits that needed >=1 retry /
+	 * persistent failures, so a regression that drops the verify (or the
+	 * rc-check) is observable via debugfs `stats` + regress.py
+	 * pm_write_verify even when the bare write happens to commit anyway. */
+	u64		ft_pm_verify_ok;
+	u64		ft_pm_verify_retry;
+	u64		ft_pm_verify_fail;
 };
 
 /* ============================================================
@@ -2085,6 +2096,58 @@ static int zx_pp_pm_read_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
 	return 0;
 }
 
+/* [H5 fix 2026-07-04] Write a PM indirect-RAM entry AND read-back-verify the
+ * write actually committed, retrying up to ZX_PM_WR_RETRIES times.
+ *
+ * zx_pp_pm_write_entry() only waits for the engine DONE bit BEFORE issuing its
+ * command; it never confirms the write's data landed. This indirect engine has
+ * been observed to silently drop a write under contention -- the DSA side
+ * needed the identical 8-iteration readback-retry loop against the same HW
+ * (zx-dsa.c zx_pm_wr(), "the bare write was observed not to commit"). On the FT
+ * install path a silently-dropped PM write arms a live CLA verdict pointing at
+ * a stale/zero pm_slot, so the flow HW-forwards with the previous occupant's
+ * next-hop MAC / NAT state (findings/qa_static_bughunt_2026-07-04.md H5).
+ * Verify word0+word1 (enough to tell our payload from stale/zero -- every FT
+ * PM entry has a nonzero, unique-per-slot word0: next_hop IP, flow_info descr,
+ * ram6 sub=pm_slot>=8, ram3 cmd=0x00800000) and retry; return -EIO on
+ * persistent mismatch so the caller fails the install cleanly (rollback via
+ * zx_ft_uninstall). MUST be called with zx_hwlock held -- same as the bare
+ * write it wraps; it issues both a write and a read on the shared PM engine. */
+#define ZX_PM_WR_RETRIES 8
+static int zx_pp_pm_write_verify(struct zx_eth *e, u8 ram_id, u32 ram_addr,
+				 const u32 data[8])
+{
+	u32 rb[8];
+	int try, rc;
+
+	for (try = 0; try < ZX_PM_WR_RETRIES; try++) {
+		rc = zx_pp_pm_write_entry(e, ram_id, ram_addr, data);
+		if (rc)
+			continue;	/* engine busy pre-write -- retry */
+		rc = zx_pp_pm_read_entry(e, ram_id, ram_addr, rb);
+		if (rc)
+			continue;	/* engine busy pre-read -- retry */
+		if (rb[0] == data[0] && rb[1] == data[1]) {
+			e->ft_pm_verify_ok++;
+			if (try) {
+				e->ft_pm_verify_retry++;
+				dev_info(e->dev,
+					 "[phase6/ft] pm_write ram%u[%#x] committed after %d retr%s\n",
+					 ram_id, ram_addr, try, try == 1 ? "y" : "ies");
+			}
+			return 0;
+		}
+		dev_warn(e->dev,
+			 "[phase6/ft] pm_write ram%u[%#x] try%d NOT committed: wrote %08x %08x readback %08x %08x\n",
+			 ram_id, ram_addr, try, data[0], data[1], rb[0], rb[1]);
+	}
+	e->ft_pm_verify_fail++;
+	dev_warn(e->dev,
+		 "[phase6/ft] pm_write ram%u[%#x] FAILED to commit after %d tries -- failing install\n",
+		 ram_id, ram_addr, ZX_PM_WR_RETRIES);
+	return rc ? rc : -EIO;
+}
+
 /* ---- PM-ops bridge to the built-in DSA flow-offload binder ----
  *
  * The binder (zx-dsa.c, built-in) cannot commit PM RAM through its own ioremap;
@@ -2694,7 +2757,13 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	nh[1] = ((u32)nh_mac[2] << 24) | ((u32)nh_mac[3] << 16) |
 		((u32)nh_mac[4] << 8) | nh_mac[5];
 	nh[2] = ((u32)nh_mac[0] << 8) | nh_mac[1];
-	zx_pp_pm_write_entry(e, 1, pm_slot, nh);
+	/* [H5 fix] rc-check + readback-verify every PM write; on persistent
+	 * failure abort so the caller (zx_ft_flower_replace / fttest) rolls the
+	 * partial install back via zx_ft_uninstall and declines (stays SW)
+	 * rather than arming a CLA verdict at a half-written pm_slot. */
+	rc = zx_pp_pm_write_verify(e, 1, pm_slot, nh);
+	if (rc)
+		return rc;
 
 	/* flow_info (ram0): per-direction rewrite-enable descriptor. next_hop_idx MUST
 	 * be pm_slot (the slot we just wrote next_hop to) — the old code hardcoded 5.
@@ -2705,7 +2774,9 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	 * this write is still unused (DN's cmd_flow_id resolves to the external DDR
 	 * table instead) but harmless. */
 	zx_ft_build_flow_info(fi, nat, pm_slot);
-	zx_pp_pm_write_entry(e, 0, pm_slot, fi);
+	rc = zx_pp_pm_write_verify(e, 0, pm_slot, fi);
+	if (rc)
+		return rc;
 
 	/* The PM engine actually FETCHES flow_info from the EXTERNAL DDR table
 	 * (see zx_ft_ext_flow_write) — without this every HW-forwarded frame is
@@ -2716,10 +2787,14 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	zx_ft_ext_flow_write(e, false, pm_slot & 0xff, fi);
 
 	sub[0] = pm_slot;				/* ram6 sub_ram -> ram3 cmd idx */
-	zx_pp_pm_write_entry(e, 6, pm_slot, sub);
+	rc = zx_pp_pm_write_verify(e, 6, pm_slot, sub);
+	if (rc)
+		return rc;
 
 	cmd[0] = 0x00800000;				/* ram3 cmd: last_cmd=1 (no-op fwd) */
-	zx_pp_pm_write_entry(e, 3, pm_slot, cmd);
+	rc = zx_pp_pm_write_verify(e, 3, pm_slot, cmd);
+	if (rc)
+		return rc;
 
 	/* WAN-ingress (is_wan) = this entry's matching packets ingress the WAN/RGMII
 	 * port, which for a routed flow is the direction that egresses toward a LAN
@@ -5383,6 +5458,12 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 		   e->sw_tx_pending, e->sw_tx_pending_max, e->sw_tx_reclaimed);
 	seq_printf(s, "sw_tx_full_drops  = %u (queue_stops %u)\n",
 		   e->sw_tx_full_drops, e->sw_tx_queue_stops);
+	/* [H5 fix] FT PM-write readback-verify accounting (finding H5). ok
+	 * counts every readback-confirmed install-path PM commit; regress.py
+	 * pm_write_verify asserts this advances by 4 per install (proving the
+	 * verify path ran), and fail should always be 0 on healthy silicon. */
+	seq_printf(s, "ft_pm_verify      = ok=%llu retry=%llu fail=%llu\n",
+		   e->ft_pm_verify_ok, e->ft_pm_verify_retry, e->ft_pm_verify_fail);
 	seq_printf(s, "BMU_ALLOC_RESULT  = 0x%08x\n", tm_read(e, TM_REG_BMU_ALLOC_RESULT));
 	seq_printf(s, "BMU_ALLOC_CTRL    = 0x%08x\n", tm_read(e, TM_REG_BMU_ALLOC_CTRL));
 	seq_printf(s, "TM[0x10054] TX kick  = 0x%08x\n", tm_read(e, 0x10054));
