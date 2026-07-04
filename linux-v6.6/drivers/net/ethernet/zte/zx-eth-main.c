@@ -2771,6 +2771,68 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	return rc ? rc : raw;
 }
 
+/* [H3 fix 2026-07-04] Shared rollback/unwind helper: clears the COMPLETE HW
+ * footprint a single install of zx_ft_install_recipe() can have written for
+ * one (raw, raw0, pm_slot) triple —
+ *   - the 5 poly-1 way buckets derived from `raw` (zx_ft_way_slots: ram2-6),
+ *   - the DN-only poly-0 ram2 bucket at `raw0 & 0xff` (when @has_raw0),
+ *   - the PM EXTERNAL DDR flow_info block for pm_slot (both direction
+ *     tables — zx_ft_ext_flow_clear already zeroes both),
+ *   - the in-PM next_hop (ram1) and flow_info (ram0) entries for pm_slot.
+ * (ram3/ram6 cmd/sub entries are deliberately NOT touched here — restoring
+ * their pre-flow stock-replay defaults is a separate, pre-existing defect,
+ * finding M3, out of scope for this fix.)
+ *
+ * This is THE single place that knows how to fully undo an install, used by:
+ *   1. zx_ft_flow_reserve(), to clear the OLD raw/raw0's footprint before a
+ *      self-REPLACE (same cookie, changed 5-tuple) adopts the new one —
+ *      findings/qa_static_bughunt_2026-07-04.md H3(a) / H3a. Before this fix
+ *      the old entry was left live and kept HW-forwarding the dead tuple
+ *      forever (DESTROY only ever clears the CURRENT raw/raw0, never an
+ *      in-place-replaced-away one).
+ *   2. zx_ft_flower_replace(), to unwind a PARTIAL install (some but not all
+ *      of the 5 way writes / the poly-0 write / the PM writes succeeded)
+ *      when zx_ft_install_recipe() returns an error — H3(b). Safe to call
+ *      unconditionally on every attempted (raw, raw0, pm_slot): every write
+ *      it undoes is idempotent (re-zeroing an already-zero/never-written
+ *      location is a no-op), so it doesn't matter which subset actually
+ *      landed before the failure.
+ *   3. zx_ft_flow_untrack(), as the single source of truth for what a clean
+ *      DESTROY must clear (replaces the untrack-local zeroing that used to
+ *      duplicate this logic ad hoc).
+ * Returns 0, or the first nonzero CLA/PM write rc — ALL writes are still
+ * attempted regardless (best-effort clear), matching the existing untrack
+ * behavior of accumulating rc rather than aborting partway. */
+static int zx_ft_uninstall(struct zx_eth *e, u16 raw, bool has_raw0, u16 raw0,
+			   u16 pm_slot)
+{
+	u32 zero15[15] = {0};
+	u32 zero8[8] = {0};
+	u8 ram[5];
+	u16 addr[5];
+	int w, rc = 0, r;
+
+	zx_ft_way_slots(raw, ram, addr);
+	for (w = 0; w < 5; w++) {
+		r = zx_cla_write_hash(e, ram[w], addr[w], zero15, 15);
+		if (r)
+			rc = r;
+	}
+	if (has_raw0) {
+		r = zx_cla_write_hash(e, 2, raw0 & 0xff, zero15, 15);
+		if (r)
+			rc = r;
+	}
+	zx_ft_ext_flow_clear(e, pm_slot & 0xff);
+	r = zx_pp_pm_write_entry(e, 0, pm_slot, zero8);	/* flow_info */
+	if (r)
+		rc = r;
+	r = zx_pp_pm_write_entry(e, 1, pm_slot, zero8);	/* next_hop */
+	if (r)
+		rc = r;
+	return rc;
+}
+
 /* Reserve a FT tracking slot at HW hash raw, recording {cookie, raw[, raw0]}
  * BEFORE the CLA entry is written so a declined offload leaves ft_flows[]/CLA
  * untouched:
@@ -2915,10 +2977,30 @@ static int zx_ft_flow_reserve(struct zx_eth *e, unsigned long cookie, u16 raw,
 			*pm_slot = e->ft_flows[self].pm_slot;
 			return 1;
 		}
+		/* [H3 fix 2026-07-04] Self-REPLACE with a CHANGED 5-tuple: the
+		 * caller (zx_ft_flower_replace) is about to install a brand-new
+		 * raw/raw0 recipe at this cookie's pm_slot, but the OLD raw's 5
+		 * ways (and OLD raw0's poly-0 bucket, if it had one) are a
+		 * SEPARATE CLA address from the new ones and are never touched by
+		 * the upcoming install -- so if we didn't clear them here they'd
+		 * be orphaned: still valid_en, still HW-forwarding the dead
+		 * tuple, forever (a plain DESTROY later only clears the CURRENT
+		 * raw/raw0, never a replaced-away one). This is finding H3(a) /
+		 * H3a (findings/qa_static_bughunt_2026-07-04.md); the C2 fix
+		 * deliberately left it out of scope. Uses the same
+		 * zx_ft_uninstall() helper untrack()/partial-install-rollback
+		 * use, so "clear a flow's old footprint" has exactly one
+		 * implementation. */
+		dev_info(e->dev,
+			 "[phase6/ft] self-replace old-footprint clear: cookie=%lx old_raw=0x%04x old_raw0=%s0x%04x -> new_raw=0x%04x pm_slot=%u\n",
+			 cookie, e->ft_flows[self].raw,
+			 e->ft_flows[self].has_raw0 ? "" : "n/a-",
+			 e->ft_flows[self].raw0, raw, e->ft_flows[self].pm_slot);
+		zx_ft_uninstall(e, e->ft_flows[self].raw,
+				e->ft_flows[self].has_raw0,
+				e->ft_flows[self].raw0,
+				e->ft_flows[self].pm_slot);
 		e->ft_flows[self].raw = raw;
-		/* [C2 fix] keep raw0/has_raw0 in sync with the (rare, H3a-class)
-		 * in-place raw change; does NOT clear the OLD poly-0 slot -- that
-		 * orphan-on-self-REPLACE case is finding H3a, out of scope here. */
 		e->ft_flows[self].raw0 = raw0;
 		e->ft_flows[self].has_raw0 = has_raw0;
 		*pm_slot = e->ft_flows[self].pm_slot;
@@ -2969,33 +3051,43 @@ static void zx_ft_flow_release(struct zx_eth *e, unsigned long cookie)
  * way address in any of the 5 banks (findings/qa_static_bughunt_2026-07-04.md
  * H2) -- i.e. the collision is prevented at install time, not papered over
  * here at destroy time. Do not relax reserve()'s higher-way check without
- * revisiting this loop. */
+ * revisiting this loop.
+ *
+ * [H3 fix 2026-07-04] The actual clearing is now zx_ft_uninstall() (shared
+ * with the self-REPLACE and partial-install-failure rollback call sites) --
+ * this function used to duplicate the same 5-way+poly-0+ext-block zeroing
+ * ad hoc. On a nonzero rc (a CLA/PM indirect-engine write reporting -EBUSY --
+ * the only failure mode observed on this silicon, a wait_done timeout) retry
+ * ONCE, then dev_warn loudly naming the still-possibly-live entry rather
+ * than the old behavior of silently discarding the rc entirely (findings/
+ * qa_static_bughunt_2026-07-04.md H3(c)). Deliberately NOT an unbounded
+ * retry loop: this runs under zx_hwlock (held for the whole zx_ft_setup_cb
+ * body), so retrying forever here would stall every other FT/DSA/debugfs
+ * user of the same hardware indefinitely. The tracking slot is freed either
+ * way -- the cookie is already gone from conntrack by the time DESTROY
+ * fires, so there is no live SW-side owner left to keep the slot reserved
+ * for. */
 static int zx_ft_flow_untrack(struct zx_eth *e, unsigned long cookie)
 {
-	u32 zero[15] = {0};
-	u8 ram[5];
-	u16 addr[5];
-	int i, w, rc = 0;
+	int i, rc;
 
 	for (i = 0; i < ZX_FT_MAX_FLOWS; i++) {
 		if (e->ft_flows[i].used && e->ft_flows[i].cookie == cookie) {
-			zx_ft_way_slots(e->ft_flows[i].raw, ram, addr);
-			for (w = 0; w < 5; w++) {
-				int r = zx_cla_write_hash(e, ram[w], addr[w],
-							  zero, 15);
-
-				if (r)
-					rc = r;
+			rc = zx_ft_uninstall(e, e->ft_flows[i].raw,
+					     e->ft_flows[i].has_raw0,
+					     e->ft_flows[i].raw0,
+					     e->ft_flows[i].pm_slot);
+			if (rc) {
+				rc = zx_ft_uninstall(e, e->ft_flows[i].raw,
+						     e->ft_flows[i].has_raw0,
+						     e->ft_flows[i].raw0,
+						     e->ft_flows[i].pm_slot);
+				if (rc)
+					dev_warn(e->dev,
+						 "[phase6/ft] flow del cookie=%lx: HW clear FAILED rc=%d (after 1 retry) -- raw=0x%04x pm_slot=%u may still be live/forwarding the dead tuple; freeing tracking slot anyway (cookie already gone from conntrack, can't retry forever under zx_hwlock)\n",
+						 cookie, rc, e->ft_flows[i].raw,
+						 e->ft_flows[i].pm_slot & 0xff);
 			}
-			if (e->ft_flows[i].has_raw0) {
-				int r = zx_cla_write_hash(e, 2,
-						e->ft_flows[i].raw0 & 0xff,
-						zero, 15);
-
-				if (r)
-					rc = r;
-			}
-			zx_ft_ext_flow_clear(e, e->ft_flows[i].pm_slot & 0xff);
 			dev_info(e->dev,
 				 "[phase6/ft] flow del cookie=%lx -> cleared raw=0x%04x (5 ways) poly0=%s(ram2[0x%02x]) ext blk %u rc=%d\n",
 				 cookie, e->ft_flows[i].raw,
@@ -3227,6 +3319,21 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	rc = zx_ft_install_recipe(e, ip_proto, saddr, daddr, sport, dport,
 				  nh_mac, eg_regport, pm_slot, &nat);
 	if (rc < 0) {
+		/* [H3 fix 2026-07-04] Partial-install failure (findings/
+		 * qa_static_bughunt_2026-07-04.md H3(b)): zx_ft_install_recipe
+		 * accumulates rc across ALL 5 way writes + the poly-0 write (it
+		 * does not bail out after the first failure), so by the time we
+		 * get here anywhere from 0 to all of those writes may have
+		 * landed. zx_ft_flow_release() alone (the old behavior) only
+		 * freed the TRACKING slot -- any ways/poly-0/PM entries that DID
+		 * land stayed live and untracked, and once the freed pm_slot got
+		 * reused by a future flow, THAT flow's install fed the orphan
+		 * entry its rewrite state (same corruption class as C2). Unwind
+		 * with the exact (raw, raw0, pm_slot) this attempt just used --
+		 * re-zeroing a location that was never actually written is a
+		 * harmless no-op, so it's safe to call unconditionally rather
+		 * than trying to track which subset of writes succeeded. */
+		zx_ft_uninstall(e, raw, is_dn, raw0, pm_slot);
 		zx_ft_flow_release(e, cls->cookie);
 		return rc;
 	}
@@ -3286,7 +3393,18 @@ static int zx_ft_setup_cb(enum tc_setup_type type, void *type_data, void *cb_pri
 		break;
 	case FLOW_CLS_DESTROY:
 		dev_info(e->dev, "[phase6/ft] flower destroy cookie=%lx\n", cls->cookie);
-		zx_ft_flow_untrack(e, cls->cookie);
+		/* [H3 fix 2026-07-04] Look at the untrack rc instead of discarding
+		 * it (findings/qa_static_bughunt_2026-07-04.md H3(c)) -- the
+		 * dev_warn on a real failure now happens inside
+		 * zx_ft_flow_untrack() itself (it has the raw/pm_slot details to
+		 * make the warning actionable); nf_flow_table has no use for a
+		 * nonzero FLOW_CLS_DESTROY return (there's no "undo a destroy"),
+		 * so this callback still always reports success upstream. */
+		rc = zx_ft_flow_untrack(e, cls->cookie);
+		if (rc && rc != -ENOENT)
+			dev_warn_ratelimited(e->dev,
+				"[phase6/ft] destroy cookie=%lx: untrack reported rc=%d -- see the HW clear FAILED warning above if the retry also failed\n",
+				cls->cookie, rc);
 		rc = 0;
 		break;
 	case FLOW_CLS_STATS:
@@ -5862,6 +5980,86 @@ static const struct file_operations zx_extwrite_fops = {
 	.llseek = default_llseek,
 };
 
+/* fttest: DEBUG/TEST-ONLY entry point into the real zx_ft_flow_reserve() /
+ * zx_ft_install_recipe() / zx_ft_flow_untrack() functions with a
+ * synthetic, test-controlled cookie and 5-tuple, so a regression test
+ * (scratchpad/regress.py's replace_orphan) can drive the exact production
+ * self-REPLACE / partial-install / DESTROY code paths — including the
+ * [H3 fix 2026-07-04] zx_ft_uninstall() rollback call — deterministically,
+ * without depending on nf_flowtable ever choosing to redeliver a real
+ * connection's cookie with a changed tuple (it structurally can't:
+ * nf_flow_table_offload.c assigns cls->cookie = (unsigned long)&tuple, a
+ * fixed sub-struct address inside the flow_offload object for that
+ * direction, so a genuinely different 5-tuple on the SAME cookie never
+ * occurs via real traffic on this conduit path — see
+ * findings/fix_h3_rollback_2026-07-04.md for the full reachability
+ * analysis). This node reuses the exact static functions the real
+ * FLOW_CLS_REPLACE/DESTROY dispatch (zx_ft_setup_cb) calls; it does not
+ * duplicate any install/rollback logic of its own.
+ *   install <cookie> <saddr> <daddr> <sport> <dport> <eg_regport>  (all hex
+ *     except eg_regport, which is decimal; TCP always assumed)
+ *   destroy <cookie>                                                (hex)
+ * A fixed test next-hop MAC (02:00:00:00:00:01, locally-administered) is
+ * used for install — the recipe's CLA/PM writes don't require a resolvable
+ * real neighbor, only zx_ft_flower_replace's caller-side zx_ft_resolve_nh()
+ * does, and this node bypasses that caller entirely. */
+static ssize_t zx_fttest_write(struct file *f, const char __user *ubuf,
+			       size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	static const u8 test_mac[ETH_ALEN] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x01 };
+	struct zx_ft_nat nat = {0};
+	char buf[128];
+	unsigned long cookie;
+	unsigned int saddr, daddr, sport, dport, eg_regport;
+	u16 raw, raw0 = 0, pm_slot = 0;
+	bool is_dn;
+	int rc;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+
+	if (sscanf(buf, "destroy %lx", &cookie) == 1) {
+		mutex_lock(&zx_hwlock);
+		rc = zx_ft_flow_untrack(e, cookie);
+		mutex_unlock(&zx_hwlock);
+		pr_info("[fttest] destroy cookie=%lx rc=%d\n", cookie, rc);
+		return count;
+	}
+	if (sscanf(buf, "install %lx %x %x %x %x %u",
+		   &cookie, &saddr, &daddr, &sport, &dport, &eg_regport) == 6) {
+		is_dn = eg_regport != ZX_WAN_REGPORT;
+		mutex_lock(&zx_hwlock);
+		raw = zx_ft_flow_hash(e, IPPROTO_TCP, htonl(saddr), htonl(daddr),
+				      htons((u16)sport), htons((u16)dport), is_dn);
+		if (is_dn)
+			raw0 = zx_ft_flow_hash_poly0(IPPROTO_TCP, htonl(saddr),
+						     htonl(daddr), htons((u16)sport),
+						     htons((u16)dport), true);
+		rc = zx_ft_flow_reserve(e, cookie, raw, is_dn, raw0, &pm_slot);
+		if (rc == 0)
+			rc = zx_ft_install_recipe(e, IPPROTO_TCP, htonl(saddr),
+						  htonl(daddr), htons((u16)sport),
+						  htons((u16)dport), test_mac,
+						  eg_regport & 0xff, pm_slot, &nat);
+		mutex_unlock(&zx_hwlock);
+		pr_info("[fttest] install cookie=%lx raw=0x%04x raw0=0x%04x pm_slot=%u rc=%d\n",
+			cookie, raw, raw0, pm_slot, rc);
+		return count;
+	}
+	return -EINVAL;
+}
+
+static const struct file_operations zx_fttest_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_fttest_write,
+	.llseek = default_llseek,
+};
+
 /* pmpeek: read back a PM RAM entry. "<ram_id> <addr>" (hex) → logs 8 words. */
 static ssize_t zx_pmpeek_write(struct file *f, const char __user *ubuf,
 			       size_t count, loff_t *ppos)
@@ -6385,6 +6583,7 @@ static void zx_debugfs_init(struct zx_eth *e)
 	debugfs_create_file("pmfill", 0644, zx_debugfs_root, e, &zx_pmfill_fops);
 	debugfs_create_file("poke", 0644, zx_debugfs_root, e, &zx_poke_fops);
 	debugfs_create_file("fdbadd", 0644, zx_debugfs_root, e, &zx_fdbadd_fops);
+	debugfs_create_file("fttest", 0644, zx_debugfs_root, e, &zx_fttest_fops);
 	debugfs_create_file("extwrite", 0644, zx_debugfs_root, e,
 			    &zx_extwrite_fops);
 	debugfs_create_u32("ftup", 0644, zx_debugfs_root, &e->ft_up_en);
