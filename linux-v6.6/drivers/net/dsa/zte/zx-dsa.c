@@ -1132,9 +1132,12 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 	u8 ip_proto = 0;
 	u16 raw;
 	int i, rc, in_ifidx = 0;
-	/* Resolved next-hop MAC. Default = the validated test-flow DST until the
-	 * MANGLE/neigh resolution below fills it (Stage 3 generalizes). */
-	u8 nh_mac[ETH_ALEN] = { 0x6c, 0x70, 0xcb, 0xb6, 0x81, 0x69 };
+	/* [H1, 2026-07-04] This path always DECLINEs below (see the gate before
+	 * the "Install" section) -- nh_mac is only read by the now-unreachable
+	 * install code kept below for a later parity pass (code-smell S1). It
+	 * used to default to a real test-host MAC (6c:70:cb:b6:81:69); zeroed
+	 * out since that value can never legitimately reach the wire now. */
+	u8 nh_mac[ETH_ALEN] = { 0 };
 	u8 eg_regport = 2;	/* fallback = lan1 regport */
 	bool mangle_dmac = false;
 
@@ -1206,6 +1209,40 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 			break;
 		}
 	}
+
+	/* [H1 gate, 2026-07-04] DECLINE the L3 flow-offload install unconditionally.
+	 *
+	 * This DSA tc-flower path is a stale, never-updated mirror of the
+	 * conduit's FT offload (zx-eth-main.c, TC_SETUP_FT) from before that
+	 * path's root-cause fixes landed. Per
+	 * findings/qa_static_bughunt_2026-07-04.md finding H1, installing via
+	 * the code below would arm a recipe that: writes no PM ext/DDR-carve
+	 * entry at all (flow_info is fetched from carve memory the conduit may
+	 * have zeroed -> unrewritten DMAC -> frames dropped at the client, or
+	 * mangled if the conduit module isn't loaded); hardcodes a single
+	 * shared PM slot (5) for every flow in both directions (the exact
+	 * bidirectional clobber the conduit fixed); writes cmd_flow_id=0 in the
+	 * CLA entry while PM lives at slot 5 (an index mismatch); and uses
+	 * stale flow_info constants. All of this drives the SAME physical
+	 * CLA/PM/hash engines the validated conduit nft-flowtable offload
+	 * relies on, so an installed recipe here can black-hole or
+	 * cross-flow-corrupt traffic on that shared HW.
+	 *
+	 * Decline cleanly here instead of arming it. Porting the conduit's
+	 * fixed per-flow pm_slot allocation + ext-carve write + flow_info
+	 * builder into this path (rather than duplicating that logic) is
+	 * deferred to a later dedup pass (code-smell S1) — this gate only
+	 * neutralizes the L3 install; normal DSA L2/bridge/port switching
+	 * (fdb, bridge, vlan, ...) is untouched.
+	 *
+	 * Everything from here to the end of the function is therefore
+	 * unreachable. It is intentionally left in place (not deleted) as the
+	 * starting point for the future parity pass, rather than duplicating
+	 * or rewriting it now. */
+	dev_info(ds->dev,
+		 "[phase6] cls_flower_add port%d cookie=%lx: L3 HW-offload install declined (unported conduit-mirror, see H1) -> stays in SW\n",
+		 port, cls->cookie);
+	return -EOPNOTSUPP;
 
 	/* [Phase 6 / Stage 2] Install the HW L3-forward recipe + accept the offload.
 	 * Only flows with an egress redirect target are modelled; everything else
