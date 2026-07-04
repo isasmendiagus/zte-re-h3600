@@ -9,3 +9,4 @@ tftp/
 scratchpad/.sudo_pw
 scratchpad/.wifi_psk
 tasks/00.07.wifi/out/
+tasks/00.07.wifi/build/
