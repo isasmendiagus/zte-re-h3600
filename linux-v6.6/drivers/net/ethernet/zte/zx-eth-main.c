@@ -402,6 +402,20 @@ struct zx_eth {
 		u16		pm_slot;	/* per-(flow,dir) PM flow_info/next-hop slot */
 		bool		used;
 	} ft_flows[ZX_FT_MAX_FLOWS];
+
+	/* [phase6/ft] PM EXTERNAL table carve (DDR above the kernel's RAM).
+	 * The PON-PP packet-modify engine does NOT read the per-flow flow_info
+	 * from the in-PM indirect ram0 — it DMA-FETCHES it from a DDR carve
+	 * whose bases sit in PON_PP regs 0x923a0020 (pm) / 0x923a0024 (acl).
+	 * Stock tm.ko zeroes this carve at init (aclRamInit) and writes the
+	 * per-session flow_info there (pp_pm_set_external_flow_info); mainline
+	 * never touched it, so every HW-forwarded frame was rewritten from
+	 * ERASED DDR (0xff = all rewrite-enables set, nat ports 0xffff,
+	 * next_hop_idx 511 = empty -> MACs/IPs zeroed) and the download
+	 * black-holed at the client NIC. Root-caused on-device 2026-07-04.
+	 */
+	void __iomem	*pm_ext;	/* mapped carve (ZX_PM_EXT_SPAN bytes) */
+	u32		pm_ext_phys;	/* carve phys base (= acl_base - 0x20000) */
 };
 
 /* ============================================================
@@ -2516,6 +2530,58 @@ static void zx_ft_build_flow_info(u32 fi[8], const struct zx_ft_nat *n,
 	fi[2] = fi[3] = fi[4] = fi[5] = fi[6] = fi[7] = 0;
 }
 
+/* ---- PM EXTERNAL flow_info (the DDR tables the PM engine actually fetches) ----
+ *
+ * Geometry (from stock tm.ko pp_pm_set_external_flow_info + the static iotable:
+ * carve mapped at virt 0xf1000000, acl @+0x20000 for 4 MiB, pm @+0x420000 for
+ * 1 MiB; flow tables at (0xf140000 | dir?0x9c00:0x1c00 + idx)*0x10):
+ *   carve + 0x41C000  dir-0 (upstream)  flow_info table, 0x8000 x 16 B
+ *   carve + 0x49C000  dir-1 (downstream) flow_info table, 0x8000 x 16 B
+ * Entry bytes = the canonical 9-byte flow_info REVERSED (entry[i] = fi_byte[8-i]).
+ *
+ * The fetch index measured on silicon (port-encoded fill, 2026-07-04):
+ *   idx = cmd_flow_id * 128 + 1   for our TCP flows (cmd_flow_id = entry
+ * byte 0x04 = pm_slot). The low 7 bits' origin is unproven (may be a per-packet
+ * sub-field), so we ROBUSTLY fill the flow's whole 128-entry block (2 KiB) —
+ * blocks are keyed by cmd_flow_id, which is unique per offloaded direction, so
+ * blocks never collide. With the block resident the DN download HW-forwards
+ * end-to-end at ~64-73 MB/s (~520-580 Mbps), DN CLA hit-rate ~99.997%.
+ */
+#define ZX_PM_EXT_SPAN		0x520000	/* acl 4M + pm 1M + 0x20000 head */
+#define ZX_PM_EXT_FLOW_DIR0	0x41C000
+#define ZX_PM_EXT_FLOW_DIR1	0x49C000
+#define ZX_PONPP_PM_BASE_OFF	0x1e0020	/* 0x923a0020 - 0x921c0000 */
+#define ZX_PONPP_ACL_BASE_OFF	0x1e0024	/* 0x923a0024 - 0x921c0000 */
+
+static void zx_ft_ext_flow_write(struct zx_eth *e, bool wan_ing, u8 flow_id,
+				 const u32 fi[8])
+{
+	u8 fb[12], ent[16] = {0};
+	void __iomem *blk;
+	int i;
+
+	if (!e->pm_ext)
+		return;
+	for (i = 0; i < 12; i++)
+		fb[i] = (fi[i >> 2] >> (8 * (i & 3))) & 0xff;	/* LE bytes */
+	for (i = 0; i < 9; i++)
+		ent[i] = fb[8 - i];
+	blk = e->pm_ext + (wan_ing ? ZX_PM_EXT_FLOW_DIR1 : ZX_PM_EXT_FLOW_DIR0) +
+	      (u32)flow_id * 128 * 16;
+	for (i = 0; i < 128; i++)
+		memcpy_toio(blk + i * 16, ent, 16);
+}
+
+/* Zero a flow's external block in BOTH direction tables (used on destroy;
+ * also written on install for the direction we haven't proven, see caller). */
+static void zx_ft_ext_flow_clear(struct zx_eth *e, u8 flow_id)
+{
+	u32 zero[8] = {0};
+
+	zx_ft_ext_flow_write(e, false, flow_id, zero);
+	zx_ft_ext_flow_write(e, true, flow_id, zero);
+}
+
 /* Write the proven recipe (PM tables + the CLA hash entry at the flow's own bucket
  * in all 5 way banks) for per-slot multi-flow coexistence. Returns raw hash or errno. */
 static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
@@ -2530,6 +2596,12 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	u16 raw;
 	int w, rc = 0;
 
+	/* Without the external flow_info tables the PM rewrite reads erased
+	 * DDR and mangles every HW-forwarded frame — refuse the offload so
+	 * the flow stays on the (correct) SW path. */
+	if (!e->pm_ext)
+		return -EOPNOTSUPP;
+
 	/* next_hop RAM (ram1): the ONE rewritten L3 address + the next-hop DMAC.
 	 * For a NAT half that is the SNAT src / DNAT dst address (nat->new_ip);
 	 * for a plain forward it is daddr (informational). */
@@ -2543,6 +2615,14 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	 * be pm_slot (the slot we just wrote next_hop to) — the old code hardcoded 5. */
 	zx_ft_build_flow_info(fi, nat, pm_slot);
 	zx_pp_pm_write_entry(e, 0, pm_slot, fi);
+
+	/* The PM engine actually FETCHES flow_info from the EXTERNAL DDR table
+	 * (see zx_ft_ext_flow_write) — without this every HW-forwarded frame is
+	 * rewritten from erased DDR and black-holes. Write BOTH direction tables
+	 * (dir-1 proven for WAN-ingress/DN; dir-0 unproven but harmless — the
+	 * block is keyed by pm_slot, unique per offloaded direction). */
+	zx_ft_ext_flow_write(e, true, pm_slot & 0xff, fi);
+	zx_ft_ext_flow_write(e, false, pm_slot & 0xff, fi);
 
 	sub[0] = pm_slot;				/* ram6 sub_ram -> ram3 cmd idx */
 	zx_pp_pm_write_entry(e, 6, pm_slot, sub);
@@ -2670,9 +2750,11 @@ static int zx_ft_flow_untrack(struct zx_eth *e, unsigned long cookie)
 				if (r)
 					rc = r;
 			}
+			zx_ft_ext_flow_clear(e, e->ft_flows[i].pm_slot & 0xff);
 			dev_info(e->dev,
-				 "[phase6/ft] flow del cookie=%lx -> cleared raw=0x%04x (5 ways) rc=%d\n",
-				 cookie, e->ft_flows[i].raw, rc);
+				 "[phase6/ft] flow del cookie=%lx -> cleared raw=0x%04x (5 ways + ext blk %u) rc=%d\n",
+				 cookie, e->ft_flows[i].raw,
+				 e->ft_flows[i].pm_slot & 0xff, rc);
 			e->ft_flows[i].used = false;
 			return rc;
 		}
@@ -2829,11 +2911,30 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 		return -EOPNOTSUPP;
 	}
 
+	eg_regport = zx_ft_egress_regport(odev);
+
+	/* UPSTREAM (LAN->WAN, egress = WAN regport) stays on the SW flowtable
+	 * fast-path: its HW-forwarded frames reach the MAC4 wire but the UP
+	 * PM rewrite source is still unproven (the external dir-0 table is
+	 * NOT what the UP engine fetches — measured 2026-07-04 via the
+	 * sport-encoded fill: the server never saw the encoded ports), so a
+	 * HW UP offload ACK-starves the connection and stalls the download.
+	 * Upstream is ACK-dominated for the download use-case; the SW
+	 * flowtable forwards it at full ACK rate. Returning 0 WITHOUT
+	 * installing keeps the flow owned by the flowtable (trap -> SW
+	 * fast-path) while the DOWNSTREAM direction below gets the full HW
+	 * fast path (validated end-to-end at ~64-73 MB/s). */
+	if (eg_regport == ZX_WAN_REGPORT) {
+		dev_info(e->dev,
+			 "[phase6/ft] cookie=%lx %pI4:%u->%pI4:%u UP dir -> SW fast-path (no HW install)\n",
+			 cls->cookie, &saddr, ntohs(sport), &daddr, ntohs(dport));
+		return 0;
+	}
+
 	/* Reserve a tracking slot BEFORE writing the CLA: decline (stay SW) on a
 	 * bucket collision or a full table instead of clobbering/leaking. The
 	 * reserve-time hash MUST match the install-time hash, so derive the same
 	 * ingress-awareness (WAN-ingress = egress toward a LAN port) here. */
-	eg_regport = zx_ft_egress_regport(odev);
 	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport,
 			      eg_regport != ZX_WAN_REGPORT);
 	rc = zx_ft_flow_reserve(e, cls->cookie, raw, &pm_slot);
@@ -6624,6 +6725,41 @@ static int zx_eth_init_extra_mmio(struct zx_eth *eth,
 	return 0;
 }
 
+/* [phase6/ft] Map + ZERO the PM external table carve (see the pm_ext field
+ * comment). The bases (acl @0x923a0024, pm @0x923a0020 = acl + 0x400000) are
+ * pre-programmed (boot ROM / U-Boot) but read as GARBAGE until the PON/PP
+ * block clocks are up — so this MUST run late in probe (after
+ * zx_eth_init_pon_chip + the TM subsystem replay), NOT at iomap time.
+ * Erased DDR there is 0xff, which the PM engine decodes as an all-enables
+ * flow_info with garbage NAT values -> every HW-forwarded frame is mangled
+ * (MACs/IPs zeroed, ports 0xffff). Stock zeroes this at aclRamInit.
+ * pfn_valid() guard: NEVER touch pages the kernel owns (if a boot pointed
+ * the bases into kernel RAM, skip instead of corrupt). */
+static void zx_ft_pm_ext_init(struct zx_eth *eth)
+{
+	struct device *dev = eth->dev;
+	u32 aclb = readl(eth->fpga_base + 0x3a0024);
+	u32 pmb  = readl(eth->fpga_base + 0x3a0020);
+	u32 carve = aclb - 0x20000u;
+
+	if (aclb >= 0x40000000u && pmb == aclb + 0x400000u &&
+	    region_intersects(carve, ZX_PM_EXT_SPAN, IORESOURCE_SYSTEM_RAM,
+			      IORES_DESC_NONE) == REGION_DISJOINT) {
+		eth->pm_ext_phys = carve;
+		eth->pm_ext = devm_ioremap(dev, carve, ZX_PM_EXT_SPAN);
+		if (eth->pm_ext) {
+			memset_io(eth->pm_ext, 0, ZX_PM_EXT_SPAN);
+			dev_info(dev,
+				 "[phase6/ft] PM external tables: carve 0x%08x +0x%x mapped + zeroed (acl 0x%08x pm 0x%08x)\n",
+				 carve, ZX_PM_EXT_SPAN, aclb, pmb);
+		}
+	}
+	if (!eth->pm_ext)
+		dev_warn(dev,
+			 "[phase6/ft] PM external tables UNAVAILABLE (acl 0x%08x pm 0x%08x) — HW-forward NAT rewrite would read erased DDR; offload rewrite disabled\n",
+			 aclb, pmb);
+}
+
 static void zx_eth_iounmap_action(void *iomem)
 {
 	iounmap((void __iomem *)iomem);
@@ -6870,6 +7006,10 @@ static int zx_eth_probe(struct platform_device *pdev)
 	 * fiber. For broadcasts we rely on the switch's flood; for unicast
 	 * we rely on the da_known_cpu lookup.
 	 */
+
+	/* [phase6/ft] PM external tables — must be after PON/TM init (the base
+	 * registers read garbage while the PON-PP block clocks are gated). */
+	zx_ft_pm_ext_init(eth);
 
 	dev_info(dev, "ZX279128S ethernet ready (IRQ=%d, base=%pR, CPU_PORT=%d)\n",
 		 eth->irq_idm, platform_get_resource(pdev, IORESOURCE_MEM, 0),
