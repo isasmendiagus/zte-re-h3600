@@ -26,6 +26,7 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/inetdevice.h>
@@ -143,6 +144,13 @@ struct zx_dsa_priv {
  * binder's own pm_regs ioremap does NOT commit to the live PM RAM. */
 struct zx_pm_ops *zx_pm_ops;
 EXPORT_SYMBOL_GPL(zx_pm_ops);
+
+/* [ft_lock 2026-07-04] Cross-module CLA/PM/hash-engine lock — see the big
+ * comment on the extern declaration in include/linux/dsa/zte.h. Defined here
+ * (built-in) so it always exists, independent of whether the conduit module
+ * is loaded. */
+DEFINE_MUTEX(zx_hwlock);
+EXPORT_SYMBOL_GPL(zx_hwlock);
 
 void zx_dsa_register_pm_ops(struct zx_pm_ops *ops)
 {
@@ -1209,17 +1217,26 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 	/* Compute the flow's HW hash up-front and RESERVE a tracking slot BEFORE
 	 * touching the CLA. A declined offload (bucket collision or full table)
 	 * must leave both flows[] and the CLA banks untouched and stay in the
-	 * (working) SW datapath — never clobber an existing entry, never leak. */
+	 * (working) SW datapath — never clobber an existing entry, never leak.
+	 *
+	 * [ft_lock 2026-07-04] From here on we touch priv->flows[] and the
+	 * shared CLA/PM/hash engines, which the conduit's FT offload path
+	 * (three concurrent WQ_UNBOUND workqueues) and our own debugfs siblings
+	 * touch too — serialize the whole reserve+install sequence against all
+	 * of them. See qa_static_bughunt_2026-07-04.md finding C1. */
+	mutex_lock(&zx_hwlock);
 	raw = zx_cla_flow_hash(priv, ip_proto, saddr, daddr, sport, dport,
 			       zx_regport[port & 7] == ZX_WAN_REGPORT);
 	rc = zx_flow_reserve(priv, cls->cookie, raw);
 	if (rc == -EOPNOTSUPP) {
+		mutex_unlock(&zx_hwlock);
 		dev_info(ds->dev,
 			 "[phase6] offload declined: CLA bucket collision cookie=%lx raw 0x%04x (way0 0x%02x already owned) -> stays in SW\n",
 			 cls->cookie, raw, raw & 0xff);
 		return rc;
 	}
 	if (rc < 0) {
+		mutex_unlock(&zx_hwlock);
 		dev_info(ds->dev,
 			 "[phase6] offload declined: flow table full (max %d) cookie=%lx raw 0x%04x -> stays in SW\n",
 			 ZX_MAX_OFFLOAD_FLOWS, cls->cookie, raw);
@@ -1231,9 +1248,11 @@ static int zx_dsa_cls_flower_add(struct dsa_switch *ds, int port,
 				  nh_mac, zx_regport[port & 7], eg_regport);
 	if (rc < 0) {
 		zx_flow_release(priv, cls->cookie);	/* undo reservation on HW error */
+		mutex_unlock(&zx_hwlock);
 		return rc;
 	}
 
+	mutex_unlock(&zx_hwlock);
 	return 0;
 }
 
@@ -1245,7 +1264,11 @@ static int zx_dsa_cls_flower_del(struct dsa_switch *ds, int port,
 
 	dev_info(ds->dev, "[phase6] cls_flower_del port%d cookie=%lx\n",
 		 port, cls->cookie);
+	/* [ft_lock] serialize against concurrent add/stats + the conduit's
+	 * FT path + debugfs — see zx_dsa_cls_flower_add. */
+	mutex_lock(&zx_hwlock);
 	rc = zx_flow_untrack(priv, cls->cookie);
+	mutex_unlock(&zx_hwlock);
 	/* Not a tracked offload flow (e.g. one we declined) -> nothing to undo. */
 	return rc == -ENOENT ? 0 : rc;
 }
@@ -1261,14 +1284,21 @@ static int zx_dsa_cls_flower_stats(struct dsa_switch *ds, int port,
 {
 	struct zx_dsa_priv *priv = ds->priv;
 	int i;
+	bool found = false;
 
+	/* [ft_lock] priv->flows[] is mutated by add/del under the same lock —
+	 * take it here too so a concurrent add/del can't be observed torn. */
+	mutex_lock(&zx_hwlock);
 	for (i = 0; i < ZX_MAX_OFFLOAD_FLOWS; i++)
 		if (priv->flows[i].used && priv->flows[i].cookie == cls->cookie) {
-			flow_stats_update(&cls->stats, 0, 0, 0, jiffies,
-					  FLOW_ACTION_HW_STATS_DELAYED);
-			return 0;
+			found = true;
+			break;
 		}
-	return -EOPNOTSUPP;
+	mutex_unlock(&zx_hwlock);
+	if (!found)
+		return -EOPNOTSUPP;
+	flow_stats_update(&cls->stats, 0, 0, 0, jiffies, FLOW_ACTION_HW_STATS_DELAYED);
+	return 0;
 }
 #endif /* CONFIG_NET_CLS_FLOWER */
 

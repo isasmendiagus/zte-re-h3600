@@ -12,6 +12,7 @@
 #define _LINUX_DSA_ZTE_H
 
 #include <linux/types.h>
+#include <linux/mutex.h>
 
 #define ZTE_TAG_LEN	4	/* {mark, port, 0, 0}; stripped before DMA */
 #define ZTE_TAG_MARK	0x5a	/* sanity marker for the internal tag */
@@ -42,5 +43,40 @@ struct zx_pm_ops {
  * conduit module registers. */
 extern struct zx_pm_ops *zx_pm_ops;
 void zx_dsa_register_pm_ops(struct zx_pm_ops *ops);
+
+/*
+ * [ft_lock 2026-07-04] Single mutex serializing ALL access to the shared CLA
+ * (classifier) indirect engine, the PM (packet-modify) indirect engine and
+ * the CLA HW hash engine, across BOTH drivers.
+ *
+ * Without it: nf_flow_table dispatches FLOW_CLS_REPLACE / DESTROY / STATS on
+ * THREE separate WQ_UNBOUND workqueues (mutually concurrent, not rtnl) that
+ * all touch these engines with zero synchronization; two concurrent REPLACEs
+ * can allocate the same pm_slot (cross-flow NAT corruption); a REPLACE
+ * racing a DESTROY can interleave the CMD-first/data-descending indirect-RAM
+ * sequence and corrupt an arbitrary CLA RAM entry (including a boot-replayed
+ * trap rule); and this built-in module's own tc-flower path (rtnl) plus the
+ * conduit's debugfs pokes drive the identical physical engines with no
+ * cross-module lock at all. See findings/qa_static_bughunt_2026-07-04.md
+ * (finding C1) and findings/fix_c1_ftlock_2026-07-04.md.
+ *
+ * Defined here (built-in, always present — no module-unload/ref hazard)
+ * rather than in the loadable conduit module, so it exists before the
+ * conduit probes and remains valid for the DSA side's lifetime regardless of
+ * whether the conduit module is loaded.
+ *
+ * Context: every caller is sleepable — nf_flow_table's offload workqueues,
+ * an rtnl-locked tc-flower install/delete/stats call, or a debugfs write()
+ * syscall. Nothing that touches these engines runs in atomic/IRQ context, so
+ * a plain mutex is correct (no atomic-context user exists to conflict with
+ * it). Take it around the WHOLE top-level operation (the whole conduit
+ * setup_cb body, the whole cls_flower_add/del/stats body, or the whole
+ * debugfs handler's HW-touching section) — never inside the low-level
+ * per-register accessors (zx_cla_write_hash/zx_cla_write_entry/
+ * zx_cla_hash_raw/zx_pp_pm_write_entry/zx_pp_pm_read_entry etc.), which are
+ * always invoked with it already held by their caller; locking there too
+ * would just self-deadlock on the non-recursive mutex for no benefit.
+ */
+extern struct mutex zx_hwlock;
 
 #endif /* _LINUX_DSA_ZTE_H */

@@ -48,6 +48,7 @@
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <linux/spinlock.h>
+#include <linux/mutex.h>
 
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
@@ -3105,22 +3106,37 @@ static int zx_ft_setup_cb(enum tc_setup_type type, void *type_data, void *cb_pri
 {
 	struct zx_eth *e = cb_priv;
 	struct flow_cls_offload *cls = type_data;
+	int rc;
 
 	if (type != TC_SETUP_CLSFLOWER)
 		return -EOPNOTSUPP;
 
+	/* [ft_lock 2026-07-04] nf_flow_table dispatches REPLACE/DESTROY/STATS
+	 * on three separate WQ_UNBOUND workqueues — mutually concurrent, and
+	 * concurrent with the DSA tc-flower path (rtnl) + debugfs pokes that
+	 * drive the identical CLA/PM/hash-engine hardware and the ft_flows[]
+	 * table. Serialize the whole callback body (reserve/install/untrack)
+	 * with the shared cross-module lock. See
+	 * findings/qa_static_bughunt_2026-07-04.md finding C1. */
+	mutex_lock(&zx_hwlock);
 	switch (cls->command) {
 	case FLOW_CLS_REPLACE:
-		return zx_ft_flower_replace(e, cls);
+		rc = zx_ft_flower_replace(e, cls);
+		break;
 	case FLOW_CLS_DESTROY:
 		dev_info(e->dev, "[phase6/ft] flower destroy cookie=%lx\n", cls->cookie);
 		zx_ft_flow_untrack(e, cls->cookie);
-		return 0;
+		rc = 0;
+		break;
 	case FLOW_CLS_STATS:
-		return zx_ft_flower_stats(e, cls);
+		rc = zx_ft_flower_stats(e, cls);
+		break;
 	default:
-		return -EOPNOTSUPP;
+		rc = -EOPNOTSUPP;
+		break;
 	}
+	mutex_unlock(&zx_hwlock);
+	return rc;
 }
 
 static LIST_HEAD(zx_ft_block_cb_list);
@@ -5336,6 +5352,12 @@ static int zx_cladump_show(struct seq_file *s, void *_unused)
 
 	seq_puts(s, "CLA ram7 trap-queue qid0 per (ptype,port):\n");
 	seq_puts(s, "ptype  p0 p1 p2 p3 p4 p6 p7\n");
+	/* [ft_lock] the CLA indirect engine's CMD/DONE/DATA registers are
+	 * shared across ALL ram_ids — a concurrent FT/DSA install writing
+	 * ram2-6 could otherwise interleave with this read-only ram7 walk and
+	 * make it print a wrong (other-ram_id) value. Named explicitly in
+	 * qa_static_bughunt_2026-07-04.md C1's calling-context list. */
+	mutex_lock(&zx_hwlock);
 	for (i = 0; i < ZX_DEF_PTL_PKT_MAP_COUNT; i++) {
 		u8 ptype = zx_def_ptl_pkt_map[i].ptype;
 
@@ -5350,6 +5372,7 @@ static int zx_cladump_show(struct seq_file *s, void *_unused)
 		}
 		seq_puts(s, "\n");
 	}
+	mutex_unlock(&zx_hwlock);
 	return 0;
 }
 
@@ -5383,7 +5406,11 @@ static ssize_t zx_clapeek_write(struct file *f, const char __user *ubuf,
 	buf[count] = 0;
 	if (sscanf(buf, "%x %x", &ram_id, &addr) != 2)
 		return -EINVAL;
+	/* [ft_lock] serialize against the FT/DSA offload paths + sibling
+	 * debugfs pokes touching the same CLA indirect engine. */
+	mutex_lock(&zx_hwlock);
 	rc = zx_cla_read_entry(e, ram_id & 0xff, addr, data);
+	mutex_unlock(&zx_hwlock);
 	if (rc) {
 		pr_info("[ZXETH] clapeek ram%u addr%#x: err %d\n", ram_id, addr, rc);
 		return rc;
@@ -5436,6 +5463,9 @@ static ssize_t zx_clawrite_write(struct file *f, const char __user *ubuf,
 	 * ram1 = rule TCAM (17 words); ram2-6 = hash (15 words). The old plain data-first
 	 * path (zx_cla_write_entry) did NOT persist ram0 — that's why the ram0 extract
 	 * write silently failed. ram7 (cpu_queue) still uses the plain path. */
+	/* [ft_lock] serialize the whole write+readback sequence against the
+	 * FT/DSA offload paths + sibling debugfs pokes on the CLA engine. */
+	mutex_lock(&zx_hwlock);
 	if (ram_id == 0)
 		rc = zx_cla_write_hash(e, 0, addr, data, 5);
 	else if (ram_id >= 1 && ram_id <= 6)
@@ -5449,6 +5479,7 @@ static ssize_t zx_clawrite_write(struct file *f, const char __user *ubuf,
 		pr_info("[ZXETH]   clawrite readback: %08x %08x %08x %08x %08x %08x %08x %08x %08x\n",
 			data[0], data[1], data[2], data[3], data[4],
 			data[5], data[6], data[7], data[8]);
+	mutex_unlock(&zx_hwlock);
 	return rc ? rc : count;
 }
 
@@ -5487,10 +5518,14 @@ static ssize_t zx_fill520_write(struct file *f, const char __user *ubuf,
 		n++;
 		p += consumed;
 	}
+	/* [ft_lock] serialize this bulk 520-bucket write against the FT/DSA
+	 * offload paths + sibling debugfs pokes on the CLA engine. */
+	mutex_lock(&zx_hwlock);
 	for (b = 0; b < ARRAY_SIZE(banks); b++)
 		for (a = 0; a < banks[b].n; a++)
 			if (zx_cla_write_hash(e, banks[b].ram, a, data, 15) == 0)
 				ok++;
+	mutex_unlock(&zx_hwlock);
 	pr_info("[ZXETH] fill520: wrote entry (%d words) to %d/520 hash buckets\n",
 		n, ok);
 	return count;
@@ -5528,7 +5563,11 @@ static ssize_t zx_pmwrite_write(struct file *f, const char __user *ubuf,
 		n++;
 		p += consumed;
 	}
+	/* [ft_lock] serialize against the FT/DSA offload paths + sibling
+	 * debugfs pokes on the PM engine. */
+	mutex_lock(&zx_hwlock);
 	rc = zx_pp_pm_write_entry(e, ram_id & 0xff, addr, data);
+	mutex_unlock(&zx_hwlock);
 	pr_info("[ZXETH] pmwrite pm-ram%u addr%#x: %d words, rc=%d\n",
 		ram_id, addr, n, rc);
 	return rc ? rc : count;
@@ -5586,9 +5625,15 @@ static ssize_t zx_extwrite_write(struct file *f, const char __user *ubuf,
 	if (sscanf(buf, "%7s", cmd) != 1)
 		return -EINVAL;
 
+	/* [ft_lock] this node pokes the SAME PM-external DDR carve that
+	 * zx_ft_ext_flow_write/_clear (the FT install/untrack path, held
+	 * under zx_hwlock via zx_ft_setup_cb) read/write per-flow — serialize
+	 * every branch below against that path + sibling debugfs tools. */
+	mutex_lock(&zx_hwlock);
 	if (!strcmp(cmd, "z")) {
 		memset_io(e->pm_ext + ZX_PM_EXT_FLOW_DIR0, 0, 0x8000 * 16);
 		memset_io(e->pm_ext + ZX_PM_EXT_FLOW_DIR1, 0, 0x8000 * 16);
+		mutex_unlock(&zx_hwlock);
 		pr_info("[ZXETH] extwrite: BOTH dir tables zeroed\n");
 		return count;
 	}
@@ -5596,19 +5641,25 @@ static ssize_t zx_extwrite_write(struct file *f, const char __user *ubuf,
 		u8 ent[16];
 		void __iomem *p;
 
-		if (sscanf(buf, "%*s %x %x", &dir, &idx) != 2 || idx >= 0x8000)
+		if (sscanf(buf, "%*s %x %x", &dir, &idx) != 2 || idx >= 0x8000) {
+			mutex_unlock(&zx_hwlock);
 			return -EINVAL;
+		}
 		p = e->pm_ext +
 		    (dir ? ZX_PM_EXT_FLOW_DIR1 : ZX_PM_EXT_FLOW_DIR0) + idx * 16;
 		memcpy_fromio(ent, p, 16);
+		mutex_unlock(&zx_hwlock);
 		pr_info("[ZXETH] ext dir%u[%#x] = %16ph\n", dir & 1, idx, ent);
 		return count;
 	}
 	if (!strcmp(cmd, "w")) {
 		if (sscanf(buf, "%*s %x %x %x %x %x",
-			   &dir, &idx, &w[0], &w[1], &w[2]) != 5 || idx >= 0x8000)
+			   &dir, &idx, &w[0], &w[1], &w[2]) != 5 || idx >= 0x8000) {
+			mutex_unlock(&zx_hwlock);
 			return -EINVAL;
+		}
 		zx_extwrite_one(e, dir & 1, idx, w);
+		mutex_unlock(&zx_hwlock);
 		pr_info("[ZXETH] extwrite dir%u[%#x] = %08x %08x %08x\n",
 			dir & 1, idx, w[0], w[1], w[2]);
 		return count;
@@ -5618,8 +5669,10 @@ static ssize_t zx_extwrite_write(struct file *f, const char __user *ubuf,
 
 		if (sscanf(buf, "%*s %x %x %x %x %x %x",
 			   &dir, &idx, &cnt, &w[0], &w[1], &w[2]) != 6 ||
-		    idx >= 0x8000 || cnt > 0x8000 || idx + cnt > 0x8000)
+		    idx >= 0x8000 || cnt > 0x8000 || idx + cnt > 0x8000) {
+			mutex_unlock(&zx_hwlock);
 			return -EINVAL;
+		}
 		for (i = idx; i < idx + cnt; i++) {
 			u32 fi[3] = { w[0], w[1], w[2] };
 
@@ -5632,10 +5685,12 @@ static ssize_t zx_extwrite_write(struct file *f, const char __user *ubuf,
 			}
 			zx_extwrite_one(e, dir & 1, i, fi);
 		}
+		mutex_unlock(&zx_hwlock);
 		pr_info("[ZXETH] extwrite %s dir%u[%#x..%#x] base %08x %08x %08x\n",
 			cmd, dir & 1, idx, idx + cnt - 1, w[0], w[1], w[2]);
 		return count;
 	}
+	mutex_unlock(&zx_hwlock);
 	return -EINVAL;
 }
 
@@ -5662,7 +5717,11 @@ static ssize_t zx_pmpeek_write(struct file *f, const char __user *ubuf,
 	buf[count] = 0;
 	if (sscanf(buf, "%x %x", &ram_id, &addr) != 2)
 		return -EINVAL;
+	/* [ft_lock] serialize against the FT/DSA offload paths + sibling
+	 * debugfs pokes on the PM engine. */
+	mutex_lock(&zx_hwlock);
 	rc = zx_pp_pm_read_entry(e, ram_id & 0xff, addr, data);
+	mutex_unlock(&zx_hwlock);
 	pr_info("[ZXETH] pmpeek pm-ram%u addr%#x rc=%d: %08x %08x %08x %08x %08x %08x %08x %08x\n",
 		ram_id, addr, rc, data[0], data[1], data[2], data[3],
 		data[4], data[5], data[6], data[7]);
@@ -5700,9 +5759,13 @@ static ssize_t zx_pmfill_write(struct file *f, const char __user *ubuf,
 		n++;
 		p += consumed;
 	}
+	/* [ft_lock] serialize this bulk 0x400-slot write against the FT/DSA
+	 * offload paths + sibling debugfs pokes on the PM engine. */
+	mutex_lock(&zx_hwlock);
 	for (a = 0; a < 0x400; a++)
 		if (zx_pp_pm_write_entry(e, 0, a, data) == 0)
 			ok++;
+	mutex_unlock(&zx_hwlock);
 	pr_info("[ZXETH] pmfill: flow_info (%d words) -> %d ram0 slots\n", n, ok);
 	return count;
 }
@@ -5785,7 +5848,12 @@ static ssize_t zx_hashcalc_write(struct file *f, const char __user *ubuf,
 		n++;
 		p += consumed;
 	}
+	/* [ft_lock] the hash engine's key/trigger/result regs are shared with
+	 * the FT/DSA offload install paths — a concurrent install's key load
+	 * could otherwise interleave with this one's trigger. */
+	mutex_lock(&zx_hwlock);
 	raw = zx_cla_hash_raw(e, key);
+	mutex_unlock(&zx_hwlock);
 	pr_info("[ZXETH] hashcalc %d words -> raw hash 0x%04x\n", n, raw);
 	return count;
 }
