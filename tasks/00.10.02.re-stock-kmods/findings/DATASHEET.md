@@ -6,6 +6,69 @@ diagrams below). Built from RE of stock kmods + live reads.
 Confidence per entry: ✅ verified live/decomp-named · 🟡 decomp/table-inferred ·
 ❓ structure known, semantics unknown.
 
+> **Companion:** a high-level hardware block diagram (datapath flow + ports/pins/addresses)
+> now lives beside this file at `HW_BLOCK_DIAGRAM.md`. Read it first for the "where does each
+> block sit / which port is which address" picture; use this file for the register detail.
+
+## 🔄 WHAT CHANGED SINCE THE OLD DATASHEET (2026-07-04 consolidation)
+This revision folds in ~4 weeks of flow-offload / queue-subsystem RE that the old text listed as
+"semantics unknown" or didn't cover. Headline changes (all cross-referenced to their findings):
+
+1. **The "PP_PM (semantics largely unknown)" block at `0x9239c000` IS the PM packet-modifier /
+   HW-NAT rewrite engine.** Full decode added: indirect iface (`0x9239c014`), the `ram_id` map
+   (ram0 flow_info / ram1 next_hop / ram2 vlan / ram3 cmd microcode / ram6 sub_ram), the
+   **flow_info 3-word bit layout** (dmac_en/sip_en/dip_en/sport_en/dport_en/hl_ttl/checksums +
+   nat_sport/nat_dport + next_hop_idx), the **next_hop RAM** (new DMAC + one NAT'd IP), the
+   **EXTERNAL DDR flow-info carve** (`acl_base−0x20000`; fetch addr `= cmd_flow_id | dir<<10`,
+   internal iff `<0x400`), and PM counters `0x9239c080/88/a0`. VALIDATED on-device: HW forwards a
+   correctly de-NAT'd download frame. (`nat_offload_re`, `download_pm_rewrite`, `up_hwoffload`,
+   `stock_red_drain_up_RE`.) ⚠ NOTE the OLD "PM (G.988 port-mapper)" at `0x921e0000` is a
+   *different* block (a source→egress authorizer), unchanged.
+2. **CLA classifier fully mapped for HW L3 flow-offload:** config `0x9238c080`, hash-poly
+   `0x9238c090`, outspace `0x9238c094`; the **HW hash engine** (`0x9238c2c0` trigger /
+   `0x9238c2c4..` key / `0x9238c2fc` out) verified live; `gparsehashkey` latch `0x9238c260`;
+   `desIn`/`desOut` descriptor latches (`0x9238c3e0`/`0x9238c394`); the ram0-7 indirect banks +
+   poly-0/1 CRC hashing; the **`cmd_flow_id` 15-bit split-field packing** (byte3 low-7 / byte4
+   high-8) that links a CLA entry to its PM flow_info slot.
+3. **CLA verdict counters are DIRECTION-SPLIT and 16-bit** (not u32): UP bank `0x9238c3c0/c4/c8/d8`
+   vs DN bank `0x9238c3cc/d0/d4/dc`; `0x9238c3c0`/`c3c8` are each two packed 16-bit sub-counters
+   (no_e8 lo / e8 hi); `0x9238c3b8` = acl_required(hi16)/acl_failed(lo16). (`counter_audit`.)
+4. **ADM PPS policer at `0x92394000` decoded** (was "semantics unknown"): `one_second`
+   `0x92394048`, per-CPU-queue pass-pps `0x92394080+q*4` (UP) / `0x923940c0+q*4` (DN) with
+   enable=bit21, drop counters `0x92394180/1c0`. Mainline initializes NONE of it (the trap-queue
+   churn-latch gap). Paired **DPA** enables `0x92398000[12:6]`/`0x92398014[0]` + verdict counter
+   `0x9239810c` also decoded. (`queue_subsystem_re`.)
+5. **QMG/RED trap-path roles pinned:** QMG `0x9234c04c` (DN hw_trap) **saturates at 1024** = the
+   CPU-trap credit (the wedge); RED trap-in/out/drop counters `0x92344204..218`; `drop_RED`
+   `0x921da044` is the wedge-correlated drop. Full CPU-trap queue map (ptype→CPU-queue via CLA
+   ram7) added. (`queue_subsystem_re`, `zte-redwedge-unicast-cpu`.)
+6. **Egress/offload status advanced:** CPU→LAN TX egress solved (2026-05-30); bidirectional NAT
+   HW-offload now works (10 GB sustained, `up_hwoffload` #492). Residual = flow-churn trap-latch
+   (ADM policer is the prescribed fix) + DN CLA hit-rate.
+
+## 🔎 VERIFICATION PASS (2026-07-04 — cross-checked vs driver source + findings)
+Every headline address above was checked against `zx-eth-main.c` / `zx-dsa.c` /
+`include/linux/dsa/zte.h` / `zx_ffe_table.h` / the DTS and the source findings.
+Corrections applied in this revision:
+1. **PM-base flag RESOLVED** — PM = `0x9239c000` (e->base = npp `0x921c0000`, + `0x1DC014`);
+   `zx-dsa.c` `ZX_PM_PHYS=0x921dc000` is a wrong constant proven non-committing; the binder
+   delegates via `zx_pm_ops`. (§"PP_PM = PM packet-modifier", §3.18.)
+2. **BMU base corrected** — `0x92348000` (TM[0x8000], ×5 +0x400; driver `TM_REG_BMU_*` are
+   tm_write-based), NOT `0x921c8000` (that's IDM — the old PART-1 row was itself a base-gotcha
+   instance; §3.3 already had it right).
+3. **SADM pipeline position** — UPSTREAM of CLA per `queue_subsystem_re` §A (SPA→SADM→CLA→ADM);
+   the 2026-06-01 "downstream of CLA" note is superseded (§SADM; HW_BLOCK_DIAGRAM redrawn).
+4. IDM row typo — ctrl is `0x921c8000=0x020f6766` (a VALUE, not address "0x920f6766").
+5. greg getPort line untangled — variant A rejects CPU; "5→0" belongs to the regport/variant-B map.
+Spot-checked TRUE against code: MAC stride/bases (`npp+(i+1)*0x40000`, MAC4=0x92300000),
+SOPC send2smacN `0x921d915c..916c`, QMG DN/UP banks `0xc044-48-4c`/`0xc054-5c-60`, TM ring
+`0x10050/0x10060` sets, CLA cmd/DONE/DATA + HW hash engine `0x2c0/0x2c4/0x2fc` + verdict banks
+(UP `c3c0/c4/c8/d8`, DN `c3cc/d0/d4/dc`, `c3b8` req/fail), ADM `0x92394080/c0 +q*4`, DPA
+`0x92398000[12:6]`/`0x9239810c`, isolation `0x923883c0+regport*4`, drops `0x921da040/44/4c`,
+`zx_regport[8]={1,2,3,4,5,0,6,7}` + `ZX_WAN_REGPORT=5`, wanphy @ MDIO 8 (DTS `ethernet-phy@8`,
+"ZX5201") + LAN GePHYs @ 10-13, TX hint `((p+0x28)&0x3f)<<4`, RX ingress `(desc[6]>>3&0x1f)-1`,
+NAPI weight 512, ring-pending `TM[0x10100+q*4]`.
+
 ## ⚠️ ERRATA (2026-06-01 PM — supersedes earlier port1 claims)
 - **port1 ingress is NOT lost at MAC→SPA→SDET.** Earlier text (the "Multi-port/DSA ingress
   status" §, the SDET counter §, SPA admit notes, and the H1 `0x19068` hypothesis) said port1's
@@ -219,8 +282,8 @@ and wrongly concluded "ring unused." The REAL ring is tm_base+0x10000 (0x9235005
 | block | phys base | key regs (phys) | role | conf |
 |---|---|---|---|---|
 | greg / STP | 0x921c0000 | port-STP-state **0x921c0044** (3 bits/port, FWD=4; stock=0=off), stp_en 0x921c0040, port_closed 0x921c004c | global switch regs incl. per-port forwarding state | ✅ |
-| IDM | 0x921c8000 | TX desc base **0x921c8004**, TX kick **0x921c8040**, TX consume **0x921c8044**, ctrl 0x920f6766 | CPU-port DMA (idm0/idm1 netdevs, WiFi fwd). NOT the LAN-egress path. | ✅ |
-| BMU | 0x921c8000 (overlaps IDM low) | bp-idx 0x921c800c, alloc-poll 0x921c8014 | buffer-pointer alloc/free | 🟡 |
+| IDM | 0x921c8000 | TX desc base **0x921c8004**, TX kick **0x921c8040**, TX consume **0x921c8044**, ctrl 0x921c8000=**0x020f6766** (⚠ was mis-typeset as "address 0x920f6766" — it's the ctrl VALUE) | CPU-port DMA (idm0/idm1 netdevs, WiFi fwd). NOT the LAN-egress path. | ✅ |
+| BMU | **0x92348000** = TM[0x8000], 5 instances +0x400 (⚠ CORRECTED 2026-07-04: the old "0x921c8000, overlaps IDM low" row was the base-gotcha — npp+0x8000 is IDM; driver `zx_tm_bmu_init` is tm_write-based) | alloc-result **0x9234800c**, alloc-kick **0x92348014**, pool cfg 0x923480e8..fc | buffer-pointer alloc/free (detail §3.3) | ✅ |
 | SIPC | 0x921cc000 | ctrl **0x921cc000=0x11** (cpu_up_en) | CPU↔fabric credit/mailbox bridge (NOT a ring) | ✅ |
 | SMCT | 0x921d0000 | init 0x921d0000=0xB, 0x921d0010=0x3810, free-gauge **0x921d0040**, free-doorbell 0x921d004c | CPU-port multi-channel transfer; gauges move during egress | 🟡 |
 | SPA (stream parser) | 0x921d4000 | match_mode **0x921d407c**, pkt-en 0x921d4000/04/08/40/44/48, indirect CMD **0x921d4014**/DONE 0x921d4018/DATA 0x921d401c–30, ONU-MAC tbl 0x921d4120/24 (=device MAC, mainline writes it) | source-port classifier; **match-RAM (ram_id0, 11 ent) is INDIRECT — not in flat dump** | ✅ |
@@ -262,7 +325,7 @@ path (wire→PHY→MAC2→CLA→QMG→CPU) works fully and is unaffected.
 4. **Write-only doorbells** (ring kicks) — read back as 0/garbage.
 
 ## Port numbering
-- Logical→physical remap (tm.c:37917 / getPort): 0–4→0–4, 5→0(CPU), 6→5, 7→6. **CPU = logical 5 = phys 0.**
+- greg remap **variant A** (tm.c:37917 / getPort): 0–4→0–4, 6→5, 7→6; **logical 5 (CPU) is REJECTED** (no greg slot). **Variant B = regport** (isolation/FDB/CLA-inport): {0,1,2,3,4}→{1,2,3,4,5}, **CPU 5→0**, 6→6, 7→7 (`zx_regport[8]={1,2,3,4,5,0,6,7}`, zx-dsa.c:54). ⚠ the old one-line "0–4→0–4, 5→0(CPU), 6→5, 7→6" conflated the two variants. See [[zte-port-numbering]] / `port_numbering_map_re.md`.
 - `lan_up_port = 4` (stock boot log), so CPU-fwd bit = 1<<(4+0x19) = bit 29.
 - Host/MAC2 = LAN3 in ZTE numbering.
 
@@ -516,6 +579,8 @@ NOTE: SIPC is a SINGLE shared block (NOT per-port) — it cannot discriminate on
 
 **2026-05-31 admit-stage notes** (~~MAC→SPA is the stage where port1 ingress dies~~ ⚠️ ERRATA 2026-06-01: port1 dies at `drop_PP`, downstream of SPA — see top ERRATA; SPA admit is all-on and NOT the gate, as this note already concluded): the up/dn receive admit is TWO per-ENTRY bitmaps — **pkt_en** (`0x14000`=ent0-0x1f / `0x14004`=0x20-0x3f / `0x14008`=0x40-0x4d) and **pps_en** (`0x1400c`=ent0-0x1f / `0x14010`=0x20-0x3d), dn mirrors at `0x4040/44/48` + `0x404c/4050`. These are per matched rule/ENTRY (78/62 bits), NOT per physical port — the entry is picked by the SPA match/hash RAM (portless byte-matcher, see [[zte-spa-matchram-not-gate]]). Live golden (all all-on): `0x14000/04=ffffffff`, `0x14008=00003fff`, `0x1400c=ffffffff`, `0x14010=3fffffff`, `0x404c/4050=ffffffff`, `0x14054=03ff05dc`. ⚠️ Mainline `zx_pm_spa_init` writes pkt_en+match but NOT pps_en — harmless because HW reset-default is all-on (verified live). Per-uni receive counters (sop/eop, byte-packed): **`0x921d45cc` + uni*4** (e.g. live 0xe5e5e6e6 = uni2/3 ≈ 229/230). NOT the port1 gate (admit all-on, port1 dies before/at SPA classification). See `port1_spa_admit_gate_re.md`.
 
+**`trap_dmac` semantic (HW-L3-offload, 2026-06):** the `trap_dmac` table (reg_id 24/25, `0x921d41a0`, 5 slots × 8B) is populated by the **bootROM** with the device's own port MACs (fuse-sourced). It traps every **to-me** (DST-MAC == a device MAC) packet at the SPA parser with **`action_rsn=0x3f` (UDF_DMAC0)** — UPSTREAM of the CLA — so a routed/offload packet never reaches the CLA forward hash while it's set. Stock clears it at init; the mainline driver clears the first 4 slots in `zx_eth_clear_spa_trap_dmac()` (zx-eth-main.c). Proven by the desIn `action_rsn` flip **0x3f→0x54** the moment it's cleared (packet advances from pre-CLA trap to CLA-lookup-miss). (NB: RegTable declares 5 slots; the driver clears 4.)
+
 | phys (sub0) | reg_id | R/W | bits | semantic name | conf |
 |---|---|---|---|---|---|
 | `0x921d4000` | 0 | RW | [31:0] | dn_reg_pkt_en? (RAM) (x4, +0x4/idx) | ✅ |
@@ -739,12 +804,12 @@ NOTE: SIPC is a SINGLE shared block (NOT per-port) — it cannot discriminate on
 | `0x9234c004` | 3 | RW | [1] | ddr_cache_enable | ✅ |
 | `0x9234c008` | 4 | RW | [1:0] | qmg_trap_cfg | ✅ |
 | `0x9234c00c` | 5 | RW | [10:0] | qmg_up_ram_depth | ✅ |
-| `0x9234c044` | 6 | R | [31:0] | statistics(sw_fwd) | ✅ |
-| `0x9234c048` | 7 | R | [31:0] | statistics(hw_fwd) | ✅ |
-| `0x9234c04c` | 8 | R | [31:0] | statistics(hw_trap) | ✅ |
-| `0x9234c054` | 9 | R | [31:0] | statistics | ✅ |
-| `0x9234c05c` | 10 | R | [31:0] | statistics | ✅ |
-| `0x9234c060` | 11 | R | [31:0] | statistics | ✅ |
+| `0x9234c044` | 6 | R | [31:0] | statistics **DN sw_fwd** (SW-forwarded WAN→LAN) | ✅ |
+| `0x9234c048` | 7 | R | [31:0] | statistics **DN hw_fwd** (HW-forwarded download) | ✅ |
+| `0x9234c04c` | 8 | R | [31:0] | statistics **DN hw_trap** — ⚠ **SATURATES/pins at 1024 = the CPU-trap-queue credit (the wedge oracle)** | ✅ |
+| `0x9234c054` | 9 | R | [31:0] | statistics **UP sw_fwd** (SW-forwarded LAN→WAN) | ✅ |
+| `0x9234c05c` | 10 | R | [31:0] | statistics **UP hw_fwd** (⚠ widx 0xd3017 — there is a gap, NOT 0xc058) | ✅ |
+| `0x9234c060` | 11 | R | [31:0] | statistics **UP hw_trap** (== MAC RX-ok on LAN→CPU) | ✅ |
 
 ## RED (random-early-detect)
 
@@ -765,9 +830,25 @@ NOTE: SIPC is a SINGLE shared block (NOT per-port) — it cannot discriminate on
 | `0x92344014` | 4 | RW | [27:0] | indirect_rw_cmd | ✅ |
 | `0x92344018` | 5 | R | [0] | ind_acc_done | ✅ |
 | `0x9234401c` | 6 | RW | [31:0] | ind_acc_data (x5, +0x4/idx) | ✅ |
-| `0x92344040` | 7 | RW | [12:0] | in_share_max | ✅ |
+| `0x92344040` | 7 | RW | [12:0] | in_share_max (live 0x3ff) | ✅ |
 | `0x9234406c` | 11 | RW | [0] | fec_enable | ✅ |
-| `0x92344074` | 12 | RW | [14:0] | up_out_share_max | ✅ |
+| `0x92344074` | 12 | RW | [14:0] | up_out_share_max (live 0x3fff) | ✅ |
+
+### RED trap-path counters (plain MMIO reads) + per-queue indirect RAM roles
+The RED block sits DIRECTLY before QMG on the CPU-trap path; `red_trp_in` climbing while `red_trp_out`
+halts and `red_drop` explodes is the churn-latch signature. The correlated OPC drop `drop_RED`
+(`0x921da044`) ≈100k tracks the reboot-only latch.
+| phys | name | dir | conf |
+|---|---|---|---|
+| `0x92344204` / `0x92344210` | RED fwd in / out | both | ✅ |
+| `0x92344208` / `0x92344214` | **RED trap in (rtin) / trap out (rtout)** | both | ✅ |
+| `0x9234420c` / `0x92344218` | RED drop in / out | both | ✅ |
+
+**Indirect per-queue RAM (via CMD `0x92344014` / DONE `0x92344018` / DATA `0x9234401c`, 5 words):**
+ram0 = per-queue OUT-buffer (guart|max<<11; q0-15=0x400 = the 1024 trap latch depth); ram2 = per-queue
+IN-buffer; ram4 = 9-word WRED curve (per queue); ram1/ram5 = occupancy readback. Mainline `zx_tm_red_init`
+replays ram0/2/4 byte-identically to stock; the RED *globals* are parity at reset defaults (a latent
+`zx_red_block_init` base-arithmetic bug writes them to dead space `0x924C4xxx`, currently harmless).
 
 ## SCH/DSCH (shaper/scheduler)
 
@@ -808,6 +889,14 @@ One indirect iface: CMD `0x9238c014` (`cmd = addr | ram_id<<22 | rw<<27`, rw bit
 | 2..6 | `cla_set_hash_table` :3366 | result/hash table — holds the **`inport` VALUE** `=(byte[0x0e]&0x3f)<<6\|(byte[0x0d]>>2)` + trap action `cpu_qid`(byte6)+`cpu_qid_rp_en` + valid_en/direct(byte0x10) | **Yes (keyed by inport)** |
 | 7 | `cla_set_cpu_queue_id` :3957 | per-(ptype,port) CPU trap-queue (data[0]=qid) | per-port |
 addr→bank: 0..0xff=ram2, 0x100..17f=ram3, 180..1bf=ram4, 1c0..1ff=ram5, 200..207=ram6. CLA inport = REGPORT (logical {0,1,2,3}→regport {1,2,3,4}). Driver debugfs `clapeek "<ram_id> <addr>"` reads an entry; `cladump` dumps ram7 per (ptype,port). **port1 verdict: regport2 entries are present + valid + identical-action to working regport3 (clapeek-verified live) → CLA is NOT the port1 gate** (the drop is upstream, MAC→SPA→SDET).
+
+**ram7 = CPU-trap-queue map (ptype/action_rsn → CPU queue), per-port banks** (`cla_set_cpu_queue_id`,
+per-port +0x80 stride: p0@+0x80…p6@+0x300, p5=CPU skip). Every to-CPU frame carries a 7-bit
+`ptype`/`action_rsn` (`trapPktType[]`). Key rows: `0x4a` BROADCAST→**q0**; `0x49/0x4c/0x60/0x61`
+OTHERS→q1; `0x4b`→q2; `0x54` LOOK_UP_MISS + `0x47/0x50-52/0x56-58`→**q3**; `0x3f` UDF_DMAC0 (to-me
+routed transit = churn first-packets) + bulk→**q4**; `0x11/0x1d/0x1f/0x20`→q5; bank1 ptype 0/1/2→q7.
+8 CPU queues; ring-pending regs `TM[0x10100+q*4]`; RED out-buffer depth 0x400 = the 1024 trap latch;
+drain = TM RX DMA → NAPI (weight 512). Mainline replays this faithfully (`zx_chip_tm_init_trap_queues`).
 
 | phys (sub0) | reg_id | R/W | bits | semantic name | conf |
 |---|---|---|---|---|---|
@@ -872,6 +961,72 @@ addr→bank: 0..0xff=ram2, 0x100..17f=ram3, 180..1bf=ram4, 1c0..1ff=ram5, 200..2
 | `0x9238c450` | 54 | RW | [11] | dn_unknown_flow_cfg | 🟡 |
 | `0x9238c450` | 55 | RW | [12] | dn_unknown_flow_cfg | 🟡 |
 | `0x9238c450` | 56 | RW | [13] | dn_unknown_flow_cfg | 🟡 |
+
+### CLA live forward/trap counters + descriptor latches (NOT in claRegTable; HW-L3-offload findings 2026-06)
+These are read directly (not via the indirect-RAM iface, not in `zx_claregtable`) and are the primary signal for HW L3 flow-offload debugging: they say whether a routed packet was SUBMITTED to the forward classify, then FORWARDED vs TRAPPED. fpga widx ↔ phys: **`phys = widx*4 + 0x92000000`** (e.g. widx `0xe30f0` → `0x9238c3c0`).
+
+| phys | name | decode | meaning | conf |
+|---|---|---|---|---|
+| `0x9238c260` | gparsehashkey latch | full key bytes | live HW-computed hash key for the in-flight packet; byte-exact vs the SW key-builder (this is what PROVED the key-builder correct) | ✅ |
+| `0x9238c3b8` | acl_required / acl_failed | **hi16=acl_required, lo16=acl_failed** (agnostic) | hi16 = packets SUBMITTED to the ACL/forward classify ("needs ACL"), **the submit gate**; lo16 = of those, count whose lookup FAILED. Direction-agnostic (single reg; not UP/DN-split). Decode: `statics` decomp_all_tm.c:68136–68138 | ✅ |
+| `0x9238c3c0` | cla_tx_fwd (**UP**) | **16-bit, PACKED: lo16=fwd_no_e8, hi16=fwd_e8** | UP (LAN→WAN) HW-forwarded. ⚠ NOT a u32 — two 16-bit sub-counters (statics: "cla tx fwd no e8"/"…e8"). Reading the full word mixes them when e8≠0. DN forward is a SEPARATE reg `0x9238c3cc` | ✅ |
+| `0x9238c3c4` | cla_tx_trp (**UP**) | 16-bit (lo16) | UP trap-to-CPU. **DN trap is 0x9238c3d0.** ⚠ CLA counters are direction-split (UP 0x…c3c0/c4/c8/d8, DN 0x…c3cc/d0/d4/dc) — see the ★ note in memory zte-datasheet. `0x9238c3c8`=UP drop (packed drp_no_e8/e8), `0x9238c3d8`=UP copy (u32) | ✅ |
+| `0x9238c3e0` | desIn[0] (CLA-ingress descriptor latch) | low half = L4 ports | shared per-packet SNAPSHOT of the in-flight CLA-ingress descriptor (e.g. `0x__9a40__` = sport 40000). ⚠️ SHARED / not pinned to a specific packet — trust the counters, use the latch only for spot-decoding | 🟡 |
+| `0x9238c3e8` | desIn[2] action_rsn | bits[29:23] (7-bit) | trap-reason of the latched descriptor. Codes: **0x3f UDF_DMAC0** (to-me DMAC trapped at the SPA parser, UPSTREAM of CLA), **0x54 LOOK_UP_MISS** (CLA hash found nothing), **0x49 OTHERS** (catch-all → forward). The reason is a pipeline-depth gauge: 0x3f=pre-CLA, 0x54=in-CLA-lookup, 0x49=through-CLA | 🟡 |
+| `0x9238c3ec` | desIn[3] l3_en | bit6 (fpga widx `0xe30fb`) | descriptor L3-routable flag (HW-computed in parse/route, NOT SW-writable). Observed l3_en=0 on a trapped mainline transit packet vs l3_en=1 on stock while forwarding | 🟡 |
+
+**Related (other blocks):** `hw_trap 0x9234c060` (QMG/UP trap counter — climbs together with cla_tx_trp); the SPA `trap_dmac` table `0x921d41a0` (SPA block, reg_id 24/25) is the source of the pre-CLA `action_rsn=0x3f` trap.
+
+### CLA verdict counters — full DIRECTION-SPLIT bank (corrected 2026-07-03, `counter_audit`)
+CLA counters are **16-bit** (not u32) and **split by direction**. `0x9238c3c0`/`c3c8` each hold TWO
+packed 16-bit sub-counters (lo16=no_e8, hi16=e8). The driver `pipeline_stats` historically read only
+the UP bank as full u32 — mixes sub-counters and reads the wrong direction for a download.
+| bank | fwd | trap | drop | copy | dir |
+|---|---|---|---|---|---|
+| UP (LAN→WAN) | `0x9238c3c0` | `0x9238c3c4` | `0x9238c3c8` | `0x9238c3d8` | uploads/ACKs |
+| **DN (WAN→LAN)** | **`0x9238c3cc`** | **`0x9238c3d0`** | **`0x9238c3d4`** | `0x9238c3dc` | downloads |
+
+`0x9238c3d0` (cla_dn_trap) = LOOK_UP_MISS on a download; ≈ `acl_failed`(`0x9238c3b8` lo16) ≈ QMG DN
+hw_trap — this is where the DN CLA-hit-rate loss shows.
+
+### CLA static config registers (values from the stock↔#452 full-block diff, `cla_fullblock_diff`)
+Every static CLA config register is BYTE-IDENTICAL stock↔mainline — the lookup-miss regression is an
+init-*operation* / hash-table build, NOT a settable register.
+| phys | stock/live value | meaning | conf |
+|---|---|---|---|
+| `0x9238c080` | `0x00000600` | **cla_config** (v6rd_del+dslite_del; trap_acl_en=0, up_unicast_ctrl=0) | ✅ |
+| `0x9238c088` | `0x00007fff` | l3_mtu length/action | ✅ |
+| `0x9238c090` | `0x00e400e4` | **hash_poly_config** (which CRC poly per hash_mode) | ✅ |
+| `0x9238c094` | `0x00000004` | **outspace_cfg** (`ACL_OUT_SPACE_SEL=0`, `ACL_OUT_HASH_NUM=1`) → slot mask `(0x400<<(6-space_sel))-1` | ✅ |
+| `0x9238c0cc` | `0x00000007` | oth_l3_pkt_action / MTU group | ✅ |
+
+### CLA HW hash engine (VERIFIED live on mainline, `zte-cla-hw-hash-engine`, `phase6_cla_hw_hash_CRACKED`)
+A dedicated engine computes the ram2-6 flow-slot from a 45-byte structured key. **Load key FIRST,
+trigger LAST.**
+| phys | role | conf |
+|---|---|---|
+| `0x9238c2c4 .. 0x9238c2f0` | 12 key words in (the 45-byte key) | ✅ |
+| `0x9238c2c0` | **trigger** — write `1` to latch+compute (control reg; reads 0x3=idle) | ✅ |
+| `0x9238c2fc` | 16-bit raw hash OUT | ✅ |
+
+Slot = `aclGetAvailableHashAddr`: `raw & ((0x400<<(6-ACL_OUT_SPACE_SEL))-1)` + way bits + free-slot
+probe. Hash = byte-wise CRC-32 (MSB-first, init 0) over the key REVERSED; **poly selected by hash_mode**
+(0=`0x04C11DB7`, 1=`0x1EDC6F41`, 2=`0xF4ACFB13`, 3=`0x32583499`). Key includes inport/outport ⇒ the slot
+is **port-numbering dependent** (can't reuse stock slots). Verified: key=0→0x0000, w0=1→0x6f41
+(=low16 of poly-1). The driver's SW `zx_ft_flow_hash_poly0` mirrors the hash_mode-0 lane.
+
+### cmd_flow_id — links a CLA entry to its PM flow_info slot (15-bit SPLIT field)
+Packed across two entry bytes: `entry_byte[3] = ((idx & 0x7f) << 1) | 1` (→ CLA word0 bits[31:24], the
+LOW 7 bits) and `entry_byte[4] = (idx >> 7) & 0xff` (→ CLA word1 bits[7:0], the HIGH 8 bits). Decode:
+`cmd_flow_id = (word0.byte3 >> 1) | (word1.byte0 << 7)`. The PM engine then fetches flow_info from
+`ram0[cmd_flow_id | dir<<10]` (internal iff `<0x400`, else external DDR). `direct`(word4 bit5) +
+`da_known`(word4 bit20) are required on BOTH directions' entries for the PM/NAT-rewrite stage to run
+(`up_hwoffload`).
+
+### desOut descriptor latch (CLA egress descriptor)
+`0x9238c394 .. 0x9238c3b4` (desOut[0..8]) = shared per-packet snapshot of the last CLA-*egress*
+descriptor (e.g. the resolved Outport: gemport_uni_id=5→WAN, =3→lan2). ⚠ SHARED/not pinned to a
+specific packet — use for spot-decode only, trust the counters for verdicts.
 
 ## SBRAG / PP_BRG (bridge: FDB/VLAN/flood)
 
@@ -971,7 +1126,7 @@ addr→bank: 0..0xff=ram2, 0x100..17f=ram3, 180..1bf=ram4, 1c0..1ff=ram5, 200..2
 
 **Block base ≈ `0x92384000`** (zx_sadmregtable). Role: per-flow policing, token bucket, pps limits, indirect RAM
 
-**2026-06-01 placement/init (mac_to_spa_admit_re.md):** SADM is **DOWNSTREAM of CLA** in the RX pipeline (SMAC→SOPC-bridge→SPA→SDET→CLA→**SADM**→RED→QMG), and is **per-flow/per-subscriber, NOT per-ingress-port** — it cannot gate the SMAC→SPA handoff. Stock inits it **globally only**: `adm_en 0x92384000[0]=1`, `adm_trap_en 0x92384000[5]=1`, `one_second 0x9238400c=200000000` (`tm_pon_pp_sadm_initial`); the per-port bucket helper `sadm_port_limit` is **never called**, `pon_pp_sadm_init` is a no-op. **Mainline does not init SADM at all.** Indirect RAM: cmd `0x92384014` / done `0x92384018`[0] / data `0x9238401c`. → SADM EXONERATED for the port1 ingress anomaly.
+**2026-06-01 placement/init (mac_to_spa_admit_re.md):** SADM is **per-flow/per-subscriber, NOT per-ingress-port** — it cannot gate the SMAC→SPA handoff. ⚠ **Pipeline position CORRECTED 2026-07-04:** `queue_subsystem_re` §A and the stock statistics chain (`undecoded_pipeline_counters`) both place SADM **UPSTREAM of CLA** (SPA→**SADM**→CLA→ADM→PM→DPA→SBRG→RED→QMG); the older mac_to_spa_admit_re claim ~~"DOWNSTREAM of CLA" (SPA→SDET→CLA→SADM→RED→QMG)~~ is superseded. Either way SADM sits downstream of the SMAC→SPA admit, so the port1 exoneration below stands. Stock inits it **globally only**: `adm_en 0x92384000[0]=1`, `adm_trap_en 0x92384000[5]=1`, `one_second 0x9238400c=200000000` (`tm_pon_pp_sadm_initial`); the per-port bucket helper `sadm_port_limit` is **never called**, `pon_pp_sadm_init` is a no-op. **Mainline does not init SADM at all.** Indirect RAM: cmd `0x92384014` / done `0x92384018`[0] / data `0x9238401c`. → SADM EXONERATED for the port1 ingress anomaly.
 
 | phys (sub0) | reg_id | R/W | bits | semantic name | conf |
 |---|---|---|---|---|---|
@@ -997,49 +1152,72 @@ addr→bank: 0..0xff=ram2, 0x100..17f=ram3, 180..1bf=ram4, 1c0..1ff=ram5, 200..2
 | `0x92384284` | 19 | RW | [2:0] | up_tf_mode | 🟡 |
 | `0x92384284` | 20 | RW | [5:3] | dn_tf_mode | 🟡 |
 
-## ADM (admission/policing)
+## ADM (admission / CPU-queue PPS policer)  ✅ (decoded 2026-07-04, `queue_subsystem_re`)
 
-**Block base ≈ `0x92394000`** (zx_admregtable). Role: turnon, color, bucket fill, protocol pkt counters, indirect RAM
+**Block base `0x92394000`** (`zx_admregtable`, fpga idx 0xe5000). Role: **admission-side rate
+limiter on the trap path**, sitting BEFORE RED/QMG in the CPU-trap pipeline
+(…SADM→CLA→**ADM**→PM→DPA→SBRG→RED→QMG→CPU-DMA). Per-CPU-queue PPS caps + per-flow srTCM/trTCM
+buckets. Decoded from `adm_set_policing_enable`@tm:17197, `adm_set_pass_pktcnt_persec`@17296,
+`tm_pon_pp_adm_initial`@42773, `zte_api_pp_set_cpu_queue_rate`@57522.
+
+**★ Mainline initializes NONE of this block** — it is the single queue-subsystem mechanism stock has
+and mainline entirely lacks, and the prescribed fix for the flow-CHURN trap-queue latch (enable the
+per-queue policer on data trap queues q3/q4/q6; excess first-packets then drop at ADM, never charge
+`drop_RED` `0x921da044`). See `queue_subsystem_re` §D for the poke recipe.
 
 | phys (sub0) | reg_id | R/W | bits | semantic name | conf |
 |---|---|---|---|---|---|
-| `0x92394000` | 0 | RW | [0] | turnon_enable | 🟡 |
+| `0x92394000` | 0 | RW | [0] | **turnon_enable** (ADM master; stock sets 1 at boot) | ✅ |
 | `0x92394000` | 1 | RW | [2] | credit_cmp_mode | 🟡 |
 | `0x92394000` | 2 | RW | [4] | color_enable | 🟡 |
-| `0x92394004` | 4 | RW | [17:0] | bucket_fill_time | 🟡 |
+| `0x92394004` | 4 | RW | [17:0] | bucket_fill_time (runtime API uses 0x1869) | ✅ |
 | `0x92394008` | 3 | RW | [20:0] | flow_stc_mode | 🟡 |
-| `0x92394014` | 5 | RW | [27:0] | indirect_rw_cmd | 🟡 |
-| `0x92394018` | 6 | R | [0] | ind_acc_done | 🟡 |
-| `0x9239401c` | 7 | RW | [31:0] | ind_acc_data (x4, +0x4/idx) | 🟡 |
-| `0x9239402c` | 8 | RW | [5:0] | spend_byte_cfg | 🟡 |
-| `0x92394040` | 9 | RW | [23:0] | protocol_pkt_map | 🟡 |
-| `0x92394044` | 10 | RW | [23:0] | protocol_pkt_map(2) | 🟡 |
-| `0x92394048` | 11 | RW | [27:0] | one_second | 🟡 |
-| `0x92394080` | 14 | RW | [20:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
-| `0x92394080` | 12 | RW | [21] | *semantics unknown* (x9, +0x4/idx) | ❓ |
-| `0x923940c0` | 15 | RW | [20:0] | *semantics unknown* (x9, +0x4/idx) | ❓ |
-| `0x923940c0` | 13 | RW | [21] | *semantics unknown* (x9, +0x4/idx) | ❓ |
-| `0x92394100` | 16 | R | [31:0] | dn_pass_protocal_packtcnt (x9, +0x4/idx) | 🟡 |
-| `0x92394140` | 17 | R | [31:0] | up_pass_protocal_packtcnt (x9, +0x4/idx) | 🟡 |
-| `0x92394180` | 18 | R | [31:0] | dn_drop_protocal_packtcnt (x9, +0x4/idx) | 🟡 |
-| `0x923941c0` | 19 | R | [31:0] | up_drop_protocal_packtcnt (x9, +0x4/idx) | 🟡 |
-| `0x9239422c` | 20 | R | [31:0] | down_drop_protocol_pktcnt | 🟡 |
-| `0x92394230` | 21 | R | [31:0] | up_drop_protocol_pktcnt | 🟡 |
+| `0x92394014` | 5 | RW | [27:0] | indirect_rw_cmd (per-FLOW srTCM/trTCM buckets `adm_set_bucket_c/_e` = the QoS per-flow policer) | ✅ |
+| `0x92394018` | 6 | R | [0] | ind_acc_done | ✅ |
+| `0x9239401c` | 7 | RW | [31:0] | ind_acc_data (x4, +0x4/idx) | ✅ |
+| `0x9239402c` | 8 | RW | [5:0] | spend_byte_cfg (runtime API uses 0x18) | ✅ |
+| `0x92394040` | 9 | RW | [23:0] | **UP queue→bucket remap** (3 bits per CPU queue; never written at boot → HW default) | ✅ |
+| `0x92394044` | 10 | RW | [23:0] | **DN queue→bucket remap** (dir0; never written at boot) | ✅ |
+| `0x92394048` | 11 | RW | [27:0] | **one_second** = tick base = 200000000 (0xBEBC200) = 200 MHz clock ticks/sec | ✅ |
+| `0x92394080` +q*4 | 14 | RW | [20:0] | **UP per-CPU-queue pass-pkt-per-sec** (q=0..7; dir==1 bank) | ✅ |
+| `0x92394080` +q*4 | 12 | RW | [21] | **UP per-queue policing enable** | ✅ |
+| `0x923940c0` +q*4 | 15 | RW | [20:0] | **DN per-CPU-queue pass-pps** (dir==0 bank) | ✅ |
+| `0x923940c0` +q*4 | 13 | RW | [21] | **DN per-queue policing enable** | ✅ |
+| `0x92394100` +q*4 | 16 | R | [31:0] | DN per-queue PASS counter (RO) | ✅ |
+| `0x92394140` +q*4 | 17 | R | [31:0] | UP per-queue PASS counter (RO) | ✅ |
+| `0x92394180` +q*4 | 18 | R | [31:0] | **DN per-queue DROP counter (RO) — the churn-fix oracle** | ✅ |
+| `0x923941c0` +q*4 | 19 | R | [31:0] | UP per-queue DROP counter (RO) | ✅ |
+| `0x9239422c` | 20 | R | [31:0] | down_drop_protocol_pktcnt (aggregate) | ✅ |
+| `0x92394230` | 21 | R | [31:0] | up_drop_protocol_pktcnt (aggregate) | ✅ |
 
-## DPA (downstream packet analysis)
+**Stock boot sequence (last-write-wins):** tm.ko `tm_pon_pp_adm_initial` sets turnon=1,
+one_second=200e6, pps q0=800/q3=400/q4=400/q5=400/q6=1000 (both dirs, enable=1); switch.ko
+`chip_tm_init` then overrides via `zte_api_pp_set_cpu_queue_rate` → **final: q0=8000, q5=8000
+(storm control on broadcast/ARP + ICMP), q1-4/6-7 = enable-bit set + pps=0** (pps=0 with enable=1
+appears to mean UNLIMITED — the data trap queues are NOT policed by stock, flag: verify live).
+The "per-protocol pass/drop proto0=ARP..5=ICMP" in older notes = these per-QUEUE counters (ARP rides
+q0, ICMP q5). Per-flow policer (attachable to an offloaded session) = the indirect srTCM/trTCM buckets.
 
-**Block base ≈ `0x92398000`** (zx_dparegtable). Role: protocol cpu-pps en, default pri, tpid select
+## DPA (downstream packet analysis)  — the DN PARSE stage (decoded 2026-07-04)
+
+**Block base `0x92398000`** (`zx_dparegtable`). Role: downstream (WAN→LAN) protocol analysis /
+parse verdict; feeds the CPU-PPS hookup for the ADM policer. `0x92398000` bits[12:6] = per-port
+(port0..6) `protocol_pkt_aly_en` (`dpa_set_protocol_pkt_aly_en`, tm:42978); `0x92398014[0]` =
+`protocol_cpu_pps_en`. **Mainline does zero DPA writes** (classification works at reset defaults, but
+the CPU-pps hookup bit's reset default is unknown — pair with the ADM fix). Verdict counter
+`0x9239810c` (byte-packed) is the DN-parse disposition oracle.
 
 | phys (sub0) | reg_id | R/W | bits | semantic name | conf |
 |---|---|---|---|---|---|
-| `0x92398000` | 0 | RW | [6] | *semantics unknown* | ❓ |
-| `0x92398000` | 1 | RW | [7] | *semantics unknown* | ❓ |
-| `0x92398000` | 2 | RW | [8] | *semantics unknown* | ❓ |
-| `0x92398000` | 3 | RW | [9] | *semantics unknown* | ❓ |
-| `0x92398000` | 4 | RW | [10] | *semantics unknown* | ❓ |
-| `0x92398000` | 5 | RW | [11] | *semantics unknown* | ❓ |
-| `0x92398000` | 6 | RW | [12] | *semantics unknown* | ❓ |
-| `0x92398014` | 7 | RW | [0] | protocol_cpu_pps_en | 🟡 |
+| `0x92398000` | 0 | RW | [6] | **protocol_pkt_aly_en[port0]** | ✅ |
+| `0x92398000` | 1 | RW | [7] | **protocol_pkt_aly_en[port1]** | ✅ |
+| `0x92398000` | 2 | RW | [8] | **protocol_pkt_aly_en[port2]** | ✅ |
+| `0x92398000` | 3 | RW | [9] | **protocol_pkt_aly_en[port3]** | ✅ |
+| `0x92398000` | 4 | RW | [10] | **protocol_pkt_aly_en[port4]** | ✅ |
+| `0x92398000` | 5 | RW | [11] | **protocol_pkt_aly_en[port5]** | ✅ |
+| `0x92398000` | 6 | RW | [12] | **protocol_pkt_aly_en[port6]** | ✅ |
+| `0x92398014` | 7 | RW | [0] | protocol_cpu_pps_en (CPU-pps hookup for ADM) | ✅ |
+| `0x9239810c` | — | R | bytes | **DN parse verdict: fwd[31:24]/drp[23:16]/cpy[15:8]/trp[7:0]** (dpa_trp climbing = DN-parse loss) | ✅ |
 | `0x92398038` | 8 | RW | [23:0] | pon_detault_pri | 🟡 |
 | `0x92398080` | 9 | RW | [2:0] | tpid_i_sel_i (base) (x10, +0x8/idx) | 🟡 |
 | `0x92398080` | 10 | RW | [5:3] | *semantics unknown* (x10, +0x8/idx) | ❓ |
@@ -1058,18 +1236,93 @@ addr→bank: 0..0xff=ram2, 0x100..17f=ram3, 180..1bf=ram4, 1c0..1ff=ram5, 200..2
 | `0x92398084` | 23 | RW | [20:18] | *semantics unknown* (x10, +0x8/idx) | ❓ |
 | `0x92398084` | 24 | RW | [23:21] | *semantics unknown* (x10, +0x8/idx) | ❓ |
 
-## PP_PM (PP port-mapper)
+## PP_PM = PM packet-modifier / HW-NAT rewrite engine (0x9239c000)  ✅ (DECODED + on-device-validated 2026-07)
 
-**Block base ≈ `0x9239c014`** (zx_pppmregtable). Role: PP port-mapper cfg (semantics largely unknown)
+**Block base `0x9239c000`** (formerly labelled "PP_PM port-mapper, semantics unknown" — that was
+wrong; this block is the **Packet Modifier**). It performs HW SNAT/DNAT (IP+L4 port), DMAC/SMAC set,
+TTL--, and IP/L4-checksum fixup on HW-forwarded flows. **Do NOT confuse with the "PM (G.988
+port-mapper)" authorizer at `0x921e0000`** — different block, different role. Sources:
+`nat_offload_re_2026-07-03`, `download_pm_rewrite_2026-07-04` (validated: client TCP accepts a
+de-NAT'd HW-forwarded frame), `up_hwoffload_2026-07-04`, `pp_pm_table_re`.
 
-| phys (sub0) | reg_id | R/W | bits | semantic name | conf |
+✅ **Driver-base discrepancy — RESOLVED (2026-07-04 verification pass):** `e->base` is the "npp"
+DT window at **`0x921c0000`** (`devm_platform_ioremap_resource_byname(pdev, "npp")`,
+zx-eth-main.c:7700), so the validated path `e->base + 0x1DC014` = **phys `0x9239c014`** —
+**`0x9239c000` IS the PM base** (npp + 0x1DC000). The `zx-dsa.c` `ZX_PM_PHYS = 0x921dc000`
+(= npp + 0x1c000, where NO PM block exists — a mis-derived phys) is a **stale/wrong constant**:
+writes through that mapping were **proven NOT to commit** to the live datapath PM RAM
+(readback-verify — word1 never lands; documented in the `include/linux/dsa/zte.h` comment block).
+Because of exactly this, the DSA binder delegates ALL PM access to the conduit's working path via
+`zx_pm_ops` (registered at conduit probe); the binder's local `pm_regs` mapping survives only as a
+pr_warn'd fallback (zx-dsa.c:689). Nothing should ever use `0x921dc000`.
+
+### Indirect interface + ram_id map (verified vs driver + decomp)
+| reg | phys | meaning |
+|---|---|---|
+| CMD  | `0x9239c014` | `addr | (ram_id<<22) | (rw<<27)` — CMD-first, then data DESCENDING (data-first does NOT commit) |
+| DONE | `0x9239c018` | poll bit0 |
+| DATA0..3 | `0x9239c01c + i*4` | data slots 0..3 |
+| DATA4..7 | `0x9239c100 + (i-4)*4` | data slots 4..7 |
+
+| ram_id | table | words | addr range | role | conf |
 |---|---|---|---|---|---|
-| `0x9239c014` | 0 | RW | [27:0] | *semantics unknown* | ❓ |
-| `0x9239c018` | 1 | RW | [0] | *semantics unknown* | ❓ |
-| `0x9239c01c` | 2 | RW | [31:0] | *semantics unknown* (x5, +0x4/idx) | ❓ |
-| `0x9239c034` | 5 | RW | [0] | *semantics unknown* | ❓ |
-| `0x9239c034` | 4 | RW | [6:1] | *semantics unknown* | ❓ |
-| `0x9239c100` | 3 | RW | [31:0] | *semantics unknown* (x5, +0x4/idx) | ❓ |
+| 0 | **flow_info** | 3 | `flow_id \| dir<<10` (dir bit10; 0=UP/SNAT, 1=DN/DNAT) | per-flow rewrite/enable descriptor + NAT L4 ports | ✅ |
+| 1 | **next_hop** | 3 | 0..0x1ff | new DMAC (6B) + the ONE new/NAT'd IP (4B) | ✅ |
+| 2 | vlan_modify | 1 | 0..0x3ff | C/S VLAN tag values | 🟡 |
+| 3 | **cmd_ram** | 1 | 0..0x1fff | VLAN/tunnel edit microcode ONLY (no L3/L4/MAC/TTL opcodes); NAPT uses no-op terminator `0x00800000` | ✅ |
+| 4 | e8_qos | 1 | 0..0x1ff | DSCP/pri modify | 🟡 |
+| 5 | modify_ram | 1 | 0..0x1ff | generic 32-bit; NOT used by the L3 fast path | 🟡 |
+| 6 | **sub_ram** | 2 | 0..0x3ff | pointers: cmd_addr→ram3, vlan_addr→ram2, modi_dat→ram5 + swap/DSCP/pppoe/dslite/v6rd flags | ✅ |
+| 0xc | cpu_mac / per-egress SMAC | — | — | egress-port SMAC source (`zx_pp_pm_set_cpu_mac`) | 🟡 |
+
+### flow_info entry (ram0) — THE NAT descriptor, 3 words (authoritative: `pp_pm_set_flow_info` tm:18340 + `operInfoAdd` tm:51760)
+```
+word0: dmac_en(b0) smac_en(b1) nat_dport[17:2] nat_sport[31:18]
+word1: nat_sport[15:14](b0-1) hl_ttl_en(b2) tcp_udp_chk_en(b3) ip_chk_en(b4)
+       dport_en(b5) sport_en(b6) dip_en(b7) sip_en(b8) subnet_id[12:9]
+       flow_pri[15:13] flow_pri_en(b16) pri_dscp_tc_en(b17)
+       next_hop_idx[26:18] sub_ram_index[31:27]
+word2: sub_ram_index[4:0]  (rest unused)
+```
+- Only ONE IP is rewritten per flow (`next_hop.ip`); `sip_en` XOR `dip_en` picks src vs dst. Both L4
+  ports have their own value slot. SNAT half sets sip_en+sport_en; DNAT half sets dip_en+dport_en;
+  whenever any field changes, `ip_chk_en`+`tcp_udp_chk_en` must be on; `hl_ttl_en` for routed transit.
+- **Fetch address** the CLA hands the PM engine = `cmd_flow_id | (dir<<10)`; **internal ram0** when
+  `cmd_flow_id < 0x400`, else EXTERNAL DDR (see carve below). ✅ verified.
+- ⚠ **known-bad values → black-hole:** hardcoded `next_hop_idx=5` (empty slot) → DMAC = 00:00:00:00:00:00;
+  SNAT enables on the DN half → never de-NATs dst. Both were mainline bugs, now fixed
+  (`download_pm_rewrite`). Verified-good example — DN slot9: `fi[0]=0x00027101 fi[1]=0x002402bc`
+  (dmac_en, dip_en, dport_en=40000, ip/tcp chk, next_hop_idx=9); UP slot8: `fi[0]=0x71000001
+  fi[1]=0x0020035e` (dmac_en, sip_en, sport_en=40000, next_hop_idx=8).
+
+### next_hop RAM (ram1) — 3 words (`pp_pm_set_next_hop_ram_info` tm:18623)
+`slot0 = ip[0]<<24|ip[1]<<16|ip[2]<<8|ip[3]` (IP as one BE word) · `slot1 = mac[2..5]` · `slot2 = mac[0]<<8|mac[1]`.
+= `{ new_MAC (rewritten DMAC / L2 next-hop), new_IP (the one NAT'd L3 address) }`.
+
+### sub_ram (ram6) — 2 words (`pp_pm_set_sub_ram_info` tm:19413)
+byte0=dscp_tc_val; byte1: dscp_tc_en(b0)/dei_en(b1)/dslite_en(b2)/pppoe_en(b3)/v6rd_en(b4);
+`cmd_addr` = byte1[7:5]|byte2<<3|(byte3&3)<<11 (→ram3); `vlan_addr` = byte3>>2|(byte4&0xf)<<6 (→ram2);
+`modi_dat_addr` = byte4>>4|(byte5&0x1f)<<4 (→ram5); `swap_en` = byte5 b5. NAPT default: all flags 0,
+cmd_addr→no-op terminator.
+
+### cmd_ram microcode (ram3) — VLAN/tunnel edits only
+Record → `pp_pm_set_cmd_ram_info`: `data0 = modify_data[15:0] | modify_cmd<<16 | ip_chk<<21 |
+tcp_chk<<22 | last_cmd<<23 | dat_type<<24`. Opcodes are VLAN push/pop/swap + PPPoE/DS-Lite/6rd encap/decap.
+**No SIP/DIP/SPORT/DPORT/DMAC/TTL opcode** (those are flow_info bits). NAPT keeps `0x00800000`, last_cmd=1.
+
+### EXTERNAL DDR flow-info carve (for `cmd_flow_id ≥ 0x400`)
+`pp_pm_set_external_flow_info` (tm:18535). Carve mapped at virt `0xf1000000`: **acl @ +0x20000** (4 MiB),
+pm @ +0x420000 (1 MiB). Flow tables at `(0xf140000 | (dir?0x9c00:0x1c00) + idx) * 0x10` (16-byte stride).
+Driver: `pm_ext_phys = acl_base − 0x20000`; DDR base via `pon_pp_set_pm_base_addr` (ONU reg 0xe). DN's
+`cmd_flow_id = pm_slot*128+1` lands ≥0x400 → this DDR path (the driver also fills it, so DN works); UP was
+repacked to `cmd_flow_id = pm_slot` (<0x400) → internal ram0[pm_slot] (`up_hwoffload`).
+
+### PM counters (plain MMIO reads; base 0x9239c000)
+| phys | field | meaning | conf |
+|---|---|---|---|
+| `0x9239c080` | full32 | pm_send | ✅ |
+| `0x9239c088` | full32 | pm_recv | ✅ |
+| `0x9239c0a0` | fwd[31:16] / trap[15:0] | PM forward / trap counts | ✅ |
 
 ## SMAC[N] (per-port ethernet MAC)
 
@@ -1284,7 +1537,7 @@ Decomp cites use `tm:NNNN`=`decomp_all_tm.c`, `plat:NNNN`=`decomp_all_plat_zxylz
 | SADM | 0x92384000 | subscriber admission/policing (PPS, token bucket) | thin |
 | ADM | 0x92394000 | admission/policing + protocol pass/drop counters | thin |
 | DPA | 0x92398000 | downstream protocol analysis, cpu-pps gate | thin |
-| PP_PM | 0x9239c000 | PP port-mapper (semantics largely unknown) | thin |
+| PM (packet-modifier) | 0x9239c000 | HW-NAT rewrite engine (flow_info/next_hop/cmd_ram; formerly "PP_PM, unknown") | ✅ decoded |
 | SMAC[N] | 0x92200000+N*0x40000 | per-port ethernet MAC | rich |
 | ETH_TM2 | 0x923a0000 | U-Boot direct-egress mux + PON_PP_TM_CFG | rich |
 | UOPC | 0x921d8000 | upstream OPC / tcont (PON) | thin |
@@ -1617,12 +1870,20 @@ flood/bcast/mcast, isolation, mirror; two indirect FDB tables.
   (ALTO), but RX-to-CPU works → the punt gate is effectively on for RX. Not swept for the egress
   direction. Semantics 🟡 inferred.
 
-## 3.18 PP_PM — PP port-mapper  ❓ (thin)
-**Base 0x9239c000** (`zx_pppmregtable` base 0x9239c014). Role: PP port-mapper cfg — **semantics
-largely unknown**.
-- **Key regs:** unknown CMD-like `0x9239c014`, `0x9239c018`, data `0x9239c01c..` / `0x9239c100..`,
-  `0x9239c034`. All ❓ (structure from table, no decomp-named setter resolved).
-- **Verified/ruled out:** ❓ no findings touch it; not implicated. Documented for completeness.
+## 3.18 PM (packet-modifier / HW-NAT engine) — was "PP_PM port-mapper"  ✅ (DECODED 2026-07)
+**Base 0x9239c000** (`zx_pppmregtable`; indirect base `0x9239c014`). **CORRECTED:** this is NOT a
+"port-mapper with unknown semantics" — it is the **PM packet-modifier / HW-NAT rewrite engine**
+(SNAT/DNAT + DMAC/SMAC + TTL-- + checksums), validated on-device. See PART 2 → "PP_PM = PM
+packet-modifier / HW-NAT rewrite engine" for the full ram_id map, flow_info/next_hop layouts, the
+external DDR carve, and the cmd_flow_id fetch. (Not to be confused with §3.8 PM = the G.988
+source→egress authorizer at 0x921e0000.)
+- **Key regs:** indirect CMD `0x9239c014` / DONE `0x9239c018` / DATA `0x9239c01c..` + `0x9239c100..`;
+  counters pm_send `0x9239c080`, pm_recv `0x9239c088`, fwd/trap `0x9239c0a0`.
+- **Driver-base flag — RESOLVED (2026-07-04):** `0x9239c000` is the PM base (e->base = npp
+  `0x921c0000`, + 0x1DC014 = 0x9239c014). `zx-dsa.c` `ZX_PM_PHYS=0x921dc000` is a wrong constant
+  (npp+0x1c000 — no PM block there; proven non-committing by readback-verify). The DSA binder
+  delegates PM access to the conduit via `zx_pm_ops` (see include/linux/dsa/zte.h); its local
+  mapping is a pr_warn'd fallback only.
 
 ## 3.19 SMAC[N] — per-port ethernet MAC  ✅ (rich)
 **Base 0x92200000 + N*0x40000** (MAC0=0x92200000 … **MAC2/host=0x92280000** … MAC4=0x92300000).
