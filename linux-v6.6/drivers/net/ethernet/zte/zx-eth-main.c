@@ -46,6 +46,7 @@
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/skbuff.h>
+#include <linux/ip.h>
 #include <linux/spinlock.h>
 
 #include <linux/debugfs.h>
@@ -2464,12 +2465,63 @@ static void zx_ft_way_slots(u16 raw, u8 ram[5], u16 addr[5])
 	ram[4] = 6; addr[4] = 0x200 + (raw & 0x7);
 }
 
+/* Parsed NAT rewrite for one offloaded direction (from the flow's MANGLE actions).
+ * A HW fast-flow is unidirectional: it rewrites exactly ONE L3 address (src for the
+ * SNAT/upload half, dst for the DNAT/download half) plus optionally its L4 port. */
+struct zx_ft_nat {
+	bool   snat;		/* rewrite source IP (upload/SNAT half) */
+	bool   dnat;		/* rewrite dest IP   (download/DNAT half) */
+	bool   sport_set;	/* rewrite source L4 port */
+	bool   dport_set;	/* rewrite dest L4 port */
+	__be32 new_ip;		/* the ONE rewritten address (src if snat, dst if dnat) */
+	u16    new_sport;	/* host-order replacement source port */
+	u16    new_dport;	/* host-order replacement dest port */
+};
+
+/* Build the 3-word PM flow_info entry (ram_id 0). Field layout decoded from stock
+ * pp_pm_set_flow_info (tm.c:18340) / findings/nat_offload_re: word0 = dmac_en(b0) |
+ * nat_dport[17:2] | nat_sport[31:18]; word1 = nat_sport[15:14] | hl_ttl_en(b2) |
+ * tcp_udp_chk_en(b3) | ip_chk_en(b4) | dport_en(b5) | sport_en(b6) | dip_en(b7) |
+ * sip_en(b8) | subnet_id[12:9] | next_hop_idx[26:18].  NAT/DMAC/TTL/checksum are done
+ * by these enable bits + the next_hop RAM (NOT by cmd_ram, which is VLAN/tunnel only).
+ *
+ * The old opaque constants (fi[0]=(0x0de8<<16)|slot; fi[1]=0x0014035c) were a byte-
+ * copied stock capture that (a) hardcoded next_hop_idx=5 — an empty slot, so every
+ * flow's DMAC was rewritten to 00:00:00:00:00:00 and the frame black-holed — and
+ * (b) always set sip_en/sport_en (source rewrite) for BOTH directions, so the DNAT
+ * (download) half never de-NAT'd the dest back to the LAN client. */
+static void zx_ft_build_flow_info(u32 fi[8], const struct zx_ft_nat *n,
+				  u16 next_hop_idx)
+{
+	bool rw = n->snat || n->dnat || n->sport_set || n->dport_set;
+	u32 w0 = 0, w1 = 0;
+
+	w0 |= 1u << 0;					/* dmac_en (next-hop MAC) */
+	w0 |= ((u32)n->new_dport & 0xffff) << 2;	/* nat_dport[17:2]  */
+	w0 |= ((u32)n->new_sport & 0x3fff) << 18;	/* nat_sport[31:18] */
+
+	w1 |= ((u32)n->new_sport >> 14) & 0x3;		/* nat_sport[15:14] */
+	w1 |= 1u << 2;					/* hl_ttl_en (routed transit) */
+	if (rw)			w1 |= 1u << 3;		/* tcp_udp_chk_en */
+	if (rw)			w1 |= 1u << 4;		/* ip_chk_en */
+	if (n->dport_set)	w1 |= 1u << 5;		/* dport_en */
+	if (n->sport_set)	w1 |= 1u << 6;		/* sport_en */
+	if (n->dnat)		w1 |= 1u << 7;		/* dip_en */
+	if (n->snat)		w1 |= 1u << 8;		/* sip_en */
+	w1 |= 1u << 9;					/* subnet_id = 1 (per stock capture) */
+	w1 |= ((u32)next_hop_idx & 0x1ff) << 18;	/* next_hop_idx[26:18] */
+
+	fi[0] = w0;
+	fi[1] = w1;
+	fi[2] = fi[3] = fi[4] = fi[5] = fi[6] = fi[7] = 0;
+}
+
 /* Write the proven recipe (PM tables + the CLA hash entry at the flow's own bucket
  * in all 5 way banks) for per-slot multi-flow coexistence. Returns raw hash or errno. */
 static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 				__be32 daddr, __be16 sport, __be16 dport,
 				const u8 nh_mac[ETH_ALEN], u8 eg_regport,
-				u16 pm_slot)
+				u16 pm_slot, const struct zx_ft_nat *nat)
 {
 	u32 cla[15];
 	u32 nh[8] = {0}, fi[8] = {0}, sub[8] = {0}, cmd[8] = {0};
@@ -2478,14 +2530,18 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	u16 raw;
 	int w, rc = 0;
 
-	nh[0] = ntohl(daddr);
+	/* next_hop RAM (ram1): the ONE rewritten L3 address + the next-hop DMAC.
+	 * For a NAT half that is the SNAT src / DNAT dst address (nat->new_ip);
+	 * for a plain forward it is daddr (informational). */
+	nh[0] = ntohl((nat->snat || nat->dnat) ? nat->new_ip : daddr);
 	nh[1] = ((u32)nh_mac[2] << 24) | ((u32)nh_mac[3] << 16) |
 		((u32)nh_mac[4] << 8) | nh_mac[5];
 	nh[2] = ((u32)nh_mac[0] << 8) | nh_mac[1];
 	zx_pp_pm_write_entry(e, 1, pm_slot, nh);
 
-	fi[0] = (0x0de8u << 16) | pm_slot;		/* rewrite-arm | next_hop_idx */
-	fi[1] = 0x0014035c;
+	/* flow_info (ram0): per-direction rewrite-enable descriptor. next_hop_idx MUST
+	 * be pm_slot (the slot we just wrote next_hop to) — the old code hardcoded 5. */
+	zx_ft_build_flow_info(fi, nat, pm_slot);
 	zx_pp_pm_write_entry(e, 0, pm_slot, fi);
 
 	sub[0] = pm_slot;				/* ram6 sub_ram -> ram3 cmd idx */
@@ -2529,9 +2585,12 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	}
 
 	dev_info(e->dev,
-		 "[phase6/ft] recipe: proto=%u %pI4:%u->%pI4:%u eg_rp=%u wan_ing=%d nh=%pM pm_slot=%u -> raw=0x%04x buckets ram2[0x%02x]/3[0x%03x]/4[0x%03x]/5[0x%03x]/6[0x%03x] rc=%d\n",
+		 "[phase6/ft] recipe: proto=%u %pI4:%u->%pI4:%u eg_rp=%u wan_ing=%d nh=%pM pm_slot=%u nat=%s%s%s ip=%pI4 sp=%u dp=%u fi=%08x:%08x -> raw=0x%04x buckets ram2[0x%02x]/3[0x%03x]/4[0x%03x]/5[0x%03x]/6[0x%03x] rc=%d\n",
 		 ip_proto, &saddr, ntohs(sport), &daddr, ntohs(dport),
-		 eg_regport, eg_regport != ZX_WAN_REGPORT, nh_mac, pm_slot, raw,
+		 eg_regport, eg_regport != ZX_WAN_REGPORT, nh_mac, pm_slot,
+		 nat->snat ? "S" : "", nat->dnat ? "D" : "",
+		 (nat->snat || nat->dnat) ? "" : "fwd", &nat->new_ip,
+		 nat->new_sport, nat->new_dport, fi[0], fi[1], raw,
 		 addr[0], addr[1], addr[2], addr[3], addr[4], rc);
 	return rc ? rc : raw;
 }
@@ -2677,6 +2736,7 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	u8 ip_proto = 0;
 	u8 eg_regport;
 	u16 raw, pm_slot = 0;
+	struct zx_ft_nat nat = {0};
 	int i, rc;
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
@@ -2724,6 +2784,37 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 					nh_mac[5] = (v >> 8) & 0xff;
 				}
 				have_mac = true;
+			} else if (act->mangle.htype ==
+				   FLOW_ACT_MANGLE_HDR_TYPE_IP4) {
+				/* nf_flow_table: offset 12=saddr(SNAT), 16=daddr(DNAT);
+				 * val = the new __be32 address (mask covers all 32b). */
+				if (act->mangle.offset ==
+				    offsetof(struct iphdr, saddr)) {
+					nat.new_ip = (__force __be32)act->mangle.val;
+					nat.snat = true;
+				} else if (act->mangle.offset ==
+					   offsetof(struct iphdr, daddr)) {
+					nat.new_ip = (__force __be32)act->mangle.val;
+					nat.dnat = true;
+				}
+			} else if (act->mangle.htype ==
+					FLOW_ACT_MANGLE_HDR_TYPE_TCP ||
+				   act->mangle.htype ==
+					FLOW_ACT_MANGLE_HDR_TYPE_UDP) {
+				/* nf_flow_table: L4 ports at word offset 0. mask
+				 * ~0xffff0000 => rewrite SOURCE port (high 16b),
+				 * val=htonl(port<<16); mask ~0xffff => DEST port
+				 * (low 16b), val=htonl(port). */
+				u32 v = ntohl((__force __be32)act->mangle.val);
+
+				if (act->mangle.mask == (__force u32)~htonl(0xffff0000)) {
+					nat.new_sport = (v >> 16) & 0xffff;
+					nat.sport_set = true;
+				} else if (act->mangle.mask ==
+					   (__force u32)~htonl(0xffff)) {
+					nat.new_dport = v & 0xffff;
+					nat.dport_set = true;
+				}
 			}
 			break;
 		default:
@@ -2760,7 +2851,7 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	}
 
 	rc = zx_ft_install_recipe(e, ip_proto, saddr, daddr, sport, dport,
-				  nh_mac, eg_regport, pm_slot);
+				  nh_mac, eg_regport, pm_slot, &nat);
 	if (rc < 0) {
 		zx_ft_flow_release(e, cls->cookie);
 		return rc;
