@@ -2704,6 +2704,24 @@ static int zx_ft_flow_reserve(struct zx_eth *e, unsigned long cookie, u16 raw,
 			return -EOPNOTSUPP;	/* CLA way0 bucket collision */
 	}
 	if (self >= 0) {			/* REPLACE existing cookie */
+		/* Re-REPLACE of an identical live flow: nf_flow_table re-delivers
+		 * FLOW_CLS_REPLACE continuously while the flow's OTHER direction
+		 * rides the SW fast-path (every SW-forwarded packet sets
+		 * NF_FLOW_HW_REFRESH -> nf_flow_offload_add re-queues). Our UP
+		 * direction deliberately stays SW, so a live download suffers a
+		 * re-REPLACE storm. Rewriting the live CLA buckets + PM slot +
+		 * external flow_info block on every re-delivery is non-atomic
+		 * under active HW lookup -> transient LOOK_UP_MISS trap bursts
+		 * (measured 2026-07-04: ~12% of DN packets punted to SW, RED
+		 * drops killing concurrent handshakes). Same cookie + same raw
+		 * = same tuple (NAT recipe immutable for a conntrack flow) ->
+		 * nothing to update: report "already installed" (rc 1) so the
+		 * caller skips the HW rewrite entirely.
+		 */
+		if (e->ft_flows[self].raw == raw) {
+			*pm_slot = e->ft_flows[self].pm_slot;
+			return 1;
+		}
 		e->ft_flows[self].raw = raw;
 		*pm_slot = e->ft_flows[self].pm_slot;
 		return 0;
@@ -2925,7 +2943,11 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	 * fast-path) while the DOWNSTREAM direction below gets the full HW
 	 * fast path (validated end-to-end at ~64-73 MB/s). */
 	if (eg_regport == ZX_WAN_REGPORT) {
-		dev_info(e->dev,
+		/* Ratelimited: the nf_flow_table re-REPLACE storm (see
+		 * zx_ft_flow_reserve) re-delivers this several times per second
+		 * for every live download; unlimited it floods/wraps the dmesg
+		 * ring (QA 2026-07-04) and each line costs a slow UART printk. */
+		dev_info_ratelimited(e->dev,
 			 "[phase6/ft] cookie=%lx %pI4:%u->%pI4:%u UP dir -> SW fast-path (no HW install)\n",
 			 cls->cookie, &saddr, ntohs(sport), &daddr, ntohs(dport));
 		return 0;
@@ -2938,6 +2960,8 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport,
 			      eg_regport != ZX_WAN_REGPORT);
 	rc = zx_ft_flow_reserve(e, cls->cookie, raw, &pm_slot);
+	if (rc == 1)		/* identical flow already live: idempotent no-op */
+		return 0;
 	if (rc == -EOPNOTSUPP) {
 		dev_info(e->dev,
 			 "[phase6/ft] offload declined: CLA bucket collision cookie=%lx raw 0x%04x (way0 0x%02x owned) -> stays in SW\n",
