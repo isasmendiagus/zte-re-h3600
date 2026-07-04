@@ -97,6 +97,11 @@
 #define NPP_REG_INIT_VAL	0x10008
 #define NPP_REG_SPA_INIT	0x141C0
 #define NPP_REG_UOPC_INIT	0x18000
+/* SOPC↔SMAC bridge glue (see zx_eth_adjust_link / zx_mac_keepalive_fn):
+ * 0x19068 bit(port+5) = transient READY (poll), bit(port) = bridge ENABLE;
+ * 0x19038 bit(port+16) = half-duplex flag. */
+#define NPP_REG_SOPC_BRIDGE	0x19068
+#define NPP_REG_SOPC_DUPLEX	0x19038
 
 /* IDM regs (still within npp_base, offset +0x8000) */
 #define IDM_REG_CONTROL		0x8000
@@ -171,6 +176,31 @@
 #define TM_REG_DMA_TX_DN_BASE	0x10060
 #define TM_REG_DMA_DESC_CNT_DN	0x10068
 #define TM_REG_DMA_REG388	0x10388
+#define TM_REG_DMA_TX_UP_KICK	0x10054	/* write 1 = kick the UP (CPU-TX) DMA queue */
+#define TM_REG_BMU_BP_STAT	0x80DC	/* bits 8:3 = allow_free_cnt refill (see zx_sw_xmit) */
+
+/* RED congestion block, TM-RELATIVE offsets (tm_read/tm_write land at phys
+ * 0x92344xxx = the real RED block; contrast the RED_OFF/NPP-relative defines
+ * at zx_red_block_init which are the documented dead-space latent bug).
+ * DATASHEET.md: RED base 0x92344000. */
+#define TM_RED_CFG		0x4004	/* phys 0x92344004; reset/stock value 0xDE */
+#define TM_RED_CFG_CPUDN_CHARGE	0x40u	/* bit6 = cpuDn out-buffer charge-accounting —
+					 * MUST stay CLEARED on mainline (churn/WAN-RX
+					 * 1024-wedge root cause, [red-arm 2026-07-04]) */
+#define TM_RED_QCFG_CMD		0x4014	/* q_idx | (type<<22) commits the 4 cfg words */
+#define TM_RED_QCFG_READY	0x4018	/* poll bit0 == 1 before commit */
+#define TM_RED_QCFG_DATA0	0x401C
+#define TM_RED_QCFG_DATA1	0x4020
+#define TM_RED_QCFG_DATA2	0x4024
+#define TM_RED_QCFG_DATA3	0x4028
+#define TM_RED_PORT_MASK	0x4040	/* RX port/queue gating mask (stock dump 0x3ff) */
+#define TM_RED_RELEASE_GO	0x4064	/* write 1 = commit release; poll bit0 busy */
+#define TM_RED_RELEASE		0x4068	/* (ring<<14) | (count<<4) | (sop<<3) | qid */
+#define TM_RED_OUT_SHARE_MAX	0x4074	/* stock dump 0x3fff */
+
+/* QMG queue-manager threshold, TM-relative (phys 0x9234c000):
+ * [12:0] = up_ram_thd, [25:13] = dn_ram_thd (DATASHEET.md). */
+#define TM_QMG_THD		0xC000
 
 #define TM_RX_QCNT_BASE		(0x4040 * 4)	/* tm[0x10100+q*4] per-queue RX count */
 /* TM IRQ_MASK semantics: 1 = MASKED. Stock unmasks bits 0 (RX) and 1 (TX).
@@ -217,6 +247,9 @@
 #define PP_BRG_RAM_D2		0x8024	/* data word 2 */
 #define PP_BRG_RAM_TABLE_SIZE	0x8184	/* low 2 bits index a mac_table_size[] of u16 */
 #define PP_BRG_ISOLATE(p)	(0x83C0 + (p) * 4)	/* per-port isolation mask */
+#define PP_BRG_PKTDEAL_FLOOD	0x8340	/* [15:0] pktdeal verdicts (2b/proto),
+					 * [31:24] unknown-unicast fwd REGPORT bitmap
+					 * (sbragRegTable[0x36], phys 0x92388340) */
 #define PP_BRG_VLAN_BASE	0x8000	/* TODO: VLAN tables indirect addressed too */
 #define BRG_RAM_READ		0x08000000
 
@@ -828,7 +861,7 @@ static int zx_sbrag_add_mac(struct zx_eth *e, const u8 *mac, u16 vlan, u8 port)
 static void zx_sbrg_set_unknown_unicast_flood_policy(struct zx_eth *e, u8 cpu_port_bitmap)
 {
 	void __iomem *pp = e->base + PP_OFF;
-	u32 v_old = readl(pp + 0x8340);
+	u32 v_old = readl(pp + PP_BRG_PKTDEAL_FLOOD);
 	/* PP[0x8340] holds TWO fields:
 	 *   bits  8..23: sbragRegTable[0x35] PKTDEAL — 2 bits per port (8 ports).
 	 *                Stock kotrace shows pktdeal=1 for every port → 0b01 in
@@ -843,7 +876,7 @@ static void zx_sbrg_set_unknown_unicast_flood_policy(struct zx_eth *e, u8 cpu_po
 	u32 v = (v_old & 0x000000ffu) |
 		(pktdeal_all << 8) |
 		((u32)cpu_port_bitmap << 24);
-	writel(v, pp + 0x8340);
+	writel(v, pp + PP_BRG_PKTDEAL_FLOOD);
 	dev_info(e->dev,
 		 "SBRG flood policy: PP[0x8340] %08x -> %08x (pktdeal=0x%04x fwd_bitmap=0x%02x)\n",
 		 v_old, v, pktdeal_all, cpu_port_bitmap);
@@ -3869,15 +3902,15 @@ static int zx_red_set_queue_cfg(struct zx_eth *e, u16 q_idx, u32 type,
 	int retries;
 
 	for (retries = 0; retries < 20; retries++)
-		if (tm_read(e, 0x4018) & 1)
+		if (tm_read(e, TM_RED_QCFG_READY) & 1)
 			break;
 	if (retries == 20)
 		return -EBUSY;
-	tm_write(e, 0x4014, (u32)q_idx | (type << 22));
-	tm_write(e, 0x4028, w3);
-	tm_write(e, 0x4024, w2);
-	tm_write(e, 0x4020, w1);
-	tm_write(e, 0x401c, w0);
+	tm_write(e, TM_RED_QCFG_CMD, (u32)q_idx | (type << 22));
+	tm_write(e, TM_RED_QCFG_DATA3, w3);
+	tm_write(e, TM_RED_QCFG_DATA2, w2);
+	tm_write(e, TM_RED_QCFG_DATA1, w1);
+	tm_write(e, TM_RED_QCFG_DATA0, w0);
 	return 0;
 }
 
@@ -3945,11 +3978,11 @@ static void zx_tm_red_init(struct zx_eth *e)
 	 * downstream of it: ADM per-queue PPS policing, the RX ring pending
 	 * counters + NAPI budget, and the BMU pool. */
 	{
-		u32 cfg = tm_read(e, 0x4004);
+		u32 cfg = tm_read(e, TM_RED_CFG);
 
-		tm_write(e, 0x4004, cfg & ~0x40u);
+		tm_write(e, TM_RED_CFG, cfg & ~TM_RED_CFG_CPUDN_CHARGE);
 		dev_info(e->dev, "TM RED init: %d failed of 1168 queue configs; RED_CFG 0x%02x -> 0x%02x (bit6 cpuDn charge-accounting OFF)\n",
-			 fail, cfg, cfg & ~0x40u);
+			 fail, cfg, cfg & ~TM_RED_CFG_CPUDN_CHARGE);
 	}
 }
 
@@ -4087,7 +4120,7 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	dev_dbg(e->dev, "  PP[0x82c0]=%08x (DA_LOOKUP_EN bitmap)\n", readl(pp + 0x82c0));
 	dev_dbg(e->dev, "  PP[0x8300]=%08x  [0x8304]=%08x\n",
 		 readl(pp + 0x8300), readl(pp + 0x8304));
-	dev_dbg(e->dev, "  PP[0x8340]=%08x (PKTDEAL+FWD)\n", readl(pp + 0x8340));
+	dev_dbg(e->dev, "  PP[0x8340]=%08x (PKTDEAL+FWD)\n", readl(pp + PP_BRG_PKTDEAL_FLOOD));
 	dev_dbg(e->dev, "  PP[0x8344]=%08x  [0x8380]=%08x  [0x863c]=%08x\n",
 		 readl(pp + 0x8344), readl(pp + 0x8380), readl(pp + 0x863c));
 
@@ -4106,7 +4139,7 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	 * the CPU as loopback (the iter34 wedge). See fdb_learning_enable_re.md
 	 * Q6. NB: CPU is internal port 0 = bit 0x01 (port-5→0 remap), not 0x20.
 	 */
-	writel(0x015555ff, pp + 0x8340);
+	writel(0x015555ff, pp + PP_BRG_PKTDEAL_FLOOD);
 	/* Broadcast / unknown-flood gates. Stock DISABLES forced flooding here:
 	 * broadcast egress is governed only by VLAN-0 membership minus port
 	 * isolation (which excludes the CPU source port → no hairpin). Stock-live
@@ -4428,16 +4461,16 @@ static void zx_tm_dma_init(struct zx_eth *e)
 	 * what silently reverted the zx_tm_red_init clear on the first fixed
 	 * build. See the [red-arm] comment in zx_tm_red_init for the full story
 	 * + findings/fix_churn_red_dnbank_2026-07-04.md. */
-	tm_write(e, 0x4004, 0x0000009e);
-	tm_write(e, 0x4014, 0x0100017f);
-	tm_write(e, 0x4018, 0x00000001);
-	tm_write(e, 0x401c, 0xff803fff);
-	tm_write(e, 0x4020, 0x0100ff80);
-	tm_write(e, 0x4024, 0x00100200);
-	tm_write(e, 0x4028, 0x00000020);
-	tm_write(e, 0x4040, 0x000003ff);
-	tm_write(e, 0x4068, 0x0000001b);
-	tm_write(e, 0x4074, 0x00003fff);
+	tm_write(e, TM_RED_CFG, 0x0000009e);
+	tm_write(e, TM_RED_QCFG_CMD, 0x0100017f);
+	tm_write(e, TM_RED_QCFG_READY, 0x00000001);
+	tm_write(e, TM_RED_QCFG_DATA0, 0xff803fff);
+	tm_write(e, TM_RED_QCFG_DATA1, 0x0100ff80);
+	tm_write(e, TM_RED_QCFG_DATA2, 0x00100200);
+	tm_write(e, TM_RED_QCFG_DATA3, 0x00000020);
+	tm_write(e, TM_RED_PORT_MASK, 0x000003ff);
+	tm_write(e, TM_RED_RELEASE, 0x0000001b);
+	tm_write(e, TM_RED_OUT_SHARE_MAX, 0x00003fff);
 
 	/* SCH (scheduler) globals at TM[0x14000+] — RE'd via SchRegTable + stock dump.
 	 * tm[0x14000] = 0x3d7 is the per-port scheduler ENABLE mask (9-bit, ports
@@ -4461,7 +4494,7 @@ static void zx_tm_dma_init(struct zx_eth *e)
 	tm_write(e, 0x14040, 0x00000249);	/* KEEP (stock dump) */
 
 	/* QMG (queue manager) at TM[0xC000+] — per QmgRegTable + stock dump */
-	tm_write(e, 0xC000, 0x01f40fa0);
+	tm_write(e, TM_QMG_THD, 0x01f40fa0);
 	tm_write(e, 0xC004, 0x00000002);
 	tm_write(e, 0xC00C, 0x000003ff);
 	tm_write(e, 0xC010, 0x00000faa);
@@ -4485,7 +4518,7 @@ static void zx_tm_release_rx_desc_raw(struct zx_eth *e, u8 q, u16 count, u8 sop,
 {
 	int t = 100;
 
-	while (t-- && (tm_read(e, 0x4064) & 1))
+	while (t-- && (tm_read(e, TM_RED_RELEASE_GO) & 1))
 		udelay(2);
 	if (t < 0) {
 		dev_warn_ratelimited(e->dev, "TM release_rx_desc not ready\n");
@@ -4499,9 +4532,9 @@ static void zx_tm_release_rx_desc_raw(struct zx_eth *e, u8 q, u16 count, u8 sop,
 	 * → tm_rx_count/tm_irq freeze at ~1024 = the unicast→CPU wedge. Stock soft_release_rx_desc
 	 * (plat decomp @0x1a8e8) sets bit14 to MATCH the ring it consumed. Fix: bit14=0 to ack the
 	 * ring 0 the poll actually drains. (Explains why Iter U failed: right count, wrong ring.) */
-	tm_write(e, 0x4068, ((u32)ring << 14) | ((u32)count << 4) | (u32)q |
+	tm_write(e, TM_RED_RELEASE, ((u32)ring << 14) | ((u32)count << 4) | (u32)q |
 			    ((u32)sop << 3));
-	tm_write(e, 0x4064, 1);
+	tm_write(e, TM_RED_RELEASE_GO, 1);
 }
 
 static void zx_tm_release_rx_desc(struct zx_eth *e, u8 q, u16 count)
@@ -4944,7 +4977,7 @@ static void zx_mac_keepalive_fn(struct work_struct *w)
 	for (i = 0; i < 5; i++) {	/* [WAN] incl. MAC4/WAN; NULL gephy[i] skipped below */
 		struct phy_device *phy = e->gephy[i];
 		void __iomem *mc = e->base + mac_off(i, MAC_REG_CONTROL);
-		void __iomem *br = e->base + 0x19068;
+		void __iomem *br = e->base + NPP_REG_SOPC_BRIDGE;
 		u32 c, reg;
 		int t;
 		/* [WAN] MAC4 = the WAN port (external ZX5201 PHY @ MDIO 0x08, NOT
@@ -5007,8 +5040,8 @@ static void zx_bmu_dump_fn(struct work_struct *w)
 	rls        = tm_read(e, 0x8098);
 	bppe_avail = tm_read(e, 0x8080);
 	bppi       = tm_read(e, 0x8088);
-	bp_stat    = tm_read(e, 0x80dc);
-	tx_kick    = tm_read(e, 0x10054);
+	bp_stat    = tm_read(e, TM_REG_BMU_BP_STAT);
+	tx_kick    = tm_read(e, TM_REG_DMA_TX_UP_KICK);
 	/* [txflowctrl] TM[0x10058] is CLEAR-ON-READ and owned by the reclaim —
 	 * report the driver's occupancy counter instead of a raw read. */
 	tx_pend    = e->sw_tx_pending;
@@ -5177,7 +5210,7 @@ static int zx_bmu_free_bp(struct zx_eth *e, u16 bp_idx, u8 is_pon)
 		 * tm[0x80dc]=0x50000111, this is 34. The earlier ">> 8" was
 		 * wrong — it gave 1 credit per refill, starving the pool.
 		 */
-		e->bmu_free_credit = (tm_read(e, 0x80dc) >> 3) & 0x3f;
+		e->bmu_free_credit = (tm_read(e, TM_REG_BMU_BP_STAT) >> 3) & 0x3f;
 	}
 	e->tm_bmu_free_fail++;
 	spin_unlock_irqrestore(&e->bmu_free_lock, flags);
@@ -5370,7 +5403,7 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	 * fetching ONE shared ring) double-emitted frames and is the
 	 * documented HW-deadlock topology — kept only behind zx_tx_dualkick=1
 	 * (which also re-shares the DN base, see zx_tm_dma_init). */
-	tm_write(e, 0x10054, 1);	/* upstream kick */
+	tm_write(e, TM_REG_DMA_TX_UP_KICK, 1);	/* upstream kick */
 	if (zx_tx_dualkick)
 		tm_write(e, 0x10064, 1);	/* legacy downstream kick */
 
@@ -5532,7 +5565,7 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 		   e->ft_pm_verify_ok, e->ft_pm_verify_retry, e->ft_pm_verify_fail);
 	seq_printf(s, "BMU_ALLOC_RESULT  = 0x%08x\n", tm_read(e, TM_REG_BMU_ALLOC_RESULT));
 	seq_printf(s, "BMU_ALLOC_CTRL    = 0x%08x\n", tm_read(e, TM_REG_BMU_ALLOC_CTRL));
-	seq_printf(s, "TM[0x10054] TX kick  = 0x%08x\n", tm_read(e, 0x10054));
+	seq_printf(s, "TM[0x10054] TX kick  = 0x%08x\n", tm_read(e, TM_REG_DMA_TX_UP_KICK));
 	/* [txflowctrl] TM[0x10058]/[0x10068] are CLEAR-ON-READ and owned by
 	 * zx_sw_tx_reclaim_locked — no raw reads here. */
 	seq_printf(s, "rx_idx            = %u\n", e->rx_idx);
@@ -6966,7 +6999,7 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 		 * The deeper stock-faithful fix is to make the UP dir HW-forward (no trap).
 		 */
 		writel(now ? 0x03f40fa0 : 0x01f40fa0,
-		       e->base + TM_OFF + 0xc000);
+		       e->base + TM_OFF + TM_QMG_THD);
 
 		/* [Iter 25] SOPC↔SMAC bridge handshake at NPP[0x19068].
 		 * Per agent 8 (phy_mac_rgmii_wedge_re.md) — THIS is the
@@ -6992,7 +7025,7 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 			 * not-ready does NOT latch the bridge (why the old unconditional write
 			 * read back 0). */
 			while (retries-- > 0) {
-				reg = readl(e->base + 0x19068);
+				reg = readl(e->base + NPP_REG_SOPC_BRIDGE);
 				if (reg & ready_bit) {
 					ready = true;
 					break;
@@ -7000,9 +7033,9 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 				udelay(100);
 			}
 			if (ready) {
-				writel(reg | enable_bit, e->base + 0x19068);
+				writel(reg | enable_bit, e->base + NPP_REG_SOPC_BRIDGE);
 				netdev_info(ndev, "[egress] PHY[%d] SOPC bridge ENABLED (ready): NPP[0x19068] %#x → %#x\n",
-					    i, reg, readl(e->base + 0x19068));
+					    i, reg, readl(e->base + NPP_REG_SOPC_BRIDGE));
 			} else {
 				netdev_warn(ndev, "[egress] PHY[%d] SOPC ready bit %d NEVER set (NPP[0x19068]=%#x) — bridge NOT enabled\n",
 					    i, i + 5, reg);
@@ -7013,11 +7046,11 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 			 * duplex != 1 (= half), clears if duplex == 1 (= full).
 			 * For our 1000/FD this should be cleared.
 			 */
-			reg = readl(e->base + 0x19038);
+			reg = readl(e->base + NPP_REG_SOPC_DUPLEX);
 			if (full)
-				writel(reg & ~duplex_bit, e->base + 0x19038);
+				writel(reg & ~duplex_bit, e->base + NPP_REG_SOPC_DUPLEX);
 			else
-				writel(reg | duplex_bit, e->base + 0x19038);
+				writel(reg | duplex_bit, e->base + NPP_REG_SOPC_DUPLEX);
 
 			/* (5) enable — ctrl |= 3 (rx/tx en) as the FINAL step, AFTER the
 			 * bridge handshake (stock pon_npp_smac_enable / enable_part_3,
@@ -7025,9 +7058,9 @@ static void zx_eth_adjust_link(struct net_device *ndev)
 			 * after the bridge is up, so re-assert here to match the order. */
 			writel(readl(mc) | 0x3u, mc);
 		} else {
-			u32 reg = readl(e->base + 0x19068);
+			u32 reg = readl(e->base + NPP_REG_SOPC_BRIDGE);
 
-			writel(reg & ~(1u << i), e->base + 0x19068);
+			writel(reg & ~(1u << i), e->base + NPP_REG_SOPC_BRIDGE);
 		}
 
 		netdev_info(ndev, "PHY[%d]%s link %s @ %d/%s → MAC[%d].ctrl=%#x (port-reset bit %d pulsed)\n",
