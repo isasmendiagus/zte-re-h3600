@@ -2348,15 +2348,47 @@ static void zx_cla_ffe_extract_init(struct zx_eth *e)
 
 /* Build the 15-word CLA ram2 forward entry for the 5-tuple (byte-exact reproduction
  * of the HW-validated forwarding entries; see zx-dsa.c zx_cla_pack_entry).
- * flow_id = the PM flow_info slot this entry's cmd_flow_id (byte0x04) must point at. */
+ * flow_id = the PM flow_info slot this entry's cmd_flow_id must point at.
+ *
+ * [up-hwoffload 2026-07-04] cmd_flow_id is a 15-bit HW field split across TWO
+ * entry bytes (findings/stock_red_drain_up_RE_2026-07-04.md CANDIDATE 2, RE'd
+ * from decomp_all_tm.c tm_acl_get_fastHashRule):
+ *   entry_byte[3] (this word's bits[31:24]) = ((idx & 0x7f) << 1) | 1   (LOW 7 bits)
+ *   entry_byte[4] (next word's bits[7:0])   = (idx >> 7) & 0xff        (HIGH bits)
+ *   => decoded cmd_flow_id = (byte3 >> 1) | (byte4 << 7)
+ * The PM engine fetches flow_info from ram0[cmd_flow_id | dir<<10] (dir: UP=0,
+ * DN=1) when cmd_flow_id < 0x400, else from an EXTERNAL DDR table.
+ *
+ * The OLD packing (still used for DN below) hardcoded byte3=0x03 (decodes to a
+ * constant low-bits=1) and put flow_id in byte4 (the HIGH bits) — so EVERY
+ * entry decoded to cmd_flow_id = flow_id*128+1. For DN (flow_id/pm_slot >= 8)
+ * that is always >=0x400 -> EXTERNAL DDR fetch, which zx_ft_ext_flow_write also
+ * populates at that exact block -> DN works, by coincidence of two matched
+ * "bugs" (see the finding). For UP the same formula resolves the SAME
+ * cmd_flow_id, but nothing was ever written to that DDR block for the UP
+ * direction's values -> the HW fetches erased/zeroed flow_info -> UP
+ * HW-forwarded frames egress with src IP 0.0.0.0 (verified on-device
+ * 2026-07-04, up_observe.py baseline1: 17/34 UP frames src=0.0.0.0).
+ *
+ * FIX (up_idx_fix, UP direction only): pack cmd_flow_id = pm_slot directly
+ * (byte3 = ((pm_slot&0x7f)<<1)|1, byte4 = pm_slot>>7 = 0 for pm_slot<128 —
+ * true for all real slots, ZX_FT_PM_BASE=8..8+ZX_FT_MAX_FLOWS-1=39). Since
+ * pm_slot < 0x400, the HW fetch resolves to INTERNAL ram0[pm_slot | 0<<10] =
+ * ram0[pm_slot] for dir=UP(0) with NO shift — exactly the address
+ * zx_ft_install_recipe already writes via zx_pp_pm_write_entry(e, 0, pm_slot,
+ * fi) (that call previously landed on an address nothing ever fetched from).
+ * DN keeps the OLD (proven, ~760 Mbps) packing untouched — lower risk than
+ * also flipping its fetch to internal ram0. */
 static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
 			   __be16 sport, __be16 dport, u8 flow_id, bool is_wan,
-			   u8 eg_regport)
+			   u8 eg_regport, bool up_idx_fix)
 {
 	u32 s = ntohl(saddr), d = ntohl(daddr);
 	u8 s0 = (s >> 24) & 0xff, s1 = (s >> 16) & 0xff, s2 = (s >> 8) & 0xff, s3 = s & 0xff;
 	u8 d0 = (d >> 24) & 0xff, d1 = (d >> 16) & 0xff, d2 = (d >> 8) & 0xff, d3 = d & 0xff;
 	u16 sp = ntohs(sport), dp = ntohs(dport);
+	u8 idx_lo = up_idx_fix ? (u8)(((flow_id & 0x7f) << 1) | 1) : 0x03;
+	u8 idx_hi = up_idx_fix ? (u8)((flow_id >> 7) & 0xff) : flow_id;
 
 	/* word0 byte0x01 hi-nibble / byte0x02 = gemport_uni_id (the CLA action's egress
 	 * port, in REGPORT space). With da_known=1 the classifier egresses the forwarded
@@ -2367,13 +2399,14 @@ static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
 	 * Outport=5 (WAN); gemport_uni_id=3 -> desOut Outport=3 (lan2), mac2_tx climbs.
 	 * eg_regport is the egress port's regport (WAN=5 for the upload direction, the
 	 * LAN client's regport for the download direction), so this is correct for BOTH
-	 * directions and preserves the old 0x03005044 for WAN-egress (upload) flows. */
-	cla[0] = 0x03000044 | (((u32)eg_regport & 0xf) << 12);
-	/* word1 bytes: [0x04]=cmd_flow_id (PM flow_info slot) [0x05]=0xc0(e8_en)
+	 * directions and preserves the old 0x03005044 for WAN-egress (upload) flows.
+	 * byte3 (bits31:24) is now the LOW 7 bits of cmd_flow_id (idx_lo), see above. */
+	cla[0] = ((u32)idx_lo << 24) | 0x000044 | (((u32)eg_regport & 0xf) << 12);
+	/* word1 bytes: [0x04]=idx_hi (HIGH bits of cmd_flow_id) [0x05]=0xc0(e8_en)
 	 * [0x06]=0x11 [0x07]=0xfa. cmd_flow_id MUST equal the slot the recipe writes
 	 * flow_info/next-hop to (mirror zx-dsa.c zx_cla_pack_entry); hardcoding 0 while
 	 * PM was written at slot 5 pointed the CLA entry at the wrong next-hop. */
-	cla[1] = (0xfau << 24) | (0x11u << 16) | (0xc0u << 8) | (flow_id & 0xff);
+	cla[1] = (0xfau << 24) | (0x11u << 16) | (0xc0u << 8) | idx_hi;
 	cla[2] = 0x00000608;
 	/* word3 is NOT a valid bit — it is the high part of extr_index
 	 * (extr_index = byte0x10<<4 | byte0xf>>4, cla_set_hash_table tm.c:3444).
@@ -2391,7 +2424,24 @@ static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
 	 * content — even filled into all 520 buckets — MISSES; da_known=1 at the correct
 	 * poly-0 slot HITS). `direct` alone (da_known=0) is necessary but NOT sufficient.
 	 * LAN-ingress (upload) forwards without either, so gate both on is_wan. */
-	cla[4] = ((u32)ip_proto << 24) | (is_wan ? 0x00100069 : 0x00000049);
+	/* [up-hwoffload 2026-07-04] `direct`+`da_known` are ALSO required on the UP
+	 * (LAN-ingress, egress=WAN) entry, not just the WAN-ingress/DN one. The
+	 * cmd_flow_id repack (up_idx_fix, idx=pm_slot -> internal ram0[pm_slot])
+	 * alone was NOT sufficient: with it but WITHOUT these bits, UP frames still
+	 * HW-forwarded (cla_up_fwd incremented) but egressed with src IP 0.0.0.0 —
+	 * i.e. the CLA verdict fires and PICKS an egress port either way, but the
+	 * PM/NAT-rewrite stage that reads flow_info/next_hop only actually RUNS
+	 * when `direct`+`da_known` are set, regardless of which side ingressed.
+	 * (The is_wan-only gating in the comment above documents da_known's
+	 * WAN-ingress KEY-COMPARE role, which is a separate, additional need —
+	 * it does not mean da_known is WAN-ingress-only for the rewrite stage.)
+	 * Verified on-device 2026-07-04 (findings/up_hwoffload_2026-07-04.md):
+	 * with both up_idx_fix AND this bit set, UP frames egress with the correct
+	 * SNAT src IP and a sustained 6 GB + 4x1 GB (10 GB total, one boot)
+	 * download completed at ~830-920 Mbps with qmg_up_trap staying 0 the
+	 * entire time — no residual admission latch. */
+	cla[4] = ((u32)ip_proto << 24) | (up_idx_fix ? 0x00100069 :
+			(is_wan ? 0x00100069 : 0x00000049));
 	cla[5] = ((u32)s3 << 24) | ((u32)s0 << 16) | ((u32)s1 << 8);
 	cla[6] = ((u32)d3 << 24) | ((u32)d0 << 16) | ((u32)d1 << 8) | s2;
 	cla[7] = ((u32)(dp & 0xff) << 24) | ((u32)(sp >> 8) << 16) |
@@ -2630,7 +2680,13 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	zx_pp_pm_write_entry(e, 1, pm_slot, nh);
 
 	/* flow_info (ram0): per-direction rewrite-enable descriptor. next_hop_idx MUST
-	 * be pm_slot (the slot we just wrote next_hop to) — the old code hardcoded 5. */
+	 * be pm_slot (the slot we just wrote next_hop to) — the old code hardcoded 5.
+	 * [up-hwoffload 2026-07-04] For the UP direction (eg_regport==WAN) this internal
+	 * ram0[pm_slot] write is now the entry the HW ACTUALLY fetches from — see the
+	 * up_idx_fix cmd_flow_id repack in zx_ft_pack_cla below (dir=UP=0, so the fetch
+	 * address ram0[cmd_flow_id | 0<<10] == ram0[pm_slot], no shift needed). For DN
+	 * this write is still unused (DN's cmd_flow_id resolves to the external DDR
+	 * table instead) but harmless. */
 	zx_ft_build_flow_info(fi, nat, pm_slot);
 	zx_pp_pm_write_entry(e, 0, pm_slot, fi);
 
@@ -2651,9 +2707,14 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	/* WAN-ingress (is_wan) = this entry's matching packets ingress the WAN/RGMII
 	 * port, which for a routed flow is the direction that egresses toward a LAN
 	 * port (eg_regport != WAN). Those packets extract the key with pos32=1 (hash)
-	 * AND need the `direct` verdict bit set in the entry (see zx_ft_pack_cla). */
+	 * AND need the `direct` verdict bit set in the entry (see zx_ft_pack_cla).
+	 * [up-hwoffload 2026-07-04] up_idx_fix = this entry's matching packets are the
+	 * UP/ACK direction (egress toward WAN) — only THIS direction's cmd_flow_id is
+	 * repacked to point at the internal ram0[pm_slot] flow_info; DN keeps the old
+	 * (proven, external-DDR) packing untouched. */
 	zx_ft_pack_cla(cla, ip_proto, saddr, daddr, sport, dport, pm_slot & 0xff,
-		       eg_regport != ZX_WAN_REGPORT, eg_regport);
+		       eg_regport != ZX_WAN_REGPORT, eg_regport,
+		       eg_regport == ZX_WAN_REGPORT);
 	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport,
 			      eg_regport != ZX_WAN_REGPORT);
 	zx_ft_way_slots(raw, ram, addr);
@@ -2949,17 +3010,25 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 
 	eg_regport = zx_ft_egress_regport(odev);
 
-	/* UPSTREAM (LAN->WAN, egress = WAN regport) stays on the SW flowtable
-	 * fast-path: its HW-forwarded frames reach the MAC4 wire but the UP
-	 * PM rewrite source is still unproven (the external dir-0 table is
-	 * NOT what the UP engine fetches — measured 2026-07-04 via the
-	 * sport-encoded fill: the server never saw the encoded ports), so a
-	 * HW UP offload ACK-starves the connection and stalls the download.
-	 * Upstream is ACK-dominated for the download use-case; the SW
-	 * flowtable forwards it at full ACK rate. Returning 0 WITHOUT
-	 * installing keeps the flow owned by the flowtable (trap -> SW
-	 * fast-path) while the DOWNSTREAM direction below gets the full HW
-	 * fast path (validated end-to-end at ~64-73 MB/s). */
+	/* [up-hwoffload 2026-07-04] UPSTREAM (LAN->WAN, egress = WAN regport) used to
+	 * stay on the SW flowtable fast-path: the UP direction's HW-forwarded frames
+	 * reached the MAC4 wire but with src IP 0.0.0.0 (the PM engine's flow_info
+	 * FETCH for the UP direction lands on a different address than the external
+	 * dir-0 table the old recipe wrote — measured 2026-07-04 via the sport-encoded
+	 * fill: the server never saw the encoded ports). Root cause (RE'd, see
+	 * findings/stock_red_drain_up_RE_2026-07-04.md CANDIDATE 2 and the up_idx_fix
+	 * comment on zx_ft_pack_cla): mainline packed cmd_flow_id as pm_slot*128+1 for
+	 * BOTH directions; DN's fetch happens to land >=0x400 (external DDR, which the
+	 * recipe also populates -> works by coincidence), UP's identical fetch lands on
+	 * the SAME resolved index but nothing was ever written there for UP's values.
+	 * FIXED by repacking the UP entry's cmd_flow_id = pm_slot directly (<0x400,
+	 * dir=UP=0 -> internal ram0[pm_slot], which the recipe already writes).
+	 * Verified on-device 2026-07-04: UP HW-forwarded frames now carry the correct
+	 * SNAT src IP (was 0.0.0.0), cla_up_fwd increments, ACKs no longer trap to the
+	 * CPU -> removes the RED-drop flood that fed the residual sustained-download
+	 * admission latch (findings/wedge_txflowctrl_fix_2026-07-04.md). e->ft_up_en
+	 * now DEFAULTS to 1 (see zx_eth_probe); the debugfs "ftup" knob still allows
+	 * forcing UP back to SW-only for regression testing. */
 	if (eg_regport == ZX_WAN_REGPORT && !READ_ONCE(e->ft_up_en)) {
 		/* Ratelimited: the nf_flow_table re-REPLACE storm (see
 		 * zx_ft_flow_reserve) re-delivers this several times per second
@@ -7053,6 +7122,11 @@ static int zx_eth_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	eth->dev = dev;
 	spin_lock_init(&eth->tx_lock);
+	/* [up-hwoffload 2026-07-04] UP HW-offload defaults ON now that the
+	 * cmd_flow_id fetch-index packing is fixed (zx_ft_pack_cla up_idx_fix) —
+	 * see the comment in the tc-flower ADD handler above the ft_up_en gate.
+	 * debugfs "ftup" (0644) still allows forcing it back to 0 for A/B tests. */
+	eth->ft_up_en = 1;
 
 	/* DTS exposes two reg entries — "pon" and "npp". Map the npp one
 	 * by name so the driver is robust to reg-entry reordering. The pon
