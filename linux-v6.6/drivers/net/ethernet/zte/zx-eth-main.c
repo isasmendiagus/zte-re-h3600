@@ -331,6 +331,17 @@ struct zx_eth {
 	void *dndesc_cpu;	dma_addr_t dndesc_dma;	/* TX DN desc ring (carved offset) */
 	u32 tx_head;		/* current TX desc write index (0..1023) */
 	spinlock_t tm_tx_lock;
+	/* [txflowctrl 2026-07-04] TM TX-ring occupancy accounting (stock
+	 * pon_tm_get_next_txdesc / pon_tm_check_tx_done_nolock port). All
+	 * fields owned by tm_tx_lock. The HW consumed-count registers
+	 * TM[0x10058] (UP) / TM[0x10068] (DN) low16 are CLEAR-ON-READ —
+	 * every read MUST go through zx_sw_tx_reclaim_locked() or the
+	 * accounting silently leaks (stats paths included). */
+	u32 sw_tx_pending;	/* descs enqueued but not yet HW-consumed */
+	u32 sw_tx_pending_max;	/* high-watermark (validation oracle) */
+	u32 sw_tx_reclaimed;	/* total descs reclaimed via consumed-count */
+	u32 sw_tx_full_drops;	/* enqueues refused: ring full (stock tx_full) */
+	u32 sw_tx_queue_stops;	/* netif_stop_queue events on the conduit */
 	u32 rx_head[TM_NUM_RX_QUEUES];		/* ring 0 (UP) per-q cursor */
 	u32 rx_head_dn[TM_NUM_RX_QUEUES];	/* ring 1 (DN/WAN) per-q cursor */
 	u32 tm_irq_count;
@@ -416,6 +427,13 @@ struct zx_eth {
 	 */
 	void __iomem	*pm_ext;	/* mapped carve (ZX_PM_EXT_SPAN bytes) */
 	u32		pm_ext_phys;	/* carve phys base (= acl_base - 0x20000) */
+
+	/* [phase6/ft] UP-direction (LAN->WAN egress) HW offload enable.
+	 * 0 = decline UP installs (UP rides the SW flowtable fast-path; the
+	 * historical default — but under full DN load the trapped UP ACKs
+	 * RED-starve, TCP collapses and the trap queue wedges, QA 2026-07-04).
+	 * 1 = install the UP recipe in HW too (debugfs "ftup"). */
+	u32		ft_up_en;
 };
 
 /* ============================================================
@@ -2942,7 +2960,7 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	 * installing keeps the flow owned by the flowtable (trap -> SW
 	 * fast-path) while the DOWNSTREAM direction below gets the full HW
 	 * fast path (validated end-to-end at ~64-73 MB/s). */
-	if (eg_regport == ZX_WAN_REGPORT) {
+	if (eg_regport == ZX_WAN_REGPORT && !READ_ONCE(e->ft_up_en)) {
 		/* Ratelimited: the nf_flow_table re-REPLACE storm (see
 		 * zx_ft_flow_reserve) re-delivers this several times per second
 		 * for every live download; unlimited it floods/wraps the dmesg
@@ -3789,6 +3807,19 @@ static void zx_sch_init(struct zx_eth *e)
 		 ZX_SCH_UNITS, ZX_SCH_QUEUES, ZX_SCH_FILL_RATE, ZX_SCH_BUCKET_CAP);
 }
 
+/* [txflowctrl 2026-07-04] Legacy shared-ring/dual-kick fallback switch.
+ * 0 (default) = stock topology: distinct UP/DN TX rings, SINGLE UP kick per
+ * enqueue (stock soft_insert_tx_1desc dir0 — the config stock uses for ALL
+ * lan-mode CPU TX incl. CPU→WAN).
+ * 1 = the historical mainline config (DN base = UP base, kick both engines).
+ * Boot-time only (rings are programmed at init): pass
+ * zx279128_eth.zx_tx_dualkick=1 on the kernel cmdline to fall back without a
+ * rebuild. The shared config is the documented HW-deadlock topology (see the
+ * comment in zx_tm_dma_init) — fallback exists purely for bring-up A/B. */
+static unsigned int zx_tx_dualkick;
+module_param(zx_tx_dualkick, uint, 0444);
+MODULE_PARM_DESC(zx_tx_dualkick, "legacy TM TX shared-ring dual-kick (0=stock single-kick)");
+
 /* pon_tm_dma_init equivalent — values from stock_eth.bin live dump. */
 static void zx_tm_dma_init(struct zx_eth *e)
 {
@@ -3811,9 +3842,12 @@ static void zx_tm_dma_init(struct zx_eth *e)
 	 * findings/tm_rx_path_bench_validation_2026-05-27.md.
 	 */
 	tm_write(e, TM_REG_DMA_TX_UP_BASE, e->txdesc_dma);
-	/* [egress-port test] SHARED ring: DN base = UP base = txdesc_dma so the dual-kick
-	 * in zx_sw_xmit drives both rings off the one desc (QMG-reaching config). */
-	tm_write(e, TM_REG_DMA_TX_DN_BASE, e->txdesc_dma);
+	/* [txflowctrl 2026-07-04] DISTINCT DN ring (stock topology, see comment
+	 * above). The old shared DN=UP config (the "[egress-port test]" era) is
+	 * the documented deadlock topology and is kept only behind the
+	 * zx_tx_dualkick=1 boot fallback. */
+	tm_write(e, TM_REG_DMA_TX_DN_BASE,
+		 zx_tx_dualkick ? e->txdesc_dma : e->dndesc_dma);
 	tm_write(e, TM_REG_DMA_REG388,     0x131217);
 	tm_write(e, TM_REG_DMA_REG3C,      0x400040);
 
@@ -4291,30 +4325,74 @@ static irqreturn_t zx_pon_irq(int irq, void *dev_id)
 static struct delayed_work zx_bmu_dump_work;
 static struct zx_eth *zx_bmu_dump_eth;
 
-/* TM TX reclaim periodic reader — stock pon_tm_timer pattern.
- * Stock pon_tm_check_tx_done_nolock reads TM[0x10058] (UP) and TM[0x10068]
- * (DN) every jiffy. Pattern `tx_done -= reg.low16` requires clear-on-read
- * semantics; empirical test on stock confirms values vary across reads
- * (0x7→0x2→0x2 with ping flood) — only consistent with HW incrementing
- * AND something draining (= stock timer).
- * Mainline has no such timer; HW low16 stays at 0, high16 fills with
- * pending TXs (41 stuck in last test). Adding a 1-jiffy delayed_work
- * that does a discard read of both regs to test if HW resumes
- * consumption.
+/* [txflowctrl 2026-07-04] TM TX-ring flow control — port of stock's CPU-TX
+ * occupancy accounting (pon_tm_get_next_txdesc plat:6689 +
+ * pon_tm_check_tx_done_nolock plat:6362 + pon_tm_timer_func plat:6438).
+ *
+ * The low16 of TM[0x10058] (UP) / TM[0x10068] (DN) is CLEAR-ON-READ
+ * "descriptors consumed since last read" (empirically confirmed 2026-05-27,
+ * commit 546ae0b3a). Stock keeps a per-direction in-flight counter:
+ * +1 per enqueue, -= consumed-count on reclaim; reclaims on-demand in the
+ * hot path once pending > 0x1ff and REFUSES the enqueue (drops the skb) at
+ * pending > 0x3ff, so it can never overwrite a descriptor the HW still owns.
+ * A 1-jiffy kernel timer (add_timer, NOT a workqueue — must keep running
+ * when kworkers starve under load) reclaims in the background.
+ *
+ * Mainline previously had NONE of this: tx_head wrapped at 1024 and
+ * memset-overwrote live descriptors, which under sustained ACK load overran
+ * the ring → torn descs (the exactly-64B TX latch), engine cursor corruption
+ * (mac4_tx halt), BMU buffer-pointer leaks → global RX descriptor-engine
+ * halt, reboot-only. See findings/stock_red_drain_up_RE_2026-07-04.md.
  */
-static struct delayed_work zx_tm_tx_reclaim_work;
-static struct zx_eth *zx_tm_tx_reclaim_eth;
+#define TM_SW_TX_RECLAIM_THRESH	0x1ff	/* half-full: reclaim in the hot path */
+#define TM_SW_TX_FULL_THRESH	0x3ff	/* stock: refuse enqueue at ring-full */
+#define TM_SW_TX_FULL_SHARED	0x300	/* conservative full mark for the
+					 * dual-kick fallback (two engines
+					 * walking one shared ring) */
+#define TM_SW_TX_WAKE_THRESH	0x200	/* wake the stopped queue below this */
 
-static void zx_tm_tx_reclaim_fn(struct work_struct *w)
+static struct timer_list zx_sw_tx_reclaim_timer;
+static struct zx_eth *zx_tm_tx_reclaim_eth;
+static bool zx_sw_tx_reclaim_timer_ready;
+
+static inline u32 zx_sw_tx_full_thresh(void)
+{
+	return zx_tx_dualkick ? TM_SW_TX_FULL_SHARED : TM_SW_TX_FULL_THRESH;
+}
+
+/* Reclaim completed TX descriptors against the HW clear-on-read
+ * consumed-count register(s). THE ONLY PLACE those registers may be read.
+ * Caller must hold tm_tx_lock. */
+static void zx_sw_tx_reclaim_locked(struct zx_eth *e)
+{
+	u32 done = tm_read(e, TM_REG_DMA_DESC_CNT_UP) & 0xffff;
+
+	if (zx_tx_dualkick)
+		done += tm_read(e, TM_REG_DMA_DESC_CNT_DN) & 0xffff;
+	if (done > e->sw_tx_pending)	/* defensive: never underflow */
+		done = e->sw_tx_pending;
+	e->sw_tx_pending -= done;
+	e->sw_tx_reclaimed += done;
+	if (e->sw_dev && netif_queue_stopped(e->sw_dev) &&
+	    e->sw_tx_pending <= TM_SW_TX_WAKE_THRESH)
+		netif_wake_queue(e->sw_dev);
+}
+
+/* 1-jiffy background reclaim — kernel timer, NOT a workqueue: the wedge
+ * builds exactly when ksoftirqd/kworkers spin, and a delayed_work would
+ * starve then (stock uses add_timer for the same reason). */
+static void zx_sw_tx_reclaim_timer_fn(struct timer_list *t)
 {
 	struct zx_eth *e = zx_tm_tx_reclaim_eth;
+	unsigned long flags;
 
 	if (!e)
-		return;
-	/* Discard reads — drain the clear-on-read counters */
-	(void)tm_read(e, 0x10058);
-	(void)tm_read(e, 0x10068);
-	schedule_delayed_work(&zx_tm_tx_reclaim_work, 1);  /* 1 jiffy = ~1ms on HZ=1000 */
+		return;	/* remove path cleared us; do not re-arm */
+	spin_lock_irqsave(&e->tm_tx_lock, flags);
+	if (e->sw_tx_pending)
+		zx_sw_tx_reclaim_locked(e);
+	spin_unlock_irqrestore(&e->tm_tx_lock, flags);
+	mod_timer(&zx_sw_tx_reclaim_timer, jiffies + 1);
 }
 
 /* [egress keepalive 2026-05-29] Mirror stock extphy_timer_func (plat:3137), which
@@ -4391,7 +4469,7 @@ resched:
 static void zx_bmu_dump_fn(struct work_struct *w)
 {
 	struct zx_eth *e = zx_bmu_dump_eth;
-	u32 alloc, rls, bppe_avail, bppi, bp_stat, tx_kick, tx_done;
+	u32 alloc, rls, bppe_avail, bppi, bp_stat, tx_kick, tx_pend;
 
 	if (!e)
 		return;
@@ -4402,15 +4480,17 @@ static void zx_bmu_dump_fn(struct work_struct *w)
 	bppi       = tm_read(e, 0x8088);
 	bp_stat    = tm_read(e, 0x80dc);
 	tx_kick    = tm_read(e, 0x10054);
-	tx_done    = tm_read(e, 0x10058);
+	/* [txflowctrl] TM[0x10058] is CLEAR-ON-READ and owned by the reclaim —
+	 * report the driver's occupancy counter instead of a raw read. */
+	tx_pend    = e->sw_tx_pending;
 	dev_dbg(e->dev,
-		 "STATS uptime_jiff=%lu drv:rx=%u rxlb=%u tx=%u txdrop=%u napi=%u irq=%u hw:alloc=%u rls=%u(diff=%d) bppe_avail=%u bppi=%u bp_stat=%08x tx_kick=%u tx_done=%u\n",
+		 "STATS uptime_jiff=%lu drv:rx=%u rxlb=%u tx=%u txdrop=%u napi=%u irq=%u hw:alloc=%u rls=%u(diff=%d) bppe_avail=%u bppi=%u bp_stat=%08x tx_kick=%u tx_pend=%u\n",
 		 jiffies,
 		 e->tm_rx_count, e->tm_rx_loopback_drops, e->tm_tx_count, e->tm_tx_dropped,
 		 e->tm_napi_count, e->tm_irq_count,
 		 alloc, rls, (int)rls - (int)alloc,
 		 bppe_avail, bppi, bp_stat,
-		 tx_kick, tx_done);
+		 tx_kick, tx_pend);
 
 	/* Per-ingress-port RX histogram — for DUPs hairpin diagnosis.
 	 * The port whose count grows ~1:1 with tm_tx_count is the CPU hairpin
@@ -4453,13 +4533,16 @@ static int zx_sw_open(struct net_device *ndev)
 	INIT_DELAYED_WORK(&zx_bmu_dump_work, zx_bmu_dump_fn);
 	schedule_delayed_work(&zx_bmu_dump_work, msecs_to_jiffies(10000));
 
-	/* TM TX reclaim timer — read TM[0x10058]/TM[0x10068] every jiffy
-	 * to drain the clear-on-read counters, replicating stock's
-	 * pon_tm_timer behavior.
-	 */
+	/* [txflowctrl] TM TX reclaim — 1-jiffy kernel timer (stock
+	 * pon_tm_timer_func): reclaims the clear-on-read consumed-counts
+	 * into sw_tx_pending and wakes the queue after a ring-full stop. */
 	zx_tm_tx_reclaim_eth = e;
-	INIT_DELAYED_WORK(&zx_tm_tx_reclaim_work, zx_tm_tx_reclaim_fn);
-	schedule_delayed_work(&zx_tm_tx_reclaim_work, 1);
+	if (!zx_sw_tx_reclaim_timer_ready) {
+		timer_setup(&zx_sw_tx_reclaim_timer,
+			    zx_sw_tx_reclaim_timer_fn, 0);
+		zx_sw_tx_reclaim_timer_ready = true;
+	}
+	mod_timer(&zx_sw_tx_reclaim_timer, jiffies + 1);
 
 	/* [egress keepalive] periodic SOPC<->MAC bridge re-assert (stock extphy_timer
 	 * equivalent) — holds the transient 0x19068 READY so CPU->LAN egress stays up. */
@@ -4662,6 +4745,27 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 
 	spin_lock_irqsave(&e->tm_tx_lock, flags);
 
+	/* [txflowctrl 2026-07-04] Ring-occupancy gate (stock
+	 * pon_tm_get_next_txdesc): reclaim on demand once half-full; if the
+	 * ring is still full, REFUSE the enqueue — stop the conduit queue
+	 * (backpressures the DSA user ports through the qdisc) and drop the
+	 * skb exactly like stock (TCP regenerates; the HW engine keeps
+	 * draining sanely). NEVER overwrite a descriptor the HW still owns —
+	 * that overrun was the sustained-download wedge (torn descs → 64B
+	 * latch → engine halt → BMU leak → global RX halt, reboot-only). */
+	if (e->sw_tx_pending > TM_SW_TX_RECLAIM_THRESH)
+		zx_sw_tx_reclaim_locked(e);
+	if (e->sw_tx_pending > zx_sw_tx_full_thresh()) {
+		e->sw_tx_full_drops++;
+		if (!netif_queue_stopped(ndev)) {
+			netif_stop_queue(ndev);
+			e->sw_tx_queue_stops++;
+		}
+		spin_unlock_irqrestore(&e->tm_tx_lock, flags);
+		TXCP(e, -1, "DROP: TX ring full (pending=%u)", e->sw_tx_pending);
+		goto drop;
+	}
+
 	bp = zx_bmu_alloc_bp(e);
 	if (bp == U32_MAX || bp >= TM_BPPE_POOL_SIZE) {
 		spin_unlock_irqrestore(&e->tm_tx_lock, flags);
@@ -4692,106 +4796,64 @@ static netdev_tx_t zx_sw_xmit(struct sk_buff *skb, struct net_device *ndev)
 	TXCP(e, 3, "BMU alloc OK: bp=%u bp_buf=%p, copied %u bytes from skb (frame at +16)",
 	     bp, bp_buf, len);
 
-	/* [Restore working dual-kick from commit 2ad931ed8 — the last on-wire-verified
-	 * CPU→LAN TX before refactor #38 (host tcpdump saw device-originated ICMP/ARP
-	 * replies). Mechanism: ONE shared ring (UP_BASE=DN_BASE=txdesc_dma), desc in
-	 * txdesc_cpu, desc[0]=0xc9, egress port=0, and DUAL-KICK both TM[0x10054]+
-	 * TM[0x10064]. The commit's note: single-kick (UP-only OR DN-only) = 100% loss
-	 * → fetched-but-not-drained; dual-kick = egress. See old_working_tx_commit_re.md.
+	/* [txflowctrl 2026-07-04] Stock TX desc format (Ghidra decomp of
+	 * pon_tm_net_tx + pon_tm_data_raw_send, see tasks/00.10.02.re-stock-kmods/
+	 * findings/tx_path_stock_decomp.md), written the stock way:
+	 *   word0: byte0 = 0xc9 (CPU/source marker), bytes2-3 = egress-port hint
+	 *          ((port+0x28)&0x3f)<<4 — THE verified egress fix (a 0 hint gave
+	 *          SOPC no destination → DSCH dropped every frame).
+	 *   word1: 0x00010000 (desc[6]=1) | bp low7 <<1 in byte 7.
+	 *   word2: bp high bits | len<<9 | 0x21<<24 (byte11 = VALID 0x01 | fmt
+	 *          0x20 — stock does desc[11] = (desc[11]&1) | 0x20).
+	 *   word3: len encoding in bytes 12-13, bytes 14-15 = 0.
+	 * NO memset (the old memset-then-rebuild destroyed live descriptors when
+	 * the ring overran and tore frames to 64 B if HW fetched mid-rebuild);
+	 * every byte is written explicitly, and word2 — carrying the VALID
+	 * byte — is written LAST, after a barrier, so the HW can never fetch a
+	 * half-built descriptor. The occupancy gate above guarantees this slot
+	 * was already consumed by the HW. Nothing touches the desc post-kick.
 	 */
-	desc = (u8 *)e->txdesc_cpu + e->tx_head * TM_TX_DESC_SIZE;	/* [egress-port test] UP ring (reaches QMG) */
-	memset(desc, 0, TM_TX_DESC_SIZE);
-	TXCP(e, 4, "desc[%u]=%p prepared (memset done, BP_SIZE=%u)", e->tx_head, desc, TM_BP_SIZE);
-	/* Stock TX desc format (Ghidra decomp of pon_tm_net_tx + pon_tm_data_raw_send,
-	 * see tasks/00.10.02.re-stock-kmods/findings/tx_path_stock_decomp.md):
-	 *   desc[0]   = 0xc9 (CPU/source marker; was 0x80 in our baseline)
-	 *   desc[1..3]= 0 except desc[2..3] port hint
-	 *   desc[4..7]= 0x00010000  (so desc[6]=1)
-	 *   desc[8..11]= 0x21 at byte 11 (VALID|0x20), bp_idx + len<<9 in low bits
-	 *   desc[12..13] = (desc[12..13] & 3) | (len << 2).
-	 */
-	desc[0]  = 0xc9;	/* [egress-port test] UP-ring marker (QMG-reaching path) */
-	desc[1]  = 0x00;
-	/* desc[2..3] = egress-port hint ((port+0x28)&0x3f)<<4. THE verified fix: was
-	 * hardcoded 0 (no destination → SOPC never picked a MAC). zx_eg_port to find MAC2. */
-	*(__le16 *)(desc + 2) = cpu_to_le16(((eg + 0x28) & 0x3f) << 4);
-	*(u32 *)(desc + 4) = cpu_to_le32(0x00010000);
-	/* desc[11] = 0x21 (bit 0 VALID + bit 5 format), not 0x01 — stock decomp
-	 * pon_tm_data_raw_send does desc[11] = (desc[11]&1) | 0x20.
-	 */
-	*(u32 *)(desc + 8) = cpu_to_le32(((bp >> 7) & 0x7f) |
-					 ((len & 0x3fff) << 9) |
-					 (0x21U << 24));
-	desc[7]  = (bp & 0x7f) << 1;
-	/* bytes 12-13 = len encoding (UP path, working-commit form) */
-	if (len < 64)
-		*(__le16 *)(desc + 12) = cpu_to_le16((len & 0x3fff) | 0x100);
-	else
-		*(__le16 *)(desc + 12) = cpu_to_le16((len & 0x3fff) << 2);
+	desc = (u8 *)e->txdesc_cpu + e->tx_head * TM_TX_DESC_SIZE;
+	{
+		u32 w3 = (len < 64) ? ((len & 0x3fff) | 0x100)
+				    : ((len & 0x3fff) << 2);
+
+		*(__le32 *)(desc + 0)  = cpu_to_le32(0xc9 |
+					 ((u32)(((eg + 0x28) & 0x3f) << 4) << 16));
+		*(__le32 *)(desc + 4)  = cpu_to_le32(0x00010000 |
+					 ((u32)((bp & 0x7f) << 1) << 24));
+		*(__le32 *)(desc + 12) = cpu_to_le32(w3);
+		dma_wmb();	/* all fields visible before VALID */
+		*(__le32 *)(desc + 8)  = cpu_to_le32(((bp >> 7) & 0x7f) |
+						     ((len & 0x3fff) << 9) |
+						     (0x21U << 24));
+	}
 
 	dma_wmb();
 	TXCP(e, 5, "desc[0..15]=%02x %02x %02x %02x  %02x %02x %02x %02x  %02x %02x %02x %02x  %02x %02x %02x %02x",
 	     desc[0], desc[1], desc[2], desc[3], desc[4], desc[5], desc[6], desc[7],
 	     desc[8], desc[9], desc[10], desc[11], desc[12], desc[13], desc[14], desc[15]);
 	e->tx_head = (e->tx_head + 1) & (TM_TX_RING_SIZE - 1);
-	TXCP(e, 6, "tx_head=%u (post-incr); about to kick TM[0x10054]=1, TM[0x10064]=1", e->tx_head);
+	TXCP(e, 6, "tx_head=%u (post-incr); about to kick TM[0x10054]=1", e->tx_head);
 
-	/* [egress-port test] DUAL kick on the shared ring (the QMG-reaching config from
-	 * commit 2ad931ed8). Testing the verified egress-port fix on this proven path. */
+	/* [txflowctrl] SINGLE kick, stock soft_insert_tx_1desc dir0: the UP
+	 * engine alone consumes this ring. The legacy dual-kick (two engines
+	 * fetching ONE shared ring) double-emitted frames and is the
+	 * documented HW-deadlock topology — kept only behind zx_tx_dualkick=1
+	 * (which also re-shares the DN base, see zx_tm_dma_init). */
 	tm_write(e, 0x10054, 1);	/* upstream kick */
-	tm_write(e, 0x10064, 1);	/* downstream kick */
+	if (zx_tx_dualkick)
+		tm_write(e, 0x10064, 1);	/* legacy downstream kick */
 
-
-	/* Post-kick desc invalidation:
-	 * pcap data showed HW emitting the SAME TX desc multiple times — host
-	 * received 300 replies for 30 sent (10x amplification), with replies
-	 * for old (cross-run) ICMP seqs continuing to fire. Hypothesis: HW
-	 * keeps polling the desc ring and re-emitting any slot whose valid
-	 * bit (desc[11] bit 5 = 0x20) is still set. Clear it now so HW only
-	 * emits once per kick. Use the prior slot we just wrote (tx_head
-	 * already advanced — subtract 1 with wrap). dma_wmb to push it out
-	 * before HW's next poll cycle. This is the post-kick clear; if HW
-	 * reads desc asynchronously (after kick returns), we'd break TX —
-	 * in which case revert and implement a NAPI-driven reclaim instead.
-	 */
-	/* [Iter 33] Removed post-kick desc invalidation. Was clearing
-	 * desc[11] VALID bit (0x20) immediately after kick to prevent HW
-	 * re-emitting (UP-ring era artifact). On DN ring, HW reads desc
-	 * asynchronously and we may clear VALID before HW reads → HW skips
-	 * desc → TX never consumed (TM[0x10068] HIGH16 grows but never
-	 * drains). Let HW manage the valid bit naturally.
-	 */
-
-	TXCP(e, 7, "kick done; TM[0x10058]=%#x (UP cnt) TM[0x10068]=%#x (DN cnt)",
-	     tm_read(e, 0x10058), tm_read(e, 0x10068));
+	e->sw_tx_pending++;
+	if (e->sw_tx_pending > e->sw_tx_pending_max)
+		e->sw_tx_pending_max = e->sw_tx_pending;
+	TXCP(e, 7, "kick done; sw_tx_pending=%u", e->sw_tx_pending);
 
 	e->tm_tx_count++;
 	ndev->stats.tx_packets++;
 	ndev->stats.tx_bytes += len;
 	spin_unlock_irqrestore(&e->tm_tx_lock, flags);
-
-	if (e->tm_tx_count <= 3) {
-		u32 cnt_up = tm_read(e, 0x10058);
-		u32 cnt_dn = tm_read(e, 0x10068);
-		void __iomem *mac0 = e->base + mac_off(0, 0);
-		u32 mac0_ctrl  = readl(mac0 + 0x000);
-		u32 mac0_ena   = readl(mac0 + 0x008);
-		u32 mac0_cnt714 = readl(mac0 + 0x714);
-		u32 mac0_cnt718 = readl(mac0 + 0x718);
-		void __iomem *pp = e->base + PP_OFF;
-		u32 pp_cnt714 = readl(pp + 0x714);
-		u32 pp_cnt780 = readl(pp + 0x780);
-		/* Tiny delay then re-read MAC counter to see if HW processed */
-		udelay(200);
-		pr_debug("[ZXETH] TX#%u bp=%u len=%u  TM_UP=%#x DN=%#x  MAC0[ctrl=%#x ena=%#x 714=%#x 718=%#x]  PP[714=%#x 780=%#x]\n",
-			 e->tm_tx_count, bp, len, cnt_up, cnt_dn,
-			 mac0_ctrl, mac0_ena, mac0_cnt714, mac0_cnt718,
-			 pp_cnt714, pp_cnt780);
-		pr_debug("[ZXETH] TX#%u +200us: MAC0[714=%#x 718=%#x]  PP[714=%#x 780=%#x]\n",
-			 e->tm_tx_count,
-			 readl(mac0 + 0x714), readl(mac0 + 0x718),
-			 readl(pp + 0x714), readl(pp + 0x780));
-	}
 
 	dev_kfree_skb_any(skb);
 	return NETDEV_TX_OK;
@@ -4929,10 +4991,15 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	seq_printf(s, "tm_bmu_free_fail  = %u\n", e->tm_bmu_free_fail);
 	seq_printf(s, "bmu_free_credit   = %u\n", e->bmu_free_credit);
 	seq_printf(s, "tx_head           = %u\n", e->tx_head);
+	seq_printf(s, "sw_tx_pending     = %u (max %u, reclaimed %u)\n",
+		   e->sw_tx_pending, e->sw_tx_pending_max, e->sw_tx_reclaimed);
+	seq_printf(s, "sw_tx_full_drops  = %u (queue_stops %u)\n",
+		   e->sw_tx_full_drops, e->sw_tx_queue_stops);
 	seq_printf(s, "BMU_ALLOC_RESULT  = 0x%08x\n", tm_read(e, TM_REG_BMU_ALLOC_RESULT));
 	seq_printf(s, "BMU_ALLOC_CTRL    = 0x%08x\n", tm_read(e, TM_REG_BMU_ALLOC_CTRL));
 	seq_printf(s, "TM[0x10054] TX kick  = 0x%08x\n", tm_read(e, 0x10054));
-	seq_printf(s, "TM[0x10058] TX count = 0x%08x\n", tm_read(e, 0x10058));
+	/* [txflowctrl] TM[0x10058]/[0x10068] are CLEAR-ON-READ and owned by
+	 * zx_sw_tx_reclaim_locked — no raw reads here. */
 	seq_printf(s, "rx_idx            = %u\n", e->rx_idx);
 	seq_printf(s, "tx_idx / tx_done  = %u / %u  pending=%d\n",
 		   e->tx_idx, e->tx_done, atomic_read(&e->tx_pending));
@@ -5005,8 +5072,10 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	seq_printf(s, "TM[0x8008] BMU_CTRL2        = 0x%08x\n", tm_read(e, TM_REG_BMU_CTRL2));
 	seq_printf(s, "TM[0x800C] BMU_ALLOC_RESULT = 0x%08x\n", tm_read(e, TM_REG_BMU_ALLOC_RESULT));
 	seq_printf(s, "TM[0x10000] DMA_CTRL        = 0x%08x\n", tm_read(e, TM_REG_DMA_CTRL));
-	seq_printf(s, "TM[0x10058] DMA_DESC_CNT_UP = 0x%08x\n", tm_read(e, TM_REG_DMA_DESC_CNT_UP));
-	seq_printf(s, "TM[0x10068] DMA_DESC_CNT_DN = 0x%08x\n", tm_read(e, TM_REG_DMA_DESC_CNT_DN));
+	/* [txflowctrl] DESC_CNT_UP/DN low16 are CLEAR-ON-READ and owned by
+	 * zx_sw_tx_reclaim_locked — report the driver occupancy instead. */
+	seq_printf(s, "sw_tx_pending (in-flight TX descs) = %u (max %u)\n",
+		   e->sw_tx_pending, e->sw_tx_pending_max);
 	seq_printf(s, "TM[0x10030] DMA_TIMEOUT     = 0x%08x\n", tm_read(e, TM_REG_DMA_TIMEOUT));
 	seq_puts(s, "\n=== Per-queue RX desc counts (TM[0x10100+q*4]) ===\n");
 	for (i = 0; i < 8; i++) {
@@ -5400,6 +5469,111 @@ static const struct file_operations zx_pmwrite_fops = {
 	.owner = THIS_MODULE,
 	.open  = simple_open,
 	.write = zx_pmwrite_write,
+	.llseek = default_llseek,
+};
+
+/* extwrite: PM EXTERNAL flow_info table probe tool (debug/RE only).
+ * The PM engine DMA-fetches per-flow flow_info from the DDR carve (see
+ * zx_ft_ext_flow_write). This node writes/encodes/reads raw entries so the
+ * engine's fetch INDEX + direction-table selection can be measured on silicon
+ * (fill entries whose nat_sport ENCODES their own index -> the sport seen on
+ * the wire IS the fetched index).
+ *   w   <dir> <idx> <w0> <w1> <w2>          write one entry
+ *   f   <dir> <start> <cnt> <w0> <w1> <w2>  fill range with the same entry
+ *   enc <dir> <start> <cnt> <w0> <w1> <w2>  fill range, nat_sport := (dir<<15)|idx
+ *   r   <dir> <idx>                          dump entry bytes to dmesg
+ *   z                                        zero BOTH dir tables completely
+ * All values hex except the cmd word. nat_sport packing (flow_info layout):
+ * w0[31:18] = sport[13:0], w1[1:0] = sport[15:14]. */
+static void zx_extwrite_one(struct zx_eth *e, u32 dir, u32 idx, const u32 fi[3])
+{
+	u8 fb[12], ent[16] = {0};
+	int i;
+
+	for (i = 0; i < 12; i++)
+		fb[i] = (fi[i >> 2] >> (8 * (i & 3))) & 0xff;
+	for (i = 0; i < 9; i++)
+		ent[i] = fb[8 - i];
+	memcpy_toio(e->pm_ext +
+		    (dir ? ZX_PM_EXT_FLOW_DIR1 : ZX_PM_EXT_FLOW_DIR0) +
+		    idx * 16, ent, 16);
+}
+
+static ssize_t zx_extwrite_write(struct file *f, const char __user *ubuf,
+				 size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[160], cmd[8] = "";
+	u32 dir = 0, idx = 0, cnt = 0, w[3] = {0, 0, 0};
+	u32 i;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (!e->pm_ext)
+		return -ENODEV;
+	if (sscanf(buf, "%7s", cmd) != 1)
+		return -EINVAL;
+
+	if (!strcmp(cmd, "z")) {
+		memset_io(e->pm_ext + ZX_PM_EXT_FLOW_DIR0, 0, 0x8000 * 16);
+		memset_io(e->pm_ext + ZX_PM_EXT_FLOW_DIR1, 0, 0x8000 * 16);
+		pr_info("[ZXETH] extwrite: BOTH dir tables zeroed\n");
+		return count;
+	}
+	if (!strcmp(cmd, "r")) {
+		u8 ent[16];
+		void __iomem *p;
+
+		if (sscanf(buf, "%*s %x %x", &dir, &idx) != 2 || idx >= 0x8000)
+			return -EINVAL;
+		p = e->pm_ext +
+		    (dir ? ZX_PM_EXT_FLOW_DIR1 : ZX_PM_EXT_FLOW_DIR0) + idx * 16;
+		memcpy_fromio(ent, p, 16);
+		pr_info("[ZXETH] ext dir%u[%#x] = %16ph\n", dir & 1, idx, ent);
+		return count;
+	}
+	if (!strcmp(cmd, "w")) {
+		if (sscanf(buf, "%*s %x %x %x %x %x",
+			   &dir, &idx, &w[0], &w[1], &w[2]) != 5 || idx >= 0x8000)
+			return -EINVAL;
+		zx_extwrite_one(e, dir & 1, idx, w);
+		pr_info("[ZXETH] extwrite dir%u[%#x] = %08x %08x %08x\n",
+			dir & 1, idx, w[0], w[1], w[2]);
+		return count;
+	}
+	if (!strcmp(cmd, "f") || !strcmp(cmd, "enc")) {
+		bool enc = cmd[0] == 'e';
+
+		if (sscanf(buf, "%*s %x %x %x %x %x %x",
+			   &dir, &idx, &cnt, &w[0], &w[1], &w[2]) != 6 ||
+		    idx >= 0x8000 || cnt > 0x8000 || idx + cnt > 0x8000)
+			return -EINVAL;
+		for (i = idx; i < idx + cnt; i++) {
+			u32 fi[3] = { w[0], w[1], w[2] };
+
+			if (enc) {
+				u16 sp = ((dir & 1) << 15) | (i & 0x7fff);
+
+				fi[0] = (fi[0] & ~(0x3fffu << 18)) |
+					((u32)(sp & 0x3fff) << 18);
+				fi[1] = (fi[1] & ~3u) | (sp >> 14);
+			}
+			zx_extwrite_one(e, dir & 1, i, fi);
+		}
+		pr_info("[ZXETH] extwrite %s dir%u[%#x..%#x] base %08x %08x %08x\n",
+			cmd, dir & 1, idx, idx + cnt - 1, w[0], w[1], w[2]);
+		return count;
+	}
+	return -EINVAL;
+}
+
+static const struct file_operations zx_extwrite_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_extwrite_write,
 	.llseek = default_llseek,
 };
 
@@ -5870,6 +6044,11 @@ static int zx_pipeline_stats_show(struct seq_file *s, void *_unused)
 	seq_printf(s, "tm_rx_loopback_drops = %u\n", e->tm_rx_loopback_drops);
 	seq_printf(s, "tm_tx_count          = %u\n", e->tm_tx_count);
 	seq_printf(s, "tm_tx_dropped        = %u\n", e->tm_tx_dropped);
+	seq_printf(s, "sw_tx_pending        = %u (max %u)\n",
+		   e->sw_tx_pending, e->sw_tx_pending_max);
+	seq_printf(s, "sw_tx_reclaimed      = %u\n", e->sw_tx_reclaimed);
+	seq_printf(s, "sw_tx_full_drops     = %u (queue_stops %u)\n",
+		   e->sw_tx_full_drops, e->sw_tx_queue_stops);
 	seq_printf(s, "tm_bmu_free_ok       = %u\n", e->tm_bmu_free_ok);
 	seq_printf(s, "tm_bmu_free_fail     = %u\n", e->tm_bmu_free_fail);
 
@@ -5908,6 +6087,9 @@ static void zx_debugfs_init(struct zx_eth *e)
 	debugfs_create_file("pmfill", 0644, zx_debugfs_root, e, &zx_pmfill_fops);
 	debugfs_create_file("poke", 0644, zx_debugfs_root, e, &zx_poke_fops);
 	debugfs_create_file("fdbadd", 0644, zx_debugfs_root, e, &zx_fdbadd_fops);
+	debugfs_create_file("extwrite", 0644, zx_debugfs_root, e,
+			    &zx_extwrite_fops);
+	debugfs_create_u32("ftup", 0644, zx_debugfs_root, &e->ft_up_en);
 	debugfs_create_file("pktdeal", 0644, zx_debugfs_root, e, &zx_pktdeal_fops);
 	debugfs_create_file("txtest", 0644, zx_debugfs_root, e, &zx_txtest_fops);
 	dev_info(e->dev, "debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem,pipeline_stats,regdump,poke,txtest}\n");
@@ -6621,9 +6803,12 @@ static void zx_eth_repoint_tm_descriptors(struct zx_eth *eth)
 		TM_NUM_INSTANCES, &eth->rxdesc_dma);
 
 	tm_write(eth, TM_REG_DMA_TX_UP_BASE, eth->txdesc_dma);
-	/* [egress-port test] SHARED ring (DN=UP=txdesc_dma) for the dual-kick path. */
-	tm_write(eth, TM_REG_DMA_TX_DN_BASE, eth->txdesc_dma);
-	dev_dbg(dev, "Re-wrote TM TX_UP=DN(shared)=%pad\n", &eth->txdesc_dma);
+	/* [txflowctrl] distinct DN ring (stock topology); shared only under the
+	 * zx_tx_dualkick=1 legacy fallback. */
+	tm_write(eth, TM_REG_DMA_TX_DN_BASE,
+		 zx_tx_dualkick ? eth->txdesc_dma : eth->dndesc_dma);
+	dev_dbg(dev, "Re-wrote TM TX_UP=%pad DN=%pad\n",
+		&eth->txdesc_dma, zx_tx_dualkick ? &eth->txdesc_dma : &eth->dndesc_dma);
 }
 
 /*
@@ -6941,9 +7126,11 @@ static int zx_eth_probe(struct platform_device *pdev)
 
 	zx_eth_apply_stock_init(eth);
 
-	/* [egress-port test] SHARED ring (DN=UP=txdesc_dma) for the dual-kick path. */
+	/* [txflowctrl] distinct UP/DN rings (stock topology); shared only under
+	 * the zx_tx_dualkick=1 legacy fallback. */
 	tm_write(eth, TM_REG_DMA_TX_UP_BASE, eth->txdesc_dma);
-	tm_write(eth, TM_REG_DMA_TX_DN_BASE, eth->txdesc_dma);
+	tm_write(eth, TM_REG_DMA_TX_DN_BASE,
+		 zx_tx_dualkick ? eth->txdesc_dma : eth->dndesc_dma);
 
 	dev_dbg(dev, "PP[0x2c] (CPU_FWD) = %#x, IDM[0x8000] CTRL = %#x\n",
 		 readl(eth->base + PP_OFF + PP_REG_CPU_FWD),
@@ -7112,6 +7299,12 @@ static int zx_eth_remove(struct platform_device *pdev)
 		usleep_range(10000, 11000);
 		/* e) Now safe to free IRQ + NAPI + netdev */
 		devm_free_irq(eth->dev, eth->irq_tm, eth);
+		/* [txflowctrl] stop the 1-jiffy TX reclaim timer before the
+		 * netdev goes away (the reclaim wakes its queue). */
+		if (zx_sw_tx_reclaim_timer_ready) {
+			zx_tm_tx_reclaim_eth = NULL;
+			del_timer_sync(&zx_sw_tx_reclaim_timer);
+		}
 		unregister_netdev(eth->sw_dev);
 		netif_napi_del(&eth->tm_napi);
 		free_netdev(eth->sw_dev);
