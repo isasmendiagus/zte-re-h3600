@@ -3132,17 +3132,30 @@ static bool zx_ft_resolve_nh(struct net_device *odev, __be32 daddr, u8 nh_mac[ET
 }
 
 /* Map a redirect/egress netdev to its chip regport. DSA per-port (lanN) slaves
- * carry their port index via dsa_user_to_port(); fall back to lan1 (regport 2). */
+ * carry their port index via dsa_port_from_netdev().
+ *
+ * [H4 fix 2026-07-04, findings/qa_static_bughunt_2026-07-04.md] This USED to
+ * fall back to regport 2 (lan1) whenever odev was NULL or not one of our DSA
+ * user ports -- which the nf_flowtable legitimately hands us for a bridge
+ * master, a VLAN upper, a ppp device, or a wifi netdev sitting on top of a
+ * DSA port. Guessing lan1 armed a real HW direct-forward CLA entry that
+ * steered that flow's actual traffic to whatever host physically sits on
+ * lan1 -- silent misdelivery to the wrong port, not merely a missed
+ * optimization. There is no valid regport for a non-DSA-user-port egress
+ * device, so this now returns a sentinel and the caller declines the
+ * offload (stays on the SW path) instead of installing a guessed route. */
+#define ZX_FT_EGRESS_INVALID	0xff
 static const u8 zx_ft_regport[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
 static u8 zx_ft_egress_regport(struct net_device *odev)
 {
-	if (odev && dsa_slave_dev_check(odev)) {
-		struct dsa_port *dp = dsa_port_from_netdev(odev);
+	struct dsa_port *dp;
 
-		if (!IS_ERR_OR_NULL(dp))
-			return zx_ft_regport[dp->index & 7];
-	}
-	return 2;	/* fallback = lan1 */
+	if (!odev || !dsa_slave_dev_check(odev))
+		return ZX_FT_EGRESS_INVALID;
+	dp = dsa_port_from_netdev(odev);
+	if (IS_ERR_OR_NULL(dp))
+		return ZX_FT_EGRESS_INVALID;
+	return zx_ft_regport[dp->index & 7];
 }
 
 /* Parse a flow_cls_offload 5-tuple + actions and install/remove the HW recipe. */
@@ -3253,6 +3266,17 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	}
 
 	eg_regport = zx_ft_egress_regport(odev);
+	if (eg_regport == ZX_FT_EGRESS_INVALID) {
+		/* [H4 fix 2026-07-04] odev is not a DSA user port of this switch
+		 * (bridge master / VLAN upper / ppp / wifi / NULL) -- there is no
+		 * regport to hand the HW, and guessing one (the old lan1
+		 * fallback) misdelivers real traffic. Decline; the flow stays on
+		 * the SW flowtable fast-path, which handles any egress device. */
+		dev_info(e->dev,
+			 "[phase6/ft] offload declined: egress dev %s is not a DSA user port of this switch (H4 guard) -> stays in SW\n",
+			 odev ? netdev_name(odev) : "(null)");
+		return -EOPNOTSUPP;
+	}
 
 	/* [up-hwoffload 2026-07-04] UPSTREAM (LAN->WAN, egress = WAN regport) used to
 	 * stay on the SW flowtable fast-path: the UP direction's HW-forwarded frames
@@ -6028,6 +6052,37 @@ static ssize_t zx_fttest_write(struct file *f, const char __user *ubuf,
 		mutex_unlock(&zx_hwlock);
 		pr_info("[fttest] destroy cookie=%lx rc=%d\n", cookie, rc);
 		return count;
+	}
+	/* [H4 fix 2026-07-04, findings/qa_static_bughunt_2026-07-04.md] "resolve
+	 * <devname>": drive the REAL, unmodified zx_ft_egress_regport() (the
+	 * exact function zx_ft_flower_replace() calls on every REPLACE) against
+	 * a live net_device looked up by name, and apply the same
+	 * ZX_FT_EGRESS_INVALID guard zx_ft_flower_replace() applies, so a
+	 * regression test can deterministically prove the H4 fix without
+	 * needing to stage a genuine non-DSA nf_flowtable egress on real
+	 * traffic. (Staging that live was attempted and found infeasible on
+	 * this rig's topology -- see the regress.py h4_nondsa_decline
+	 * docstring/findings/fix_h4_nondsa_2026-07-04.md for why -- so this
+	 * exercises the identical production resolver + sentinel check via a
+	 * deterministic, HW-write-free debugfs query instead. No installs, no
+	 * HW state touched -- purely a resolve-and-report.) */
+	{
+		char devname[IFNAMSIZ];
+
+		if (sscanf(buf, "resolve %15s", devname) == 1) {
+			struct net_device *d = dev_get_by_name(&init_net, devname);
+			u8 rp = zx_ft_egress_regport(d);
+
+			if (rp == ZX_FT_EGRESS_INVALID)
+				pr_info("[fttest] resolve dev=%s -> INVALID (H4 guard would decline)\n",
+					devname);
+			else
+				pr_info("[fttest] resolve dev=%s -> VALID regport=%u\n",
+					devname, rp);
+			if (d)
+				dev_put(d);
+			return count;
+		}
 	}
 	if (sscanf(buf, "install %lx %x %x %x %x %u",
 		   &cookie, &saddr, &daddr, &sport, &dport, &eg_regport) == 6) {
