@@ -3907,12 +3907,71 @@ static void zx_tm_red_init(struct zx_eth *e)
 	for (q = 0; q < 384; q++)
 		if (zx_red_set_queue_cfg(e, q, 4, 0xff803fff, 0x0100ff80, 0x00100200, 0x20))
 			fail++;
-	dev_info(e->dev, "TM RED init: %d failed of 1168 queue configs (busy timeout)\n", fail);
+
+	/* [red-arm 2026-07-04] Clear RED_CFG bit6 (phys 0x92344004, tm off
+	 * 0x4004): DISABLE the RED cpuDn out-buffer occupancy accounting.
+	 *
+	 * ROOT CAUSE OF THE CHURN/WAN-RX WEDGE (validated live on the H3600,
+	 * findings/fix_churn_red_dnbank_2026-07-04.md): with bit6=1 (the 0xDE
+	 * reset value, == stock live) every WAN-ingress hw_trap charges the RED
+	 * out-buffer used_space of its CPU-DN queue (RED out-queue indices
+	 * 8-15, stock's red_info_store "cpuDn" bank; readable via RED indirect
+	 * ram1, CMD 0x4014 = q|0x8400000) 1:1 -- and on mainline NOTHING ever
+	 * returns it: DN traps deliver to the CPU via ring0, whose dequeue/
+	 * release credits only the cpuUp bank. used_space leaks monotonically
+	 * to the 0x400=1024 depth, RED then demotes all further DN traps to
+	 * sw_fwd (which never reaches the CPU on mainline) = the reboot-only
+	 * "qmg_dn_trap pinned at 1024" wedge (churn storms and even idle WAN
+	 * chatter get there). No SW op refunds a charged queue -- release port
+	 * 0x4064/0x4068 (both bank polarities x both sop values, stale AND
+	 * actively-charging queues), ram0/ram1 indirect writes (both write
+	 * protocols), RED cfg_enable toggle, OPC ram-init pulse: ALL refuted
+	 * live with the ram1 occupancy oracle watching.
+	 *
+	 * bit6 is a LIVE level control, proven by runtime bisection: 0xDE
+	 * leaks 1:1, 0x9E (bit6 cleared) stops the charge instantly, restoring
+	 * 0xDE resumes the leak, re-clearing freezes it again. bit7 alone
+	 * (0x5E) does NOT stop it. With bit6=0 a 60-flow churn storm drove
+	 * qmg_dn_trap to 2098 -- past the old 1024 wall -- with zero occupancy
+	 * accumulation, lan4 datapath healthy, downloads at line rate.
+	 *
+	 * Stock DIVERGENCE, deliberate: stock runs bit6=1 but never exercises
+	 * the DN hw_trap path at scale (its to-CPU traffic rides the sw_fwd
+	 * verdict; live stock reads qmg_dn_trap == 0), so the charge-only
+	 * accounting never hurts it. Mainline's trap-all DSA-conduit
+	 * architecture charges it on EVERY WAN-ingress frame, so the
+	 * accounting must be off until (if ever) delivery is rearchitected
+	 * onto the sw_fwd path. CPU overload protection still exists upstream/
+	 * downstream of it: ADM per-queue PPS policing, the RX ring pending
+	 * counters + NAPI budget, and the BMU pool. */
+	{
+		u32 cfg = tm_read(e, 0x4004);
+
+		tm_write(e, 0x4004, cfg & ~0x40u);
+		dev_info(e->dev, "TM RED init: %d failed of 1168 queue configs; RED_CFG 0x%02x -> 0x%02x (bit6 cpuDn charge-accounting OFF)\n",
+			 fail, cfg, cfg & ~0x40u);
+	}
 }
 
 /* [Iter Y 2026-06-04] zx_red_block_init — init the REAL RED congestion block at phys 0x92344000
- * (e->base + 0x184000). UNTESTED-PENDING-HW (committed during a host-USB block so it's ready to
- * build+test the moment 2 stable NICs return). RATIONALE: grep proved mainline NEVER writes the
+ * (e->base + 0x184000).
+ *
+ * ⚠ [red-arm 2026-07-04] LATENT BASE BUG, now understood: every access below goes through
+ * tm_write()/tm_read() (= e->base + TM_OFF 0x180000 + off) with NPP-relative offsets
+ * (RED_OFF 0x184000), so it all lands at 0x924Cxxxx DEAD SPACE — none of these writes have
+ * ever reached the RED block. Benign in the end: the RED globals reset-default to stock's
+ * live values (RED_CFG=0xDE, share maxes 0x3ff/0x3fff), and the premise below ("mainline
+ * never writes 0x92344xxx") was wrong anyway — zx_tm_red_init()'s TM[0x4014] IS the RED
+ * indirect port at phys 0x92344014 (tm-relative), and its ram0 q0-15=0x400 matches stock
+ * live. The churn/WAN-RX 1024 wedge root cause was NOT this bug (stock also runs
+ * RED_CFG=0xDE) but the bit6 cpuDn charge-accounting — see the [red-arm] block in
+ * zx_tm_red_init. Left otherwise untouched: making these writes land would apply
+ * UNVALIDATED config values (e.g. q0-15 guart 0x3ff vs the live-verified 0x400) — clean up
+ * in a dedicated pass.
+ *
+ * Original rationale (kept for history): UNTESTED-PENDING-HW (committed during a host-USB
+ * block so it's ready to build+test the moment 2 stable NICs return). RATIONALE: grep proved
+ * mainline NEVER writes the
  * 0x92344xxx RED block — zx_tm_red_init() above touches TM[0x4014]=0x921c4014 (a DIFFERENT block).
  * So the RED block's per-queue OUT-BUFFER thresholds + global share pools run at reset/bootloader
  * defaults → suspected cause of the CPU/trap-queue RED drops + the ~1024 latch under load.
@@ -4361,8 +4420,15 @@ static void zx_tm_dma_init(struct zx_eth *e)
 	/* TM[0x4xxx] queue/RX-ACK config from stock dump — never written by us.
 	 * 0x4014/0x4018 look like RX queue enable+config. 0x4080+ are stats but
 	 * 0x4040=port mask and 0x4068=ACK control are gating.
-	 */
-	tm_write(e, 0x4004, 0x000000de);
+	 *
+	 * [red-arm 2026-07-04] 0x4004 (RED_CFG, phys 0x92344004): the stock-dump
+	 * value is 0xDE, but bit6 = the cpuDn out-buffer charge-accounting MUST
+	 * stay CLEARED on mainline (0x9E) or the DN trap-credit leak/wedge comes
+	 * back — this very line (a later-init replay of the stock constant) is
+	 * what silently reverted the zx_tm_red_init clear on the first fixed
+	 * build. See the [red-arm] comment in zx_tm_red_init for the full story
+	 * + findings/fix_churn_red_dnbank_2026-07-04.md. */
+	tm_write(e, 0x4004, 0x0000009e);
 	tm_write(e, 0x4014, 0x0100017f);
 	tm_write(e, 0x4018, 0x00000001);
 	tm_write(e, 0x401c, 0xff803fff);
