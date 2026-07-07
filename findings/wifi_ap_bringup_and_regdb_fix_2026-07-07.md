@@ -95,6 +95,50 @@ Then via adb `cmd wifi connect-network "H3600-AP-Test" wpa2 "h3600aptest"`:
   route on a no-internet Wi-Fi). Not a device WiFi fault: the reverse direction
   proves the L2/L3 path is bidirectional.
 
+## End-to-end: WiFi client reaches the internet THROUGH the H3600 (SW path)
+
+After the AP worked, wired the client to the internet via the host as uplink and
+**verified a real Android STA reaching 8.8.8.8 through the H3600** (cellular
+data OFF, so the only path is WiFi):
+
+```
+Android STA 192.168.50.10
+  -> WiFi 5 GHz WPA2  -> H3600 AP wlan1 (hostapd)
+  -> H3600 route+NAT (MASQUERADE -o lan2)  -> lan2 (MAC2) 192.168.9.1
+  -> host enxc8a362 192.168.9.2  -> host NAT (MASQUERADE -o wlo1)  -> internet
+```
+
+**Proof (device conntrack, cellular off):**
+`src=192.168.50.10 dst=8.8.8.8 type=8 ... src=8.8.8.8 dst=192.168.9.1` — the
+H3600 is NAT-translating the client's ICMP; 7 conntrack entries for the client.
+Android ping 8.8.8.8 = 4/4 0% loss with mobile data disabled.
+
+### The "host<->device DSA path is broken" was a MISDIAGNOSIS (two config bugs)
+
+Earlier this session I concluded the DSA host<->device L3 path was broken. It was
+not — two host/config mistakes:
+1. **Host routing:** `ip addr add` on enxc8a362 was silently failing (expired
+   sudo cache), so there was no connected route for the device subnet — the
+   host sent the test pings out `wlo1` (default route via the home modem), never
+   to the device. `ip route get 192.168.9.1` -> `via 10.44.66.250 dev wlo1` was
+   the tell.
+2. **Wrong port:** the host cable is on **lan2 (MAC2 / RJ45 #3, the U-Boot TFTP
+   jack)**, NOT lan4/WAN as assumed. Found by flooding ARP from the host and
+   reading per-port rx deltas on the device: lan2 +16 / sw +20, lan4 only +4.
+   (Consistent with the memory: U-Boot TFTPs via MAC2, and this box TFTP-booted
+   fine over this same cable.)
+
+With the IP on **lan2** and the host route correct, host<->device is 3/3 both
+ways, RTT ~2 ms. Device-side setup that made the client's internet work:
+`ip route add default via 192.168.9.2`, `iptables -t nat -A POSTROUTING -o lan2
+-j MASQUERADE`, `iptables -P FORWARD ACCEPT`, and udhcpd with `option dns` +
+`option router 192.168.50.1`. Host-side: `ip_forward=1`, `iptables -t nat -A
+POSTROUTING -s 192.168.9.0/24 -o wlo1 -j MASQUERADE`.
+
+This is the **SW-forwarding baseline** (CPU routes+NATs every packet — visible
+in conntrack/netfilter). It is exactly the base on which the HW offload (below)
+is built.
+
 ## WiFi HW offloading — status: NOT IMPLEMENTED (Stage 3)
 
 Per the earlier device-free RE (`findings/wifi_offload_feasibility_2026-07-04.md`):
