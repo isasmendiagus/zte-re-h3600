@@ -405,6 +405,18 @@ struct zx_eth {
 	 */
 	u8  fdb_learned[16];
 
+	/* [Stage-3 WiFi observation, 2026-07-07] IDM RX ssid decode — ADDITIVE
+	 * ONLY, delivery via napi_gro_receive is unchanged. Per the stock RE
+	 * (findings/wifi_offload_feasibility_2026-07-04.md), IDM RX desc word1
+	 * bits 16..18 = ssid (3-bit), bit 19 = ssid_valid. Mirrors the
+	 * tm_rx_per_ingress[] counter pattern above: pure observation to learn
+	 * whether/which ssid stock's WLAN vifs would stamp on this ring once
+	 * ports 6/7 carry real MT7915 AP traffic. No behavior change.
+	 */
+	u32 idm_rx_count;
+	u32 idm_rx_per_ssid[8];
+	u32 idm_rx_ssid_invalid;	/* ssid_valid bit was 0 */
+
 	struct napi_struct napi;
 	struct zx_eth_port ports[ZX_NPORTS];
 
@@ -1634,6 +1646,21 @@ static int zx_idm_poll(struct napi_struct *napi, int budget)
 			u16 len = word1 & 0x3FFF;
 			u8 port = (word1 >> 31) & 1;
 			struct net_device *ndev = e->ports[port].netdev;
+			/* [Stage-3 WiFi observation, 2026-07-07] ADDITIVE ssid decode.
+			 * Per stock RE (findings/wifi_offload_feasibility_2026-07-04.md
+			 * dump_idm_desc_rx): IDM RX desc byte6 bit0..2 = ssid, byte6
+			 * bit3 = ssid_valid → word1 bits 16..18 / bit 19. This is pure
+			 * observation to establish the RX-ssid ground truth once fabric
+			 * ports 6/7 carry MT7915 AP traffic; delivery below is unchanged
+			 * (still napi_gro_receive). No dispatch, no behavior change. */
+			u8 ssid = (word1 >> 16) & 0x7;
+			bool ssid_valid = (word1 >> 19) & 1;
+
+			e->idm_rx_count++;
+			if (ssid_valid)
+				e->idm_rx_per_ssid[ssid]++;
+			else
+				e->idm_rx_ssid_invalid++;
 
 			new_skb = __netdev_alloc_skb(ndev, IDM_RX_SKB_SIZE, GFP_ATOMIC);
 			if (!new_skb) {
@@ -5547,6 +5574,17 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 		   e->tm_rx_per_ingress[7], e->tm_rx_per_ingress[8],
 		   e->tm_rx_per_ingress[0]);
 	seq_printf(s, "tm_rx_loopback_drops = %u\n", e->tm_rx_loopback_drops);
+	/* [Stage-3 WiFi observation] IDM RX ssid histogram — additive, decoded
+	 * from IDM RX desc word1 bits16..19 in zx_idm_poll. All-zero today (ports
+	 * 6/7 carry no MT7915 traffic yet); becomes the empirical RX-ssid ground
+	 * truth once an AP client sends through the fabric. */
+	seq_printf(s, "idm_rx_count      = %u\n", e->idm_rx_count);
+	seq_printf(s, "idm_rx_per_ssid 0..7 = %u %u %u %u %u %u %u %u  (ssid_invalid=%u)\n",
+		   e->idm_rx_per_ssid[0], e->idm_rx_per_ssid[1],
+		   e->idm_rx_per_ssid[2], e->idm_rx_per_ssid[3],
+		   e->idm_rx_per_ssid[4], e->idm_rx_per_ssid[5],
+		   e->idm_rx_per_ssid[6], e->idm_rx_per_ssid[7],
+		   e->idm_rx_ssid_invalid);
 	seq_printf(s, "tm_tx_count       = %u\n", e->tm_tx_count);
 	seq_printf(s, "tm_tx_dropped     = %u\n", e->tm_tx_dropped);
 	seq_printf(s, "tm_bmu_free_ok    = %u\n", e->tm_bmu_free_ok);
