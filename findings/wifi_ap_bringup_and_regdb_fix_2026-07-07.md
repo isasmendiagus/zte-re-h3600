@@ -167,6 +167,54 @@ steps (ranked, from the feasibility finding):
 Risks noted: exact stored-entry ssid encodings, the trap-all L2 behaviour (only
 CLA flows get the full HW ride), MT7915 AP-mode MCU stability (the reboot above).
 
+### Stage-3 gap analysis (mainline IDM code, 2026-07-07)
+
+Device state today: `idm0`/`idm1` netdevs exist but are **DOWN** (qdisc noop,
+0 rx) — fabric ports 6/7 unused. All debugfs offload tools are present
+(`clapeek`/`clawrite`/`fdbadd`/`pmwrite`/`pmpeek`/`txtest`/`ftup`/`hashcalc`).
+
+Mainline `drivers/net/ethernet/zte/zx-eth-main.c` gaps (vs the stock ssid path):
+- **RX (`zx_idm_poll` :1633-1660):** decodes only `len` (word1 bits0-13) and the
+  idm-port bit (word1 bit31); delivers via plain `napi_gro_receive`. The ssid
+  (byte6 bits0-2) + ssid_valid (byte6 bit3) = word1 bits16-19 are **never read**.
+  No `(idm,ssid)->vif` dispatch hook (the stock `idm_skb_recv` equivalent).
+- **TX (`zx_idm_xmit` :1744-1746):** builds word1 = `len | (port?BIT31:0)` only;
+  ssid bits 30:28 are **never set**, `skb[0xb7]` is never read.
+- **No ssid macros** anywhere (`IDM_DESC_LEN_MASK`/`_PORT_BIT` only, :304-306;
+  `IDM_DESC_CSUM_SHIFT 28` defined but unused). Ring is a raw `u32*`.
+- **FDB (`zx_fdb_add` :656):** can address port 6/7 (`port<8`), encodes port in
+  `d2` (:677), but the entry format has **no ssid field**; port 6 is currently
+  repurposed as a plain CPU port for idm0/idm1 (comment :261).
+- **CLA/PM builders:** all keyed on LAN/WAN ports + `ZX_CPU_PORT 5`; the
+  `zx_ft_regport[8]`/`port_remap[8]` tables carry logical→phys for ports 0-7 but
+  **no ssid / outport / ssid_flag** dimension anywhere.
+
+**Port 6/7 isolation — POLARITY MUST BE VERIFIED FIRST.** `zx_port_isolate`
+(:888) writes `PP_BRG_ISOLATE(p)=0x83C0+p*4` (PP block, `PP_OFF 0x1C0000`). At
+:7619-7620 ports 6/7 get `0xFF` (also duplicated raw at :1340-1341). But the
+code comment (:885) documents the register as an **allow-mask** (ports this port
+may forward TO); the LAN loop `~(1<<i)` (allow all-but-self) only makes sense
+under allow-semantics, under which `0xFF` = forward to ALL (MORE permissive, not
+isolated). Stock uses `0xdf` (all except PON port 5). So the feasibility note's
+"isolates 6/7 with 0xFF" is likely **inverted** — mainline already opens 6/7,
+just not identically to stock. Read `PP[0x83D8]/[0x83DC]` live before changing.
+
+**Ranked first reversible steps (do #1+#2 as one observational commit):**
+1. After verifying polarity, align ports 6/7 forwarding mask with stock
+   (`0xFF`->`0xdf`) at :7619-7620 (+ the duplicate :1340-1341). 2 lines, trivially
+   revertible.
+2. RX ssid decode (additive/observational) in `zx_idm_poll` after :1634:
+   `u8 ssid=(word1>>16)&0x7; bool ssid_valid=(word1>>19)&1;` — log/count per-ssid
+   (mirror `tm_rx_per_ingress` :394), keep `napi_gro_receive`. Gives the
+   empirical RX-ssid ground truth once 6/7 are open.
+3. TX ssid stamp in `zx_idm_xmit` :1744-1746: OR `((ssid&0x7)<<28)` + add
+   `#define IDM_DESC_SSID_SHIFT 28`; defaults to 0 (= today) when no ssid marker.
+   Only useful once AP-mode WiFi vifs feed frames with an ssid source.
+
+Blocking unknown for #2/#3 to become *useful*: the exact ssid bit positions in
+the **stored** FDB/CLA/PM entries still need RE from stock `tm.ko` — mainline
+has none of that plumbing yet.
+
 ## Reusable gotchas this session
 
 - **tftpd dies on USB-NIC re-enumeration.** The host TFTP NIC (AX88179,
