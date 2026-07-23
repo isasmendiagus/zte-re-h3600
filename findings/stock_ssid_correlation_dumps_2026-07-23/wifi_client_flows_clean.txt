@@ -1,0 +1,15 @@
+Da_known               :0
+da_known= 0, valid_en = 0, direct = 0, rule_mode = 0
+da_known= 0, valid_en = 1, direct = 0, rule_mode = 0
+da_known= 1, valid_en = 0, direct = 1, rule_mode = 0
+da_known= 1, valid_en = 1, direct = 1, rule_mode = 0
+e8_en =0, cmd_flow_id = 1136, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+e8_en =0, cmd_flow_id = 1137, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+e8_en =0, cmd_flow_id = 1138, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+e8_en =0, cmd_flow_id = 1139, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+e8_en =0, cmd_flow_id = 1140, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+[TM][pp_pm_get_next_hop_ram_info]input: next_hop_idx = 167, 
+[TM][pp_pm_get_next_hop_ram_info]output: next_mac: 0xfa:f4:9f;69:7e:e5,  next_dip: 192.168.1.128
+[TM][pp_pm_set_flow_info]input: dir = 0, flow_ram_addr = 1149,           sub_ram_index = 0, next_hop_idx = 164, pri_dscp_tc_en = 0,flow_pri_en = 0, flow_pri = 0,subnet_id = 1,
+[TM][pp_pm_set_flow_info]input: dir = 1, flow_ram_addr = 1136,           sub_ram_index = 0, next_hop_idx = 165, pri_dscp_tc_en = 0,flow_pri_en = 0, flow_pri = 0,subnet_id = 0,
+[TM][pp_pm_set_next_hop_ram_info]input: next_hop_idx: 165, next_mac: 0xfa:f4:9f;69:7e:e5,  next_dip: 192.168.1.128

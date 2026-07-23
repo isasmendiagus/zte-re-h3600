@@ -1,0 +1,96 @@
+[TM][pp_pm_set_next_hop_ram_info]input: next_hop_idx: 165, next_mac: 0xfa:f4:9f;69:7e:e5,  next_dip: 192.168.1.128
+[TM][pp_pm_set_flow_info]input: dir = 1, flow_ram_addr = 1136,           sub_ram_index = 0, next_hop_idx = 165, pri_dscp_tc_en = 0,flow_pri_en = 0, flow_pri = 0,subnet_id = 0,
+[TM][cla_acl_hash_addr_gen]input: 
+hash_mode = 0,outport = 0 , inport = 0,tag_level = 0,l2_type = 0 
+[TM][cla_acl_hash_addr_gen] hash_addr = d6ec
+[TM][cla_set_hash_table]input: 
+hash_addr = 236, windata19 = 0, windata18 =0 ,windata17 =0
+windata0= 17, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 1, valid_en = 1, direct = 1, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1136, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+[TM][cla_acl_hash_addr_gen]input: 
+hash_mode = 0,outport = 0 , inport = 0,tag_level = 0,l2_type = 0 
+[TM][cla_acl_hash_addr_gen] hash_addr = dfe7
+[TM][cla_set_hash_table]input: 
+hash_addr = 231, windata19 = 0, windata18 =0 ,windata17 =0
+windata0= 6, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 1, valid_en = 1, direct = 1, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1137, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+[TM][pp_pm_set_flow_info]input: dir = 0, flow_ram_addr = 1149,           sub_ram_index = 0, next_hop_idx = 164, pri_dscp_tc_en = 0,flow_pri_en = 0, flow_pri = 0,subnet_id = 1,
+[TM][cla_acl_hash_addr_gen]input: 
+hash_mode = 0,outport = 0 , inport = 0,tag_level = 0,l2_type = 0 
+[TM][cla_acl_hash_addr_gen] hash_addr = c894
+[TM][cla_set_hash_table]input: 
+hash_addr = 148, windata19 = 0, windata18 =0 ,windata17 =0
+windata0= 6, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 0, valid_en = 1, direct = 0, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1149, tcnt_gpid_rp_en = 1, gemport_uni_id = 5
+hash_addr = 148, windata19 = 0, windata18 =0 ,windata17 =0
+windata0= 6, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 0, valid_en = 1, direct = 0, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1149, tcnt_gpid_rp_en = 1, gemport_uni_id = 5
+[TM][cla_set_hash_table]input: 
+hash_addr = 148, windata19 = 0, windata18 =0 ,windata17 =0
+windata0= 6, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 0, valid_en = 0, direct = 0, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1149, tcnt_gpid_rp_en = 1, gemport_uni_id = 5
+[TM][cla_get_hash_table]input: hash_addr = 231
+hash_addr = 231, windata19 = 0, windata18 =0 ,windata17 =0
+windata0= 6, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 1, valid_en = 1, direct = 1, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1137, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+[TM][cla_set_hash_table]input: 
+hash_addr = 231, windata19 = 0, windata18 =0 ,windata17 =0
+windata0= 6, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 1, valid_en = 0, direct = 1, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1137, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+v4_up:3, v4_dn:3, v6_up:0, v6_dn:0
+fast entry total 6
+hash_addr = 93, windata19 = 0, windata18 =0 ,windata17 =0
+windata0= 17, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 1, valid_en = 1, direct = 1, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1138, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+[TM][cla_set_hash_table]input: 
+hash_addr = 93, windata19 = 0, windata18 =0 ,windata17 =0
+windata0= 17, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 1, valid_en = 0, direct = 1, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1138, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+[TM][cla_get_hash_table]input: hash_addr = 210
+hash_addr = 210, windata19 = 0, windata18 =0 ,windata17 =0
+windata0= 17, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 0, valid_en = 1, direct = 0, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1150, tcnt_gpid_rp_en = 1, gemport_uni_id = 5
+[TM][cla_set_hash_table]input: 
+hash_addr = 210, windata19 = 0, windata18 =0 ,windata17 =0
+windata0= 17, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 0, valid_en = 0, direct = 0, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1150, tcnt_gpid_rp_en = 1, gemport_uni_id = 5
+windata0= 17, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 1, valid_en = 1, direct = 1, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1140, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+ Forward, tcont:0, queue:0, gemport_uni:0x1c(28)
+dir = 1, flow_ram_addr = 1140, sub_ram_index = 0, next_hop_idx = 167, dmac_en = 1, smac_en = 1, nat_dport = 34389, nat_sport = 0, hl_ttl_en = 1
+[TM][pp_pm_get_next_hop_ram_info]input: next_hop_idx = 167, 
+[TM][pp_pm_get_next_hop_ram_info]output: next_mac: 0xfa:f4:9f;69:7e:e5,  next_dip: 192.168.1.128
+[TM][cla_get_hash_table]input: hash_addr = 8
+hash_addr = 8, windata19 = 0, windata18 =0 ,windata17 =0
+windata0= 17, flow_sta_info = 0, gemport_valid = 0, tcont_high = 0
+da_known= 1, valid_en = 1, direct = 1, rule_mode = 0
+inport = 0, outport = 0, flow_pri = 0, wan_id = 0
+e8_en =0, cmd_flow_id = 1139, tcnt_gpid_rp_en = 1, gemport_uni_id = 28
+ Forward, tcont:0, queue:0, gemport_uni:0x1c(28)
+dir = 1, flow_ram_addr = 1139, sub_ram_index = 0, next_hop_idx = 167, dmac_en = 1, smac_en = 1, nat_dport = 60684, nat_sport = 0, hl_ttl_en = 1
+[TM][pp_pm_get_next_hop_ram_info]input: next_hop_idx = 167, 
+[TM][pp_pm_get_next_hop_ram_info]output: next_mac: 0xfa:f4:9f;69:7e:e5,  next_dip: 192.168.1.128
