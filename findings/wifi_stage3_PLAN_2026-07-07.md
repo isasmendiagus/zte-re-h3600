@@ -126,7 +126,12 @@ dump the same structures) if the mainline read is ambiguous.
 - **Phase B — IDM plumbing:** RX ssid decode→dispatch, TX ssid stamp, greg IDM-RX
   enable if needed, and the `(idm,ssid)↔vif` dispatcher (idmfdb equivalent).
   Moderate, bounded once A is known. Driver code + live iteration.
-- **Phase C — extend CLA/PM flow-offload to emit outport 6/7 + ssid.** Heavily
+- **Phase A — SOLVED 2026-07-07** (stock-live correlation, commit 246621e29): the ssid rides
+  the CLA flow's **`gemport_uni_id`** (essid `0x10 | (idm_ring<<3) | ssid`, range 0x10-0x1f),
+  with `outport=0`, `da_known=1`, `direct=1`. NOT in the FDB (no ssid field) and NOT in `outport`.
+  This is the "good case" — `gemport_uni_id` is a CLA field the eth offload path already uses.
+- **Phase C — extend CLA/PM flow-offload to emit the WiFi flow: pack `gemport_uni_id` with
+  `0x10|(idm_ring<<3)|ssid`, leave `outport=0`, set `da_known/direct`.** Heavily
   reuses the eth DN offload path; relatively fast, but gated on A.
 - **Phase D — integration + validation + hardening:** WAN→WiFi DN NAT rides HW,
   verify with a real client, measure hit-rate/CPU, regress tests, handle MT7915

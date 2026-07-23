@@ -236,6 +236,8 @@ existing memory) + `wan_id`(5 bits) — zero spare bits.
 (§3) — this 5-bit width is the interesting clue for Stage 3 (see 🟡 hypothesis below), since ports
 0-7 alone would only need 3 bits.
 
+> **✅ RESOLVED 2026-07-07 by stock-live correlation (see `findings/wifi_stage3_stock_ssid_correlation_2026-07-07.md`, commit 246621e29): the value/range was RIGHT (`0x10 | (idm_ring<<3) | ssid`, e.g. 0x1c = idm1/port7/SSID4) but the FIELD was WRONG — the essid is stored in the CLA flow's `gemport_uni_id` (CLA entry bytes 1-2: `param_2[2]<<4 | param_2[1]>>4`), NOT in `outport` (which stock leaves = 0). So a mainline WiFi flow must pack `gemport_uni_id` with `0x10|(ring<<3)|ssid` and leave `outport=0`. The hypothesis below is preserved for history but is superseded on the field-location point.**
+
 ### 🟡 Hypothesis (not confirmed) — `outport` may already be wide enough to fold ssid in via value range
 
 The FDB job (§2, §5) independently confirmed a **real, exact** SW-side "logical WLAN port" numbering
