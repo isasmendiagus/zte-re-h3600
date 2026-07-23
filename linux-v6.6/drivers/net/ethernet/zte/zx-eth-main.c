@@ -56,6 +56,7 @@
 #include <linux/list.h>
 #include <linux/rtnetlink.h>
 #include <net/dsa.h>
+#include <net/net_namespace.h>	/* [Stage-3 WiFi Phase B] init_net for dev_get_by_name */
 #include <net/flow_offload.h>
 #include <net/neighbour.h>
 #include <net/route.h>
@@ -302,10 +303,49 @@
 
 /* Descriptor word [4:8] bit fields (TX) */
 #define IDM_DESC_LEN_MASK	0x1FFFFF
-#define IDM_DESC_CSUM_SHIFT	28
+/* [Stage-3 WiFi Phase B, 2026-07-23] TX-desc word1 bits 28..30 = ssid, bit 31
+ * = ring select (IDM_DESC_PORT_BIT). Verified against stock idm_net_tx
+ * (decomp_all_plat_zxylzb_9128S.c:4268-4270: desc[1] = len | ring<<31 |
+ * cb[0xb7]<<28) — see findings/wifi_stage3_phaseB_dispatcher_spec_2026-07-07.md
+ * §2.2. RENAMED from the old, unused-and-misnamed IDM_DESC_CSUM_SHIFT (which
+ * was an early mis-transcription of exactly these ssid bits; do NOT re-add a
+ * second define for bit 28). */
+#define IDM_DESC_SSID_SHIFT	28
+#define IDM_DESC_SSID_MASK	0x7
 #define IDM_DESC_PORT_BIT	BIT(31)
 
 #define ZX_NPORTS		2	/* idm0 + idm1 */
+
+/* [Stage-3 WiFi Phase B, 2026-07-23] ssid carried in skb->cb from the WiFi
+ * vif's rx_handler (zx_wifi_rx_handler) into zx_idm_xmit's TX-descriptor
+ * packer. Stock uses skb->cb[0xb7], but that offset is out of bounds for
+ * mainline's 48-byte sk_buff::cb — a fresh in-bounds offset is used here per
+ * the spec's step-3 correction. The magic byte gates application so ordinary
+ * (non-WiFi) traffic through zx_idm_xmit keeps today's behavior (no ssid bits
+ * added) when no tag was stamped. UNTESTED ON HARDWARE — staged for later
+ * hardware validation (spec §2.2/§2.3). */
+struct zx_skb_wifi_tag {
+	u8 magic;
+	u8 ssid;
+};
+#define ZX_SKB_CB_TAG_OFF	40
+#define ZX_SKB_CB_TAG_MAGIC	0x5a
+
+/* [Stage-3 WiFi Phase B, 2026-07-23] IDM ring <-> WiFi-vif dispatch node.
+ * node_index = ssid + idm*8 (range 0..15, 2 rings × 8 ssid) — confirmed from
+ * three independent stock sites (get_node_index.c:16, idm_fdb_forward.c:25,
+ * idm_fdb_multi_send_handle.c:219). idm/ssid are position-determined constants
+ * (mirrors stock's static fdb_list initializer). A mainline binding owns both
+ * ends of the mapping, so this replaces stock's register_idm_fdb_node +
+ * WlanIndex2WlanIdmMap indirection with a direct (idm,ssid)→vif table
+ * (spec §1.3/§3). UNTESTED ON HARDWARE. */
+struct zx_wifi_dispatch_node {
+	bool enabled;
+	u8 idm;				/* ring 0/1 (= node_index >> 3) */
+	u8 ssid;			/* 0..7    (= node_index & 7)  */
+	struct net_device *idm_ndev;	/* the idmN netdev (= ports[idm].netdev) */
+	struct net_device *wlan_ndev;	/* the bound mac80211 vif netdev */
+};
 
 struct zx_eth;
 
@@ -416,6 +456,19 @@ struct zx_eth {
 	u32 idm_rx_count;
 	u32 idm_rx_per_ssid[8];
 	u32 idm_rx_ssid_invalid;	/* ssid_valid bit was 0 */
+
+	/* [Stage-3 WiFi Phase B, 2026-07-23] IDM ring <-> WiFi-vif dispatch.
+	 * BUILD-VERIFIED, UNTESTED ON HARDWARE — staged per
+	 * findings/wifi_stage3_phaseB_dispatcher_spec_2026-07-07.md. The table
+	 * defaults all-zero (enabled=false everywhere), so with nothing bound
+	 * both the RX dispatch (zx_idm_poll) and TX stamp (zx_idm_xmit) are
+	 * inert and behavior is byte-identical to today's baseline. Bindings
+	 * are installed via the "wifi_bind" debugfs knob (zx_wifi_register_vif).
+	 * node_index = ssid + idm*8. */
+	struct zx_wifi_dispatch_node zx_wifi_dispatch[16];
+	u32 idm_wifi_rx_dispatched;	/* RX frames handed to a bound vif */
+	u32 idm_wifi_rx_nobind;		/* valid ssid, no bound/up vif -> local stack */
+	u32 idm_wifi_tx_injected;	/* TX frames stamped with an ssid into the ring */
 
 	struct napi_struct napi;
 	struct zx_eth_port ports[ZX_NPORTS];
@@ -1560,7 +1613,14 @@ static int zx_idm_init(struct zx_eth *e)
 	for (int i = 0; i < IDM_RX_RING_SIZE; i++)
 		npp_write(e, IDM_REG_RX_KICK, 0x10000);
 
-	/* Final RX enable from stock */
+	/* Final RX enable from stock.
+	 * [Stage-3 WiFi Phase B, 2026-07-23] This is ALSO the "enable IDM RX"
+	 * step the Phase-B spec (§4) calls for — it is the exact stock enable
+	 * value and no additional register write is needed for the ring to
+	 * receive WiFi-stamped frames; idm0/idm1 are already registered, up-able
+	 * netdevs (zx_eth_probe_port). The ring reads 0 today only because
+	 * nothing feeds it, which is precisely the gap the Phase-B dispatch
+	 * (zx_idm_poll RX dispatch + zx_idm_xmit TX stamp) closes. */
 	npp_write(e, IDM_REG_RX_ENABLE, 0x4000800);
 
 	e->rx_idx = 0;
@@ -1681,11 +1741,43 @@ static int zx_idm_poll(struct napi_struct *napi, int budget)
 					 DMA_FROM_DEVICE);
 			skb_put(skb, len);
 			skb->dev = ndev;
+
+			/* [Stage-3 WiFi Phase B, 2026-07-23] RX dispatch.
+			 * BUILD-VERIFIED, UNTESTED ON HARDWARE (spec §1/§3,
+			 * findings/wifi_stage3_phaseB_dispatcher_spec_2026-07-07.md).
+			 * If this ring frame carries a valid ssid that maps to a
+			 * bound, UP mac80211 vif, hand the *intact* L2 frame to
+			 * that vif's ndo_start_xmit — mirroring stock
+			 * idm_fdb_forward's direct ndo_start_xmit call
+			 * (idm_fdb_forward.c:54). ⚠ Deliberately does NOT call
+			 * eth_type_trans() here: eth_type_trans() pulls the 14-B
+			 * Ethernet header (skb_pull(ETH_HLEN)), which the vif's
+			 * transmit path needs left intact. When nothing is bound
+			 * (the default), this whole block is skipped and delivery
+			 * falls through unchanged to the local stack below — the
+			 * exact SW baseline. `port` here is the idm ring index
+			 * (word1 bit31), so node_index = ssid + port*8. */
+			if (ssid_valid && ssid < 8) {
+				struct zx_wifi_dispatch_node *wn =
+					&e->zx_wifi_dispatch[ssid + port * 8];
+
+				if (wn->enabled && wn->wlan_ndev &&
+				    (wn->wlan_ndev->flags & IFF_UP)) {
+					skb->dev = wn->wlan_ndev;
+					e->idm_wifi_rx_dispatched++;
+					wn->wlan_ndev->netdev_ops->ndo_start_xmit(
+						skb, wn->wlan_ndev);
+					goto refill;	/* skip eth_type_trans + gro */
+				}
+				e->idm_wifi_rx_nobind++;
+			}
+
 			skb->protocol = eth_type_trans(skb, ndev);
 			ndev->stats.rx_bytes += len;
 			ndev->stats.rx_packets++;
 			napi_gro_receive(napi, skb);
 
+refill:
 			d[0] = cpu_to_le32(new_dma);
 			d[1] = 0;
 			e->rx_skb[idx] = new_skb;
@@ -1737,7 +1829,15 @@ static netdev_tx_t zx_idm_xmit(struct sk_buff *skb, struct net_device *ndev)
 	u32 *tx_desc = e->desc_cpu + IDM_TX_DESC_OFFSET;
 	dma_addr_t dma;
 	unsigned long flags;
-	u32 idx, len;
+	u32 idx, len, word1;
+	/* [Stage-3 WiFi Phase B, 2026-07-23] read the ssid stamped by
+	 * zx_wifi_rx_handler (if any) — see the ZX_SKB_CB_TAG_* definition. */
+	const struct zx_skb_wifi_tag *tag =
+		(const struct zx_skb_wifi_tag *)&skb->cb[ZX_SKB_CB_TAG_OFF];
+
+	/* Fail the build if the mainline sk_buff::cb ever shrinks below our tag. */
+	BUILD_BUG_ON(ZX_SKB_CB_TAG_OFF + sizeof(struct zx_skb_wifi_tag) >
+		     sizeof_field(struct sk_buff, cb));
 
 	/* Min frame length 0x40 per stock pon_tm_data_raw_send (per stock decomp):
 	 * if (len < 0x40 && param_3==0 && (desc[14]&1)==0) zeropad to 0x40 and
@@ -1768,9 +1868,22 @@ static netdev_tx_t zx_idm_xmit(struct sk_buff *skb, struct net_device *ndev)
 	idx = e->tx_idx;
 	e->tx_idx = (idx + 1) & (IDM_TX_RING_SIZE - 1);
 
+	/* [Stage-3 WiFi Phase B, 2026-07-23] base word1 = today's behavior: len
+	 * plus the ring-select bit derived from which idm netdev we're on
+	 * (port->idx). The ring bit is chosen by the netdev, NOT by the ssid tag
+	 * — so we deliberately do NOT reproduce stock's bug where an unmasked
+	 * cb[0xb7]<<28 (e.g. an echoed 0xff RX sentinel) also corrupts bit31.
+	 * Only when a valid ssid tag was stamped by zx_wifi_rx_handler do we OR
+	 * in the (clamped) 3-bit ssid at bits 28..30; otherwise the descriptor
+	 * is byte-identical to the pre-Phase-B baseline. UNTESTED ON HARDWARE. */
+	word1 = (len & IDM_DESC_LEN_MASK) | (port->idx ? IDM_DESC_PORT_BIT : 0);
+	if (tag->magic == ZX_SKB_CB_TAG_MAGIC) {
+		word1 |= (u32)(tag->ssid & IDM_DESC_SSID_MASK) << IDM_DESC_SSID_SHIFT;
+		e->idm_wifi_tx_injected++;
+	}
+
 	tx_desc[idx * 2]     = cpu_to_le32(dma);
-	tx_desc[idx * 2 + 1] = cpu_to_le32((len & IDM_DESC_LEN_MASK) |
-					   (port->idx ? IDM_DESC_PORT_BIT : 0));
+	tx_desc[idx * 2 + 1] = cpu_to_le32(word1);
 	e->tx_skb[idx] = skb;
 	atomic_inc(&e->tx_pending);
 
@@ -1782,6 +1895,129 @@ static netdev_tx_t zx_idm_xmit(struct sk_buff *skb, struct net_device *ndev)
 	ndev->stats.tx_packets += 1;
 	spin_unlock_irqrestore(&e->tx_lock, flags);
 	return NETDEV_TX_OK;
+}
+
+/* ============================================================
+ *   [Stage-3 WiFi Phase B, 2026-07-23] IDM <-> WiFi-vif dispatch glue
+ *
+ *   BUILD-VERIFIED, UNTESTED ON HARDWARE. Staged per
+ *   findings/wifi_stage3_phaseB_dispatcher_spec_2026-07-07.md. Mainline
+ *   equivalent of stock idmfdb.ko's register_idm_fdb_node /
+ *   idm_fdb_recv_handle, minus the WlanIndex2WlanIdmMap indirection (mainline
+ *   owns both ends of the (idm,ssid)<->vif mapping, so we bind directly).
+ *
+ *   TX direction (vif -> ring): a netdev rx_handler on each bound vif
+ *   intercepts every frame the vif RECEIVES over the air, stamps the ssid
+ *   into skb->cb, and re-injects it onto the vif's bound idmN netdev via
+ *   zx_idm_xmit. This mirrors stock's idm_fdb_recv_handle (spec §2.3). It
+ *   defaults OFF: with no vif bound, no rx_handler is installed, so the SW
+ *   baseline is untouched. NOTE (spec §2.3 coexistence caveat): a vif can
+ *   hold only one rx_handler, and the bridge owns it while the vif is a br0
+ *   member — binding therefore returns -EBUSY unless the vif is first removed
+ *   from br0. Reversible: unregister + re-bridge restores the baseline.
+ * ============================================================
+ */
+
+static rx_handler_result_t zx_wifi_rx_handler(struct sk_buff **pskb)
+{
+	struct sk_buff *skb = *pskb;
+	struct zx_wifi_dispatch_node *node =
+		rcu_dereference(skb->dev->rx_handler_data);
+	struct zx_skb_wifi_tag *tag;
+
+	/* Fall through to the normal stack (SW baseline) when the binding is
+	 * inactive or the target ring isn't up — stock gates on a non-NULL
+	 * idm_dev (idm_fdb_recv_handle.c:28); we add the stricter IFF_UP test. */
+	if (!node || !node->enabled || !node->idm_ndev ||
+	    !(node->idm_ndev->flags & IFF_UP))
+		return RX_HANDLER_PASS;
+
+	/* Stamp ssid for zx_idm_xmit's TX-descriptor packer (spec §2.1/§2.2). */
+	tag = (struct zx_skb_wifi_tag *)&skb->cb[ZX_SKB_CB_TAG_OFF];
+	tag->magic = ZX_SKB_CB_TAG_MAGIC;
+	tag->ssid  = node->ssid;
+
+	skb->dev = node->idm_ndev;
+	/* Direct ndo_start_xmit-equivalent call, mirroring stock's raw dispatch
+	 * (spec §2.3 recommends this over dev_queue_xmit to start). On TX_BUSY
+	 * zx_idm_xmit did NOT take ownership, so drop here (can't re-queue from
+	 * an rx_handler). Revisit with dev_queue_xmit if backpressure drops hurt. */
+	if (zx_idm_xmit(skb, node->idm_ndev) == NETDEV_TX_BUSY)
+		kfree_skb(skb);
+
+	return RX_HANDLER_CONSUMED;
+}
+
+/* Bind a WiFi vif to (idm_ring, ssid). node_index = ssid + idm_ring*8.
+ * UNTESTED ON HARDWARE. Takes/holds a reference on the vif for the lifetime of
+ * the binding; installs the rx_handler under rtnl. Returns -EBUSY if the vif
+ * already has an rx_handler (e.g. it is still a br0 member — see the caveat
+ * above). */
+static int zx_wifi_register_vif(struct zx_eth *e, struct net_device *vif,
+				u8 idm_ring, u8 ssid)
+{
+	struct zx_wifi_dispatch_node *node;
+	int rc;
+
+	if (!vif || idm_ring > 1 || ssid > 7)
+		return -EINVAL;
+	if (idm_ring >= ZX_NPORTS || !e->ports[idm_ring].netdev)
+		return -ENODEV;
+
+	node = &e->zx_wifi_dispatch[ssid + idm_ring * 8];
+	if (node->enabled)
+		return -EBUSY;
+
+	node->idm	= idm_ring;
+	node->ssid	= ssid;
+	node->idm_ndev	= e->ports[idm_ring].netdev;
+	node->wlan_ndev	= vif;
+
+	rtnl_lock();
+	rc = netdev_rx_handler_register(vif, zx_wifi_rx_handler, node);
+	rtnl_unlock();
+	if (rc) {
+		node->wlan_ndev = NULL;
+		node->idm_ndev  = NULL;
+		return rc;
+	}
+
+	dev_hold(vif);
+	/* Publish last: the rx_handler above already returns RX_HANDLER_PASS
+	 * until enabled flips true, and the RX-dispatch path in zx_idm_poll
+	 * likewise checks enabled — so no frame is dispatched half-bound. */
+	smp_wmb();
+	node->enabled = true;
+	netdev_info(vif, "[ZXETH] wifi_bind: %s -> idm%u ssid%u (node %u) [UNTESTED]\n",
+		    vif->name, idm_ring, ssid, ssid + idm_ring * 8);
+	return 0;
+}
+
+/* Unbind. UNTESTED ON HARDWARE. */
+static int zx_wifi_unregister_vif(struct zx_eth *e, u8 idm_ring, u8 ssid)
+{
+	struct zx_wifi_dispatch_node *node;
+	struct net_device *vif;
+
+	if (idm_ring > 1 || ssid > 7)
+		return -EINVAL;
+
+	node = &e->zx_wifi_dispatch[ssid + idm_ring * 8];
+	if (!node->enabled)
+		return -ENOENT;
+
+	node->enabled = false;
+	smp_wmb();
+	vif = node->wlan_ndev;
+	if (vif) {
+		rtnl_lock();
+		netdev_rx_handler_unregister(vif);
+		rtnl_unlock();
+		dev_put(vif);
+	}
+	node->wlan_ndev = NULL;
+	node->idm_ndev  = NULL;
+	return 0;
 }
 
 /* ============================================================
@@ -6684,6 +6920,89 @@ static const struct file_operations zx_txtest_fops = {
 	.llseek = default_llseek,
 };
 
+/* [Stage-3 WiFi Phase B, 2026-07-23] wifi_bind: manually bind/unbind a WiFi
+ * vif to an IDM ring + ssid (spec §5 step 2 — decouples "does the dispatch
+ * mechanism work" from "how is the (idm,ssid) mapping discovered", the latter
+ * being an open policy question, spec §6.3). BUILD-VERIFIED, UNTESTED ON
+ * HARDWARE.
+ *   Bind:    echo '<ifname> <idm> <ssid>' > wifi_bind   # e.g. 'wlan1 0 0'
+ *   Unbind:  echo 'del <idm> <ssid>'      > wifi_bind   # e.g. 'del 0 0'
+ * Reading the file dumps the current 16-node table.
+ * NOTE: netdev_rx_handler_register returns -EBUSY if the vif already has an
+ * rx_handler (it does while a br0 member) — `brctl delif br0 <vif>` first
+ * (spec §2.3 coexistence caveat). */
+static ssize_t zx_wifi_bind_write(struct file *f, const char __user *ubuf,
+				  size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[64], ifname[IFNAMSIZ];
+	unsigned int idm, ssid;
+	struct net_device *vif;
+	int rc;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+
+	if (sscanf(buf, "del %u %u", &idm, &ssid) == 2) {
+		rc = zx_wifi_unregister_vif(e, idm & 0xff, ssid & 0xff);
+		pr_info("[ZXETH] wifi_bind: del idm%u ssid%u = %d [UNTESTED]\n",
+			idm, ssid, rc);
+		return rc ? rc : count;
+	}
+
+	if (sscanf(buf, "%15s %u %u", ifname, &idm, &ssid) != 3)
+		return -EINVAL;
+
+	vif = dev_get_by_name(&init_net, ifname);
+	if (!vif)
+		return -ENODEV;
+	rc = zx_wifi_register_vif(e, vif, idm & 0xff, ssid & 0xff);
+	dev_put(vif);	/* register took its own ref on success */
+	pr_info("[ZXETH] wifi_bind: %s idm%u ssid%u = %d [UNTESTED]\n",
+		ifname, idm, ssid, rc);
+	return rc ? rc : count;
+}
+
+static int zx_wifi_bind_show(struct seq_file *s, void *unused)
+{
+	struct zx_eth *e = s->private;
+	int i;
+
+	seq_puts(s, "# IDM<->WiFi dispatch table (Stage-3 Phase B, UNTESTED ON HW)\n");
+	seq_printf(s, "# rx_dispatched=%u rx_nobind=%u tx_injected=%u\n",
+		   e->idm_wifi_rx_dispatched, e->idm_wifi_rx_nobind,
+		   e->idm_wifi_tx_injected);
+	seq_puts(s, "# node idm ssid  vif        idm_ndev\n");
+	for (i = 0; i < 16; i++) {
+		struct zx_wifi_dispatch_node *n = &e->zx_wifi_dispatch[i];
+
+		if (!n->enabled)
+			continue;
+		seq_printf(s, "  %2d   %u    %u    %-10s %s\n",
+			   i, n->idm, n->ssid,
+			   n->wlan_ndev ? n->wlan_ndev->name : "(null)",
+			   n->idm_ndev ? n->idm_ndev->name : "(null)");
+	}
+	return 0;
+}
+
+static int zx_wifi_bind_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, zx_wifi_bind_show, inode->i_private);
+}
+
+static const struct file_operations zx_wifi_bind_fops = {
+	.owner   = THIS_MODULE,
+	.open    = zx_wifi_bind_open,
+	.read    = seq_read,
+	.write   = zx_wifi_bind_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
 /* ============================================================
  *   pipeline_stats — mirror stock /sys/devices/platform/tm/tmTest/{tmup,tmdn}
  *
@@ -6862,6 +7181,10 @@ static void zx_debugfs_init(struct zx_eth *e)
 	debugfs_create_u32("ftup", 0644, zx_debugfs_root, &e->ft_up_en);
 	debugfs_create_file("pktdeal", 0644, zx_debugfs_root, e, &zx_pktdeal_fops);
 	debugfs_create_file("txtest", 0644, zx_debugfs_root, e, &zx_txtest_fops);
+	/* [Stage-3 WiFi Phase B, 2026-07-23] manual (idm,ssid)<->vif binding
+	 * knob — BUILD-VERIFIED, UNTESTED ON HARDWARE (spec §5 step 2). */
+	debugfs_create_file("wifi_bind", 0644, zx_debugfs_root, e,
+			    &zx_wifi_bind_fops);
 	dev_info(e->dev, "debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem,pipeline_stats,regdump,poke,txtest}\n");
 }
 
