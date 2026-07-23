@@ -34,6 +34,84 @@ guessed.
 
 ---
 
+## Verification pass (Fable 5, 2026-07-23)
+
+Independent device-free re-verification of every load-bearing claim against the decomps,
+the stock binaries themselves, vmlinux.dis, and mainline source. Verdict: **the spec's
+core contracts are correct**; several supporting details were wrong and are fixed inline
+below. Summary:
+
+**Confirmed (re-derived from primary sources, not taken on faith):**
+- `node_index = ssid + idm_ring*8`, now from THREE independent sites (`get_node_index.c:16`,
+  `idm_fdb_forward.c:25`, `idm_fdb_multi_send_handle.c:219`), plus the orca
+  `register_idm_fdb_node_bydev.c:32`.
+- `fdb_list` node layout `+0x00 enabled / +0x01 idm / +0x03 ssid / +0x04 type /
+  +0x08 forbidIdm / +0x10 idm_dev / +0x14 wlan_dev`, stride 0x128 — all cites re-checked.
+- **Q5 upgraded 🟡→✅**: the idm/ssid bytes really are compile-time constants — verified
+  by hexdump of the real `ext/rootfs/kmodule/idmfdb.ko` binary (`.data..read_mostly`
+  section, symbol `fdb_list` size 4736 = 16×0x128, file offset 0x3440): node k has
+  byte`+1` = k>>3 and byte`+3` = k&7 exactly (§1.4). A full sweep of every fdb_list-touching
+  function (incl. the LED/flood functions the original pass missed) found no runtime write.
+- **Q4 confirmed**: `WlanIndex2WlanIdmMap` @ c02ca5a0 + 5 siblings all linear-scan the
+  same 16×0x29 vmlinux table @ 0xc0691650 — and the table has a *name*: **`wlan_to_idm_map`**
+  (`nm.txt:42288`, EXPORT_SYMBOL'd, `__ksymtab_wlan_to_idm_map` @ c05ed630). Key offsets
+  +0x21/+0x22/+0x23/+0x24/+0x25/+0x26/+0x28 all re-verified instruction-by-instruction.
+- The TX contract (`skb->cb[0xb7]` stamp, dispatch via `idm_dev->ndo_start_xmit`) and the
+  stock TX descriptor packing `len | ring<<31 | cb[0xb7]<<28` **unmasked** (the clamp
+  warning is real) — verified directly in `decomp_all_plat_zxylzb_9128S.c:4268-4270`,
+  not just via the encoding spec. RX side (`desc byte6 bit3=valid/bits0-2=ssid → cb[0xb7]`,
+  invalid→`0xff` sentinel) verified at `plat:4125-4131`.
+- All `zx-eth-main.c` line cites (RX decode :1645-1663, xmit :1733-1785, RX_ENABLE
+  0x4000800 :1564, netdev_ops, probe_port, fdb_add) re-read and correct.
+- mt7915.ko stub-vs-real claims (1-byte `halt_baddata` externs; `mbss_create_vif` the real
+  caller, `local_8d` = bss index `param_3` +5 remap) verified.
+
+**Corrected in this pass (details at the marked spots):**
+1. **§3 RX-dispatch code had a real bug**: it called `eth_type_trans()` (which *pulls the
+   14-byte Ethernet header*) before `ndo_start_xmit` — mac80211 would have transmitted
+   headerless frames. Stock does NOT do this on the dispatch path. Fixed; insertion point
+   in `zx_idm_poll` moved to before the existing `eth_type_trans` call.
+2. §1.3 counter offsets were wrong: RX-dispatch success counters are `+0x18..0x27`
+   (not "+0x20..0x2f"), failures `+0xc0..0xcf` (not "+0xc8..0xd7"); TX-inject counters
+   `+0xa8..0xb7`. Also found an undocumented `+0x02` static byte (copy of idm, never read).
+3. `idm_fdb_recv_handle` does **not** IFF_UP-check the idm dev — it's a plain non-NULL
+   check (`:28`); §1.3/§2.3's "IFF_UP gate" language fixed. (IFF_UP is only checked by
+   `idm_fdb_forward` on `wlan_dev`, and by the isolate/LED helpers.)
+4. §1.5 vmlinux-struct table: the ifname string lives at **+0x01..0x20**, with **+0x00 a
+   dedicated in-use flag byte** — proven three ways (IfName2WlanIdmMap literal pool =
+   table+1 with flag read at `[r4,#-1]`; switch.ko's `R_ARM_ABS32 wlan_to_idm_map`
+   reloc addend = **+1**; `sw_init_wlan_ssid` passes row+1 as the *name* into
+   `aclWLANToIDMEssidCfg2`). Also found a new field: **+0x27 = the composed essid
+   `0x10|(idm<<3)|ssid`** — `aclEssidToWlanIDMMap2` validates it as 0x10..0x1f, an
+   independent re-confirmation of Phase A's encoding.
+5. §6 Q1 had the data flow backwards: `sw_init_wlan_ssid` **reads** `wlan_to_idm_map`
+   (and programs the TM ACL essid map from it) — it cannot be the populator. No kmod
+   writes the table (full reloc scan of every stock .ko: only switch.ko references it,
+   read-only). Its address appears in vmlinux's `systools_proc_opts` blob → populated
+   from userland via the systools config machinery (🟡, exact command untraced; still
+   irrelevant to mainline).
+6. §6 Q2 narrowed: `ffe_get_npu_enable` @ c0458714 disassembled — a 7-instruction getter
+   returning `*(*(ptr@0xc07f7630)+8)+0x34` (global FFE/NPU state flag), 0 if the inner
+   pointer is NULL. It IS a global master switch; who sets it remains untraced.
+7. Mainline already defines `IDM_DESC_CSUM_SHIFT 28` (`zx-eth-main.c:305`) — **unused**
+   anywhere, and almost certainly a misnamed early transcription of the very bits stock
+   uses for ssid. Checklist step 1 now says rename/replace it, not add a colliding define.
+8. §2.3's "without breaking the SW baseline" claim was too rosy: `netdev_rx_handler_register`
+   on a vif **conflicts with br0 membership** (the bridge owns the rx_handler slot). While
+   bound, the vif cannot be bridged; reversibility = unregister-and-rebridge. Hardened.
+9. Minor: `mbss_create_vif` cite :164-171 → :164-167; `idm_netdev_event` matches *wlan
+   ifnames* (via `IfName2WlanIdmMap(dev->name)`, idm==0 rows) on UP/DOWN, not "idm0/1".
+
+**Still open** (unchanged verdicts): §6.1 exact systools populate command (irrelevant for
+mainline), §6.2 who sets the NPU flag (irrelevant), §6.3 (idm,ssid) config policy (design
+decision), §6.4 raw-xmit vs dev_queue_xmit (design decision), §6.5 step-4.5 bridging
+topology (first thing to test live).
+
+The implementation checklist (§5) is, after these fixes, considered trustworthy for a
+Phase-B coding agent.
+
+---
+
 ## 0. The contract in one picture
 
 ```
@@ -116,13 +194,16 @@ single cleanest source, since it labels every field it prints),
 |---|---|---|---|
 | `+0x00` | 1 B | `enabled` (bit0) | write: `register_idm_fdb_node.c:32` (`=1`); read: `idm_fdb_forward.c:32`, `print_idm_map.c:33`, `idm_fdb_idm_isolate_handle.c:22` |
 | `+0x01` | 1 B | `idm` (ring 0/1) | read-only, see §1.4 below; printed `print_idm_map.c:43` (`"idm:%d"`), used for the `"idm%d"` devname lookup in `register_idm_fdb_node.c:33` |
+| `+0x02` | 1 B | static copy of `idm` (verification pass: present in the `.data` initializer — see §1.4 — but no code in idmfdb.ko ever reads it) | idmfdb.ko binary `.data..read_mostly` dump |
 | `+0x03` | 1 B | `ssid` (0-7) | read-only, see §1.4; printed `print_idm_map.c:43` (`"ssid:%d"`); **read to stamp `skb->cb[0xb7]`** in `idm_fdb_recv_handle.c:19` (`param_1[3]`) — this is the field the TX path (§2) consumes |
 | `+0x04` | 1 B | `type` (0=AP-vif, 2=ApCli, per `WlanIfName2Index`/`ApcliCardIndex2WlanIdmMap` sibling functions) | write: `register_idm_fdb_node.c:39` (copied from map struct `+0x22`); read: `idm_fdb_idm_isolate_handle.c:24-25` (isolate-policy decision) |
 | `+0x08` | 4 B (bit0) | `forbidIdm` flag | read+clear: `idm_fdb_idm_isolate_handle.c:23` (`&= 0xfffffffe`); read (must be 0) in `idm_fdb_recv_handle.c:28` |
-| `+0x10` | 4 B | `idm_dev` (ptr to `idmN` netdev) | write: `register_idm_fdb_node.c:36` (`__dev_get_by_name("idm%d")` result); read: `idm_fdb_recv_handle.c:20,28,55` (IFF_UP check + TX dispatch target) |
-| `+0x14` | 4 B | `wlan_dev` (ptr to the vif netdev) | write: `register_idm_fdb_node.c:35` (`= param_2`, the arg); read: `idm_fdb_forward.c:27,34-35,54` (IFF_UP check + RX dispatch target), `idm_fdb_recv_handle.c:29,32` |
-| `+0x20..0x2f` | 4×u32 | RX/TX success byte/packet counters | `idm_fdb_forward.c:57-65` |
-| `+0xc8..0xd7`(≈) | 4×u32 | failure counters | `idm_fdb_forward.c:69-77` |
+| `+0x10` | 4 B | `idm_dev` (ptr to `idmN` netdev) | write: `register_idm_fdb_node.c:36` (`__dev_get_by_name("idm%d")` result); read: `idm_fdb_recv_handle.c:28` (**non-NULL check only — recv_handle does NOT IFF_UP-check the idm dev**), `:55` (TX dispatch target) |
+| `+0x14` | 4 B | `wlan_dev` (ptr to the vif netdev) | write: `register_idm_fdb_node.c:35` (`= param_2`, the arg); read: `idm_fdb_forward.c:27,32-35,54` (non-NULL + `flags&IFF_UP` check on the *wlan* dev + RX dispatch target), `idm_fdb_recv_handle.c:29,32` |
+| `+0x18..0x27` | 2×u64 | RX-dispatch success counters: pkt64 @`+0x18`, byte64 @`+0x20` (verification pass: `DAT_00013420`−`fdb_list`@0x13408 = **+0x18**, not +0x20 as originally stated) | `idm_fdb_forward.c:56-65` |
+| `+0xa8..0xb7` | 2×u64 | TX-inject success counters: pkt64 @`+0xa8`, byte64 @`+0xb0` | `idm_fdb_recv_handle.c:20-26` |
+| `+0xc0..0xcf` | 2×u64 | RX-dispatch failure counters: pkt64 @`+0xc0`, byte64 @`+0xc8` (originally misstated as "+0xc8..0xd7") | `idm_fdb_forward.c:68-77` (both the xmit-failed and the not-enabled `LAB_000101b0` paths) |
+| `+0x28..0x9f`(≈) | — | further counter/LED-rate-shadow area (read+written by `idm_led_timer_handle.c:54-76`; not load-bearing, not fully mapped) | — |
 
 Stride confirmed two ways: `iVar1 = node_index * 0x128` (byte-array indexing,
 `register_idm_fdb_node.c:31`) **and** `(&DAT_0001341c)[node_index * 0x4a]` (u32-array
@@ -146,11 +227,16 @@ and `ssid = node_index & 7` are fully determined by the node's position in the a
 so `fdb_list[k].idm`/`.ssid` **must be compile-time constants baked into idmfdb.ko's
 `.data` section** at module-build time (one static initializer row per of the 16 nodes:
 `{idm:0,ssid:0}, {idm:0,ssid:1}, ..., {idm:1,ssid:7}`), never touched again at runtime.
-🟡 DERIVED (no literal static-initializer bytes were dumped — that would need a `.data`
-section hexdump of the real `idmfdb.ko` binary, not attempted here — but the absence of
-any write instruction across every function that manipulates this struct, combined with
-the field's value being fully recoverable from the array index, makes this the only
-explanation consistent with the code). **For a mainline port this is actually simpler**:
+✅ CONFIRMED (verification pass, 2026-07-23): **the static-initializer bytes were dumped
+from the real binary.** `readelf -s ext/rootfs/kmodule/idmfdb.ko` → `fdb_list` is a
+4736-byte (= exactly 16×0x128) OBJECT filling the whole `.data..read_mostly` section
+(PROGBITS, file offset 0x3440). The dump shows, for every node k = 0..15: byte`+0x00`=0
+(disabled), byte`+0x01` = k>>3 (idm), byte`+0x02` = k>>3 (undocumented duplicate, never
+read by code), byte`+0x03` = k&7 (ssid), all other bytes 0. Additionally a *complete*
+sweep of every fdb_list-touching function in the module (adding `idm_led_timer_handle`,
+`idm_fdb_multi_send_handle`, `print_idm_led`, `print_idm_led_stat` to the five functions
+originally checked) found no write to `+0x01`/`+0x02`/`+0x03` anywhere.
+**For a mainline port this is actually simpler**:
 just declare the dispatch table as `static const u8 node_idm[16] = {...}` /
 `node_ssid[16] = {...}` (or compute `idm=i>>3, ssid=i&7` inline) — no init-time write
 needed at all, exactly mirroring what stock does.
@@ -177,35 +263,48 @@ return NULL;
 ```
 
 **Caller (✅ CONFIRMED, real — not a stub):** `mbss_create_vif`
-(`ghidra/output_ko/mt7915.ko/mbss_create_vif.c:164-171`), the MT7915 MBSSID-vif creation
+(`ghidra/output_ko/mt7915.ko/mbss_create_vif.c:164-167`), the MT7915 MBSSID-vif creation
 routine (called once per configured SSID/BSS when the radio brings its BSS set up):
 ```c
-if (4 < param_3) local_8d = local_8d + '\x05';   /* param_3 = bss index within the radio;
-                                                     +5 remaps for the second radio/band —
-                                                     this IS the wlan_index encoding */
+if (4 < param_3) local_8d = local_8d + '\x05';   /* param_3 = bss index; +5 remap for
+                                                     slots >4 (second radio/band per the
+                                                     🟡 reading) — this IS the wlan_index */
 uVar5 = register_idm_fdb_node(local_8d, iVar11);  /* iVar11 = the just-created vif netdev */
 ```
+(Verification pass: `local_8d` provenance confirmed — initialized `= (char)param_3` at
+`mbss_create_vif.c:33/69`, optionally re-assigned via the profile's own ifidx at `:104-105`
+("re-assign ifidx %d -> %d") / `multi_profile_devname_req` at `:108` — so it is the
+driver's bss/ifidx integer, exactly as stated.)
 So **`wlan_index` is a small per-driver integer** (not the ssid/idm pair directly) —
 one value per (radio, bss-slot) combination, assigned by the WLAN driver itself at vif
 creation time, completely independent of the switch's `(idm,ssid)` numbering. The
 *mapping* from that arbitrary integer to `(idm,ssid,type)` is exactly what
 `WlanIndex2WlanIdmMap` provides (next paragraph) — i.e. **the wlan_index→(idm,ssid) glue
-is a config table, not a formula**, and it must be populated from *somewhere* (in stock,
-presumably by `sw_init_wlan_ssid`'s SW-side radio-config parsing, `decomp_all_switch.c:5112`,
-feeding this vmlinux table at boot — the exact vmlinux-table populator was not traced in
-this pass; ❓ open, see §6).
+is a config table, not a formula**. ~~Presumably populated by `sw_init_wlan_ssid`~~ —
+**corrected by the verification pass**: `sw_init_wlan_ssid` (`decomp_all_switch.c:5113-5143`)
+*reads* this table (walking all 16 rows via the exported symbol; switch.ko's
+`R_ARM_ABS32 wlan_to_idm_map` reloc, addend +1) and programs the TM ACL essid map from it
+(`aclWLANToIDMEssidCfg2(row_idx, port6/7-from-idm@+0x25, essid@+0x27, name@+0x01)`), so it
+is a *consumer*, not the populator. No stock kmod writes the table at all (full reloc scan:
+only switch.ko references the symbol, read-only; mt7915.ko does not). The table's address
+appears in vmlinux's `systools_proc_opts` blob → 🟡 populated from userland via the stock
+systools config machinery at WLAN-config time (which also explains why it is already
+populated *before* `mbss_create_vif` runs); exact command untraced, ❓ see §6.
 
 **✅ Q4 ANSWERED — `WlanIndex2WlanIdmMap` internals.** It is a **vmlinux builtin**
 (`EXPORT_SYMBOL`, `tasks/00.10.01.re-vmlinux/nm.txt:42278 "c02ca5a0 T WlanIndex2WlanIdmMap"`),
 not a separate `.ko` — this is *why* no decomp set on disk ever contained its body: it
-was never compiled as a loadable module in the first place. Full disassembly at
-`vmlinux.dis:749085-749107`:
+was never compiled as a loadable module in the first place. The table itself is a named,
+**itself-EXPORT_SYMBOL'd** vmlinux object: **`wlan_to_idm_map` @ 0xc0691650**
+(`nm.txt:42288 "c0691650 t wlan_to_idm_map"`, `__ksymtab_wlan_to_idm_map` @ c05ed630 —
+verification pass). Full disassembly at `vmlinux.dis:749085-749107`:
 
 ```
 WlanIndex2WlanIdmMap(r0=wlan_index):
-  table = 0xc0691650                    /* fixed vmlinux .data address */
+  table = 0xc0691650                    /* = wlan_to_idm_map, vmlinux .data */
   for (r3 = table; r3 != table+16*41; r3 += 41) {   /* 16 entries × 0x29(41) bytes */
-      if (r3[0] == 0) continue;                       /* byte 0 = "slot in use" (name non-empty) */
+      if (r3[0] == 0) continue;                       /* byte 0 = in-use flag (a dedicated
+                                                          byte; the ifname lives at +0x01) */
       if (r3[0x21] == wlan_index) return r3;           /* match on the wlan_index byte */
   }
   return 0;   /* NULL = "not mapped" — the mainline zte_shim stub's behavior */
@@ -220,13 +319,15 @@ field of one shared struct):
 
 | offset | field | evidence |
 |---|---|---|
-| `+0x00`, len 0x21 (33 B) | `ifname` (C string) | `IfName2WlanIdmMap` does `strcmp(entry, ifname)` with `entry` = table-row base (`vmlinux.dis:749200`); 0x21 is exactly where the next field starts, so the name buffer is 33 bytes |
+| `+0x00` | **in-use flag** (u8, dedicated byte — CORRECTED: originally misread as the name's first char) | `WlanIndex2WlanIdmMap` `ldrb [r3]`/skip-if-0 (`:749093-749094`); `IfName2WlanIdmMap` reads it as `ldrb r3,[r4,#-1]` with r4 = row+1 (`:749192`) |
+| `+0x01..0x20` | `ifname` (C string, ≤32 B incl NUL) | `IfName2WlanIdmMap`'s literal pool holds **0xc0691651 = table+1** (`:749214`) and `strcmp(row+1, ifname)` (`:749196-749200`); independently: switch.ko's `R_ARM_ABS32 wlan_to_idm_map` reloc has in-place addend **+1**, and `sw_init_wlan_ssid` passes that row+1 pointer as the *name* argument to `aclWLANToIDMEssidCfg2` |
 | `+0x21` | `wlan_index` (u8) | match key of `WlanIndex2WlanIdmMap` (`:749095`) |
 | `+0x22` | `type` (u8: 0=AP, 2=ApCli) | filter in `ApcliCardIndex2WlanIdmMap` (`==2`, `:749176-749178`) and `WlanIfName2Index`/`ApCliIfName2Index` (`==0`/`==2` gate, `:749223-749225`,`:749247-749249`); consumed as `fdb_list[].type` by `register_idm_fdb_node` |
 | `+0x23` | `card_index` (u8) | key in `ApcliCardIndex2WlanIdmMap` (`:749179-749181`) and (as an output) `WlanIfName2Index`/`ApCliIfName2Index` (`:749227-749228`,`:749251-749252`) |
 | `+0x24` | 🟡 secondary index (unconfirmed exact semantic — 2nd key of `WlanCardOffset2WlanIdmMap`'s 2-key lookup, also an output of `WlanIfName2Index`/`ApCliIfName2Index`) | `:749127-749128`, `:749230-749233` |
-| `+0x25` | **`idm`** (ring: 0=idm0/port6, 1=idm1/port7) | consumed by `get_node_index.c:16` and `get_sw_port_from_devname` (`decomp_all_switch.c:4550,4560`: `*(char*)(iVar2+0x25)=='\0'`/`=='\x01'` branches) |
-| `+0x26` | **`ssid`** (0-7) | consumed by `get_node_index.c:16` and `get_sw_port_from_devname` (`decomp_all_switch.c:4553,4562`: `*(byte*)(iVar2+0x26)+0x10`/`+0x18`) |
+| `+0x25` | **`idm`** (ring: 0=idm0/port6, 1=idm1/port7) | consumed by `get_node_index.c:16` and `get_sw_port_from_devname` (`decomp_all_switch.c:4551,4560`: `*(char*)(iVar2+0x25)=='\0'`/`=='\x01'` branches) |
+| `+0x26` | **`ssid`** (0-7) | consumed by `get_node_index.c:16` and `get_sw_port_from_devname` (`decomp_all_switch.c:4556,4565`: `*(byte*)(iVar2+0x26)+0x10`/`+0x18`) |
+| `+0x27` | **`essid`** = the composed `0x10\|(idm<<3)\|ssid` (0x10-0x1f) — NEW, found by the verification pass | `sw_init_wlan_ssid` reads it (row+1 pointer `+0x26` = abs `+0x27`) and passes it as `aclWLANToIDMEssidCfg2`'s essid arg (`decomp_all_switch.c:5131/5135`); `aclEssidToWlanIDMMap2` (`decomp_all_tm.c:50203`) validates the same value as `param_1 - 0x10 < 0x10` → range **0x10..0x1f**, i.e. exactly Phase A's `gemport_uni_id` encoding — an independent stock-side re-confirmation of the Phase-A formula |
 | `+0x28` | `probe_seq` (u8) | key of `WlanProbeSeq2WlanIdmMap` (`:749147-749148`) |
 
 **`IfName2WlanIdmMap(const char *ifname)`** (`vmlinux.dis:749189-749213`) is the same
@@ -277,10 +378,18 @@ tx_desc[idx*2+1] = cpu_to_le32((len & IDM_DESC_LEN_MASK) |
                                 (port->idx ? IDM_DESC_PORT_BIT : 0));
 ```
 Needs an added `| (ssid_clamped << IDM_DESC_SSID_SHIFT)` where `IDM_DESC_SSID_SHIFT` = 28
-(bits 28-30, ssid-encoding spec §1 TX table) — **⚠ must clamp ssid to 0-7 before the
-shift**; stock's own contract does not mask `skb->cb[0xb7]` before `<<28`, so an invalid
-value (e.g. an echoed RX sentinel `0xff`) corrupts bit31 (`IDM_DESC_PORT_BIT`, the ring
-select) as well. A mainline implementation must NOT reproduce that bug.
+(bits 28-30) — verified by the verification pass **directly against stock's `idm_net_tx`**
+(`decomp_all_plat_zxylzb_9128S.c:4268-4270`: `desc[1] = len | ring<<0x1f | cb[0xb7]<<0x1c`),
+not only via the encoding spec. **⚠ must clamp ssid to 0-7 before the shift**; stock's own
+contract does not mask `skb->cb[0xb7]` before `<<28`, so an invalid value (e.g. an echoed
+RX sentinel `0xff`) corrupts bit31 (`IDM_DESC_PORT_BIT`, the ring select) as well. A
+mainline implementation must NOT reproduce that bug.
+
+**⚠ Naming collision (verification pass):** mainline already has `#define
+IDM_DESC_CSUM_SHIFT 28` (`zx-eth-main.c:305`) — **unused anywhere in the driver** and
+almost certainly a misnamed early transcription of these very ssid bits. **Rename/replace
+it with `IDM_DESC_SSID_SHIFT`** rather than adding a second define for the same bit
+positions (two names for one field is a future misprogramming hazard).
 
 ### 2.3 The exact mainline hook point — 🟡 DERIVED, a concrete recommendation
 
@@ -308,11 +417,27 @@ rx_handler_result_t zx_wifi_rx_handler(struct sk_buff **pskb)
     return RX_HANDLER_CONSUMED;
 }
 ```
-This mirrors stock's IFF_UP gate (`idm_fdb_recv_handle.c:28`, `*(int*)(param_1+0x10)!=0`
-checked against `node.idm_dev`) and reproduces the "fall through to the existing SW
-bridge path if the ring isn't up" safety net for free — important, since it means Phase B
-can be brought up **without breaking the already-working SW baseline** (WAN⇄WiFi via
-br0), exactly the incremental/reversible posture the roadmap wants.
+This mirrors stock's gate (`idm_fdb_recv_handle.c:28`, `*(int*)(param_1+0x10)!=0` — note
+that is a **non-NULL check on `node.idm_dev`, not an IFF_UP check**; the mainline handler
+above deliberately adds the IFF_UP condition on top, which is strictly safer).
+
+**⚠ Coexistence caveat (verification pass):** `netdev_rx_handler_register` on the vif
+**conflicts with br0 membership of that same vif** — the bridge itself owns the one
+rx_handler slot per netdev (this is exactly the `-EBUSY` case flagged in checklist step 2).
+On the current rig the vif *is* a br0 member (the working SW baseline), so binding the
+dispatch handler requires first removing the vif from br0. The "fall through on
+RX_HANDLER_PASS" safety net therefore lands in the **local stack**, not the bridge; the
+incremental/reversible posture holds in the weaker but still sufficient sense that
+*unregistering the handler and re-adding the vif to br0* restores the exact SW baseline.
+(The natural end-state topology — bridge `idmN` in place of the vif — is checklist
+step 4.5's open question, §6.5.)
+
+Context note from the stock RX side (verification pass): stock pre-marks every skb it
+allocates for the IDM RX ring with `skb+0xbc |= 0x10` (`plat:4122`), and
+`idm_fdb_hook_xmit` returns early on that flag (`idm_fdb_hook_xmit.c:12`) — a
+"ring-originated frame" marker used to skip the FFE-learn hook. Not needed for the
+minimal Phase-B dispatcher, but worth mirroring (an skb flag/cb marker) if step 4.5 ends
+up bridging `idmN`, to make ring-origin frames distinguishable and loop-proof.
 ❓ Calling `zx_idm_xmit` directly (bypassing qdisc, like stock's raw `ndo_start_xmit`
 call) vs `dev_queue_xmit()` (qdisc-safe, mainline-idiomatic) is a real design choice not
 resolved here — recommend starting with the direct call (matches proven stock behavior,
@@ -328,9 +453,10 @@ Given §1.5's conclusion (mainline owns both ends, no opaque `wlan_index` to tra
 **skip the `WlanIndex2WlanIdmMap` indirection** and register directly:
 
 ```c
-/* Called once per WiFi vif netdev, at NETDEV_UP (or NETDEV_REGISTER) time — see the
- * notifier pattern idmfdb.ko itself uses for idm0/1 (idm_netdev_event.c), mirrored here
- * for the *vif* side instead of the ring side. */
+/* Called once per WiFi vif netdev, at NETDEV_UP (or NETDEV_REGISTER) time — cf. the
+ * notifier pattern idmfdb.ko itself uses (idm_netdev_event.c: matches *wlan ifnames*
+ * via IfName2WlanIdmMap(dev->name) on UP/DOWN of idm==0 rows and re-runs the isolate
+ * policy — corrected by the verification pass; it is not an idm0/1-side notifier). */
 int zx_wifi_register_vif(struct net_device *vif_ndev, u8 idm_ring, u8 ssid)
 {
     int node_index = ssid + idm_ring * 8;
@@ -361,17 +487,25 @@ function is what *populates* it, replacing stock's `register_idm_fdb_node` +
 
 **RX-side dispatch (§1), concretely, replacing the plain delivery in `zx_idm_poll`:**
 ```c
-/* zx-eth-main.c:1687, replacing napi_gro_receive(napi, skb) when a mapping exists */
+/* Insert AFTER skb_put(skb, len) (zx-eth-main.c:1682) but BEFORE the existing
+ * "skb->protocol = eth_type_trans(skb, ndev)" line (zx-eth-main.c:1684).
+ * ⚠ CORRECTED by the verification pass: the original spec called eth_type_trans()
+ * before ndo_start_xmit — but eth_type_trans() PULLS the 14-byte Ethernet header
+ * (skb_pull(ETH_HLEN)), so mac80211 would have transmitted a headerless frame.
+ * Stock does NOT call eth_type_trans on the dispatch path: idm_fdb_forward only
+ * sets skb->dev and calls ndo_start_xmit on the intact frame (idm_fdb_forward.c:35,54);
+ * eth_type_trans appears only in plat's idm_skb_recv==NULL local-delivery fallback
+ * (decomp_all_plat_zxylzb_9128S.c:4132-4136). */
 if (ssid_valid && ssid < 8) {
     struct zx_wifi_dispatch_node *node = &zx_wifi_dispatch[ssid + port * 8];
     if (node->enabled && node->wlan_ndev && (node->wlan_ndev->flags & IFF_UP)) {
         skb->dev = node->wlan_ndev;
-        skb->protocol = eth_type_trans(skb, node->wlan_ndev);
         node->wlan_ndev->netdev_ops->ndo_start_xmit(skb, node->wlan_ndev);
-        goto refill;   /* skip the napi_gro_receive below */
+        goto refill;   /* skip eth_type_trans + napi_gro_receive below */
     }
 }
-napi_gro_receive(napi, skb);   /* unchanged fallback: broadcast/flood/unmapped ssid */
+/* fall through unchanged: eth_type_trans + napi_gro_receive
+ * (broadcast/flood/unmapped/invalid ssid → local stack, as today) */
 ```
 This mirrors `idm_fdb_forward`'s direct `ndo_start_xmit` call (§1.3, `idm_fdb_forward.c:54`)
 — i.e. stock **also** bypasses the normal RX stack on this side, consistent with using
@@ -418,8 +552,10 @@ in order so a wrong step is caught before the next depends on it.
    - Add `struct zx_wifi_dispatch_node { bool enabled; struct net_device *idm_ndev,
      *wlan_ndev; } zx_wifi_dispatch[16];` to `struct zx_eth` (near the existing
      `idm_rx_per_ssid[8]` fields, `zx-eth-main.c:416-418`).
-   - Add `#define IDM_DESC_SSID_SHIFT 28` and `#define IDM_DESC_SSID_MASK 0x7` next to
-     the existing `IDM_DESC_*` macros (`zx-eth-main.c:304-306`).
+   - **Rename the existing, unused `IDM_DESC_CSUM_SHIFT 28` (`zx-eth-main.c:305`) to
+     `IDM_DESC_SSID_SHIFT`** (it is a misnamed early transcription of the same bits —
+     verification pass, §2.2) and add `#define IDM_DESC_SSID_MASK 0x7` next to the
+     `IDM_DESC_*` macros (`zx-eth-main.c:304-306`). Do NOT leave two defines for bit 28.
    - **Validate:** `make modules`; module still loads; `idm_rx_count` behavior
      unchanged (this step adds no new code path yet, pure scaffolding).
 
@@ -430,7 +566,10 @@ in order so a wrong step is caught before the next depends on it.
    (§3's open policy question), letting you test with a manually-typed binding first.
    - **Validate:** `cat /sys/kernel/debug/zx_eth/wifi_bind` (or equivalent) shows the
      bound node; `netdev_rx_handler_register` returns 0 (not `-EBUSY` — a vif can only
-     have one rx_handler; check no bridge/other hook is already attached to that vif).
+     have one rx_handler; the **bridge** holds it while the vif is a br0 member, which
+     it IS in the current SW-baseline rig config — `brctl delif br0 <vif>` first, and
+     note this takes the vif out of the SW WAN⇄WiFi path until step 4.5 re-plumbs it;
+     see §2.3's coexistence caveat).
 
 3. **Implement `zx_wifi_rx_handler()` (§2.3) and the TX ssid-stamp+clamp in
    `zx_idm_xmit()` (§2.2).**
@@ -447,7 +586,10 @@ in order so a wrong step is caught before the next depends on it.
      carried traffic. A debugfs counter "wifi_tx_injected" is cheap to add for this.
 
 4. **Wire up RX-side dispatch in `zx_idm_poll()` (§3's second code block), replacing
-   `napi_gro_receive` when a mapping exists.**
+   `napi_gro_receive` when a mapping exists.** ⚠ Insertion point is BEFORE the existing
+   `eth_type_trans()` call (`zx-eth-main.c:1684`) and the dispatch branch must NOT call
+   `eth_type_trans()` itself — it pulls the Ethernet header, which `ndo_start_xmit`
+   needs intact (§3, corrected).
    - **Validate — this is the step that answers §4's falsifiable claim:** send a frame
      *toward* the STA from the CPU side (e.g. `ping <STA IP>` from the router itself, or
      any downstream traffic that would normally exit via `br0`→`wlan1`). Confirm
@@ -473,18 +615,22 @@ in order so a wrong step is caught before the next depends on it.
 
 ## 6. Open questions (do not guess past these)
 
-1. **How stock populates the vmlinux `WlanIndex2WlanIdmMap` table (`0xc0691650`) at
-   boot** — presumably from `sw_init_wlan_ssid`'s radio-config parsing
-   (`decomp_all_switch.c:5112`, per the ssid-encoding spec §5) via some vmlinux-internal
-   write path, not traced in this pass. **Not needed for the mainline implementation**
-   (§1.5/§3 conclude mainline should bypass this table entirely), but flagged since it's
-   the one piece of §1.5's picture left unconfirmed.
-2. **`ffe_get_npu_enable()`** — the vmlinux-builtin gate `idm_fdb_recv_handle` checks
-   before doing anything (`idm_fdb_recv_handle.c:17-18`). Not resolved (same as the
-   ssid-encoding spec's pre-existing open question #6 on `ffe_learn_skb`/
-   `ffe_get_npu_enable`) — likely a global "is the fast-forwarding engine enabled at
-   all" master switch, probably irrelevant to a from-scratch mainline design that has no
-   equivalent global engine, but flagged in case it gates something Phase B needs.
+1. **How stock populates `wlan_to_idm_map` (`0xc0691650`)** — NARROWED by the
+   verification pass but still not fully traced. What is now known: it is NOT
+   `sw_init_wlan_ssid` (that function *reads* the table and programs the TM ACL essid
+   map from it — §1.5, corrected); no stock kmod writes it (full reloc scan — only
+   switch.ko references the exported symbol, read-only); its address sits in vmlinux's
+   `systools_proc_opts` blob (`vmlinux.dis:1237682`, blob @ c04dc850), so 🟡 it is
+   written from userland via the stock systools config machinery at WLAN-config time
+   (which also explains it being populated before `mbss_create_vif` runs). The exact
+   systools command/proc path is untraced. **Not needed for the mainline implementation**
+   (§1.5/§3 conclude mainline should bypass this table entirely).
+2. **`ffe_get_npu_enable()`** — MOSTLY RESOLVED by the verification pass:
+   disassembled at `vmlinux.dis` c0458714 — a 7-instruction getter,
+   `return p ? *(u32*)(p+0x34) : 0` where `p = *(*(u32*)0xc07f7630 + 8)` — i.e. a
+   global FFE/NPU-state "master enable" flag exactly as hypothesized. Who sets the flag
+   (and the struct's full layout) remains untraced; irrelevant to a from-scratch
+   mainline design, which has no equivalent global engine gate.
 3. **The exact `(idm_ring, ssid)` discovery/configuration policy for a mainline vif**
    (§3's "this is a policy decision, not something the decomp can settle") — needs a
    human/design decision (devicetree property? debugfs? hostapd bring-up convention?),
@@ -520,9 +666,10 @@ in order so a wrong step is caught before the next depends on it.
   independent reader of `+0x00`,`+0x04`,`+0x08`,`+0x14`; isolate policy (context only).
 - `ghidra/output_ko/idmfdb.ko/idm_fdb_init.c` — hook install (`idm_skb_recv =
   idm_fdb_forward`), confirms nothing new vs. ssid-encoding spec §5.
-- `ghidra/output_ko/mt7915.ko/mbss_create_vif.c:164-171` — the real (non-stub) caller of
-  `register_idm_fdb_node`, showing the `wlan_index` (`local_8d`, `+5` for 2nd radio) is a
-  WLAN-driver-internal integer, not a switch-side value.
+- `ghidra/output_ko/mt7915.ko/mbss_create_vif.c:164-167` (provenance of `local_8d` at
+  `:33,69,104-108`) — the real (non-stub) caller of `register_idm_fdb_node`, showing the
+  `wlan_index` (`local_8d`, `+5` for slots >4) is a WLAN-driver-internal integer, not a
+  switch-side value.
 - `ghidra/output_ko/mt7915.ko/{register_idm_fdb_node,idm_fdb_recv_handle,
   idm_fdb_hook_xmit}.c` — all 1-byte `halt_baddata()` stubs, confirming these are
   *imported* (from idmfdb.ko) in mt7915.ko, not locally defined.
@@ -550,11 +697,41 @@ in order so a wrong step is caught before the next depends on it.
 - `wifi_stage3_PLAN_2026-07-07.md` §1 (commit `1478beecf`) — port 6/7 isolation already
   open, cited for §4's enablement answer.
 
+Added by the verification pass (2026-07-23):
+- `ext/rootfs/kmodule/idmfdb.ko` **binary** — `readelf -S/-s`: `fdb_list` = 4736-byte
+  OBJECT = whole `.data..read_mostly` section (PROGBITS @ file 0x3440); hexdump of all 16
+  node initializers confirms static `idm=k>>3` @+0x01 (+ duplicate @+0x02), `ssid=k&7`
+  @+0x03 (§1.4, Q5 now binary-proven).
+- `ext/rootfs/kmodule/switch.ko` relocations — `R_ARM_ABS32 wlan_to_idm_map` at .text
+  +0x74a8 with in-place addend **+1** (the `sw_init_wlan_ssid` literal): proves the
+  row+1 pointer convention and hence ifname@+0x01/flag@+0x00; full reloc scan of every
+  stock `.ko` (ext + orca): only switch.ko references the table symbol, mt7915.ko does not.
+- `decomp_all_plat_zxylzb_9128S.c:4122` (ring-RX skbs pre-marked `skb+0xbc|=0x10`),
+  `:4125-4131` (RX ssid decode: desc byte6 bit3 valid / bits0-2 ssid → `cb[0xb7]`,
+  invalid→0xff), `:4132-4136` (`idm_skb_recv==NULL` fallback = the only eth_type_trans
+  on this path), `:4268-4270` (TX desc word1 = `len | ring<<31 | cb[0xb7]<<28`, unmasked).
+- `decomp_all_switch.c:5112-5143` (`sw_init_wlan_ssid` — reads the map via row+1 pointer:
+  flag@`iVar1-1`, idm@`iVar1+0x24`=abs+0x25 → port 6/7, essid@`iVar1+0x26`=abs+0x27,
+  name=`iVar1` → `aclWLANToIDMEssidCfg2`).
+- `decomp_all_tm.c:50175-50227` (`aclWLANToIDMEssidCfg2` stores {port,essid,name} in
+  `s_aclWlanToIdmEssidMap` stride 0x12; `aclEssidToWlanIDMMap2` validates essid as
+  `param_1-0x10 < 0x10` → essid range **0x10..0x1f** = Phase A's `0x10|(idm<<3)|ssid`).
+- `tasks/00.10.01.re-vmlinux/nm.txt:42288` (`c0691650 t wlan_to_idm_map`) +
+  `vmlinux.dis` `__ksymtab_wlan_to_idm_map` @ c05ed630 — the table is a named, exported
+  vmlinux object; its address also appears in the `systools_proc_opts` blob
+  (`vmlinux.dis:1237682`) → §6.1's populate-path narrowing.
+- `vmlinux.dis` c0458714 (`ffe_get_npu_enable` full disassembly — §6.2).
+- `ghidra/output_ko/idmfdb.ko/{idm_led_timer_handle,idm_fdb_multi_send_handle,
+  print_idm_led,print_idm_led_stat}.c` — completing the fdb_list-touching sweep for
+  §1.4's no-runtime-write claim (`idm_fdb_multi_send_handle.c:219` is also the third
+  independent `ssid + idm*8` site).
+
 ## Relationship to the ssid-encoding spec's own open questions
 
 Of that document's 6 open questions, this pass resolves **#4** (`WlanIndex2WlanIdmMap`/
 `IfName2WlanIdmMap` internals — §1.5 above) and **#5** (fdb_list write-site — §1.4 above,
-answer: "there is no runtime write site, they're static"). Questions #1/#2/#3 (FDB-A
+answer: "there is no runtime write site, they're static" — since upgraded to ✅ by the
+2026-07-23 verification pass's binary `.data` dump). Questions #1/#2/#3 (FDB-A
 spare bits, ssid_out provenance on a plain DA hit, CLA `outport` vs `gemport_uni_id`)
 were already independently resolved by the Phase-A stock-live correlation
 (`wifi_stage3_stock_ssid_correlation_2026-07-07.md`) and are out of Phase B's scope.
