@@ -217,10 +217,58 @@ writes (SSH oracle, next session) or crafting a ram2 catch-all entry for inport
 6/7 on mainline via the existing clawrite/hashcalc machinery — both are Phase-C-
 adjacent work items, and the second is the actual Phase-C deliverable anyway.
 
+## Appendix 2 — continued root-cause hunt (same session, user-requested deep dive)
+
+The CLA-coverage/LOOK_UP_MISS hypothesis from Appendix 1 was **refuted** and the
+black hole localized one stage further:
+
+1. **The SPA→SADM live descriptor window** (stock `desOut` printer, regs
+   0x921d45ec.. = fpga ids 0x7517b..; field map from `decomp_all_tm.c:65686-65730`)
+   read during an injection burst shows, for our ring frame:
+   **`inport=7, action=1 (TRAP), reason=0x11 = ZX_TM_TRAP_ARP`** (reason table =
+   `trapPktType` @ tm.ko .data+0x88a0). So classification is PERFECT: the
+   idm1-injected frame enters the fabric as port 7 and is protocol-trapped like
+   any wire ARP — NOT a lookup miss (background frames read inport=5/CPU with
+   reasons 0x4a BROADCAST / 0x21 ICMPV6, validating the decode).
+2. **The trap lands in TM DN queue 5** and is *popped-and-dropped*: the packed
+   per-q status `TM[0x10114]` hi16 byte-pair (wr,rd) advances by EXACTLY the
+   injected count on every valid burst (e.g. 0xc0c0→0xcdcd for 13 ARPs), both
+   bytes in lockstep — dequeued at QMG level with **no descriptor ever written**
+   to either CPU desc-ring slice (q5 ring0/ring1 slices at
+   0x4C000000+0x3F1F000+0x14000/+0x34000 dumped around the cursor via devmem:
+   all zero at/after the cursor). Queues 4 and 7 demonstrably deliver
+   (`TM RX q=4/q=7` in dmesg) — queue 5's consumer is simply not armed/bound on
+   mainline.
+3. **ram7 re-steer does NOT redirect**: `clawrite 7 0x391 <qid>` (ptype 0x11 ARP |
+   port-7 offset 0x380) sticks (readback; note qid is validated ≤6 by stock —
+   a write of 7 clamps to 4) but subsequent bursts still tick queue 5 — so the
+   queue choice for these protocol traps is not (only) the ram7 (ptype,port)
+   row, or a second bank/other table participates (`zx_pkt_map.h` has qid0/qid1
+   banks; the replay writes bank0 only). Wire ARP rows all read qid=5 as
+   replayed, yet wire traps deliver — their delivery evidently rides a
+   different (armed) path.
+4. Boot-era artifacts: q5 ring0 slice slots 0-15 DO contain 16 old descriptors
+   (two repeated patterns, `5400019F 4A190000 20007800 00040000` ×10 +
+   `1404F69E ..` ×6, len-field at +12 = 0 so the NAPI scan skips them) — from
+   very early boot, format/meaning unresolved; the bppe field (37) decodes to
+   the same churning BP the working path uses, so their buffers are long
+   overwritten. Not load-bearing for the conclusion; noted for completeness.
+
+**Final localization for this session:** vif→ring→fabric→CLA(trap, correct
+inport+reason)→QMG DN **queue 5 → dequeue-to-nowhere**. The missing mainline
+piece is the **QMG DN queue-5 consumer/delivery binding** (stock presumably arms
+it at WLAN-config time — plausibly binding it to the IDM RX engine, which would
+make trapped WLAN-ingress frames arrive on the IDM RX ring exactly as the
+Phase-B RX dispatch expects). Next session: stock-live oracle — boot stock,
+inject/observe which consumer drains queue 5 and capture the queue→consumer
+binding registers stock programs at WLAN bring-up.
+
 ## Follow-ups
 
 1. **EAPOL/DHCP passthrough in `zx_wifi_rx_handler`** (must-fix before any real
    STA rides a bound vif — see the live discovery above).
+1b. **Stock-live oracle for the QMG DN queue-5 consumer binding** (see Appendix
+   2 — the single remaining gap between Phase B and WiFi-on-the-fabric).
 2. Stock-live oracle: capture the CLA/QMG writes stock performs at WLAN-config
    time (the runtime state the boot snapshot misses), OR craft an inport-6/7 ram2
    catch-all on mainline and watch the injected frames get classified.
