@@ -4083,29 +4083,86 @@ static void zx_chip_tm_init_isolate(struct zx_eth *e)
 		 readl(pp + PP_BRG_ISOLATE(6)) & 0xff, readl(pp + PP_BRG_ISOLATE(7)) & 0xff);
 }
 
+/* WiFi (fabric inport 6/7) trap re-steer, fix "A.2".
+ *
+ * Stock steers ARP (ptype 0x11) plus the 0x1d/0x1f/0x20 protocol classes to
+ * CPU DN queue 5 ({ptype,qid0,qid1} = {..,5,5} in zx_def_ptl_pkt_map). On
+ * mainline, DN queue 5 has never been exercised by wire traffic and
+ * pops-to-nowhere the first time it is hit by a fabric-port-6/7 (WiFi) trap —
+ * the "dead q5" pathology documented in
+ * findings/wifi_stage3_qmg_queue5_consumer_re_2026-07-07.md §4. Queue 4 is
+ * live-proven delivered since boot (that doc's §4 delta table). We therefore
+ * re-steer the affected q5 rows to q4 across ALL ram7 banks so that whichever
+ * bank a port-6/7 ingress frame actually consults — base/dir-1 (row 0x011),
+ * or per-port bank 6 (0x311) / 7 (0x391); unresolved device-free, see that
+ * doc §2.4 + §7 open-Q — lands in a delivered queue. This subsumes the
+ * bank-index-space ambiguity that made the earlier single-bank `0x391`
+ * re-steer miss (doc §2.4). Wire-port banks (0..4) are overridden at runtime
+ * by the ram2 catch-all cpu_qid (→q7, doc §2.3), so this is a no-op for the
+ * existing LAN/WAN trap delivery and only changes the port-6/7 outcome.
+ * ON-DEVICE-UNTESTED. Set ZX_WIFI_TRAP_LIVE_QID to 0xff to disable the
+ * re-steer (leaving the stock-parity dual-bank replay of A.1 intact).
+ */
+#define ZX_WIFI_TRAP_DEAD_QID	5	/* pop-to-nowhere DN queue on mainline */
+#define ZX_WIFI_TRAP_LIVE_QID	4	/* live-delivered replacement (doc §4) */
+
+/* chip_tm_init's trap-queue setup — replays def_ptl_pkt_map into CLA ram7.
+ *
+ * Stock chip_tm_init (decomp_all_switch.c:2505-2518) walks the
+ * {ptype,qid0,qid1} table calling zte_api_pp_set_trap_queue for BOTH
+ * directions (decomp_all_tm.c:57882-57916):
+ *   dir 0 → loops port 0..7 SKIPPING 5, writes qid0 into the 7 per-inport
+ *           banks (offsets 0x080/0x100/0x180/0x200/0x280/0x300/0x380);
+ *   dir 1 → writes port 5 ONLY, i.e. qid1 into the base bank 0x000-0x7f
+ *           (row = ptype & 0x7f; tm_protocol_pkt_limit_map_set port-5 case,
+ *           decomp_all_tm.c:40362-40400 / :3957 cla_set_cpu_queue_id;
+ *           bank offsets cross-confirmed by DATASHEET.md:890,894).
+ * Mainline previously replayed dir 0 ONLY (qid0 into the 7 per-inport banks)
+ * and left the base bank at the blanket qid=7 from zx_cla_apply_replay — but
+ * the base bank is a live-proven trap-steering bank
+ * (fix_churn_red_dnbank_2026-07-04.md). This adds the missing dir-1 base-bank
+ * replay (fix "A.1", stock parity) and the WiFi q5->q4 re-steer (fix "A.2").
+ * Source: findings/wifi_stage3_qmg_queue5_consumer_re_2026-07-07.md §2, §5.
+ * Since every ptype in zx_def_ptl_pkt_map is <= 0x7f, "ptype & 0x7f",
+ * "ptype & 0xff" and "ptype | 0" all reduce to ptype, so the single
+ * "ptype | zx_pkt_port_addr_offset[port]" row computation is exact for every
+ * bank (base bank offset = 0).
+ * BUILD-VERIFIED, ON-DEVICE-UNTESTED.
+ */
 static void zx_chip_tm_init_trap_queues(struct zx_eth *e)
 {
-	u32 ok = 0, fail = 0;
+	u32 ok = 0, fail = 0, resteer = 0;
 	int port, i;
 
 	for (i = 0; i < ZX_DEF_PTL_PKT_MAP_COUNT; i++) {
 		u8 ptype = zx_def_ptl_pkt_map[i].ptype;
-		u8 qid   = zx_def_ptl_pkt_map[i].qid0;	/* bank 0 only for now */
+		u8 qid0  = zx_def_ptl_pkt_map[i].qid0;
+		u8 qid1  = zx_def_ptl_pkt_map[i].qid1;
 
 		for (port = 0; port < 8; port++) {
-			u32 addr;
+			u32 addr = ptype | zx_pkt_port_addr_offset[port];
+			/* dir-1 base bank (port-5 slot, offset 0) takes qid1;
+			 * the 7 per-inport banks (dir-0) take qid0. */
+			u8 qid = (port == 5) ? qid1 : qid0;
 
-			if (port == 5)
-				continue;	/* CPU port — skip */
-			addr = ptype | zx_pkt_port_addr_offset[port];
+			/* Fix A.2: re-steer the dead-q5 WiFi trap classes to
+			 * the live q4 in EVERY bank (base + per-inport 6/7). */
+			if (ZX_WIFI_TRAP_LIVE_QID != 0xff &&
+			    qid == ZX_WIFI_TRAP_DEAD_QID) {
+				qid = ZX_WIFI_TRAP_LIVE_QID;
+				resteer++;
+			}
+
 			if (zx_cla_set_cpu_queue_id(e, addr, qid) == 0)
 				ok++;
 			else
 				fail++;
 		}
 	}
-	dev_info(e->dev, "trap_queue replay: %u ok, %u fail (%u entries × 7 ports)\n",
-		 ok, fail, ZX_DEF_PTL_PKT_MAP_COUNT);
+	dev_info(e->dev,
+		 "trap_queue replay: %u ok, %u fail (%u entries x 8 banks incl. base/dir-1; %u q%u->q%u WiFi re-steers)\n",
+		 ok, fail, ZX_DEF_PTL_PKT_MAP_COUNT, resteer,
+		 ZX_WIFI_TRAP_DEAD_QID, ZX_WIFI_TRAP_LIVE_QID);
 }
 
 /* Both writes: spa table + pp_pm RAM (mirrors stock tm_onu_mac_addr_set) */
@@ -6107,8 +6164,8 @@ static int zx_cladump_show(struct seq_file *s, void *_unused)
 	int i, port;
 	static const u8 cols[7] = { 0, 1, 2, 3, 4, 6, 7 };
 
-	seq_puts(s, "CLA ram7 trap-queue qid0 per (ptype,port):\n");
-	seq_puts(s, "ptype  p0 p1 p2 p3 p4 p6 p7\n");
+	seq_puts(s, "CLA ram7 trap-queue qid per (ptype,bank):\n");
+	seq_puts(s, "ptype  p0 p1 p2 p3 p4 p6 p7 base\n");
 	/* [ft_lock] the CLA indirect engine's CMD/DONE/DATA registers are
 	 * shared across ALL ram_ids — a concurrent FT/DSA install writing
 	 * ram2-6 could otherwise interleave with this read-only ram7 walk and
@@ -6127,6 +6184,14 @@ static int zx_cladump_show(struct seq_file *s, void *_unused)
 			else
 				seq_puts(s, " ??");
 		}
+		/* base bank (dir-1 / port-5 slot, offset 0) — now written by the
+		 * dual-bank replay; surfaced here for the on-device re-steer
+		 * oracle (wifi_stage3_qmg_queue5_consumer_re §6 check #2). */
+		if (zx_cla_read_entry(e, 7, ptype | zx_pkt_port_addr_offset[5],
+				      data) == 0)
+			seq_printf(s, " %02x", data[0] & 0xff);
+		else
+			seq_puts(s, " ??");
 		seq_puts(s, "\n");
 	}
 	mutex_unlock(&zx_hwlock);
@@ -7848,7 +7913,10 @@ err_pools:
  *  2. trap_queue setup     — per-protocol CPU queue routing. Overrides
  *                            the blanket "qid=7" from cla_apply_replay
  *                            with the stock def_ptl_pkt_map (82 entries
- *                            × 7 ports).
+ *                            × 8 banks: dir-0 qid0 into the 7 per-inport
+ *                            banks + dir-1 qid1 into the base bank), and
+ *                            re-steers the dead-q5 WiFi trap classes to q4
+ *                            (wifi_stage3_qmg_queue5_consumer_re, A.1+A.2).
  *  3. per-port isolate     — chip_tm_init calls tm_port_isolate_set 8×.
  *                            This is the TM-side per-port mask, separate
  *                            from the PP_BRG_ISOLATE writes done earlier
