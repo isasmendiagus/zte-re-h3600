@@ -50,6 +50,37 @@ closes exactly that gap. Kernel **#524**, RAM-boot, validated live.
 - ssid≠0 raw encoding (bits 0..2) still only hypothesis-confirmed at ssid=0;
   first ssid-tagged unknown-SA traffic will confirm via the diag print.
 
+## OTA test (same session, real STA — appendix)
+
+hostapd AP on wlan1 (`H3600-AP-Test`, ch36, WPA2) with **wlan1 bound to
+(idm1, ssid4) BEFORE any STA existed** — the adversarial order that broke
+Phase-B. A real station (owner's second device, randomized MAC
+0e:3e:df:2c:9f:2a; the adb phone stayed on the home network — Samsung still
+blocks `cmd wifi connect-network`, phone PIN-locked) then joined:
+
+1. **WPA2 4-way handshake COMPLETED with the vif bound** — `all_sta` flags
+   `[AUTH][ASSOC][AUTHORIZED]`. Mechanism note: `/proc/net/packet` is EMPTY —
+   hostapd 2.11 + kernel 6.6 negotiate **control-port-over-nl80211**, so
+   EAPOL never touches the netdev rx_handler on this stack; the ETH_P_PAE
+   passthrough is belt-and-braces for setups that do use the netdev path.
+   Either way: the Phase-B "STA can't join a bound AP vif" failure is GONE.
+2. **OTA client frames rode the full shuttle**: `tm_wifi_rx_dispatched`
+   16→42 (+26) during association/DHCP-retry windows with `nobind` flat —
+   node 12 = (idm1, ssid4) → **raw = 0x1c: the ssid≠0 encoding is now
+   live-confirmed** (closing the open point above).
+3. Dispatched frames **enter the stack cleanly**: an on-demand traced test
+   (bind lan2↔(1,0), device ARPs via idm1, `skb:kfree_skb` ftrace) showed
+   dispatch +3 with ZERO drop events — consumed by arp_rcv. The periodic
+   mac80211 `0x20000` drops in the trace are the dozing STA's PS/NULLFUNC
+   keepalives (normal, monitor-class).
+4. **DHCP lease NOT yet obtained** (the one open item): forensics
+   (`/proc/net/snmp` Udp all-zero cumulative) show no DISCOVER ever reached
+   UDP — root cause reconstruction: the first `busybox udhcpd` (daemonized)
+   died silently, the STA's only DHCP window went unanswered, and the
+   screen-off/dozing Android gave up and later deauthed. udhcpd was
+   restarted foreground-with-log and verified alive; re-test needs the STA
+   to rejoin (owner action) — monitor left running at session close.
+
 ## Honesty
 
 - RAN ON HW: everything in the table above.
