@@ -330,6 +330,12 @@ struct zx_skb_wifi_tag {
 };
 #define ZX_SKB_CB_TAG_OFF	40
 #define ZX_SKB_CB_TAG_MAGIC	0x5a
+/* [Stage-3 WiFi Phase B.2, 2026-07-24] "shuttled" marker: stamped on skbs the
+ * TM trap-RX path delivers INTO a bound vif (zx_wifi_tm_rx_dispatch) so the
+ * vif's zx_wifi_rx_handler passes them to the local stack instead of
+ * re-injecting them into the fabric (infinite vif->ring->trap->vif loop
+ * otherwise). cb is preserved across netif_rx()'s backlog. */
+#define ZX_SKB_CB_TAG_MAGIC_SHUTTLED	0xa5
 
 /* [Stage-3 WiFi Phase B, 2026-07-23] IDM ring <-> WiFi-vif dispatch node.
  * node_index = ssid + idm*8 (range 0..15, 2 rings × 8 ssid) — confirmed from
@@ -469,6 +475,13 @@ struct zx_eth {
 	u32 idm_wifi_rx_dispatched;	/* RX frames handed to a bound vif */
 	u32 idm_wifi_rx_nobind;		/* valid ssid, no bound/up vif -> local stack */
 	u32 idm_wifi_tx_injected;	/* TX frames stamped with an ssid into the ring */
+	/* [Stage-3 WiFi Phase B.2, 2026-07-24] TM trap-RX fabric-ingress dispatch
+	 * counters (fix-A validation proved port-6/7 ring-ingress traps deliver on
+	 * the TM CPU rings with desc raw port >= 0x10, NOT on the IDM RX ring —
+	 * findings/wifi_stage3_fixA_ondevice_validation_2026-07-07.md). */
+	u32 tm_rx_fabric;		/* TM-RX frames with fabric/IDM ingress identity */
+	u32 tm_wifi_rx_dispatched;	/* ...handed to a bound vif's stack (netif_rx) */
+	u32 tm_wifi_rx_nobind;		/* ...no bound/up vif -> baseline DSA-demux path */
 
 	struct napi_struct napi;
 	struct zx_eth_port ports[ZX_NPORTS];
@@ -1932,8 +1945,22 @@ static rx_handler_result_t zx_wifi_rx_handler(struct sk_buff **pskb)
 	    !(node->idm_ndev->flags & IFF_UP))
 		return RX_HANDLER_PASS;
 
-	/* Stamp ssid for zx_idm_xmit's TX-descriptor packer (spec §2.1/§2.2). */
+	/* [Stage-3 WiFi Phase B.2, 2026-07-24] EAPOL passthrough — the Phase-B
+	 * live discovery: diverting EAPOL into the fabric starves hostapd's
+	 * ETH_P_PAE packet socket and the WPA2 4-way handshake times out (no STA
+	 * can join a bound AP vif). Control-plane frames must reach the stack.
+	 * findings/wifi_stage3_phaseB_ondevice_validation_2026-07-07.md. */
+	if (skb->protocol == cpu_to_be16(ETH_P_PAE))
+		return RX_HANDLER_PASS;
+
+	/* [Phase B.2] Loop guard: frames the TM trap-RX path delivered INTO this
+	 * vif (zx_wifi_tm_rx_dispatch) carry the shuttled marker — hand them to
+	 * the local stack; re-injecting would loop vif->ring->trap->vif forever. */
 	tag = (struct zx_skb_wifi_tag *)&skb->cb[ZX_SKB_CB_TAG_OFF];
+	if (tag->magic == ZX_SKB_CB_TAG_MAGIC_SHUTTLED)
+		return RX_HANDLER_PASS;
+
+	/* Stamp ssid for zx_idm_xmit's TX-descriptor packer (spec §2.1/§2.2). */
 	tag->magic = ZX_SKB_CB_TAG_MAGIC;
 	tag->ssid  = node->ssid;
 
@@ -4865,6 +4892,61 @@ static void zx_tm_release_rx_desc(struct zx_eth *e, u8 q, u16 count)
 	zx_tm_release_rx_desc_raw(e, q, count, 1, 0);
 }
 
+/* [Stage-3 WiFi Phase B.2, 2026-07-24] TM trap-RX -> bound-vif dispatch.
+ *
+ * Fix-A on-device validation (findings/wifi_stage3_fixA_ondevice_validation_
+ * 2026-07-07.md) proved that fabric-port-6/7 (IDM ring) ingress traps deliver
+ * to the CPU on the TM rings (q4 ring0, UP-side) with a fabric-internal
+ * ingress identity in desc[6]: raw port >= 0x10 (observed 24 for idm1/ssid0;
+ * hypothesis raw = 0x10 | idm<<3 | ssid — the first-8 diag below verifies,
+ * incl. the idm0 raw value and the ssid bit placement, ON-DEVICE-UNTESTED).
+ * These frames previously died in DSA demux (tag port 23 has no netdev).
+ *
+ * Semantics: a port-6/7-ingress trap is an UP frame the bound vif already
+ * received over the air and injected into the fabric (zx_wifi_rx_handler);
+ * the fabric couldn't hw-forward it, so the CPU must now process it as if
+ * received on that vif — mirroring stock's wlan->idm->fabric->trap->CPU slow
+ * path. Delivery = netif_rx() into the vif with the SHUTTLED cb marker so
+ * the vif's rx_handler passes it to the stack (no re-inject loop). The vif's
+ * own netdev stats are NOT touched (mac80211/DSA netdevs own their stats).
+ *
+ * Returns true when the frame was dispatched (caller skips the baseline sw
+ * delivery); false = keep baseline behavior (unbound, alloc failure).
+ */
+static bool zx_wifi_tm_rx_dispatch(struct zx_eth *e, const u8 *src, u16 len,
+				   u8 raw)
+{
+	u8 idm = (raw >> 3) & 1, ssid = raw & 7;
+	struct zx_wifi_dispatch_node *wn = &e->zx_wifi_dispatch[ssid + idm * 8];
+	bool bound = wn->enabled && wn->wlan_ndev &&
+		     (wn->wlan_ndev->flags & IFF_UP);
+	struct zx_skb_wifi_tag *tag;
+	struct sk_buff *skb;
+
+	e->tm_rx_fabric++;
+	if (e->tm_rx_fabric <= 8)
+		dev_info(e->dev,
+			 "TM-RX fabric #%u raw=0x%02x (idm%u ssid%u) len=%u src=%pM dst=%pM et=%04x bound=%d\n",
+			 e->tm_rx_fabric, raw, idm, ssid, len,
+			 src + 6, src, ntohs(*(const __be16 *)(src + 12)), bound);
+	if (!bound) {
+		e->tm_wifi_rx_nobind++;
+		return false;
+	}
+	skb = netdev_alloc_skb(wn->wlan_ndev, len + 32);
+	if (!skb)
+		return false;
+	skb_reserve(skb, 16);
+	memcpy(skb_put(skb, len), src, len);
+	tag = (struct zx_skb_wifi_tag *)&skb->cb[ZX_SKB_CB_TAG_OFF];
+	tag->magic = ZX_SKB_CB_TAG_MAGIC_SHUTTLED;
+	tag->ssid  = ssid;
+	skb->protocol = eth_type_trans(skb, wn->wlan_ndev);
+	netif_rx(skb);
+	e->tm_wifi_rx_dispatched++;
+	return true;
+}
+
 /* NAPI poll — based on pon_tm_net_poll RE, simplified for first iteration */
 /* RX checkpoint logging — kept under pr_debug so it compiles out unless
  * the file/dyn-debug is enabled. The first-N-polls gate is preserved so
@@ -5012,6 +5094,17 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 							 e->tm_rx_loopback_drops, src + 6, src,
 							 ntohs(*(__be16 *)(src + 12)), len, ingress_port);
 					zx_bmu_free_bp(e, bppe_idx, 0);
+				} else if (ingress_port >= 15 &&
+					   zx_wifi_tm_rx_dispatch(e, src, len,
+						(u8)(ingress_port + 1))) {
+					/* [Stage-3 WiFi Phase B.2] fabric/IDM-ingress
+					 * trap (desc raw port >= 0x10) handed to the
+					 * bound vif's stack. When unbound the helper
+					 * returns false and the frame falls through
+					 * to the baseline sw delivery below (where
+					 * DSA demux drops it — pre-B.2 behavior).
+					 * BP is freed by the common release below. */
+					e->tm_rx_count++;
 				} else {
 					struct sk_buff *skb =
 						netdev_alloc_skb(e->sw_dev,
@@ -5872,6 +5965,9 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	 * 6/7 carry no MT7915 traffic yet); becomes the empirical RX-ssid ground
 	 * truth once an AP client sends through the fabric. */
 	seq_printf(s, "idm_rx_count      = %u\n", e->idm_rx_count);
+	seq_printf(s, "tm_rx_fabric      = %u (wifi_dispatched=%u nobind=%u)\n",
+		   e->tm_rx_fabric, e->tm_wifi_rx_dispatched,
+		   e->tm_wifi_rx_nobind);
 	seq_printf(s, "idm_rx_per_ssid 0..7 = %u %u %u %u %u %u %u %u  (ssid_invalid=%u)\n",
 		   e->idm_rx_per_ssid[0], e->idm_rx_per_ssid[1],
 		   e->idm_rx_per_ssid[2], e->idm_rx_per_ssid[3],
@@ -7044,10 +7140,13 @@ static int zx_wifi_bind_show(struct seq_file *s, void *unused)
 	struct zx_eth *e = s->private;
 	int i;
 
-	seq_puts(s, "# IDM<->WiFi dispatch table (Stage-3 Phase B, UNTESTED ON HW)\n");
+	seq_puts(s, "# IDM<->WiFi dispatch table (Stage-3 Phase B)\n");
 	seq_printf(s, "# rx_dispatched=%u rx_nobind=%u tx_injected=%u\n",
 		   e->idm_wifi_rx_dispatched, e->idm_wifi_rx_nobind,
 		   e->idm_wifi_tx_injected);
+	seq_printf(s, "# tm_rx_fabric=%u tm_rx_dispatched=%u tm_rx_nobind=%u (Phase B.2)\n",
+		   e->tm_rx_fabric, e->tm_wifi_rx_dispatched,
+		   e->tm_wifi_rx_nobind);
 	seq_puts(s, "# node idm ssid  vif        idm_ndev\n");
 	for (i = 0; i < 16; i++) {
 		struct zx_wifi_dispatch_node *n = &e->zx_wifi_dispatch[i];
