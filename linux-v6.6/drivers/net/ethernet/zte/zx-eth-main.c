@@ -6934,7 +6934,15 @@ static const struct file_operations zx_txtest_fops = {
 static ssize_t zx_wifi_bind_write(struct file *f, const char __user *ubuf,
 				  size_t count, loff_t *ppos)
 {
-	struct zx_eth *e = f->private_data;
+	/* .open is single_open() (for the seq-file read side), so
+	 * f->private_data is the struct seq_file — the zx_eth pointer is in
+	 * seq->private (== inode->i_private). Every OTHER write knob in this
+	 * driver uses simple_open (private_data = i_private directly); this one
+	 * combines a seq-file reader with a writer, hence the extra hop.
+	 * [Fixed 2026-07-24 during on-device validation: the original
+	 * build-verified code read f->private_data directly and would have
+	 * dereferenced the seq_file as a zx_eth on the very first write.] */
+	struct zx_eth *e = ((struct seq_file *)f->private_data)->private;
 	char buf[64], ifname[IFNAMSIZ];
 	unsigned int idm, ssid;
 	struct net_device *vif;
