@@ -482,6 +482,7 @@ struct zx_eth {
 	u32 tm_rx_fabric;		/* TM-RX frames with fabric/IDM ingress identity */
 	u32 tm_wifi_rx_dispatched;	/* ...handed to a bound vif's stack (netif_rx) */
 	u32 tm_wifi_rx_nobind;		/* ...no bound/up vif -> baseline DSA-demux path */
+	u32 tm_wifi_rx_noparse;		/* ...bound but no recognizable frame at any offset */
 
 	struct napi_struct napi;
 	struct zx_eth_port ports[ZX_NPORTS];
@@ -4536,7 +4537,19 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	writel(0x00000000, pp + 0x8300);	/* sbrg_set_brdcst_fld_en: OFF (stock=0; was 0xffff = the broadcast hairpin gate) */
 	writel(0x00000000, pp + 0x8304);	/* broadcast flood portmask: off (stock=0) */
 	writel(0xfffffffa, pp + 0x8050);
-	writel(0x0000ff00, pp + 0x8008);
+	/* [Phase B close-out, 2026-07-25] VLAN-check enables: MUST be 0, not
+	 * the 0x0000ff00 this stock-replay line used to write. This function
+	 * runs AFTER zx_pp_init (probe order: zx_pp_init → zx_eth_apply_
+	 * stock_init → zx_pp_brg_init), so the old value here silently
+	 * CLOBBERED commit b5a4e5d8b's vl_chk-off write in zx_pp_init — the
+	 * same last-writer-wins replay trap as the RED_CFG bit6 story.
+	 * Found on the first #527 boot: 0x92388008 read back 0x0000ff00
+	 * despite the fix being compiled in. outport_vl_chk_en[15:8] with
+	 * mainline's effectively-empty VLAN tables = every bridge-FORWARD
+	 * verdict drop_PP'd (killed all WiFi/ring FORWARD-class unicast).
+	 * See findings/wifi_stage3_phaseB_e2e_realclient_2026-07-07.md.
+	 */
+	writel(0x00000000, pp + 0x8008);	/* vl_chk all OFF (was 0x0000ff00) */
 	dev_dbg(e->dev, "PP_BRG post-init: SMAC_LOOK_EN=%02x (CPU port 5 disabled)\n",
 		 readl(pp + 0x81c0));
 
@@ -4933,7 +4946,28 @@ static void zx_tm_release_rx_desc(struct zx_eth *e, u8 q, u16 count)
  * Returns true when the frame was dispatched (caller skips the baseline sw
  * delivery); false = keep baseline behavior (unbound, alloc failure).
  */
-static bool zx_wifi_tm_rx_dispatch(struct zx_eth *e, const u8 *src, u16 len,
+#define ZX_ET_KNOWN(et) ((et) == ETH_P_IP || (et) == ETH_P_ARP || \
+			 (et) == ETH_P_IPV6 || (et) == ETH_P_8021Q || \
+			 (et) == ETH_P_PPP_DISC || (et) == ETH_P_PPP_SES || \
+			 (et) == ETH_P_PAE)
+
+/* [Phase B close-out, 2026-07-25] Fabric trap frames reach the CPU in more
+ * than one layout, and the desc len field's meaning varies with the path:
+ *   - UP-ring traps (B.2's ARPs):        eth frame at bp+16 (16B HW prefix)
+ *   - DN traps via the trap path:        eth frame at bp+18 (extra 2B stub —
+ *     the July live-proven UNHANDLED_PROTO 0x9f2a shift, commit 5e2d25a5e)
+ *   - DN bridge-FORWARD-to-CPU (seen on the first #529 boot with the VLAN
+ *     check cleared at init): NO ethernet header — the IP packet sits
+ *     directly at bp+16 (TM-RX debug showed dst=45:00:.. et=c0a8 = raw IPv4
+ *     bytes, and desc len == the IP total-length exactly).
+ * A blind stub-size heuristic can't cover all of these, so detect by
+ * CONTENT: probe the 4 plausible eth-frame offsets for a known ethertype
+ * (0x9f2a-style SA tails are not in the known set), and if none matches,
+ * accept a bare IPv4/IPv6 header at bp+16 and deliver it tun-style (L3,
+ * skb->protocol set by hand). Frame length is derived from the L3 header
+ * (IP total-length / IPv6 payload-length) rather than the ambiguous desc
+ * len whenever possible. */
+static bool zx_wifi_tm_rx_dispatch(struct zx_eth *e, const u8 *bp, u16 len,
 				   u8 raw)
 {
 	u8 idm = (raw >> 3) & 1, ssid = raw & 7;
@@ -4942,57 +4976,90 @@ static bool zx_wifi_tm_rx_dispatch(struct zx_eth *e, const u8 *src, u16 len,
 		     (wn->wlan_ndev->flags & IFF_UP);
 	struct zx_skb_wifi_tag *tag;
 	struct sk_buff *skb;
+	static const u8 cands[4] = { 16, 18, 2, 0 };
+	const u8 *frm = NULL;
+	u16 flen = 0, l3proto = 0;
+	int i;
 
 	e->tm_rx_fabric++;
-	if (e->tm_rx_fabric <= 8)
+	if (e->tm_rx_fabric <= 8) {
 		dev_info(e->dev,
-			 "TM-RX fabric #%u raw=0x%02x (idm%u ssid%u) len=%u src=%pM dst=%pM et=%04x bound=%d\n",
-			 e->tm_rx_fabric, raw, idm, ssid, len,
-			 src + 6, src, ntohs(*(const __be16 *)(src + 12)), bound);
+			 "TM-RX fabric #%u raw=0x%02x (idm%u ssid%u) len=%u bound=%d\n",
+			 e->tm_rx_fabric, raw, idm, ssid, len, bound);
+		print_hex_dump(KERN_INFO, "  bp: ", DUMP_PREFIX_OFFSET, 16, 1,
+			       bp, 48, false);
+	}
 	if (!bound) {
 		e->tm_wifi_rx_nobind++;
 		return false;
 	}
-	/* [Phase B e2e, 2026-07-25 — UNTESTED ON HW (device hung before a
-	 * rebuild/boot; validate on next boot)] DN-trap fabric frames arrive
-	 * with the ethernet frame at bp_buf+18, i.e. 2 bytes PAST the +16 the
-	 * caller's offset heuristic picks (trap path prepends a 2-byte stub).
-	 * Live-proven with a real client: every dispatched IP frame died in
-	 * __netif_receive_skb_core as UNHANDLED_PROTO with protocol=0x9f2a =
-	 * the client SA's last two bytes read as the ethertype — an exact +2
-	 * shift. (Also retro-explains B.2's "DHCP DISCOVER never reached UDP"
-	 * with Udp SNMP all-zero — it was never udhcpd's death.) UP-ring trap
-	 * frames (B.2's validated ARPs) sit at +16 and are unaffected: only
-	 * shift when +12 does NOT hold a known ethertype but +14 DOES (0x9f2a
-	 * is ≥ 0x0600, so a plain 802.3-min check can NOT catch this — the
-	 * kernel itself accepted it as an ethertype and then found no proto
-	 * handler). findings/wifi_stage3_phaseB_e2e_realclient_2026-07-07.md. */
-	{
-		u16 et12 = ntohs(*(const __be16 *)(src + 12));
-		u16 et14 = ntohs(*(const __be16 *)(src + 14));
-		#define ZX_ET_KNOWN(et) ((et) == ETH_P_IP || (et) == ETH_P_ARP || \
-					 (et) == ETH_P_IPV6 || (et) == ETH_P_8021Q || \
-					 (et) == ETH_P_PPP_DISC || (et) == ETH_P_PPP_SES || \
-					 (et) == ETH_P_PAE)
-		if (len > 16 && !ZX_ET_KNOWN(et12) && ZX_ET_KNOWN(et14)) {
-			src += 2;
-			len -= 2;
-		}
-		#undef ZX_ET_KNOWN
+
+	/* 1) Ethernet frame at one of the known stub offsets? */
+	for (i = 0; i < 4; i++) {
+		u16 et = ntohs(*(const __be16 *)(bp + cands[i] + 12));
+
+		if (!ZX_ET_KNOWN(et))
+			continue;
+		frm = bp + cands[i];
+		if (et == ETH_P_IP)
+			flen = 14 + ntohs(*(const __be16 *)(frm + 16));
+		else if (et == ETH_P_IPV6)
+			flen = 14 + 40 + ntohs(*(const __be16 *)(frm + 18));
+		else if (et == ETH_P_ARP)
+			flen = 60;	/* 42 real + min-frame pad */
+		else
+			flen = len;	/* PAE/PPPoE/8021Q: trust desc len */
+		break;
 	}
-	skb = netdev_alloc_skb(wn->wlan_ndev, len + 32);
+	/* 2) Bare L3 at bp+16 (DN bridge-FORWARD delivery, no eth header). */
+	if (!frm && (bp[16] >> 4) == 4 && (bp[16] & 0xf) >= 5) {
+		u16 totlen = ntohs(*(const __be16 *)(bp + 18));
+
+		if (totlen >= 20) {
+			frm = bp + 16;
+			flen = totlen;
+			l3proto = ETH_P_IP;
+		}
+	}
+	if (!frm && (bp[16] >> 4) == 6) {
+		frm = bp + 16;
+		flen = 40 + ntohs(*(const __be16 *)(bp + 20));
+		l3proto = ETH_P_IPV6;
+	}
+	if (!frm || flen < 20 ||
+	    flen > TM_BP_SIZE - (u16)(frm - bp)) {
+		e->tm_wifi_rx_noparse++;
+		if (e->tm_wifi_rx_noparse <= 4) {
+			dev_info(e->dev, "TM-RX fabric NOPARSE #%u len=%u\n",
+				 e->tm_wifi_rx_noparse, len);
+			print_hex_dump(KERN_INFO, "  bp: ", DUMP_PREFIX_OFFSET,
+				       16, 1, bp, 48, false);
+		}
+		return false;
+	}
+
+	skb = netdev_alloc_skb(wn->wlan_ndev, flen + 32);
 	if (!skb)
 		return false;
 	skb_reserve(skb, 16);
-	memcpy(skb_put(skb, len), src, len);
+	memcpy(skb_put(skb, flen), frm, flen);
 	tag = (struct zx_skb_wifi_tag *)&skb->cb[ZX_SKB_CB_TAG_OFF];
 	tag->magic = ZX_SKB_CB_TAG_MAGIC_SHUTTLED;
 	tag->ssid  = ssid;
-	skb->protocol = eth_type_trans(skb, wn->wlan_ndev);
+	if (l3proto) {
+		/* tun-style L3 delivery: no mac header to parse */
+		skb->dev = wn->wlan_ndev;
+		skb->protocol = htons(l3proto);
+		skb->pkt_type = PACKET_HOST;
+		skb_reset_mac_header(skb);
+	} else {
+		skb->protocol = eth_type_trans(skb, wn->wlan_ndev);
+	}
 	netif_rx(skb);
 	e->tm_wifi_rx_dispatched++;
 	return true;
 }
+#undef ZX_ET_KNOWN
 
 /* NAPI poll — based on pon_tm_net_poll RE, simplified for first iteration */
 /* RX checkpoint logging — kept under pr_debug so it compiles out unless
@@ -5142,7 +5209,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 							 ntohs(*(__be16 *)(src + 12)), len, ingress_port);
 					zx_bmu_free_bp(e, bppe_idx, 0);
 				} else if (ingress_port >= 15 &&
-					   zx_wifi_tm_rx_dispatch(e, src, len,
+					   zx_wifi_tm_rx_dispatch(e, bp_buf, len,
 						(u8)(ingress_port + 1))) {
 					/* [Stage-3 WiFi Phase B.2] fabric/IDM-ingress
 					 * trap (desc raw port >= 0x10) handed to the
@@ -6012,9 +6079,9 @@ static int zx_stats_show(struct seq_file *s, void *_unused)
 	 * 6/7 carry no MT7915 traffic yet); becomes the empirical RX-ssid ground
 	 * truth once an AP client sends through the fabric. */
 	seq_printf(s, "idm_rx_count      = %u\n", e->idm_rx_count);
-	seq_printf(s, "tm_rx_fabric      = %u (wifi_dispatched=%u nobind=%u)\n",
+	seq_printf(s, "tm_rx_fabric      = %u (wifi_dispatched=%u nobind=%u noparse=%u)\n",
 		   e->tm_rx_fabric, e->tm_wifi_rx_dispatched,
-		   e->tm_wifi_rx_nobind);
+		   e->tm_wifi_rx_nobind, e->tm_wifi_rx_noparse);
 	seq_printf(s, "idm_rx_per_ssid 0..7 = %u %u %u %u %u %u %u %u  (ssid_invalid=%u)\n",
 		   e->idm_rx_per_ssid[0], e->idm_rx_per_ssid[1],
 		   e->idm_rx_per_ssid[2], e->idm_rx_per_ssid[3],
@@ -7191,9 +7258,9 @@ static int zx_wifi_bind_show(struct seq_file *s, void *unused)
 	seq_printf(s, "# rx_dispatched=%u rx_nobind=%u tx_injected=%u\n",
 		   e->idm_wifi_rx_dispatched, e->idm_wifi_rx_nobind,
 		   e->idm_wifi_tx_injected);
-	seq_printf(s, "# tm_rx_fabric=%u tm_rx_dispatched=%u tm_rx_nobind=%u (Phase B.2)\n",
+	seq_printf(s, "# tm_rx_fabric=%u tm_rx_dispatched=%u tm_rx_nobind=%u noparse=%u (Phase B.2)\n",
 		   e->tm_rx_fabric, e->tm_wifi_rx_dispatched,
-		   e->tm_wifi_rx_nobind);
+		   e->tm_wifi_rx_nobind, e->tm_wifi_rx_noparse);
 	seq_puts(s, "# node idm ssid  vif        idm_ndev\n");
 	for (i = 0; i < 16; i++) {
 		struct zx_wifi_dispatch_node *n = &e->zx_wifi_dispatch[i];

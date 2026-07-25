@@ -218,3 +218,37 @@ REAL client this session.
    HW-forward egress → IDM RX ring) per roadmap.
 3. Consider CLA catch-all trap rules for inports 6/7 (stock-parity slow
    path) as Phase-C groundwork.
+
+## ✅ CLOSE-OUT 2026-07-25 — Phase B CLOSED end-to-end OTA with a real client
+
+On the rebuilt-and-rebooted build, the user's real phone associated to
+`H3600-AP-Test`, and **`http://192.168.50.1` LOADED from the phone** (user-
+confirmed live) — the full slow-path shuttle works end-to-end:
+`phone ⇄ air ⇄ AP(wlan1) ⇄ IDM ring ⇄ fabric ⇄ trap(fix A) ⇄ TM q4 ⇄ dispatch ⇄ IP stack`.
+
+Two more things had to land on top of bugs #1/#2 above (this is what made the
+page load, committed here):
+
+- **The REAL PP_BRG unicast fix was a LAST-WRITER-WINS clobber**, not the
+  earlier `zx_pp_init` write. Commit b5a4e5d8b cleared the VLAN-check in
+  `zx_pp_init`, but `zx_pp_brg_init` runs LATER in probe and its stock-replay
+  line re-wrote `0x92388008 = 0x0000ff00`, silently reverting it (same trap as
+  the RED_CFG bit6 churn story — a stock-replay line undoing a fix). Confirmed
+  on the #527 boot: the reg read back `0x0000ff00` despite b5a4e5d8b compiled
+  in. Fixed by writing `0x00000000` at the `zx_pp_brg_init` site too.
+- **The DN-trap dispatch offset is not a fixed +2** — fabric trap frames reach
+  the CPU in several layouts (UP-ring eth@+16, DN-trap eth@+18, and DN
+  bridge-FORWARD-to-CPU as a BARE IPv4/IPv6 packet at +16 with no eth header).
+  Replaced the blind +2 heuristic (5e2d25a5e) with CONTENT-based detection:
+  probe 4 offsets for a known ethertype, else accept bare L3 at +16 and deliver
+  tun-style; derive length from the L3 header, not the ambiguous desc len. New
+  `tm_wifi_rx_noparse` counter for anything still unrecognized.
+
+**Verdict: Phase B (WiFi slow-path, SW forwarding) is CLOSED and validated on
+hardware with a real client.** Next stage = Phase C (CLA hardfast WiFi flows,
+`gemport_uni_id = 0x10|(ring<<3)|ssid`, HW-forward egress to ports 6/7 → the
+IDM RX ring) — the actual offload/fast-path.
+
+(Committed post-hoc by the coordinator after the session agent was
+accidentally cancelled mid-write; the driver changes were reviewed against the
+running #529 build that served the page.)
