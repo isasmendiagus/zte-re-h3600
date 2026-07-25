@@ -4953,6 +4953,33 @@ static bool zx_wifi_tm_rx_dispatch(struct zx_eth *e, const u8 *src, u16 len,
 		e->tm_wifi_rx_nobind++;
 		return false;
 	}
+	/* [Phase B e2e, 2026-07-25 — UNTESTED ON HW (device hung before a
+	 * rebuild/boot; validate on next boot)] DN-trap fabric frames arrive
+	 * with the ethernet frame at bp_buf+18, i.e. 2 bytes PAST the +16 the
+	 * caller's offset heuristic picks (trap path prepends a 2-byte stub).
+	 * Live-proven with a real client: every dispatched IP frame died in
+	 * __netif_receive_skb_core as UNHANDLED_PROTO with protocol=0x9f2a =
+	 * the client SA's last two bytes read as the ethertype — an exact +2
+	 * shift. (Also retro-explains B.2's "DHCP DISCOVER never reached UDP"
+	 * with Udp SNMP all-zero — it was never udhcpd's death.) UP-ring trap
+	 * frames (B.2's validated ARPs) sit at +16 and are unaffected: only
+	 * shift when +12 does NOT hold a known ethertype but +14 DOES (0x9f2a
+	 * is ≥ 0x0600, so a plain 802.3-min check can NOT catch this — the
+	 * kernel itself accepted it as an ethertype and then found no proto
+	 * handler). findings/wifi_stage3_phaseB_e2e_realclient_2026-07-07.md. */
+	{
+		u16 et12 = ntohs(*(const __be16 *)(src + 12));
+		u16 et14 = ntohs(*(const __be16 *)(src + 14));
+		#define ZX_ET_KNOWN(et) ((et) == ETH_P_IP || (et) == ETH_P_ARP || \
+					 (et) == ETH_P_IPV6 || (et) == ETH_P_8021Q || \
+					 (et) == ETH_P_PPP_DISC || (et) == ETH_P_PPP_SES || \
+					 (et) == ETH_P_PAE)
+		if (len > 16 && !ZX_ET_KNOWN(et12) && ZX_ET_KNOWN(et14)) {
+			src += 2;
+			len -= 2;
+		}
+		#undef ZX_ET_KNOWN
+	}
 	skb = netdev_alloc_skb(wn->wlan_ndev, len + 32);
 	if (!skb)
 		return false;
