@@ -130,12 +130,91 @@ identification (0x92388008 was never in the port1 diff shortlists, and stock
 vs mainline DIFFERS on it). **Re-test port1 ingress with `0x92388008 = 0`**
 next time jack2 is cabled — cheap and plausibly the same class of omission.
 
+---
+
+# SESSION CONTINUATION (same day): the SECOND bug + a hang postmortem
+
+The owner re-connected the client by hand. With the VLAN fix live, the
+shuttle counters tracked real client traffic **1:1** (`tx_injected` ==
+`tm_rx_fabric` == `tm_rx_dispatched` deltas, e.g. +16/+16/+16) — the fabric
+leg is fully fixed. But ping AND a client browser hit to an on-device httpd
+(`http://192.168.50.1`, busybox httpd, left running) still failed:
+**Tcp InSegs stayed 0** — dispatched frames died between `netif_rx` and IP.
+
+## Bug #2 (FOUND, source-fixed, HW-validation pending): +2 dispatch offset
+
+`skb:kfree_skb` tracing with the real client's traffic:
+
+```
+__netif_receive_skb_core: reason UNHANDLED_PROTO protocol=40746 (0x9f2a) ×30
+```
+
+**0x9f2a = the last two bytes of the client's MAC** (0e:3e:df:2c:**9f:2a**)
+read as the ethertype ⇒ the frame handed to `eth_type_trans` is shifted by
+exactly +2: DN-trap fabric frames sit at **bp_buf+18** (the trap path
+prepends a 2-byte stub), while the caller's offset heuristic only knows
++0/+16. UP-ring trap frames (B.2's validated ARPs) sit at +16 — which is why
+every earlier validation passed. **This also retro-explains B.2's "DHCP
+DISCOVER never reached UDP / Udp SNMP all-zero"** — it was this offset, not
+udhcpd's death. Note 0x9f2a ≥ 0x0600, so the kernel accepted it as a
+(unknown) ethertype — an 802.3-min check can't catch the shift; the fix
+matches *known* ethertypes at +12 vs +14 and shifts only when +14 wins.
+
+Source fix: commit `5e2d25a5e` (in `zx_wifi_tm_rx_dispatch`). **UNTESTED ON
+HW** — see postmortem.
+
+## Postmortem: I hung the device (honesty)
+
+Chasing byte-level proof of the +18 offset, I batched ~200 `busybox devmem`
+reads of the BP pool over the UART REPL — including one ~1100-char
+40-command line. The known console gotcha (ttyAMA input overruns — "send
+commands ONE per zc() call") bit hard: input corruption produced a mangled
+devmem address, the read hit an unclocked/secure region and the AXI access
+never completed → **CPU hard-hang** (console dead mid-stream, zero tty echo,
+no SIGINT; mt7915 keeps beaconing autonomously so the SSID is still visible —
+misleading). The offset analysis did NOT need that dump — the 0x9f2a
+arithmetic was already conclusive.
+
+- Recovery requires a DTR power-cycle (boots STOCK from NAND; mainline was
+  RAM-boot) + TFTP re-boot of mainline — out of scope per this session's
+  no-reboot directive. STOPPED here and reported.
+- ⚠ LESSON (repeat of a documented gotcha, now with a much higher price):
+  NEVER send long/many-command lines to the UART REPL; one short command per
+  zc() call; and NEVER script devmem loops over the console — if a byte-dump
+  is truly needed, add a driver debugfs hexdump knob instead.
+
+## State for the NEXT session (checklist)
+
+1. Device is HUNG; power-cycle via bridge :9998 DTR (≥5-10 s OFF — also
+   resets the WAN modem), boots stock, then TFTP RAM-boot mainline.
+2. Rebuild first: both fixes are in source (`b5a4e5d8b` PP_BRG[0x008]=0 at
+   init + `5e2d25a5e` dispatch offset). No live pokes needed after that.
+3. Re-run this session's validation ladder on the new build:
+   synthetic UDP out idm1 → `pp_drop` frozen, `tm_rx_fabric/dispatched` tick,
+   and now also `Udp/Tcp InSegs` move (offset fixed).
+4. With the client: static ARP `192.168.50.100 → 0e:3e:df:2c:9f:2a` on wlan1,
+   then ping + `http://192.168.50.1` (busybox httpd, `/tmp/www`). The client
+   does NOT answer broadcast who-has (Android doze) and did not answer ICMP
+   echo in this session's windows — treat HTTP as the primary proof.
+5. Then Phase-B step 4 (client→LAN via route/NAT — bridge conflicts with the
+   bound rx_handler) and the port1/jack2 drop_PP retest with the VLAN fix.
+
+## Verdict
+
+**Phase B slow-path: NOT yet closed OTA, but for the first time FULLY
+root-caused end-to-end.** Two independent bugs stacked on the client→AP
+unicast path: (1) PP outport-VLAN-check vs empty VLAN tables (fixed live,
+validated with real client traffic at the fabric level, in source); (2) +2
+frame offset on DN-trap dispatch (found via real client traffic, fixed in
+source, validation needs the next boot). Everything else — assoc/WPA2 with
+bound vif, OTA injection, fabric return, dispatch — verified working with a
+REAL client this session.
+
 ## Next steps
 
-1. **OTA close**: client re-joins → `ping 192.168.50.100` (static ARP already
-   staged) → expect success; then client→LAN via SW bridge/route+NAT
-   (Phase-B step 4) → Phase B fully CLOSED.
-2. **Driver patch** (next build): `zx_pp_brg_init` writes
-   `PP_BRG[0x8008] = 0` + comment; consider CLA catch-all trap rules for
-   inports 6/7 (stock-parity slow path) as Phase-C groundwork.
-3. Phase C (CLA WiFi flows, HW-forward egress → IDM RX ring) per roadmap.
+1. Next boot (new build with both fixes): validation checklist above →
+   expect ping + HTTP to the AP to work → Phase B CLOSED.
+2. Then client→LAN forwarding (step 4) and Phase C (CLA WiFi flows,
+   HW-forward egress → IDM RX ring) per roadmap.
+3. Consider CLA catch-all trap rules for inports 6/7 (stock-parity slow
+   path) as Phase-C groundwork.
