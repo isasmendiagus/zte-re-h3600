@@ -1418,6 +1418,26 @@ static void zx_pp_init(struct zx_eth *e)
 	writel(0x000000FF, pp + PP_BRG_BASE + 0x03D8);	/* port 6 */
 	writel(0x000000FF, pp + PP_BRG_BASE + 0x03DC);	/* port 7 */
 
+	/* [Stage-3 WiFi Phase B e2e, 2026-07-25] PP_BRG[0x008] VLAN-check
+	 * enables — power-on default is 0x0000ff00 = outport_vl_chk_en[15:8]
+	 * = 0xff, i.e. every bridge-FORWARD egress is VLAN-checked. Mainline
+	 * populates NO VLAN tables, so the check fails for every bridged
+	 * frame → drop_PP (0x921da040) +1/frame. Invisible on wire ports
+	 * (their traffic rides the CLA per-inport catch-all traps, which
+	 * bypass the bridge), but it silently killed ALL FORWARD-class
+	 * unicast ingressing from the WiFi/ring fabric ports 6/7 — a real
+	 * WLAN client associated + 4-way-handshaked fine (trap-class) and
+	 * then had every IP packet eaten. Stock writes 0x0000dfdf here AND
+	 * populates the VLAN tables; with no VLAN feature, all-checks-off
+	 * is the faithful config. Root-caused live by regdump-vs-stock diff
+	 * + poke; see findings/wifi_stage3_phaseB_e2e_realclient_2026-07-07.md.
+	 * VALIDATED ON HW (live poke on #524): FORWARD-class ring-ingress
+	 * frames then deliver fabric→TM-trap→dispatch→vif stack, pp_drop
+	 * frozen. NOTE for the OPEN port1/jack2 drop_PP anomaly: this reg
+	 * was never in the June port1 diff shortlists — retest jack2.
+	 */
+	writel(0x00000000, pp + PP_BRG_BASE + 0x0008);	/* vl_chk all OFF */
+
 	/* SBRG (Switch Bridge) flood/forward enables — controls per-port
 	 * broadcast/unicast/multicast forwarding decisions. RE'd from sbragRegTable:
 	 *   pp_brg[0x300] = broadcast flood enable mask (8 ports, 1 bit each)
