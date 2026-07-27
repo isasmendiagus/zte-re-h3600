@@ -564,6 +564,16 @@ struct zx_eth {
 	 * 1 = install the UP recipe in HW too (debugfs "ftup"). */
 	u32		ft_up_en;
 
+	/* [Stage-3 WiFi Phase C 2026-07-27] WiFi-egress HW offload enable.
+	 * 0 (DEFAULT) = the H4 guard declines wlan-vif-egress flows exactly as
+	 * before Phase C — an unconfigured boot is behavior-identical to the
+	 * pre-Phase-C baseline. 1 (debugfs "ftwifi") = a FLOW_CLS_REPLACE whose
+	 * egress dev is a BOUND wifi_bind vif resolves to the WLAN logical port
+	 * essid = 0x10|(idm<<3)|ssid and installs the DN hardfast recipe with
+	 * gemport_uni_id = essid (spec:
+	 * findings/wifi_stage3_phaseC_offload_spec_2026-07-25.md §1.5/§3). */
+	u32		ft_wifi_en;
+
 	/* [H5 fix 2026-07-04] PM indirect-RAM write-verify accounting
 	 * (findings/qa_static_bughunt_2026-07-04.md H5). zx_pp_pm_write_verify()
 	 * reads each FT-install PM write back and retries on mismatch; these
@@ -2824,8 +2834,20 @@ static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
 	 * eg_regport is the egress port's regport (WAN=5 for the upload direction, the
 	 * LAN client's regport for the download direction), so this is correct for BOTH
 	 * directions and preserves the old 0x03005044 for WAN-egress (upload) flows.
-	 * byte3 (bits31:24) is now the LOW 7 bits of cmd_flow_id (idx_lo), see above. */
-	cla[0] = ((u32)idx_lo << 24) | 0x000044 | (((u32)eg_regport & 0xf) << 12);
+	 * byte3 (bits31:24) is now the LOW 7 bits of cmd_flow_id (idx_lo), see above.
+	 *
+	 * [Stage-3 WiFi Phase C 2026-07-27] gemport_uni_id is a 12-BIT stored field
+	 * spanning entry bytes 1-2 (stock decoder cla_set_hash_table,
+	 * decomp_all_tm.c:3366-3550: gemport_uni_id = byte2<<4 | byte1>>4), i.e.
+	 * cla[0] bits [15:12] (low nibble) + bits [23:16] (high byte). The old
+	 * packing wrote only the low nibble — fine for eth regports 1-5, but a
+	 * WiFi egress carries the WLAN logical port `essid = 0x10|(idm<<3)|ssid`
+	 * (0x10-0x1f, Phase-A live stock correlation: gemport_uni_id=28=0x1c for
+	 * an idm1/ssid4 client, outport left 0) whose bit4 was truncated. Packing
+	 * the high bits is a no-op for every eth value (1-5 have no high bits). */
+	cla[0] = ((u32)idx_lo << 24) | 0x000044 |
+		 (((u32)eg_regport & 0xf) << 12) |	   /* gemport_uni_id[3:0]  */
+		 ((((u32)eg_regport >> 4) & 0xff) << 16);  /* gemport_uni_id[11:4] */
 	/* word1 bytes: [0x04]=idx_hi (HIGH bits of cmd_flow_id) [0x05]=0xc0(e8_en)
 	 * [0x06]=0x11 [0x07]=0xfa. cmd_flow_id MUST equal the slot the recipe writes
 	 * flow_info/next-hop to (mirror zx-dsa.c zx_cla_pack_entry); hardcoding 0 while
@@ -3577,6 +3599,38 @@ static u8 zx_ft_egress_regport(struct net_device *odev)
 	return zx_ft_regport[dp->index & 7];
 }
 
+/* [Stage-3 WiFi Phase C 2026-07-27] Resolve a flow's egress netdev to the WLAN
+ * logical port (`essid = 0x10 | (idm_ring<<3) | ssid`, 0x10-0x1f) when it is a
+ * vif currently bound in the Phase-B (idm,ssid)<->vif dispatch table — the
+ * mainline equivalent of stock's get_sw_port_from_devname()
+ * (decomp_all_switch.c:4515: WLAN devname -> 0x10+ssid / 0x18+ssid), which is
+ * where stock's hardfast installer gets the gemport_uni_id for a WiFi DN flow
+ * (switch.c:1697). Returns ZX_FT_EGRESS_INVALID when disabled, unbound, or not
+ * a wifi vif — the caller then declines exactly as the pre-Phase-C H4 guard.
+ *
+ * Locking: called under zx_hwlock (zx_ft_setup_cb). wifi_bind's
+ * register/unregister do NOT take zx_hwlock, so a concurrent unbind can race
+ * this scan — same convention as the zx_idm_poll RX dispatch, and benign for
+ * the same reason: only pointer EQUALITY with odev (held live by the caller's
+ * flow rule) plus two u8s are read, nothing is dereferenced through
+ * wlan_ndev; the worst case installs a flow whose frames then land on a
+ * now-unbound node and are counted as idm_wifi_rx_nobind (delivered to the
+ * idmN stack fallback), not misdelivered. */
+static u8 zx_ft_wifi_essid(struct zx_eth *e, const struct net_device *odev)
+{
+	int i;
+
+	if (!odev || !READ_ONCE(e->ft_wifi_en))
+		return ZX_FT_EGRESS_INVALID;
+	for (i = 0; i < 16; i++) {
+		struct zx_wifi_dispatch_node *wn = &e->zx_wifi_dispatch[i];
+
+		if (READ_ONCE(wn->enabled) && wn->wlan_ndev == odev)
+			return 0x10 | ((wn->idm & 1) << 3) | (wn->ssid & 7);
+	}
+	return ZX_FT_EGRESS_INVALID;
+}
+
 /* Parse a flow_cls_offload 5-tuple + actions and install/remove the HW recipe. */
 static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 {
@@ -3685,6 +3739,21 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	}
 
 	eg_regport = zx_ft_egress_regport(odev);
+	if (eg_regport == ZX_FT_EGRESS_INVALID) {
+		/* [Stage-3 WiFi Phase C 2026-07-27] Before declining, try the
+		 * WiFi resolution: a bound vif egress resolves to the WLAN
+		 * logical port essid (0x10-0x1f), which the recipe installs as
+		 * gemport_uni_id (the HW-validated egress-steering field, now
+		 * carrying stock's WiFi encoding). Gated by debugfs "ftwifi"
+		 * (default off -> this block is a no-op and the H4 decline
+		 * below is byte-identical to the pre-Phase-C behavior). */
+		eg_regport = zx_ft_wifi_essid(e, odev);
+		if (eg_regport != ZX_FT_EGRESS_INVALID)
+			dev_info(e->dev,
+				 "[phaseC/ft] cookie=%lx egress %s -> wifi essid 0x%02x (idm%u ssid%u), installing DN hardfast\n",
+				 cls->cookie, netdev_name(odev), eg_regport,
+				 (eg_regport >> 3) & 1, eg_regport & 7);
+	}
 	if (eg_regport == ZX_FT_EGRESS_INVALID) {
 		/* [H4 fix 2026-07-04] odev is not a DSA user port of this switch
 		 * (bridge master / VLAN upper / ppp / wifi / NULL) -- there is no
@@ -6801,13 +6870,19 @@ static ssize_t zx_fttest_write(struct file *f, const char __user *ubuf,
 		if (sscanf(buf, "resolve %15s", devname) == 1) {
 			struct net_device *d = dev_get_by_name(&init_net, devname);
 			u8 rp = zx_ft_egress_regport(d);
+			/* [Phase C 2026-07-27] also report the wifi resolution
+			 * (real helper, gated by ftwifi like production). */
+			u8 we = zx_ft_wifi_essid(e, d);
 
-			if (rp == ZX_FT_EGRESS_INVALID)
-				pr_info("[fttest] resolve dev=%s -> INVALID (H4 guard would decline)\n",
-					devname);
-			else
+			if (rp != ZX_FT_EGRESS_INVALID)
 				pr_info("[fttest] resolve dev=%s -> VALID regport=%u\n",
 					devname, rp);
+			else if (we != ZX_FT_EGRESS_INVALID)
+				pr_info("[fttest] resolve dev=%s -> WIFI essid=0x%02x (idm%u ssid%u)\n",
+					devname, we, (we >> 3) & 1, we & 7);
+			else
+				pr_info("[fttest] resolve dev=%s -> INVALID (H4 guard would decline; ftwifi=%u)\n",
+					devname, READ_ONCE(e->ft_wifi_en));
 			if (d)
 				dev_put(d);
 			return count;
@@ -7465,6 +7540,9 @@ static void zx_debugfs_init(struct zx_eth *e)
 	debugfs_create_file("extwrite", 0644, zx_debugfs_root, e,
 			    &zx_extwrite_fops);
 	debugfs_create_u32("ftup", 0644, zx_debugfs_root, &e->ft_up_en);
+	/* [Stage-3 WiFi Phase C 2026-07-27] WiFi-egress offload gate, default 0
+	 * (= pre-Phase-C baseline). UNTESTED ON HARDWARE until Phase-C V1. */
+	debugfs_create_u32("ftwifi", 0644, zx_debugfs_root, &e->ft_wifi_en);
 	debugfs_create_file("pktdeal", 0644, zx_debugfs_root, e, &zx_pktdeal_fops);
 	debugfs_create_file("txtest", 0644, zx_debugfs_root, e, &zx_txtest_fops);
 	/* [Stage-3 WiFi Phase B, 2026-07-23] manual (idm,ssid)<->vif binding
