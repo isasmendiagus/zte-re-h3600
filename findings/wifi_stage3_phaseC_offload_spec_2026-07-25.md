@@ -43,6 +43,77 @@ zero-CPU path on this SoC, per `findings/wifi_offload_feasibility_2026-07-04.md`
 
 ---
 
+## 0.1 ★ LIVE VALIDATION 2026-07-27 — trigger+encoding PROVEN, **R1 CONFIRMED AS A BLOCKER**
+
+Implemented (commit `0eb084706`), built, RAM-booted, and tested on HW with a **real WiFi client**
+(Android 16 phone via adb, MAC `76:b3:fe:0d:9f:39`, IP 192.168.50.100 from `busybox udhcpd`;
+AP = hostapd `H3600-AP-Test` ch36 WPA2 on wlan1 = 192.168.50.1/24). Topology was **routed, no
+NAT** (this kernel lacks `NFT_NAT` — `type nat` chains fail to create), with a host route
+`192.168.50.0/24 via 10.44.66.223` so the WAN-side host (10.44.66.133, an HTTP server) and the
+phone reach each other *through* the device: WAN ingress lan4 → egress wlan1 = the DN direction.
+
+### PROVEN (three independent confirmations)
+
+1. **The crux answer is correct, validated with real traffic.** With the flowtable listing
+   **only** `devices = { lan4 }` (no wlan1 — which per §1.3(a) would break flowtable creation),
+   the WAN⇄WiFi flow WAS offered to our callback and installed:
+   ```
+   [phaseC/ft] cookie=c561de94 egress wlan1 -> wifi essid 0x1c (idm1 ssid4), installing DN hardfast
+   [phase6/ft] recipe: proto=6 10.44.66.133:8080->192.168.50.100:42094 eg_rp=28 wan_ing=1
+               nh=76:b3:fe:0d:9f:39 pm_slot=10 ...
+   ```
+   Note `nh=` is the **phone's real MAC**, resolved by the existing `zx_ft_resolve_nh` on the
+   routed vif. The UP direction installed too (`eg_rp=5`, pm_slot=9). **No fttest, no debugfs
+   install — the production nft path did it.**
+2. **The resolver works:** `fttest resolve wlan1` → `WIFI essid=0x1c (idm1 ssid4)`;
+   `resolve lan2` → `VALID regport=3` (eth path untouched).
+3. **The gemport packing fix is correct in silicon.** CLA readback of an installed WiFi entry:
+   `clapeek ram2 0xd1` → word0 = `0301c044` → `gemport_uni_id = byte2<<4 | byte1>>4 = 0x1c = 28`
+   — bit-identical to the Phase-A stock capture — with `cla[4]=0x06100069` (direct + da_known).
+   The old `& 0xf` packing would have stored 0xc.
+
+### THE BLOCKER — a WiFi hardfast flow BLACK-HOLES the traffic (R1 confirmed)
+
+Controlled A/B, same 45 s HTTP GET from the phone, isolating one variable at a time:
+
+| nft flowtable | `ftwifi` | bytes received in 45 s |
+|---|---|---|
+| ON | **ON** | **0** (reproduced twice) |
+| ON | OFF | 13,334,840 |
+| OFF | OFF | 15,899,248 |
+
+⇒ The flowtable itself is healthy (the eth UP flow installs and traffic flows); it is
+**specifically the WiFi DN hardfast entry that kills the flow**. Throughout every run:
+`idm_rx_count = 0` (the IDM RX ring **never** received a single frame),
+`CLA fwd[0x1cc3c0] = 0`, while `QMG DN hw_fwd` moved 0→29. So the frames leave the SW path but
+**never arrive at the IDM ring** — they are lost between the CLA/QMG verdict and the fabric
+port-6/7 egress DMA.
+
+**This is exactly risk R1 (§2.1/§5), now upgraded from "unknown" to "confirmed, reproducible".**
+The spec's §4 ordering (V1 white-box egress leg BEFORE V2 e2e) was right and should be honored:
+do not iterate on the install recipe — the install is proven correct; the missing piece is the
+**fabric→IDM-RX delivery path**, which no mainline code has ever exercised (`idm_rx_count` has
+been 0 since Phase 1).
+
+### Next-session debug ladder for R1 (highest value first)
+
+1. `CLA fwd = 0` while the entry is installed and matching traffic flows ⇒ **confirm whether the
+   CLA entry is even HIT**. Read `desIn`/`desOut` latches and the per-entry age bit; compare a
+   WiFi flow vs a known-good eth DN flow installed at the same instant (the eth one is the
+   control that HW-forwards at ~95 MB/s).
+2. If the CLA hits but nothing reaches the ring: inspect the **QMG/TM WiFi egress queues**
+   (`qnum_wifi0/1` exist in the post-bridge descriptor, `PrintBrgDesc` tm.c:66522-66523) — a
+   WiFi egress class whose queue/consumer is unconfigured on mainline would drop exactly here,
+   mirroring the q5 story (`findings/wifi_stage3_qmg_queue5_consumer_re_2026-07-07.md`).
+3. Check `pon_pp_set_wifi_mac_len` / `greg_set_wifi_queue1_protocol` and any port-6/7 egress
+   enable that mainline's init never replays (stock parity diff on the PP/TM WiFi registers).
+4. Only then revisit the entry fields (e.g. stock's `smac_en=1`, §5 Q3).
+
+**Device left safe:** `ftwifi = 0` (the default) — with it off the box forwards WiFi traffic
+normally in SW, as the A/B table shows.
+
+---
+
 ## 1. THE CRUX — how a bridged/routed-WiFi flow gets offered to and installed in the CLA/PM path
 
 ### 1.1 What the kernel actually does (v6.6, this tree — all cites verified in-tree)
