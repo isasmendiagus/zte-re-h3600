@@ -2663,10 +2663,89 @@ def test_upload_offload(args):
         "IP/NAT is correct, and there's no 0.0.0.0 regression.")
 
 
+def test_wifi_r1_drain(args):
+    """R1 REGRESSION GUARD (Phase C, fix 87b6f4fb2 + validation 2026-07-28):
+    the IDM RX ring consumer must run from PROBE — with idm0/idm1 never
+    administratively UP, a WiFi-egress hardfast flow's HW-forwarded frames
+    must be consumed (idm_rx_count climbs) instead of rotting in the ring
+    (the pre-fix black hole: RX_PENDING climbs, idm_rx_count pinned 0).
+
+    Needs NO WiFi hardware/AP: fttest-install a WiFi-egress tuple
+    (eg_regport 28 = essid 0x1c = idm1/ssid4) and hping it from the WAN
+    side. Two gotchas baked in (both cost debug time on 2026-07-28):
+      * hping must send PSH+ACK DATA packets (-PA -d) — the hardfast
+        deliberately traps TCP SYN/FIN/RST control packets to the CPU, so
+        a plain SYN burst NEVER rides the HW path (by design, not a bug);
+      * assert IDM[0x8024] IRQ_MASK NAPI bits clear (== 0x0b pattern, bit2
+        RX clear) at baseline — the probe-time-start fix's static half.
+    """
+    name = "wifi_r1_drain"
+    t0 = time.time()
+    notes = []
+    _cleanup_client_procs()
+
+    def idm_stats():
+        out = rig.dev(["busybox grep -E 'idm_rx_count|idm_rx_per_ssid|IRQ_MASK|RX_PENDING' "
+                       "/sys/kernel/debug/zx_eth/stats"], wait=3.0)
+        m_cnt = re.search(r"idm_rx_count\s*=\s*(\d+)", out)
+        m_ssid = re.search(r"idm_rx_per_ssid 0\.\.7 = ((?:\d+ ?)+)", out)
+        m_mask = re.search(r"IDM\[0x8024\] IRQ_MASK\s*=\s*0x([0-9a-f]+)", out)
+        return (int(m_cnt.group(1)) if m_cnt else None,
+                int(m_ssid.group(1).split()[4]) if m_ssid else None,
+                int(m_mask.group(1), 16) if m_mask else None)
+
+    cnt0, ssid4_0, mask = idm_stats()
+    if cnt0 is None or mask is None:
+        return TestResult(name, "ERROR", time.time() - t0, {},
+                          "stats node lacks idm_rx_count/IRQ_MASK lines -- pre-R1 build?")
+    if mask & 0x04:
+        return TestResult(name, "FAIL", time.time() - t0, {"irq_mask": hex(mask)},
+                          "IDM IRQ_MASK bit2 (RX) still MASKED at baseline (0x%x) -- the "
+                          "probe-time consumer start (R1 fix) is not in effect" % mask)
+
+    cookie = 0x51d0a100 + (int(time.time()) % 0xff)
+    saddr, sport = 0x0a2c4285, 8080              # 10.44.66.133:8080 (host wlo1)
+    daddr, dport = 0xc0a832c8, 53261             # 192.168.50.200:53261 (no real client needed)
+    inst = None
+    try:
+        t_ref = _device_uptime()
+        inst = _fttest_install(cookie, saddr, daddr, sport, dport, 28, t_ref)
+        if inst is None or inst["rc"] < 0:
+            return TestResult(name, "ERROR", time.time() - t0, {"install": inst},
+                              "fttest WiFi-egress install didn't succeed (rc=%s)"
+                              % (inst and inst["rc"]))
+        # WAN-side data burst: route the fake client IP via the device's lan4
+        # and hping the exact tuple with PSH+ACK+payload (NOT SYN -- see doc).
+        rig.sh(rig.SUDO + "ip route replace 192.168.50.200/32 via %s" % rig.LAN4_IP, timeout=15)
+        rig.sh(rig.SUDO + "hping3 -c 30 -i u20000 -PA -d 200 -s 8080 -k -p 53261 "
+               "192.168.50.200 >/dev/null 2>&1; true", timeout=60)
+        time.sleep(2)
+        cnt1, ssid4_1, _ = idm_stats()
+    finally:
+        if inst is not None:
+            _fttest_destroy(cookie)
+        rig.sh(rig.SUDO + "ip route del 192.168.50.200/32 2>/dev/null; true", timeout=15)
+
+    d_cnt = (cnt1 or 0) - cnt0
+    d_ssid4 = (ssid4_1 or 0) - (ssid4_0 or 0)
+    metrics = {"idm_rx_count_delta": d_cnt, "ssid4_delta": d_ssid4,
+               "irq_mask": hex(mask), "pm_slot": inst and inst["pm_slot"]}
+    if d_cnt < 20:
+        return TestResult(name, "FAIL", time.time() - t0, metrics,
+                          "idm_rx_count climbed only +%d of 30 hping data frames (idm links "
+                          "never upped) -- IDM ring not draining = R1 regressed" % d_cnt)
+    if d_ssid4 < 20:
+        notes.append("ring drained (+%d) but ssid4 tag only +%d -- essid encode suspect" %
+                     (d_cnt, d_ssid4))
+    status = "PASS" if not notes else "FAIL"
+    return TestResult(name, status, time.time() - t0, metrics, "; ".join(notes))
+
+
 # ---------------------------------------------------------------------------
 # registry + battery composition
 # ---------------------------------------------------------------------------
 REGISTRY = {
+    "wifi_r1_drain": test_wifi_r1_drain,
     "baseline_download": test_baseline_download,
     "sustained_download": test_sustained_download,
     "multiflow": test_multiflow,
@@ -2697,13 +2776,17 @@ REGISTRY = {
 # their docstrings).
 ORDER = ["baseline_download", "red_credit_recycle", "sustained_download", "multiflow", "churn",
          "concurrency_race", "poly0_stale", "high_way_collision", "replace_orphan", "pm_write_verify",
-         "bidirectional", "edge_decline", "h1_dsa_decline", "h4_nondsa_decline", "churn_no_wedge",
-         "counters_sanity", "dmesg_clean", "recovery_alive"]
+         "bidirectional", "edge_decline", "h1_dsa_decline", "h4_nondsa_decline", "wifi_r1_drain",
+         "churn_no_wedge", "counters_sanity", "dmesg_clean", "recovery_alive"]
 
 QUICK = ["baseline_download", "red_credit_recycle", "sustained_download", "counters_sanity",
          "dmesg_clean"]
 
 DESCRIPTIONS = {
+    "wifi_r1_drain": "R1 REGRESSION GUARD (Phase C): IDM RX ring consumer runs from probe -- "
+                     "WiFi-egress hardfast frames drain (idm_rx_count climbs, ssid4-tagged) with "
+                     "idm0/idm1 never upped; IRQ_MASK bit2 clear at baseline; hping data (-PA), "
+                     "never SYN (hardfast traps TCP control pkts by design)",
     "baseline_download": "1 flow ~500MB-1GB -> line rate, HW-offloaded (cla hit-rate high), CPU sane",
     "sustained_download": "N back-to-back big downloads -> no wedge, no residual admission latch (KEY guard)",
     "multiflow": "N concurrent downloads (distinct 5-tuples) -> all connect+complete, no slot clobber",
@@ -2741,6 +2824,7 @@ DESCRIPTIONS = {
 }
 
 DEFAULT_TIMEOUTS = {
+    "wifi_r1_drain": 120,
     "baseline_download": 90,
     "sustained_download": 700,
     "multiflow": 120,

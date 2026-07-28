@@ -47,6 +47,8 @@
 #include <linux/platform_device.h>
 #include <linux/skbuff.h>
 #include <linux/ip.h>
+#include <net/checksum.h>	/* [Phase C 2026-07-28] ip_fast_csum for the DN
+				 * WiFi-dispatch IP-checksum repair */
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
 
@@ -475,6 +477,22 @@ struct zx_eth {
 	u32 idm_wifi_rx_dispatched;	/* RX frames handed to a bound vif */
 	u32 idm_wifi_rx_nobind;		/* valid ssid, no bound/up vif -> local stack */
 	u32 idm_wifi_tx_injected;	/* TX frames stamped with an ssid into the ring */
+	/* [Phase C R1 validation 2026-07-28] dispatch debug/dial-in:
+	 * idm_wifi_rx_dumped: one-shot hexdump budget for dispatched frames
+	 * (debugfs "idm_rx_dump" — write 0 to re-arm 4 more dumps). Ground
+	 * truth for the IDM RX payload format (offset/DA) which had never
+	 * been eyeballed on HW.
+	 * ft_wifi_dispatch_qx: 0 (default) = direct ndo_start_xmit into the
+	 * vif (stock idm_fdb_forward parity) — HW-validated 2026-07-28 at
+	 * 7.65 MB/s sustained; 1 = dev_queue_xmit (standard L2 injection,
+	 * also works but measured ~4x slower on the same rig, 1.97 MB/s).
+	 * Both modes deliver once the IP-checksum repair below is in place —
+	 * the checksum was the sole delivery bug (an earlier "mac80211 eats
+	 * the frames" reading came from a synthetic-flow probe whose fake
+	 * next-hop DA 02:00:00:00:00:01 was legitimately dropped by AP-mode
+	 * STA lookup). */
+	u32 idm_wifi_rx_dumped;
+	u32 ft_wifi_dispatch_qx;
 	/* [Stage-3 WiFi Phase B.2, 2026-07-24] TM trap-RX fabric-ingress dispatch
 	 * counters (fix-A validation proved port-6/7 ring-ingress traps deliver on
 	 * the TM CPU rings with desc raw port >= 0x10, NOT on the IDM RX ring —
@@ -1807,10 +1825,62 @@ static int zx_idm_poll(struct napi_struct *napi, int budget)
 
 				if (wn->enabled && wn->wlan_ndev &&
 				    (wn->wlan_ndev->flags & IFF_UP)) {
+					/* [Phase C R1 validation 2026-07-28] one-shot
+					 * payload ground truth: first 4 dispatched
+					 * frames per arm (debugfs idm_rx_dump=0 to
+					 * re-arm). Answers the never-verified offset
+					 * question (TM ring had a +2 quirk; this ring
+					 * was unverified). Tiny console load. */
+					if (e->idm_wifi_rx_dumped < 4) {
+						e->idm_wifi_rx_dumped++;
+						pr_info("[phaseC/idm-rx] dispatch len=%u ssid=%u first bytes:\n",
+							len, ssid);
+						print_hex_dump(KERN_INFO, "  idmrx: ",
+							DUMP_PREFIX_OFFSET, 16, 1,
+							skb->data,
+							min_t(u32, len, 48), false);
+					}
+					/* [Phase C 2026-07-28, HW-proven root cause]
+					 * The PM edit decrements the IPv4 TTL but
+					 * does NOT update the IP header checksum
+					 * (dispatched frames carried the checksum
+					 * of TTL+1 — off by exactly 0x100). On the
+					 * eth DN path the egress pipeline repairs
+					 * it in HW; on this fabric->IDM shuttle
+					 * nothing does, so the client's IP stack
+					 * silently drops every frame. Repair it
+					 * here — the CPU touches each frame anyway.
+					 * (TCP/UDP checksums are unaffected: TTL is
+					 * not in the pseudo-header; IPv6 has no
+					 * header checksum.) */
+					if (len >= ETH_HLEN + sizeof(struct iphdr) &&
+					    ((struct ethhdr *)skb->data)->h_proto ==
+							htons(ETH_P_IP)) {
+						struct iphdr *iph = (struct iphdr *)
+							(skb->data + ETH_HLEN);
+
+						iph->check = 0;
+						iph->check = ip_fast_csum(
+							(const void *)iph, iph->ihl);
+					}
 					skb->dev = wn->wlan_ndev;
 					e->idm_wifi_rx_dispatched++;
-					wn->wlan_ndev->netdev_ops->ndo_start_xmit(
-						skb, wn->wlan_ndev);
+					if (READ_ONCE(e->ft_wifi_dispatch_qx)) {
+						/* Alternate mode: standard L2
+						 * injection (full xmit path:
+						 * queue pick + validate +
+						 * HARD_TX_LOCK). Works, but
+						 * measured ~4x slower than the
+						 * direct call — kept as a
+						 * debug/comparison knob. */
+						skb->protocol =
+							((struct ethhdr *)skb->data)->h_proto;
+						skb_reset_mac_header(skb);
+						dev_queue_xmit(skb);
+					} else {
+						wn->wlan_ndev->netdev_ops->ndo_start_xmit(
+							skb, wn->wlan_ndev);
+					}
 					goto refill;	/* skip eth_type_trans + gro */
 				}
 				e->idm_wifi_rx_nobind++;
@@ -7524,6 +7594,14 @@ static void zx_debugfs_init(struct zx_eth *e)
 	/* [Stage-3 WiFi Phase C 2026-07-27] WiFi-egress offload gate, default 0
 	 * (= pre-Phase-C baseline). UNTESTED ON HARDWARE until Phase-C V1. */
 	debugfs_create_u32("ftwifi", 0644, zx_debugfs_root, &e->ft_wifi_en);
+	/* [Phase C R1 validation 2026-07-28] dispatch xmit mode (0 = direct
+	 * ndo_start_xmit, stock parity, DEFAULT — HW-validated 7.65 MB/s;
+	 * 1 = dev_queue_xmit, works but ~4x slower) + hexdump re-arm knob. */
+	e->ft_wifi_dispatch_qx = 0;
+	debugfs_create_u32("wifi_dispatch_qx", 0644, zx_debugfs_root,
+			   &e->ft_wifi_dispatch_qx);
+	debugfs_create_u32("idm_rx_dump", 0644, zx_debugfs_root,
+			   &e->idm_wifi_rx_dumped);
 	debugfs_create_file("pktdeal", 0644, zx_debugfs_root, e, &zx_pktdeal_fops);
 	debugfs_create_file("txtest", 0644, zx_debugfs_root, e, &zx_txtest_fops);
 	/* [Stage-3 WiFi Phase B, 2026-07-23] manual (idm,ssid)<->vif binding
