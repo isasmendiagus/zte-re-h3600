@@ -47,6 +47,8 @@
 #include <linux/platform_device.h>
 #include <linux/skbuff.h>
 #include <linux/ip.h>
+#include <linux/tcp.h>	/* [Stage-3 UP offload 2026-07-28] TCP-data-only
+			 * injection filter in zx_wifi_rx_handler */
 #include <net/checksum.h>	/* [Phase C 2026-07-28] ip_fast_csum for the DN
 				 * WiFi-dispatch IP-checksum repair */
 #include <linux/spinlock.h>
@@ -2060,6 +2062,50 @@ static rx_handler_result_t zx_wifi_rx_handler(struct sk_buff **pskb)
 	tag = (struct zx_skb_wifi_tag *)&skb->cb[ZX_SKB_CB_TAG_OFF];
 	if (tag->magic == ZX_SKB_CB_TAG_MAGIC_SHUTTLED)
 		return RX_HANDLER_PASS;
+
+	/* [Stage-3 UP offload 2026-07-28] Inject ONLY IPv4 TCP DATA frames;
+	 * PASS everything else (ARP, DHCP, ICMP, IPv6, TCP SYN/FIN/RST) to the
+	 * normal stack. Two HW-proven reasons:
+	 *  1. The hardfast deliberately CPU-traps TCP control packets (SYN-only
+	 *     hping bursts never ride HW — Phase-C validation), so injecting
+	 *     them buys nothing;
+	 *  2. a CLA-missing injected frame round-trips fabric->trap->TM-ring and
+	 *     must survive the +2-offset trap parser (Phase-B.2's noparse quirk)
+	 *     to get back to the stack — live 2026-07-28: 12 injected handshake
+	 *     SYNs trapped back, 0 re-dispatched, connection dead. Keeping the
+	 *     control plane on the SW path makes connect/teardown robust while
+	 *     established data rides the fabric fast path. (rx_handler runs
+	 *     post-eth_type_trans: skb->data = L3, mac header pulled.) */
+	if (skb->protocol == cpu_to_be16(ETH_P_IP)) {
+		const struct iphdr *iph;
+		const struct tcphdr *th;
+
+		if (!pskb_may_pull(skb, sizeof(*iph)))
+			return RX_HANDLER_PASS;
+		iph = (const struct iphdr *)skb->data;
+		if (iph->protocol != IPPROTO_TCP)
+			return RX_HANDLER_PASS;
+		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(*th)))
+			return RX_HANDLER_PASS;
+		th = (const struct tcphdr *)(skb->data + iph->ihl * 4);
+		if (th->syn || th->fin || th->rst)
+			return RX_HANDLER_PASS;
+	} else {
+		return RX_HANDLER_PASS;
+	}
+
+	/* [Stage-3 UP offload 2026-07-28] Restore the L2 header before the ring:
+	 * rx_handlers run post-eth_type_trans (skb->data = L3, mac header
+	 * pulled), but zx_idm_xmit DMA-maps skb->data verbatim — without this
+	 * push the fabric receives a HEADERLESS frame the CLA can never parse
+	 * (and the trap-side parser only sometimes rescues, cf. the Phase-B.2
+	 * offset-hunt/noparse quirks). Same pattern as the bridge's
+	 * br_dev_queue_push_xmit. If the mac header isn't where we expect,
+	 * stay on the SW path rather than inject garbage. */
+	if (!skb_mac_header_was_set(skb) ||
+	    skb_mac_header(skb) != skb->data - ETH_HLEN)
+		return RX_HANDLER_PASS;
+	skb_push(skb, ETH_HLEN);
 
 	/* Stamp ssid for zx_idm_xmit's TX-descriptor packer (spec §2.1/§2.2). */
 	tag->magic = ZX_SKB_CB_TAG_MAGIC;
