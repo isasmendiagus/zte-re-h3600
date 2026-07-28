@@ -119,8 +119,20 @@ static const struct zx_ffe_index { u8 id; u32 w[5]; } zx_ffe_index[] = {
 	{  3, { 0x33323130, 0x37363534, 0x3b3a3938, 0x3f3e3d3c, 0x00150355 } },
 	{  4, { 0x43424140, 0x47464544, 0x4b4a4948, 0x4f4e4d4c, 0x00150355 } },
 	{  5, { 0x53525150, 0x57565554, 0x5b5a5958, 0x5f5e5d5c, 0x00150355 } },
-	{  6, { 0x63626160, 0x67666564, 0x6b6a6968, 0x6f6e6d6c, 0x00150055 } },
-	{  7, { 0x73727170, 0x77767574, 0x7b7a7978, 0x7f7e7d7c, 0x00150055 } },
+	/* Groups 6/7 = the FABRIC inports (port6=idm0, port7=idm1): same mis-rule
+	 * failure as group 9 below — the stock 0x00150055 enables slots {0,2,4,6}
+	 * = rules {0x60/0x70, ..62/..72, ..64/..74, ..66/..76} and the HW picks the
+	 * HIGHEST (0x66/0x76), byte-identical to the VOLATILE rule 0x96 (key
+	 * includes ip_len/ip_id/ip_csum/tcp_seq -> no static entry can ever hit).
+	 * 0x00150001 restricts to slot 0 (0x60/0x70 = the clean v4-5tuple rule,
+	 * byte-identical to 0x90). Verified live 2026-07-28: with group 7 forced to
+	 * 0x00150001 the fabric-ingress extracted key is byte-stable and matches
+	 * zx_ft_build_key exactly except the rule-id header byte
+	 * (findings/wifi_stage3_up_cla_keymiss_forensics_2026-07-28.md). Same
+	 * tradeoff as group 9 (loses v6/v4-3tuple fast-classify on fabric ingress;
+	 * those flows just trap to the CPU/SW path as before). */
+	{  6, { 0x63626160, 0x67666564, 0x6b6a6968, 0x6f6e6d6c, 0x00150001 } },
+	{  7, { 0x73727170, 0x77767574, 0x7b7a7978, 0x7f7e7d7c, 0x00150001 } },
 	{  8, { 0x83828180, 0x87868584, 0x8b8a8988, 0x8f8e8d8c, 0x00150755 } },
 	/* word4 index_valid low16: enable ONLY rule slot 0 (ram1 addr 0x90 = the clean
 	 * L3-relative 5-tuple extract rule). The HW selects the HIGHEST enabled rule; the

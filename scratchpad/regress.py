@@ -1815,20 +1815,26 @@ def test_high_way_collision(args):
 # about the ASSERTION is simulated, only the STIMULUS (which function
 # arguments to call with) is test-driven rather than traffic-driven.
 # ---------------------------------------------------------------------------
-def _fttest_install(cookie, saddr, daddr, sport, dport, eg_regport, t_ref, wait=2.0):
+def _fttest_install(cookie, saddr, daddr, sport, dport, eg_regport, t_ref, wait=2.0,
+                    key_hdr=None):
     """One fttest 'install' round trip; parses the driver's own
-    "[fttest] install cookie=... raw=0x.... raw0=0x.... pm_slot=... rc=..."
+    "[fttest] install cookie=... [key_hdr=0x..] raw=0x.... raw0=0x.... pm_slot=... rc=..."
     confirmation line (not just assuming success). Returns
-    {raw, raw0, pm_slot, rc} or None if the line didn't show up."""
+    {raw, raw0, pm_slot, rc[, key_hdr]} or None if the line didn't show up.
+    key_hdr: optional flow-key header byte (Stage-3 WiFi UP 2026-07-28 fttest
+    extension: 0x38/0x30 = fabric idm1/idm0 ingress; omitted = eth 0x48)."""
     cmd = "install %x %x %x %x %x %d" % (cookie, saddr, daddr, sport, dport, eg_regport)
+    if key_hdr is not None:
+        cmd += " %x" % key_hdr
     rig.dev(["echo '%s' > /sys/kernel/debug/zx_eth/fttest" % cmd], wait=wait)
     win = _dmesg_since(r"\[fttest\] install cookie=%x" % cookie, t_ref, tail=10, wait=1.5)
-    m = re.search(r"\[fttest\] install cookie=%x raw=0x([0-9a-f]+) raw0=0x([0-9a-f]+) "
-                  r"pm_slot=(\d+) rc=(-?\d+)" % cookie, win)
+    m = re.search(r"\[fttest\] install cookie=%x (?:key_hdr=0x([0-9a-f]+) )?raw=0x([0-9a-f]+) "
+                  r"raw0=0x([0-9a-f]+) pm_slot=(\d+) rc=(-?\d+)" % cookie, win)
     if not m:
         return None
-    return {"raw": int(m.group(1), 16), "raw0": int(m.group(2), 16),
-            "pm_slot": int(m.group(3)), "rc": int(m.group(4))}
+    return {"key_hdr": int(m.group(1), 16) if m.group(1) else None,
+            "raw": int(m.group(2), 16), "raw0": int(m.group(3), 16),
+            "pm_slot": int(m.group(4)), "rc": int(m.group(5))}
 
 
 def _fttest_destroy(cookie, wait=2.0):
@@ -2741,11 +2747,107 @@ def test_wifi_r1_drain(args):
     return TestResult(name, status, time.time() - t0, metrics, "; ".join(notes))
 
 
+def test_wifi_up_fabric_key(args):
+    """WiFi-UP FABRIC-KEY REGRESSION GUARD (Stage-3 UP offload, 2026-07-28,
+    findings/wifi_stage3_up_offload_CLOSED_2026-07-28.md). White-box,
+    traffic-free (fttest + clapeek only — no AP/client needed). Guards the
+    three halves of the UP fix:
+
+      1. BOOT INIT: ram0[6]/ram0[7] index_valid == 0x00150001 (fabric-inport
+         extract groups restricted to the clean 5-tuple rule 0x60/0x70 —
+         stock's 0x00150055 selects the VOLATILE rule 0x66/0x76 and every
+         static entry misses). ram0[9] (the wired fix) must still be
+         0x00150001 too.
+      2. FABRIC-KEYED INSTALL (fttest 7-arg form, key_hdr=0x38): the way0
+         entry's word4 must be 0x061?0047-shaped — extr nibble 7 (rule
+         0x70), da_known SET, `direct` CLEAR. direct=1 is the bit the fabric
+         key-compare REJECTS (proven live 2026-07-28: model-exact key +
+         fill520 all-bucket sweep still missed 100% until direct was
+         dropped); da_known=1 drives the PM rewrite. raw0 must be 0 (NO
+         poly-0 write: fabric probes the poly-1 way set — proven by zeroing
+         the poly-0 slot under live HW forwarding, rate unchanged).
+      3. ETH PATH UNCHANGED: a plain 6-arg install of the same tuple shape
+         must still pack word4 == 0x06100069 (direct SET — required by the
+         WAN-ingress compare / proven eth-UP recipe).
+
+    Both installs are destroyed and their way0 buckets verified zeroed."""
+    name = "wifi_up_fabric_key"
+    t0 = time.time()
+    notes = []
+    metrics = {}
+
+    # 1. boot-init ram0 index_valid values
+    for grp, want in ((6, 0x00150001), (7, 0x00150001), (9, 0x00150001)):
+        w = _clapeek(0, grp)
+        if not w or len(w) < 5:
+            return TestResult(name, "ERROR", time.time() - t0, metrics,
+                              "clapeek ram0[%d] unreadable" % grp)
+        metrics["ram0_%d_word4" % grp] = hex(w[4])
+        if w[4] != want:
+            notes.append("ram0[%d] index_valid 0x%08x != 0x%08x (fabric rule-select "
+                         "fix missing at boot init)" % (grp, w[4], want))
+
+    cookie_w = 0x0f0ab100 + (int(time.time()) % 0xff)
+    cookie_e = cookie_w + 0x100
+    saddr, sport = 0xc0a8320a, 41000        # 192.168.50.10:41000 (synthetic)
+    daddr, dport = 0x0a2c4285, 9099         # 10.44.66.133:9099
+    wi = ei = None
+    try:
+        t_ref = _device_uptime()
+        # 2. fabric-keyed UP install (key_hdr 0x38 = idm1 ingress, egress WAN=5)
+        wi = _fttest_install(cookie_w, saddr, daddr, sport, dport, 5, t_ref,
+                             key_hdr=0x38)
+        if wi is None or wi["rc"] < 0:
+            return TestResult(name, "ERROR", time.time() - t0, metrics,
+                              "fabric-keyed fttest install failed (rc=%s) -- pre-UP-fix "
+                              "build (fttest lacks the key_hdr arg)?" % (wi and wi["rc"]))
+        metrics.update(raw_wifi=hex(wi["raw"]), raw0_wifi=hex(wi["raw0"]),
+                       key_hdr=hex(wi["key_hdr"] or 0))
+        if wi["key_hdr"] != 0x38:
+            notes.append("fttest didn't echo key_hdr=0x38 (got %s)" % metrics["key_hdr"])
+        if wi["raw0"] != 0:
+            notes.append("fabric UP install computed a poly-0 raw0=0x%04x (should be 0: "
+                         "no poly-0 write for fabric ingress)" % wi["raw0"])
+        ww = _clapeek(2, wi["raw"] & 0xff)
+        metrics["wifi_word4"] = ww and hex(ww[4])
+        if not ww or (ww[4] & 0xff0000ff) != 0x06000047 or not (ww[4] & 0x00100000):
+            notes.append("fabric entry word4 %s != 0x061?0047 shape (need extr nibble 7 + "
+                         "da_known SET + direct CLEAR — the fabric compare rejects "
+                         "direct=1)" % metrics["wifi_word4"])
+        # 3. eth-keyed install of a sibling tuple: packing unchanged
+        ei = _fttest_install(cookie_e, saddr, daddr, sport + 1, dport, 5, t_ref)
+        if ei is None or ei["rc"] < 0:
+            notes.append("eth-keyed control install failed (rc=%s)" % (ei and ei["rc"]))
+        else:
+            ew = _clapeek(2, ei["raw"] & 0xff)
+            metrics["eth_word4"] = ew and hex(ew[4])
+            if not ew or ew[4] != 0x06100069:
+                notes.append("eth UP entry word4 %s != 0x06100069 (eth packing must be "
+                             "byte-identical to the proven recipe)" % metrics["eth_word4"])
+            if ei["raw"] == wi["raw"]:
+                notes.append("eth raw == fabric raw 0x%04x — key_hdr not folded into the "
+                             "hash?" % wi["raw"])
+    finally:
+        _fttest_destroy(cookie_w)
+        _fttest_destroy(cookie_e)
+
+    for tag, inst in (("wifi", wi), ("eth", ei)):
+        if inst and inst.get("rc", -1) >= 0:
+            z = _clapeek(2, inst["raw"] & 0xff)
+            if z and any(z[:15]):
+                notes.append("%s way0 bucket ram2[0x%02x] not zeroed after destroy" %
+                             (tag, inst["raw"] & 0xff))
+
+    status = "PASS" if not notes else "FAIL"
+    return TestResult(name, status, time.time() - t0, metrics, "; ".join(notes))
+
+
 # ---------------------------------------------------------------------------
 # registry + battery composition
 # ---------------------------------------------------------------------------
 REGISTRY = {
     "wifi_r1_drain": test_wifi_r1_drain,
+    "wifi_up_fabric_key": test_wifi_up_fabric_key,
     "baseline_download": test_baseline_download,
     "sustained_download": test_sustained_download,
     "multiflow": test_multiflow,
@@ -2777,6 +2879,7 @@ REGISTRY = {
 ORDER = ["baseline_download", "red_credit_recycle", "sustained_download", "multiflow", "churn",
          "concurrency_race", "poly0_stale", "high_way_collision", "replace_orphan", "pm_write_verify",
          "bidirectional", "edge_decline", "h1_dsa_decline", "h4_nondsa_decline", "wifi_r1_drain",
+         "wifi_up_fabric_key",
          "churn_no_wedge", "counters_sanity", "dmesg_clean", "recovery_alive"]
 
 QUICK = ["baseline_download", "red_credit_recycle", "sustained_download", "counters_sanity",
@@ -2787,6 +2890,11 @@ DESCRIPTIONS = {
                      "WiFi-egress hardfast frames drain (idm_rx_count climbs, ssid4-tagged) with "
                      "idm0/idm1 never upped; IRQ_MASK bit2 clear at baseline; hping data (-PA), "
                      "never SYN (hardfast traps TCP control pkts by design)",
+    "wifi_up_fabric_key": "WiFi-UP FABRIC-KEY GUARD (Stage-3 UP): ram0[6]/[7] index_valid "
+                          "0x00150001 at boot; fabric-keyed (key_hdr 0x38) install packs extr "
+                          "nibble 7 + da_known SET + direct CLEAR, no poly-0 write; eth install "
+                          "packing byte-identical (0x06100069); destroys clear way0. White-box "
+                          "fttest+clapeek, no AP/client needed",
     "baseline_download": "1 flow ~500MB-1GB -> line rate, HW-offloaded (cla hit-rate high), CPU sane",
     "sustained_download": "N back-to-back big downloads -> no wedge, no residual admission latch (KEY guard)",
     "multiflow": "N concurrent downloads (distinct 5-tuples) -> all connect+complete, no slot clobber",
@@ -2825,6 +2933,7 @@ DESCRIPTIONS = {
 
 DEFAULT_TIMEOUTS = {
     "wifi_r1_drain": 120,
+    "wifi_up_fabric_key": 90,
     "baseline_download": 90,
     "sustained_download": 700,
     "multiflow": 120,

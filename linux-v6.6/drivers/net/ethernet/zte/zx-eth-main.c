@@ -355,6 +355,12 @@ struct zx_wifi_dispatch_node {
 	u8 ssid;			/* 0..7    (= node_index & 7)  */
 	struct net_device *idm_ndev;	/* the idmN netdev (= ports[idm].netdev) */
 	struct net_device *wlan_ndev;	/* the bound mac80211 vif netdev */
+	/* [Stage-3 WiFi UP 2026-07-28] the vif's ifindex, cached at bind time so
+	 * the FT install path can recognize a WiFi-INGRESS flow (nf_flow_table's
+	 * FLOW_DISSECTOR_KEY_META ingress_ifindex) by integer compare — no
+	 * wlan_ndev dereference, keeping the essid-path convention that a racing
+	 * unbind can at worst mis-classify one in-flight install, never fault. */
+	int wlan_ifindex;
 };
 
 struct zx_eth;
@@ -555,8 +561,9 @@ struct zx_eth {
 		 * and was never checked for collisions (two DN flows with
 		 * distinct raw&0xff but equal raw0&0xff silently clobbered
 		 * each other). has_raw0 is false for UP-direction entries
-		 * (no poly-0 write happens for those, see zx_ft_install_recipe)
-		 * so untrack must not blindly zero ram2[raw0&0xff] for them. */
+		 * (eth AND WiFi-ingress — no poly-0 write happens for those,
+		 * see zx_ft_install_recipe) so untrack must not blindly zero
+		 * ram2[raw0&0xff] for them. */
 		u16		raw0;
 		bool		has_raw0;
 		u16		pm_slot;	/* per-(flow,dir) PM flow_info/next-hop slot */
@@ -2146,6 +2153,7 @@ static int zx_wifi_register_vif(struct zx_eth *e, struct net_device *vif,
 	node->ssid	= ssid;
 	node->idm_ndev	= e->ports[idm_ring].netdev;
 	node->wlan_ndev	= vif;
+	node->wlan_ifindex = vif->ifindex;
 
 	rtnl_lock();
 	rc = netdev_rx_handler_register(vif, zx_wifi_rx_handler, node);
@@ -2191,6 +2199,7 @@ static int zx_wifi_unregister_vif(struct zx_eth *e, u8 idm_ring, u8 ssid)
 	}
 	node->wlan_ndev = NULL;
 	node->idm_ndev  = NULL;
+	node->wlan_ifindex = 0;
 	return 0;
 }
 
@@ -2877,6 +2886,16 @@ static void zx_cla_ffe_extract_init(struct zx_eth *e)
  * hash bucket and WAN-ingress data MISSES (findings/wan_ingress_data_hitrate). */
 #define ZX_WAN_REGPORT		5
 
+/* [Stage-3 WiFi UP 2026-07-28] Flow-key header byte (key word0 byte3 =
+ * ex_rule_id >> 1). The CLA extract rule is selected per INGRESS group and is
+ * baked into the hashed key, so the installer must build the key (and the
+ * entry's extr_index) for the rule the flow's ingress port actually
+ * classifies under: eth ingress (GePHY LAN + WAN/RGMII) = group 9 = rule
+ * 0x90; fabric ingress = per-inport group 6/7 = rule 0x60 (idm0) / 0x70
+ * (idm1). findings/wifi_stage3_up_cla_keymiss_forensics_2026-07-28.md. */
+#define ZX_FT_KEY_HDR_ETH	0x48	/* rule 0x90 >> 1 */
+#define ZX_FT_KEY_HDR_IDM(idm)	(0x30 | (((idm) & 1) << 3))	/* 0x60/0x70 >> 1 */
+
 /* Build the 15-word CLA ram2 forward entry for the 5-tuple (byte-exact reproduction
  * of the HW-validated forwarding entries; see zx-dsa.c zx_cla_pack_entry).
  * flow_id = the PM flow_info slot this entry's cmd_flow_id must point at.
@@ -2912,7 +2931,7 @@ static void zx_cla_ffe_extract_init(struct zx_eth *e)
  * also flipping its fetch to internal ram0. */
 static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
 			   __be16 sport, __be16 dport, u8 flow_id, bool is_wan,
-			   u8 eg_regport, bool up_idx_fix)
+			   u8 eg_regport, bool up_idx_fix, u8 key_hdr)
 {
 	u32 s = ntohl(saddr), d = ntohl(daddr);
 	u8 s0 = (s >> 24) & 0xff, s1 = (s >> 16) & 0xff, s2 = (s >> 8) & 0xff, s3 = s & 0xff;
@@ -2983,8 +3002,28 @@ static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
 	 * SNAT src IP and a sustained 6 GB + 4x1 GB (10 GB total, one boot)
 	 * download completed at ~830-920 Mbps with qmg_up_trap staying 0 the
 	 * entire time — no residual admission latch. */
-	cla[4] = ((u32)ip_proto << 24) | (up_idx_fix ? 0x00100069 :
-			(is_wan ? 0x00100069 : 0x00000049));
+	/* [Stage-3 WiFi UP 2026-07-28] byte0x10's low nibble is the extr_index
+	 * rule-select nibble (extr_index low byte = key_hdr << 1): 0x9 for eth
+	 * ingress (rule 0x90), 0x7/0x6 for fabric ingress (rule 0x70/0x60). The
+	 * entry's extr_index must equal the packet's ex_rule_id or the compare
+	 * fails even at the right bucket (2026-06-28 finding). key_hdr >> 3
+	 * yields exactly that nibble (0x48>>3=9, 0x38>>3=7, 0x30>>3=6), so the
+	 * eth cases below are byte-identical to the proven 0x69/0x49 values.
+	 *
+	 * FABRIC-ingress entries must NOT set `direct` (byte0x10 bit5): the
+	 * fabric lookup's key-compare REJECTS direct=1 entries — proven live
+	 * 2026-07-28 by fill520 sweeps with a byte-stable, model-exact key
+	 * (rule select + key + all 520 buckets covered -> still 100%
+	 * LOOK_UP_MISS; flipping ONLY direct 1->0 made the same entry match,
+	 * and da_known=1+direct=0 fired the CLA forward verdict, cla_up_fwd
+	 * == injections). da_known stays 1 (drives the PM rewrite stage). The
+	 * eth UP/DN cases keep direct=1 (0x69) — required there (2026-07-04:
+	 * WAN-ingress compare needs direct=1; eth-UP rewrite validated with
+	 * it). */
+	cla[4] = ((u32)ip_proto << 24) |
+		 ((key_hdr != ZX_FT_KEY_HDR_ETH) ? (0x00100040u | (key_hdr >> 3)) :
+		  (up_idx_fix || is_wan) ? (0x00100060u | (key_hdr >> 3))
+					 : (0x00000040u | (key_hdr >> 3)));
 	cla[5] = ((u32)s3 << 24) | ((u32)s0 << 16) | ((u32)s1 << 8);
 	cla[6] = ((u32)d3 << 24) | ((u32)d0 << 16) | ((u32)d1 << 8) | s2;
 	cla[7] = ((u32)(dp & 0xff) << 24) | ((u32)(sp >> 8) << 16) |
@@ -3009,7 +3048,8 @@ static void zx_ft_pack_cla(u32 cla[15], u8 ip_proto, __be32 saddr, __be32 daddr,
  * (proven: driver key pos32=0 -> raw 0x7b38 = installed slot, but the live
  * WAN-ingress DN key pos32=1 -> raw 0x3e4e; findings/wan_ingress_data_hitrate). */
 static void zx_ft_build_key(u32 key[12], u8 ip_proto, __be32 saddr,
-			    __be32 daddr, __be16 sport, __be16 dport, bool is_wan)
+			    __be32 daddr, __be16 sport, __be16 dport, bool is_wan,
+			    u8 key_hdr)
 {
 	u32 s = ntohl(saddr), d = ntohl(daddr);
 	u16 fields[7] = {
@@ -3019,7 +3059,14 @@ static void zx_ft_build_key(u32 key[12], u8 ip_proto, __be32 saddr,
 	u8 kb[48] = {0};
 	int n, i;
 
-	kb[3] = 0x48;		/* word0 = 0x48000000 (ex_rule_id 0x90) */
+	/* [Stage-3 WiFi UP 2026-07-28] key word0 byte3 = ex_rule_id >> 1 (the
+	 * latch decodes ex_rule_id = word0 >> 23). The HW bakes the SELECTED
+	 * extract rule into the hashed header, and the rule is per-INGRESS-group:
+	 * eth ingress classifies under group 9 -> rule 0x90 -> 0x48; fabric
+	 * ingress under its per-inport group -> rule 0x70 (idm1) / 0x60 (idm0)
+	 * -> 0x38 / 0x30 (live-verified byte-exact,
+	 * findings/wifi_stage3_up_cla_keymiss_forensics_2026-07-28.md). */
+	kb[3] = key_hdr;
 	if (is_wan)
 		kb[4] |= 1;	/* key pos32: WAN/RGMII-ingress extraction bit */
 	for (n = 0; n < 7; n++) {
@@ -3038,11 +3085,13 @@ static void zx_ft_build_key(u32 key[12], u8 ip_proto, __be32 saddr,
 }
 
 static u16 zx_ft_flow_hash(struct zx_eth *e, u8 ip_proto, __be32 saddr,
-			   __be32 daddr, __be16 sport, __be16 dport, bool is_wan)
+			   __be32 daddr, __be16 sport, __be16 dport, bool is_wan,
+			   u8 key_hdr)
 {
 	u32 key[12];
 
-	zx_ft_build_key(key, ip_proto, saddr, daddr, sport, dport, is_wan);
+	zx_ft_build_key(key, ip_proto, saddr, daddr, sport, dport, is_wan,
+			key_hdr);
 	return zx_cla_hash_raw(e, key);
 }
 
@@ -3070,11 +3119,13 @@ static u16 zx_cla_hash_sw_poly0(const u32 key[12])
 }
 
 static u16 zx_ft_flow_hash_poly0(u8 ip_proto, __be32 saddr, __be32 daddr,
-				 __be16 sport, __be16 dport, bool is_wan)
+				 __be16 sport, __be16 dport, bool is_wan,
+				 u8 key_hdr)
 {
 	u32 key[12];
 
-	zx_ft_build_key(key, ip_proto, saddr, daddr, sport, dport, is_wan);
+	zx_ft_build_key(key, ip_proto, saddr, daddr, sport, dport, is_wan,
+			key_hdr);
 	return zx_cla_hash_sw_poly0(key);
 }
 
@@ -3128,7 +3179,15 @@ static void zx_ft_build_flow_info(u32 fi[8], const struct zx_ft_nat *n,
 	w1 |= ((u32)n->new_sport >> 14) & 0x3;		/* nat_sport[15:14] */
 	w1 |= 1u << 2;					/* hl_ttl_en (routed transit) */
 	if (rw)			w1 |= 1u << 3;		/* tcp_udp_chk_en */
-	if (rw)			w1 |= 1u << 4;		/* ip_chk_en */
+	/* ip_chk_en must accompany hl_ttl_en, not just NAT: the PM TTL edit
+	 * leaves the IP checksum STALE unless bit4 folds it (same defect class
+	 * as Phase-C R1, findings/wifi_stage3_phaseC_R1_validation; stock sets
+	 * flow_info bit4). Proven live 2026-07-28 on a nat=fwd WiFi-UP flow:
+	 * HW-forwarded frames reached the host wire with ttl 63 and
+	 * `bad cksum (off by 0x100)` -> silently dropped by the receiver; DN
+	 * only survived this because its frames pass the CPU dispatch, which
+	 * repairs the csum in SW. Unconditional: any TTL-edited frame needs it. */
+	w1 |= 1u << 4;					/* ip_chk_en */
 	if (n->dport_set)	w1 |= 1u << 5;		/* dport_en */
 	if (n->sport_set)	w1 |= 1u << 6;		/* sport_en */
 	if (n->dnat)		w1 |= 1u << 7;		/* dip_en */
@@ -3198,13 +3257,21 @@ static void zx_ft_ext_flow_clear(struct zx_eth *e, u8 flow_id)
 static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 				__be32 daddr, __be16 sport, __be16 dport,
 				const u8 nh_mac[ETH_ALEN], u8 eg_regport,
-				u16 pm_slot, const struct zx_ft_nat *nat)
+				u16 pm_slot, const struct zx_ft_nat *nat,
+				u8 key_hdr)
 {
 	u32 cla[15];
 	u32 nh[8] = {0}, fi[8] = {0}, sub[8] = {0}, cmd[8] = {0};
 	u8 ram[5];
 	u16 addr[5];
 	u16 raw;
+	/* [Stage-3 WiFi UP 2026-07-28] key_hdr != ETH marks a flow whose
+	 * matching packets ingress the FABRIC (a bound WiFi vif injecting via
+	 * idm0/idm1): the key/extr_index are built for the fabric rule (key_hdr
+	 * 0x30/0x38) and the key's pos32 WAN-ingress bit stays 0 (live-verified:
+	 * fabric = 0, LAN-like). Callers only pass a fabric key_hdr for
+	 * eg_regport == ZX_WAN_REGPORT (the UP direction), so the WAN-ingress
+	 * branch below and fabric-keying are mutually exclusive. */
 	int w, rc = 0;
 
 	/* Without the external flow_info tables the PM rewrite reads erased
@@ -3269,9 +3336,9 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	 * (proven, external-DDR) packing untouched. */
 	zx_ft_pack_cla(cla, ip_proto, saddr, daddr, sport, dport, pm_slot & 0xff,
 		       eg_regport != ZX_WAN_REGPORT, eg_regport,
-		       eg_regport == ZX_WAN_REGPORT);
+		       eg_regport == ZX_WAN_REGPORT, key_hdr);
 	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport,
-			      eg_regport != ZX_WAN_REGPORT);
+			      eg_regport != ZX_WAN_REGPORT, key_hdr);
 	zx_ft_way_slots(raw, ram, addr);
 	for (w = 0; w < 5; w++) {
 		int r = zx_cla_write_hash(e, ram[w], addr[w], cla, 15);
@@ -3288,7 +3355,7 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 	 * climbs 1:1, download traps→drops). Verified on-device 2026-07-03. */
 	if (eg_regport != ZX_WAN_REGPORT) {
 		u16 raw0 = zx_ft_flow_hash_poly0(ip_proto, saddr, daddr,
-						 sport, dport, true);
+						 sport, dport, true, key_hdr);
 		int r = zx_cla_write_hash(e, 2, raw0 & 0xff, cla, 15);
 
 		if (r)
@@ -3297,6 +3364,12 @@ static int zx_ft_install_recipe(struct zx_eth *e, u8 ip_proto, __be32 saddr,
 			 "[phase6/ft] WAN-DN poly-0 install: raw0=0x%04x ram2[0x%02x] rc=%d\n",
 			 raw0, raw0 & 0xff, r);
 	}
+	/* [Stage-3 WiFi UP 2026-07-28] FABRIC-ingress (wifi_ing) UP entries need
+	 * NO poly-0 slot: the fabric lookup probes the poly-1 way set exactly
+	 * like GePHY LAN ingress — proven live by zeroing the poly-0 slot under
+	 * an active HW-forwarding upload (rate/hit-rate unchanged, acl_fail
+	 * stayed flat). Only WAN/RGMII ingress (the DN branch above) consults
+	 * the poly-0 ram2 slot. */
 
 	dev_info(e->dev,
 		 "[phase6/ft] recipe: proto=%u %pI4:%u->%pI4:%u eg_rp=%u wan_ing=%d nh=%pM pm_slot=%u nat=%s%s%s ip=%pI4 sp=%u dp=%u fi=%08x:%08x -> raw=0x%04x buckets ram2[0x%02x]/3[0x%03x]/4[0x%03x]/5[0x%03x]/6[0x%03x] rc=%d\n",
@@ -3412,8 +3485,9 @@ static int zx_ft_uninstall(struct zx_eth *e, u16 raw, bool has_raw0, u16 raw0,
  *   -ENOSPC      the tracking table is full and this cookie is not already known.
  * @has_raw0/@raw0: the caller's DN-only poly-0 hash (zx_ft_flow_hash_poly0),
  * mirroring exactly what zx_ft_install_recipe will write when eg_regport !=
- * ZX_WAN_REGPORT; pass has_raw0=false for UP-direction installs (no poly-0
- * write happens for those).
+ * ZX_WAN_REGPORT; pass has_raw0=false for UP-direction installs, eth and
+ * WiFi-ingress alike (no poly-0 write happens for those — the fabric lookup
+ * probes the poly-1 way set, proven live 2026-07-28).
  * Re-uses the slot on REPLACE (same cookie). On success records
  * {cookie,raw,raw0,has_raw0}, assigns a per-entry PM slot (ZX_FT_PM_BASE +
  * tracking-index -> distinct per direction, since each direction is a
@@ -3728,6 +3802,30 @@ static u8 zx_ft_wifi_essid(struct zx_eth *e, const struct net_device *odev)
 	return ZX_FT_EGRESS_INVALID;
 }
 
+/* [Stage-3 WiFi UP 2026-07-28] Resolve a flow's INGRESS ifindex (from the
+ * nf_flow_table rule's FLOW_DISSECTOR_KEY_META) to the flow-key header byte:
+ * a currently-bound WiFi vif returns the fabric rule header for its ring
+ * (0x38 = idm1, 0x30 = idm0); anything else returns the eth header 0x48.
+ * Gated by ftwifi like zx_ft_wifi_essid, so ftwifi=0 keeps every install
+ * byte-identical to the pre-fix driver. Same locking convention as
+ * zx_ft_wifi_essid (integer compare against the bind-time cached ifindex; a
+ * racing unbind at worst mis-keys one install, which then just LOOK_UP_MISSes
+ * and stays on the SW path). */
+static u8 zx_ft_wifi_ing_hdr(struct zx_eth *e, int ifindex)
+{
+	int i;
+
+	if (!ifindex || !READ_ONCE(e->ft_wifi_en))
+		return ZX_FT_KEY_HDR_ETH;
+	for (i = 0; i < 16; i++) {
+		struct zx_wifi_dispatch_node *wn = &e->zx_wifi_dispatch[i];
+
+		if (READ_ONCE(wn->enabled) && wn->wlan_ifindex == ifindex)
+			return ZX_FT_KEY_HDR_IDM(wn->idm);
+	}
+	return ZX_FT_KEY_HDR_ETH;
+}
+
 /* Parse a flow_cls_offload 5-tuple + actions and install/remove the HW recipe. */
 static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 {
@@ -3740,8 +3838,10 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	bool have_mac = false;
 	u8 ip_proto = 0;
 	u8 eg_regport;
+	u8 key_hdr = ZX_FT_KEY_HDR_ETH;
+	int ing_ifindex = 0;
 	u16 raw, raw0 = 0, pm_slot = 0;
-	bool is_dn;
+	bool is_dn, has_raw0;
 	struct zx_ft_nat nat = {0};
 	int i, rc;
 
@@ -3750,6 +3850,16 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 
 		flow_rule_match_basic(rule, &m);
 		ip_proto = m.key->ip_proto;
+	}
+	/* [Stage-3 WiFi UP 2026-07-28] nf_flow_table_offload.c always emits the
+	 * META key with ingress_ifindex = the direction's iifidx — the ONLY
+	 * ingress identity in the rule, needed to key fabric-ingress (WiFi vif)
+	 * flows for their per-inport CLA extract rule (see key_hdr below). */
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_META)) {
+		struct flow_match_meta m;
+
+		flow_rule_match_meta(rule, &m);
+		ing_ifindex = m.key->ingress_ifindex;
 	}
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IPV4_ADDRS)) {
 		struct flow_match_ipv4_addrs m;
@@ -3905,11 +4015,30 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	 * `raw` which install_recipe independently recomputes too) so reserve()
 	 * can collision-check it and untrack() can later clear it. */
 	is_dn = eg_regport != ZX_WAN_REGPORT;
-	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport, is_dn);
-	if (is_dn)
+	/* [Stage-3 WiFi UP 2026-07-28] The UP direction of a WiFi client's flow
+	 * ingresses the FABRIC (bound vif -> rx_handler -> idm ring), which
+	 * classifies under its per-inport CLA group (rule 0x70/0x60), NOT the
+	 * eth group-9 rule 0x90 — so the key header, the entry's extr_index,
+	 * and consequently raw/raw0 all change. Resolve the ingress ifindex
+	 * against the wifi_bind table (ftwifi-gated; eth flows and ftwifi=0 stay
+	 * byte-identical). Only the UP direction (egress == WAN) can be
+	 * fabric-ingress on this topology; DN's ingress is the WAN port. */
+	if (!is_dn)
+		key_hdr = zx_ft_wifi_ing_hdr(e, ing_ifindex);
+	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport, is_dn,
+			      key_hdr);
+	/* WiFi-ingress UP flows get NO poly-0 slot (fabric probes the poly-1
+	 * way set, proven live — see zx_ft_install_recipe), so has_raw0 stays
+	 * DN-only. */
+	has_raw0 = is_dn;
+	if (has_raw0)
 		raw0 = zx_ft_flow_hash_poly0(ip_proto, saddr, daddr, sport,
-					     dport, true);
-	rc = zx_ft_flow_reserve(e, cls->cookie, raw, is_dn, raw0, &pm_slot);
+					     dport, is_dn, key_hdr);
+	if (key_hdr != ZX_FT_KEY_HDR_ETH)
+		dev_info(e->dev,
+			 "[phaseC/ft] cookie=%lx ingress ifindex %d is a bound wifi vif -> fabric key_hdr=0x%02x (rule 0x%02x), installing UP hardfast\n",
+			 cls->cookie, ing_ifindex, key_hdr, key_hdr << 1);
+	rc = zx_ft_flow_reserve(e, cls->cookie, raw, has_raw0, raw0, &pm_slot);
 	if (rc == 1)		/* identical flow already live: idempotent no-op */
 		return 0;
 	if (rc == -EOPNOTSUPP) {
@@ -3926,7 +4055,7 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 	}
 
 	rc = zx_ft_install_recipe(e, ip_proto, saddr, daddr, sport, dport,
-				  nh_mac, eg_regport, pm_slot, &nat);
+				  nh_mac, eg_regport, pm_slot, &nat, key_hdr);
 	if (rc < 0) {
 		/* [H3 fix 2026-07-04] Partial-install failure (findings/
 		 * qa_static_bughunt_2026-07-04.md H3(b)): zx_ft_install_recipe
@@ -3942,7 +4071,7 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 		 * re-zeroing a location that was never actually written is a
 		 * harmless no-op, so it's safe to call unconditionally rather
 		 * than trying to track which subset of writes succeeded. */
-		zx_ft_uninstall(e, raw, is_dn, raw0, pm_slot);
+		zx_ft_uninstall(e, raw, has_raw0, raw0, pm_slot);
 		zx_ft_flow_release(e, cls->cookie);
 		return rc;
 	}
@@ -6931,9 +7060,10 @@ static ssize_t zx_fttest_write(struct file *f, const char __user *ubuf,
 	char buf[128];
 	unsigned long cookie;
 	unsigned int saddr, daddr, sport, dport, eg_regport;
+	unsigned int key_hdr = ZX_FT_KEY_HDR_ETH;
 	u16 raw, raw0 = 0, pm_slot = 0;
-	bool is_dn;
-	int rc;
+	bool is_dn, has_raw0;
+	int n, rc;
 
 	if (count == 0 || count >= sizeof(buf))
 		return -EINVAL;
@@ -6985,25 +7115,38 @@ static ssize_t zx_fttest_write(struct file *f, const char __user *ubuf,
 			return count;
 		}
 	}
-	if (sscanf(buf, "install %lx %x %x %x %x %u",
-		   &cookie, &saddr, &daddr, &sport, &dport, &eg_regport) == 6) {
+	/* [Stage-3 WiFi UP 2026-07-28] optional 7th arg = key_hdr (hex): the
+	 * flow-key header byte (0x48 eth default; 0x38/0x30 = fabric idm1/idm0)
+	 * so the WiFi-UP fabric-keyed install path is white-box testable
+	 * without staging a live WiFi client (mirrors the production
+	 * zx_ft_wifi_ing_hdr resolution, which real traffic exercises). */
+	n = sscanf(buf, "install %lx %x %x %x %x %u %x",
+		   &cookie, &saddr, &daddr, &sport, &dport, &eg_regport,
+		   &key_hdr);
+	if (n == 6 || n == 7) {
+		if (n == 6)
+			key_hdr = ZX_FT_KEY_HDR_ETH;
 		is_dn = eg_regport != ZX_WAN_REGPORT;
+		has_raw0 = is_dn;	/* fabric UP: poly-1 ways only */
 		mutex_lock(&zx_hwlock);
 		raw = zx_ft_flow_hash(e, IPPROTO_TCP, htonl(saddr), htonl(daddr),
-				      htons((u16)sport), htons((u16)dport), is_dn);
-		if (is_dn)
+				      htons((u16)sport), htons((u16)dport), is_dn,
+				      (u8)key_hdr);
+		if (has_raw0)
 			raw0 = zx_ft_flow_hash_poly0(IPPROTO_TCP, htonl(saddr),
 						     htonl(daddr), htons((u16)sport),
-						     htons((u16)dport), true);
-		rc = zx_ft_flow_reserve(e, cookie, raw, is_dn, raw0, &pm_slot);
+						     htons((u16)dport), is_dn,
+						     (u8)key_hdr);
+		rc = zx_ft_flow_reserve(e, cookie, raw, has_raw0, raw0, &pm_slot);
 		if (rc == 0)
 			rc = zx_ft_install_recipe(e, IPPROTO_TCP, htonl(saddr),
 						  htonl(daddr), htons((u16)sport),
 						  htons((u16)dport), test_mac,
-						  eg_regport & 0xff, pm_slot, &nat);
+						  eg_regport & 0xff, pm_slot, &nat,
+						  (u8)key_hdr);
 		mutex_unlock(&zx_hwlock);
-		pr_info("[fttest] install cookie=%lx raw=0x%04x raw0=0x%04x pm_slot=%u rc=%d\n",
-			cookie, raw, raw0, pm_slot, rc);
+		pr_info("[fttest] install cookie=%lx key_hdr=0x%02x raw=0x%04x raw0=0x%04x pm_slot=%u rc=%d\n",
+			cookie, key_hdr, raw, raw0, pm_slot, rc);
 		return count;
 	}
 	return -EINVAL;
