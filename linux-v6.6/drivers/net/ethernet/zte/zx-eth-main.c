@@ -2085,22 +2085,14 @@ static int zx_wifi_unregister_vif(struct zx_eth *e, u8 idm_ring, u8 ssid)
 
 static int zx_eth_open(struct net_device *ndev)
 {
-	struct zx_eth_port *port = *(struct zx_eth_port **)netdev_priv(ndev);
-	struct zx_eth *e = port->eth;
-
-	netdev_info(ndev, "open\n");
-
-	/* First port to open: enable NAPI + unmask RX IRQ only.
-	 * (Stock idm_net_open only clears bit 2 (RX) — TX completion is
-	 * polled from NAPI alongside RX, no separate IRQ enable needed.)
+	/* [Phase C R1 fix, 2026-07-27] NAPI + IDM RX IRQ are now started ONCE at
+	 * probe (stock parity), NOT here. The IDM RX ring consumer must run even
+	 * with no idm0/idm1 netdev administratively UP, because WiFi HW-offload
+	 * egress lands hw-forwarded frames on the IDM RX ring with no netdev ever
+	 * upped (the R1 black hole). NAPI ownership lives in probe + remove.
+	 * findings/wifi_stage3_phaseC_R1_fix_2026-07-25.md
 	 */
-	if (!e->started) {
-		napi_enable(&e->napi);
-		/* Unmask BOTH RX (bit 2) and TX done (bit 4) — see if any IDM IRQ fires */
-		npp_and(e, IDM_REG_IRQ_MASK, ~IDM_IRQ_NAPI_MASK);
-		e->started = true;
-	}
-
+	netdev_info(ndev, "open\n");
 	netif_carrier_on(ndev);
 	netif_start_queue(ndev);
 	return 0;
@@ -2108,24 +2100,13 @@ static int zx_eth_open(struct net_device *ndev)
 
 static int zx_eth_stop(struct net_device *ndev)
 {
-	struct zx_eth_port *port = *(struct zx_eth_port **)netdev_priv(ndev);
-	struct zx_eth *e = port->eth;
-	int i, others_up = 0;
-
+	/* [Phase C R1 fix, 2026-07-27] Do NOT stop the IDM engine here: the NAPI /
+	 * IDM IRQ lifecycle now lives at probe/remove, so downing idm0/idm1 (or the
+	 * last eth port) cannot kill WiFi-offload RX-ring delivery. See zx_eth_open
+	 * + findings/wifi_stage3_phaseC_R1_fix_2026-07-25.md.
+	 */
 	netif_stop_queue(ndev);
 	netif_carrier_off(ndev);
-
-	for (i = 0; i < ZX_NPORTS; i++)
-		if (e->ports[i].netdev != ndev &&
-		    (e->ports[i].netdev->flags & IFF_UP))
-			others_up++;
-
-	if (!others_up && e->started) {
-		/* Mask all IRQs (stock idm_net_stop sets bits 2+4) */
-		npp_or(e, IDM_REG_IRQ_MASK, IDM_IRQ_NAPI_MASK);
-		napi_disable(&e->napi);
-		e->started = false;
-	}
 	netdev_info(ndev, "stop\n");
 	return 0;
 }
@@ -8686,6 +8667,21 @@ static int zx_eth_probe(struct platform_device *pdev)
 	/* [phase6/ft] PM external tables — must be after PON/TM init (the base
 	 * registers read garbage while the PON-PP block clocks are gated). */
 	zx_ft_pm_ext_init(eth);
+
+	/* [Phase C R1 fix, 2026-07-27] Start the IDM RX ring consumer NOW (stock
+	 * idm_net_init unmasks at init) — at the END of probe, after all IDM/TM
+	 * init that could re-mask (the init-time IDM_IRQ_ALL_MASKED). The consumer
+	 * (zx_idm_poll NAPI + IDM IRQ) must run even when no idm0/idm1 netdev is
+	 * administratively UP: WiFi HW-offload egress lands hw-forwarded frames on
+	 * the IDM RX ring with no netdev ever upped. Without this, ftwifi=1 traffic
+	 * accumulates in the ring (RX_PENDING climbs) while idm_rx_count stays 0
+	 * (the R1 black hole); proven live — bringing idm links up drained the ring
+	 * 0->93, all ssid=4 (essid 0x1c). NAPI ownership is HERE (+ zx_eth_remove),
+	 * not in open/stop. findings/wifi_stage3_phaseC_R1_fix_2026-07-25.md
+	 */
+	napi_enable(&eth->napi);
+	npp_and(eth, IDM_REG_IRQ_MASK, ~IDM_IRQ_NAPI_MASK);
+	eth->started = true;
 
 	dev_info(dev, "ZX279128S ethernet ready (IRQ=%d, base=%pR, CPU_PORT=%d)\n",
 		 eth->irq_idm, platform_get_resource(pdev, IORESOURCE_MEM, 0),
