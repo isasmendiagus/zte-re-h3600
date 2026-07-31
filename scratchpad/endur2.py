@@ -57,11 +57,12 @@ def main(target=200000):
         got, dinj, dfwd, dmiss, cur = wp._flow_health(sink, 15)
         al, rl = cur.get("bmu_al"), cur.get("bmu_rl")
         print("-- r%d: %.2f MB dinj=%d dfwd=%s dmiss=%s inj=%s | ledger d=%s "
-              "bp0=%s" % (n, got / 1e6, dinj, dfwd, dmiss,
-                          cur.get("tx_injected"),
-                          (al - rl) if al is not None and rl is not None
-                          else "?",
-                          wp.hx(cur.get("bp0"))))
+              "| rin=%s tin=%s rout=%s tout=%s dntrap=%s" %
+              (n, got / 1e6, dinj, dfwd, dmiss, cur.get("tx_injected"),
+               (al - rl) if al is not None and rl is not None else "?",
+               wp.hx(cur.get("red_fwd_in")), wp.hx(cur.get("red_trp_in")),
+               wp.hx(cur.get("red_fwd_out")), wp.hx(cur.get("red_trp_out")),
+               wp.hx(cur.get("qmg_dn_trap"))))
         sys.stdout.flush()
         if (cur.get("tx_injected") or 0) >= target:
             print("=== ENDURANCE PASSED: inj=%s >= %d, no wedge ==="

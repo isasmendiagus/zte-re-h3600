@@ -229,9 +229,46 @@ def gkey12():
     return w
 
 
+def red_ramid_sweep(rids=(0, 1, 2, 3), label=""):
+    """RED indirect sweep across ram-ids (cmd bits 22+ = ram select; the
+    known used_space bank is rid 1). Hunting the wedge-#2 charge bank."""
+    rows = list(range(0, 16)) + [(40 + p) * 8 for p in range(5)]
+    for rid in rids:
+        vals = {}
+        for i in range(0, len(rows), 10):
+            chunk = rows[i:i + 10]
+            cmds = []
+            for q in chunk:
+                cmdval = q | (rid << 22) | (1 << 27)
+                cmds.append("echo %08x %08x > %s" % (RED_CMD, cmdval, POKE))
+                cmds.append("echo %08x > %s" % (RED_DONE, POKE))
+                cmds.append("echo %08x > %s" % (RED_DATA0, POKE))
+            cmds.append("dmesg | busybox grep -a 'peek 0x' | busybox tail -%d"
+                        % (len(cmds) + 6))
+            out = ab_ctrs.zc(cmds, wait=3, hardcap=60)
+            data = re.findall(r"peek 0x%08x = 0x([0-9a-f]+)" % RED_DATA0,
+                              out, re.I)
+            if len(data) >= len(chunk):
+                for j, q in enumerate(chunk):
+                    vals[q] = int(data[len(data) - len(chunk) + j], 16)
+        nz = {q: v for q, v in vals.items() if v}
+        print("== RED rid%d %s: nonzero: %s ==" % (
+            rid, label,
+            " ".join("r%d=0x%x" % (q, v) for q, v in sorted(nz.items()))
+            or "NONE"))
+        sys.stdout.flush()
+
+
 def wedgecap():
     print("==== WEDGE SIGNATURE CAPTURE ====")
     bmu_show(bmu_read(), "wedge-onset")
+    try:
+        v = ab_ctrs.read()
+        print("== QMG/RED full == " + " ".join(
+            "%s=%s" % (k, hx(x)) for k, x in v.items()))
+    except Exception as ex:
+        print("(ab_ctrs.read failed: %s)" % ex)
+    red_ramid_sweep((0, 1, 2, 3), "wedge")
     v1 = sample()
     show(v1, "wedge-A")
     for i in range(3):
@@ -369,7 +406,12 @@ def lite_sample():
              ("bp0", 0x92348048), ("bp1", 0x92348448), ("bp2", 0x92348848),
              ("bp3", 0x92348c48), ("bp4", 0x92349048),
              # BMU alloc/release ledger (instances mirror; inst0 suffices)
-             ("bmu_al", 0x92348090), ("bmu_rl", 0x92348098))
+             ("bmu_al", 0x92348090), ("bmu_rl", 0x92348098),
+             # wedge-#2 hunt: RED in/out + dn_trap + red_cfg (watch for any
+             # counter/level approaching ~1024 at onset)
+             ("red_fwd_in", 0x92344204), ("red_trp_in", 0x92344208),
+             ("red_fwd_out", 0x92344210), ("red_trp_out", 0x92344214),
+             ("qmg_dn_trap", 0x9234c04c), ("red_cfg", 0x92344004))
     cmds = ["echo %08x > /sys/kernel/debug/zx_eth/poke" % a for _, a in names]
     cmds.append("dmesg | busybox grep -a 'peek 0x' | busybox tail -%d"
                 % (len(names) + 4))
