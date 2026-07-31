@@ -1,4 +1,18 @@
-# Wedge #2, session 2026-07-31f — SIPC→CPU "descriptor ring" REFUTED by full decomp RE; 0x921cc008 demoted to coincident symptom; SMCT pp_pmau init gap found+landed; wedge repro'd at inj=14.8k with the gauge at 0x777
+# Wedge #2, session 2026-07-31f — SIPC→CPU "descriptor ring" REFUTED by full decomp RE; 0x921cc008 demoted to coincident symptom; SMCT pp_pmau init gap found+landed (NOT the wedge fix — wedged again at inj=66,468); wedge repro'd at inj=14.8k with the gauge at 0x777
+
+> **OUTCOME (session close, user-observed): the pp_pmau build WEDGED AGAIN at
+> inj=66,468** on its first fresh-boot validation run (red_fwd_in=0x103bf≈66,495
+> ≈ tx_injected → genuinely HW-forwarding throughout; dn_trap=31,828). So
+> pp_pmau=0xB is **NOT the complete wedge #2 fix**; it is retained as verified
+> stock init parity. `ftwifi` stays **default OFF**.
+>
+> **Suggestive-but-unproven improvement**: every prior FRESH-BOOT onset on
+> record was 967 / ~965 / 1,755 (the 205k survivor was warm, 82k deep; this
+> session's 14,799 was a time-warm box). 66,468 is ~38x the best prior
+> fresh-boot onset. n=1 — the same-build variance lesson (1.7k→205k) forbids
+> calling this an improvement without ≥3 fresh-boot A/B runs of old-vs-new
+> build. Next session: run that A/B before chasing new mechanisms.
+> Session paused here by user request.
 
 Predecessor: `findings/wifi_stage3_wedge_topcrm_axiqos_2026-07-31.md` (§8 set this
 session's task: RE the SIPC→CPU descriptor ring and make mainline drain it).
