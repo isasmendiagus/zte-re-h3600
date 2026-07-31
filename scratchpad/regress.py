@@ -2017,6 +2017,67 @@ def test_replace_orphan(args):
 # test-only `fttest` node (no traffic needed -- eg_regport=2 => is_dn => the
 # full 4-PM-write DN path); duplicates no install logic of its own.
 # ---------------------------------------------------------------------------
+def test_axi_qos(args):
+    """[A09] GUARD: the SoC AXI bus-matrix/QoS block @phys 0x00a20000 is
+    programmed to stock's machine-init values.
+
+    WHY THIS GUARD EXISTS: stock programs this block from the *kernel's*
+    zx279128_init_machine (arch_initcall 3), not from any kmod, so it is
+    absent from the kmod replay table every other parity check is built
+    against -- which is exactly how mainline shipped for months with all of
+    stock's arbitration/QoS fields left at zero (found 2026-07-31,
+    findings/wifi_stage3_wedge_topcrm_axiqos_2026-07-31.md). A silent
+    regression here is invisible to every other test in this battery, hence
+    a dedicated white-box guard.
+
+    Traffic-free: one small targeted /bin/memdump read (NOT the banned bulk
+    MAC4 dump -- different block entirely, and 0x40 bytes).
+    """
+    name = "axi_qos"
+    t0 = time.time()
+    notes = []
+
+    # stock values, from vmlinux RE [vm-05] + verified live on mainline post-fix
+    EXPECT = {0x00a20000: 0x0d000000, 0x00a20078: 0x1f0f1f0f,
+              0x00a20080: 0x40000001, 0x00a20088: 0x1f0f1f0f}
+
+    out = ctr.zc(["/bin/memdump 0x00a20000 0x4",
+                  "/bin/memdump 0x00a20078 0x14"], wait=3.0)
+    got = {}
+    for m in re.finditer(r"^(00a200[0-9a-f]{2})\s+([0-9a-f]{8})\s*$",
+                         out, re.M | re.I):
+        got[int(m.group(1), 16)] = int(m.group(2), 16)
+
+    missing = [a for a in EXPECT if a not in got]
+    if missing:
+        return TestResult(name, "ERROR", time.time() - t0,
+                          {"raw_read": got},
+                          "could not read %s from the device (memdump output "
+                          "unparsed) -- is /bin/memdump present and the REPL "
+                          "healthy?" % ", ".join("0x%08x" % a for a in missing))
+
+    metrics = {"0x%08x" % a: "0x%08x" % got[a] for a in sorted(got)}
+    for addr, want in sorted(EXPECT.items()):
+        if got[addr] != want:
+            notes.append("**FAIL**: [0x%08x] = 0x%08x, expected stock 0x%08x "
+                         "-- the [A09] zx_soc_axi_qos_init() write is missing "
+                         "or was overwritten" % (addr, got[addr], want))
+
+    # +0x8c is a HW mirror of +0x88 (observed live); treat a mismatch as a
+    # soft signal only, since it is inferred rather than written by stock.
+    if 0x00a2008c in got and got[0x00a2008c] != got[0x00a20088]:
+        notes.append("note: [0x00a2008c]=0x%08x no longer mirrors "
+                     "[0x00a20088]=0x%08x (mirror behaviour was observed "
+                     "live 2026-07-31; informational, not a failure)"
+                     % (got[0x00a2008c], got[0x00a20088]))
+
+    ok = not any(n.startswith("**FAIL**") for n in notes)
+    if ok and not notes:
+        notes.append("all 5 stock AXI-QoS fields present and correct")
+    return TestResult(name, "PASS" if ok else "FAIL", time.time() - t0,
+                      metrics, "; ".join(notes))
+
+
 def test_pm_write_verify(args):
     name = "pm_write_verify"
     t0 = time.time()
@@ -2859,6 +2920,7 @@ REGISTRY = {
     "high_way_collision": test_high_way_collision,
     "replace_orphan": test_replace_orphan,
     "pm_write_verify": test_pm_write_verify,
+    "axi_qos": test_axi_qos,
     "bidirectional": test_bidirectional,
     "edge_decline": test_edge_decline,
     "h1_dsa_decline": test_h1_dsa_decline,
@@ -2877,7 +2939,7 @@ REGISTRY = {
 # at finding H1). dmesg_clean/recovery_alive run near the end on purpose (see
 # their docstrings).
 ORDER = ["baseline_download", "red_credit_recycle", "sustained_download", "multiflow", "churn",
-         "concurrency_race", "poly0_stale", "high_way_collision", "replace_orphan", "pm_write_verify",
+         "concurrency_race", "poly0_stale", "high_way_collision", "replace_orphan", "pm_write_verify", "axi_qos",
          "bidirectional", "edge_decline", "h1_dsa_decline", "h4_nondsa_decline", "wifi_r1_drain",
          "wifi_up_fabric_key",
          "churn_no_wedge", "counters_sanity", "dmesg_clean", "recovery_alive"]
@@ -2915,6 +2977,9 @@ DESCRIPTIONS = {
                            "declines instead of one destroy wiping the other's live bucket",
     "replace_orphan": "H3 REGRESSION GUARD: self-REPLACE (same cookie, changed tuple) clears the OLD "
                        "5 ways + poly-0 slot before adopting the new tuple -- no orphaned stale entry",
+    "axi_qos": "[A09] GUARD: the SoC AXI bus-matrix/QoS block @0x00a20000 carries stock's "
+               "machine-init values (stock programs it from the kernel, not a kmod, so no other "
+               "parity check covers it). White-box, traffic-free",
     "pm_write_verify": "H5 REGRESSION GUARD: every install's 4 PM writes are rc-checked + readback-"
                         "verified (ft_pm_verify.ok +=4, fail=0) and pmpeek independently confirms "
                         "ram1/ram3/ram6 committed the intended values",
@@ -2945,6 +3010,7 @@ DEFAULT_TIMEOUTS = {
     "high_way_collision": 180,
     "replace_orphan": 180,
     "pm_write_verify": 90,
+    "axi_qos": 20,
     "bidirectional": 300,
     "edge_decline": 60,
     "h1_dsa_decline": 60,

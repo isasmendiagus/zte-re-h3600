@@ -1,4 +1,11 @@
-# Wedge #2, session 2026-07-31e — the top_crm clock/reset thread is REFUTED; a real stock-kernel divergence (AXI QoS @0x00a20000) found, landed, and shown NOT to be the pool gate
+# Wedge #2, session 2026-07-31e — top_crm REFUTED; a real stock-kernel divergence (AXI QoS @0x00a20000) found + landed, but it is NOT the pool gate and **NOT the wedge fix**; wedge #2 remains OPEN
+
+> **READ §7 FIRST.** The A09 candidate survived 205k HW-forwarded frames in
+> one run and then wedged at **inj=1,755 on the very next fresh boot of the
+> identical build**. Wedge #2 is **NOT fixed**, `ftwifi` stays **default
+> OFF**, and — the load-bearing lesson — **a single clean endurance run is
+> not evidence of a fix**: onset variance on one unchanged build spans
+> 1.7k → >205k frames.
 
 Predecessor: `findings/wifi_stage3_wedge_bmu_pool_2026-07-28.md` (+ its
 2026-07-31d addendum). Memory: `zte-wifi-up-offload`.
@@ -169,7 +176,153 @@ contradicted.
      0x80e0=0xfb1 / 0x80e4=0x3b0, all 0 on stock and climbing with
      traffic).
 
-## 7. Tooling / rig notes
+## 7. ⚠⚠ ENDURANCE A/B — A09 is NOT the wedge fix, and single-run endurance results are WORTHLESS
+
+Two endurance runs of the **same A09 build**, same rig, same tool
+(`endur2.py`, throttled ~1 MB/s continuous phone→WAN upload, ftwifi on,
+idm1 up) — the shape that produced the historical 967/965 onsets:
+
+| run | boot | start inj | outcome |
+|---|---|---|---|
+| 1 | warm (device had already pushed 82k frames) | 82,332 | **PASSED 205,463** — ~148k genuinely HW-forwarded frames (dfwd 27k–31k per 12 s window), BMU ledger flat (−11→−18), no wedge |
+| 2 | **fresh boot** of the identical build | 944 | **TRUE WEDGE at inj=1,755** (dn_trap frozen at 0x47 under 5 host pings) |
+
+**Verdict: A09 does NOT fix wedge #2.** Run 1's survival was environmental,
+not causal — exactly the confounder to worry about, since the predecessor
+doc notes the onsets happen in *retransmit-heavy windows* driven by the
+flaky modem-WiFi leg, and run 1's link was healthy. `ftwifi` stays
+**default OFF**. A09 is retained purely as verified stock parity (§2, and
+now confirmed against live stock — see below), not as a fix.
+
+**The methodological lesson is the most valuable output of this session:**
+one clean endurance run — even 205k frames, 200× the onset — is NOT
+evidence that this wedge is fixed. The onset variance on a *single
+unchanged build* spans 1.7k → >205k. Any future claim of "wedge fixed"
+needs **several fresh-boot runs**, and a fresh boot is mandatory (run 1
+was warm and started 82k frames deep, already past the hazard window).
+
+### Live-stock confirmation of the A09 values (the capture the task wanted)
+
+Read read-only over SSH from a live stock box (`/bin/devmem2`; note stock's
+busybox 1.17 has **no `head`**, which silently broke a first attempt).
+Stock LIVE matches the static RE **exactly**, and matches post-fix mainline
+byte-for-byte:
+
+```
+00a20000 0d000000     00a20078 1f0f1f0f     00a2007c 1f0f1f0f
+00a20080 40000001     00a20084 bfffffff
+00a20088 1f0f1f0f     00a2008c 1f0f1f0f
+```
+
+So `+0x7c` mirrors `+0x78` and `+0x8c` mirrors `+0x88` on stock too (the
+mirroring seen live on mainline is real HW behaviour, not an artifact), and
+`+0x84` genuinely *retains* `0xbfffffff` rather than acting as a
+write-only clear. Also captured: stock `sys_ctrl` (0x94100000) is zero
+across +0x00..+0x1c except **+0x10 = 0x100** — so the A06 "clear bit11
+(0x800)" step is consistent with stock and sys_ctrl holds no other
+divergence in that window.
+
+### Wedge-2 signature at the run-2 onset (unchanged from the predecessor)
+
+```
+BMU:  all 5 inst: pool=0/0 avail=0 alloc=194 rls=205 alloc-rls=-11   (BALANCED)
+QMG:  dn_sw=0x1b dn_hw=0xb2e dn_trap=0x47(FROZEN) up_sw/up_hw/up_trap=0
+RED:  fwd_in=0xb4a fwd_out=0xb49  trp_in=0xaa trp_out=0xa5  drop=0x6
+      pp_drop=0x4  sadm_pass=0  sadm_drop=0  mac2_tx=0xf
+```
+
+Balanced ledger + `bppe_cnt=0` + everything else healthy — i.e. the
+resource is **absent, not over-charged**, and *not* a BP leak. This is
+further evidence for §5: `bppe_cnt=0` is a benign long-standing condition,
+and the BP-starvation story does not explain this wedge.
+
+### New characterization worth chasing (hypothesis, n small — do not over-trust)
+
+Every post-fix-#1 onset now on record is **early**: 967, ~965, and 1,755 —
+all within ~1–2k frames of the flow starting on a fresh boot. The much
+larger onsets (19.6k–71.8k) all predate fix #1 and belong to the
+double-free bug. Run 1 entered already 82k frames deep and never wedged.
+That shape is a **cold-start / first-few-thousand-frames hazard** (an
+init-ordering or warm-up race, or a first-consumption of something
+uninitialized), *not* a wear-out/leak. If it holds, the right experiment is
+to instrument the first ~2k HW-forwarded frames on a fresh boot rather than
+to run long endurance tests at all — which would also make each iteration
+minutes instead of an hour.
+
+## 8. ★★ THE REAL LOCALIZATION: 0x921cc008 is a SIPC occupancy gauge that fills to saturation and halts the fabric
+
+This is the most valuable result of the session. Enabled by the §7
+reframing (the wedge is early ⇒ a 1-minute repro), the new tracer
+`wedge_coldstart.py` samples a deliberately small 9-register set every ~3 s
+from flow start. It caught the collapse in the act:
+
+```
+r12-r16  sipc_008=0xddd011   up_fwd +2434,+2371,+2310,+2433,+2352   healthy
+r17      sipc_008=0xeee011   up_fwd +2345
+r18      sipc_008=0xfff011   up_fwd +2419      <-- SATURATED
+r19      sipc_008=0xfff011   up_fwd +2268
+r20      sipc_008=0xfff011   up_fwd  +657      <-- collapse begins
+r21      sipc_008=0xfff011   up_fwd    +1
+r22-r25  sipc_008=0xfff011   up_fwd     0      dead
+r26      sipc_008=0x111011   up_fwd  +905      <-- WRAPS -> brief recovery!
+r27-r29  sipc_008=0x111011   up_fwd     0      dead for good
+```
+
+**Mechanism**: `0x921cc008` bits[23:12] are three 4-bit gauges that climb in
+lockstep with HW-forwarded fabric traffic (~2-3k frames per step). The
+fabric halts the moment they saturate at `0xf`. The wrap back to `0x1` frees
+headroom and buys a brief, partial recovery burst before saturating again.
+Nothing else moved first: `bmu_e0/e4` were pinned at 0xfb1/0x3b0 the whole
+run and `sipc_drop` was static at 0x80000, so this is the **first** stage to
+go, not a downstream symptom. It also retro-explains the predecessor's
+one-off note ("0x921cc008 stepped 0x111011→0x222211 at one onset") — same
+register, now with the full progression and the causal link.
+
+**Stock comparison** (`sipc_diff.py`, vs `captures/fpga/npp_block_stock.txt`):
+stock reads `0x921cc008 = 0x00000399` — the three high nibbles are **000**,
+i.e. on stock this resource drains. 10 registers in the block differ.
+
+### …but the block is READ-ONLY, and SIPC config parity is exact
+
+Tested live on the wedged box (`unwedge_test.py`): writes to `0x921cc008`
+(→0x399), `0x921cc040` (→stock 0x01980000) and `0x921cc03c` (→stock 0x318)
+are all **deaf** — every readback unchanged, box stayed wedged. So those
+registers are HW **status**, and they differ from stock because the *state*
+differs, not because mainline misprograms them. Confirmed from the decomp:
+
+- `pon_npp_sipc_init()` is literally `npp[0xc000] = 0x11` — exactly what
+  mainline's `npp_write(e, NPP_REG_SIPC_INIT, 0x11)` does.
+- The whole `zx_sipcregtable` is 2 entries, both at `0x921cc000`: bit0 =
+  `sipc_set_rx_en`, bit2 = `sipc_set_cpu_up_en`. Live, **both** stock and
+  mainline read `0x921cc000 = 0x00000011` (rx_en=1, cpu_up_en=0).
+
+So there is **no SIPC configuration divergence at all**. The gauge fills
+because something downstream never releases the resource.
+
+### What the resource almost certainly is (next session starts here)
+
+The stock symbol names around this block are decisive:
+`sipc2cpu_ful_cnt_up`, `sipc2cpu_ful_cnt_dn`, `sipc2cpu_aful_cnt_up`,
+`sipc2cpu_aful_cnt_dn` ("SIPC→CPU FIFO full / almost-full"), plus
+`sipc_desc_full_err` / `sipc_desc_empty_err`.
+
+⇒ Hypothesis: **HW-forwarded fabric frames still enqueue an SIPC→CPU
+descriptor that mainline never consumes.** Mainline's RX path drains the TM
+rings; if the SIPC→CPU descriptor ring is a separate producer/consumer pair
+that only stock services, then every HW-forwarded frame leaks one slot until
+the ring is full and the fabric stalls. This fits every observation:
+SW-forwarded traffic is fine (the CPU consumes it), eth HW-offload is fine
+(trap-all → CPU consumes), and only ports-6/7 fabric HW-forwards leak. It
+also matches the ~2-3k-frames-per-step fill rate against a small ring.
+
+Concrete next steps: RE `tm_pon_npp_sipc_initial` and the `sipc2cpu_*`
+counter accessors to find (a) the SIPC→CPU descriptor ring's base/producer/
+consumer registers, and (b) whether stock arms an auto-discard/auto-release
+for frames not destined to the CPU. Use `wedge_coldstart.py` as the oracle —
+a candidate fix is right if `sipc_008` stops climbing, which is visible in
+~1 minute instead of an hour of endurance.
+
+## 9. Tooling / rig notes
 
 - `scratchpad/bmu_reinit.py` — live BMU engine re-init/kick/initsat probe
   (`reinit|kick|initsat|all`), paced for the console.

@@ -2305,13 +2305,28 @@ static inline void tm_and(struct zx_eth *e, u32 off, u32 mask)
  * reserved-memory DT + direct memremap_wc (bypassing dma_alloc_coherent
  * because the kernel doesn't manage this region — it's outside `mem=192M`).
  * Carved layout matches stock per agent 3 vmlinux RE:
+ *   +0x00000000  BPPE table (16 KiB) + jumbo BPPE at +0x10000  <-- stock-exact
  *   +0x00020000  ACL RAM    (4 MiB, zeroed before BMU enable)
  *   +0x00420000  Flow RAM   (1 MiB, zeroed)
- *   +0x02700000  BPPE table (128 KiB region)
  *   +0x02C20000  BP buffer pool
  *   +0x03F1F000  TM RX desc ring
  *   +0x03FDF000  TM TX UP desc ring
  *   +0x03FEF000  TM TX DN desc ring
+ *
+ * [wedge #2 lead 2026-07-31] BPPE moved +0x02700000 -> +0x00000000 (stock's
+ * exact address 0x4C000000; stock: bppe@carve+0, jumbo@+0x10000,
+ * ACL@+0x20000, flow@+0x420000 — see static_analysis_vmlinux_platform_init.md
+ * §5). It had been parked at +0x02700000 to coincide with the HW-dictated
+ * PM/ACL carve base (0x4E700000 = fpga[0x3a0024]-0x20000), i.e. inside the
+ * 128 KiB head that carve reserves ahead of the ACL table — which is exactly
+ * what made zx_ft_pm_ext_init's full-span memset silently wipe the BP pool
+ * every boot (fix #1b). carve+0..+0x20000 is otherwise unused (ACL starts at
+ * +0x20000) and is precisely the size stock's BPPE region occupies, so this
+ * both restores stock parity and permanently removes that overlap hazard.
+ * It also tests whether the BMU DDR-prefetch engine has an address/window
+ * constraint, which is the last untested explanation for bppe_cnt==0
+ * (every value-parity write, re-prime edge, kick and cache-flush theory is
+ * already refuted — findings/wifi_stage3_wedge_topcrm_axiqos_2026-07-31.md).
  */
 #define CARVED_BASE_PHYS	0x4C000000UL
 #define CARVED_SIZE		(64UL * 1024 * 1024)
@@ -2319,7 +2334,7 @@ static inline void tm_and(struct zx_eth *e, u32 off, u32 mask)
 #define CARVED_ACL_SIZE		(4UL * 1024 * 1024)
 #define CARVED_FLOW_OFF		0x00420000UL
 #define CARVED_FLOW_SIZE	(1UL * 1024 * 1024)
-#define CARVED_BPPE_OFF		0x02700000UL
+#define CARVED_BPPE_OFF		0x00000000UL	/* stock-exact; see layout note */
 #define CARVED_BP_OFF		0x02C20000UL
 #define CARVED_RXDESC_OFF	0x03F1F000UL
 #define CARVED_TXUP_OFF		0x03FDF000UL
@@ -7833,7 +7848,14 @@ static void zx_debugfs_init(struct zx_eth *e)
 			    &zx_extwrite_fops);
 	debugfs_create_u32("ftup", 0644, zx_debugfs_root, &e->ft_up_en);
 	/* [Stage-3 WiFi Phase C 2026-07-27] WiFi-egress offload gate, default 0
-	 * (= pre-Phase-C baseline). UNTESTED ON HARDWARE until Phase-C V1. */
+	 * (= pre-Phase-C baseline). STILL default-OFF: the sustained
+	 * fabric-ingress wedge is NOT fixed. A 2026-07-31 candidate ([A09] SoC
+	 * AXI-QoS init) survived 205k HW-forwarded frames in one run but the
+	 * wedge reproduced at inj=1755 on the very next fresh boot of the SAME
+	 * build — so that run was environmental luck, not a fix. Read the
+	 * variance warning in
+	 * findings/wifi_stage3_wedge_topcrm_axiqos_2026-07-31.md before ever
+	 * flipping this on the strength of a single endurance run. */
 	debugfs_create_u32("ftwifi", 0644, zx_debugfs_root, &e->ft_wifi_en);
 	/* [Phase C R1 validation 2026-07-28] dispatch xmit mode (0 = direct
 	 * ndo_start_xmit, stock parity, DEFAULT — HW-validated 7.65 MB/s;
@@ -8717,23 +8739,24 @@ static void zx_ft_pm_ext_init(struct zx_eth *eth)
 		eth->pm_ext_phys = carve;
 		eth->pm_ext = devm_ioremap(dev, carve, ZX_PM_EXT_SPAN);
 		if (eth->pm_ext) {
-			/* [wedge fix #2 2026-07-31] Zero ONLY from the ACL base
-			 * (+0x20000) onward. The 0x20000 head of this carve is
-			 * NOT ours: carve == CARVED_BPPE_OFF == 0x4E700000 = the
-			 * BMU BPPE free-list table (+ jumbo table at +0x10000)
-			 * that zx_tm_alloc_pools filled and zx_tm_bmu_init
-			 * primed EARLIER in probe. The old full-span memset
-			 * wiped it, leaving the BMU allocator pool-less (live:
-			 * bppe bpcnt 0 vs stock 8112, bppi 15 vs 79) — the
-			 * fabric then ran on a ~15-buffer recycle margin that
-			 * collapses chip-wide under sustained HW-forwarding
-			 * (the fabric-ingress endurance wedge). No FT offset
-			 * ever touches the head (ACL +0x20000, flow_info
-			 * +0x41C000/+0x49C000). */
-			memset_io(eth->pm_ext + 0x20000, 0,
-				  ZX_PM_EXT_SPAN - 0x20000);
+			/* Zero the FULL span again (safe as of 2026-07-31).
+			 * History worth keeping straight: this memset used to
+			 * clobber the BMU BPPE free-list, because BPPE was
+			 * parked at CARVED_BPPE_OFF == this same carve base
+			 * (0x4E700000), inside the 0x20000 head that the carve
+			 * reserves ahead of the ACL table. Fix #1b worked around
+			 * it by skipping the head. BPPE now lives at
+			 * CARVED_BASE_PHYS+0 (stock-exact 0x4C000000), so the
+			 * head is nobody's and the original full-span zero is
+			 * both correct and desirable — erased DDR reads 0xff,
+			 * which the PM engine decodes as an all-enables
+			 * flow_info with garbage NAT values. Removing the
+			 * special case removes the landmine: any future carve
+			 * reshuffle can no longer silently re-create the
+			 * overlap. */
+			memset_io(eth->pm_ext, 0, ZX_PM_EXT_SPAN);
 			dev_info(dev,
-				 "[phase6/ft] PM external tables: carve 0x%08x +0x%x mapped, zeroed from +0x20000 (BPPE head preserved; acl 0x%08x pm 0x%08x)\n",
+				 "[phase6/ft] PM external tables: carve 0x%08x +0x%x mapped, fully zeroed (BPPE now at carve+0, no overlap; acl 0x%08x pm 0x%08x)\n",
 				 carve, ZX_PM_EXT_SPAN, aclb, pmb);
 		}
 	}
