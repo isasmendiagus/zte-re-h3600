@@ -11,7 +11,12 @@ The path to get there:
 4. Get end-to-end traffic working under mainline + open driver.
 5. **Port to OpenWrt** as the supported target (the original goal).
 
-We are currently in stages 2–4. OpenWrt comes last.
+Stages 2–4 are essentially **done**: the mainline `zx279128-eth` DSA driver
+with **bidirectional HW flow-offload** (NAT in silicon) carries ethernet traffic
+at line rate, and WiFi (STA + AP + a working slow-path + a HW-offload mechanism)
+is up. What remains before OpenWrt: WiFi offload **durability** (one open
+fabric-ingress "wedge" keeps it gated off) + productionization, then the
+OpenWrt port itself. See the Status table below.
 
 ## Releases / tags
 
@@ -44,17 +49,25 @@ with `tasks/00.01.eth-driver/scripts/build_slotA.py` then `tftp_boot_mainline.py
 
 ## Status
 
+_Updated 2026-07-31. Working branch: `phase6-hw-offload` (== `main`)._
+
 | Subsystem | State |
 |-----------|-------|
-| Mainline kernel boot via TFTP+bootm | ✅ working |
-| Custom `/init` (C) on PID 1 | ✅ working |
-| Interactive UART shell (busybox-via-fork REPL) | ✅ working |
-| Driver `zx279128-eth` loads, replays 22363 stock regs | ✅ working |
-| `sw` netdev brought up, IP assigned | ✅ working |
-| Driver TX path (`tm_tx_count` increments) | ✅ working |
-| Packets reach physical wire (host pcap sees device MAC) | ⚠️ intermittent (22 seen, then gate closed) |
-| Driver RX path (host pings reach `sw` netdev) | ❌ broken (`rx_packets=0`, `tm_irq_count=0`) |
-| `live_load_mod` hot-reload cycle (~30s vs 3min reboot) | ⚠️ needs soft-float busybox |
+| Mainline boot (TFTP+bootm), C `/init`, UART REPL, 22k-reg stock replay | ✅ working |
+| Ethernet DSA multi-port (`lan0-4` + WAN), hotplug, RX + TX + wire egress | ✅ working (line rate) |
+| Ethernet **HW flow-offload — bidirectional (DN + UP)**, NAT done in silicon | ✅ working (~line rate, 10 GB+ sustained, nft-flowtable path) |
+| Churn / RED CPU-queue "1024" wedge | ✅ fixed (RED_CFG bit6 charge-accounting) |
+| WiFi STA (MediaTek MT7915, in-tree mt76/mac80211) | ✅ proven |
+| WiFi AP (soft-float hostapd) + real client + internet via CPU SW-forward | ✅ working (5 GHz WPA2, end-to-end) |
+| WiFi slow-path (fabric ⇄ vif dispatcher, "Phase B") | ✅ working end-to-end (real client) |
+| WiFi **HW offload** mechanism (Stage 3, DN + UP, `gemport_uni_id`/ports 6-7) | ✅ mechanism HW-validated, ⚠️ **gated OFF** — open fabric-ingress endurance "wedge #2" |
+| OpenWrt port | ⏳ not started (the end goal) |
+
+The only thing between "WiFi HW-offload works" and "on by default" is **wedge #2**:
+under sustained fabric-ingress HW-forwarding the fabric front-end starves and halts
+(~1k–72k frames, reboot-only). Deeply characterized + a 1-minute repro exists;
+several root-cause hypotheses refuted (BMU-pool, top_crm, SIPC-ring, A09 AXI/QoS).
+See `findings/wifi_stage3_*` + memory `zte-wifi-up-offload`. `ftwifi` stays default OFF.
 
 ## Where do I start? (fresh-agent path)
 
