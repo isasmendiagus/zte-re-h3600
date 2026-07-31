@@ -240,6 +240,7 @@
 #define TM_TX_RING_SIZE		1024
 #define TM_TX_DESC_SIZE		16
 #define TM_JUMBO_BP_SIZE	10240	/* stock high16 of TM[0xFC] = 0x2800=10240 */
+#define TM_JUMBO_BPPE_POOL_SIZE	0x66	/* stock jumbo pool = 102 entries */
 #define TM_NUM_RX_QUEUES	8
 #define TM_RX_DESC_PER_Q	1024	/* Stock uses idx % 0x400 (1024); was 256 — explains why we saw zeros */
 #define TM_DESC_SIZE		16
@@ -1238,12 +1239,33 @@ static void zx_npp_aux_init(struct zx_eth *e)
 static void zx_stock_apply_block(struct zx_eth *e, const char *name,
 				 u32 start, u32 end)
 {
-	u32 i, runs = 0, singles = 0, regs_in_runs = 0;
+	u32 i, runs = 0, singles = 0, regs_in_runs = 0, skipped_bmu = 0;
 
 	for (i = start; i < end; i++) {
 		const struct zx_stock_op *op = &zx_stock_ops[i];
 		void __iomem *win = (op->window == ZX_BURST_WIN_PON_EARLY)
 				    ? e->pon_early : e->base;
+
+		/* [wedge fix #2 2026-07-31] SKIP the TM BMU sub-block
+		 * (TM[0x8000..0x11ff] x5 instances = base window offsets
+		 * 0x188000..0x1891ff). The captured stock table contains this
+		 * block's RUNTIME state (HW-owned cursors 0x8040/44/48, status
+		 * counters, AND the INIT=1 enables). Replaying INIT=1 here —
+		 * BEFORE zx_tm_bmu_init has configured/primed anything — makes
+		 * the virgin BMU engine latch an EMPTY producer state; the
+		 * engine never re-samples the producer cursor on later INIT
+		 * toggles (live-proven: every re-prime variant read back
+		 * bppe_cnt=0), so the fabric ran forever on a ~15-buffer
+		 * recycle margin instead of the 8192-BP pool. Skipping the
+		 * range leaves zx_tm_bmu_init/zx_tm_bmu_enable as the FIRST
+		 * toucher: a proper virgin-block 0->1 enable with a valid
+		 * producer -> the pool actually produces (stock-parity
+		 * bppe_cnt ~8112). */
+		if (op->window == ZX_BURST_WIN_BASE &&
+		    op->off_or_addr >= 0x188000 && op->off_or_addr < 0x189200) {
+			skipped_bmu++;
+			continue;
+		}
 
 		if (op->kind == ZX_BURST_KIND_RUN) {
 			__iowrite32_copy(win + op->off_or_addr, op->data,
@@ -1256,8 +1278,8 @@ static void zx_stock_apply_block(struct zx_eth *e, const char *name,
 		}
 	}
 	dev_info(e->dev,
-		 "stock-init %s: %u ops (%u runs/%u regs + %u singles)\n",
-		 name, end - start, runs, regs_in_runs, singles);
+		 "stock-init %s: %u ops (%u runs/%u regs + %u singles, %u BMU-block skipped)\n",
+		 name, end - start, runs, regs_in_runs, singles, skipped_bmu);
 }
 
 /* ============================================================
@@ -2370,6 +2392,12 @@ static int zx_tm_alloc_pools(struct zx_eth *e)
 	bppe = (u16 *)e->bppe_cpu;
 	for (i = 0; i < TM_BPPE_POOL_SIZE; i++)
 		bppe[i] = cpu_to_be16(i);
+	/* [wedge fix #2] jumbo BPPE table at +0x10000 (stock layout), be16
+	 * indices 0..TM_JUMBO_BPPE_POOL_SIZE-1 — stock primes a real jumbo
+	 * pool (0x66 entries); mainline used to advertise an empty one. */
+	bppe = (u16 *)((u8 *)e->bppe_cpu + 0x10000);
+	for (i = 0; i < TM_JUMBO_BPPE_POOL_SIZE; i++)
+		bppe[i] = cpu_to_be16(i);
 
 	dev_info(e->dev, "TM pools (carved): bppe@%pad, bp@%pad, rxdesc@%pad, txup@%pad, txdn@%pad\n",
 		 &e->bppe_dma, &e->bp_dma, &e->rxdesc_dma,
@@ -2420,10 +2448,12 @@ static void zx_tm_bmu_init(struct zx_eth *e)
 		u32 base = inst * TM_INSTANCE_STRIDE;
 
 		/* BP/BPPE base physical addresses — all 5 instances point at
-		 * the same shared CMA region.
+		 * the same shared CMA region. [wedge fix #2 2026-07-31] jumbo
+		 * BPPE table is a SEPARATE table at +0x10000 (stock parity:
+		 * 0x4e710000), not an alias of the normal one.
 		 */
 		tm_write(e, base + TM_REG_BPPE_BASE,       e->bppe_dma);
-		tm_write(e, base + TM_REG_JUMBO_BPPE_BASE, e->bppe_dma);
+		tm_write(e, base + TM_REG_JUMBO_BPPE_BASE, e->bppe_dma + 0x10000);
 		tm_write(e, base + TM_REG_BP_BUFFER_BASE,  e->bp_dma);
 		tm_write(e, base + TM_REG_BP_JUMBO_BASE,   e->bp_dma);
 		tm_write(e, base + TM_REG_BP_SIZE,
@@ -2435,14 +2465,23 @@ static void zx_tm_bmu_init(struct zx_eth *e)
 		tm_write(e, base + TM_REG_BMU_CTRL,        0x104C040);
 		tm_write(e, base + TM_REG_BMU_CTRL2,       0x104C040);
 
-		/* Pool sizes: high 16 = total, low 16 = runtime consumed */
-		tm_write(e, base + TM_REG_BMU_POOL_SIZE,   TM_BPPE_POOL_SIZE << 16);
-		tm_write(e, base + TM_REG_BMU_JUMBO_POOL,  0);
-
 		/* BUCKETS_M1: stock formula (POOL_SIZE>>5)-1 = 31 for POOL=1024 */
 		tm_write(e, base + TM_REG_BMU_BUCKETS_M1,  (TM_BPPE_POOL_SIZE >> 5) - 1);
-		tm_write(e, base + TM_REG_BMU_JUMBO_BUCK,  0);
+		tm_write(e, base + TM_REG_BMU_JUMBO_BUCK,
+			 (TM_JUMBO_BPPE_POOL_SIZE >> 5) - 1);
 	}
+
+	/* [wedge fix #2 2026-07-31] Prime the producer cursors ONCE, instance 0
+	 * only — exact stock parity. Stock's pon_tm_bmu_init writes 0x8048/
+	 * 0x804c a single time (plat decomp :5694), and its tm.ko replay never
+	 * writes them for instances 1..4 (the 5 "instances" mirror one shared
+	 * engine: live stock shows identical cursors on all 5). Mainline's old
+	 * per-instance loop advertised the 8192-entry pool FIVE times into the
+	 * one engine. Also prime the jumbo pool (stock 0x66 entries) instead
+	 * of 0 — stock never runs with an empty jumbo producer.
+	 */
+	tm_write(e, TM_REG_BMU_POOL_SIZE,  TM_BPPE_POOL_SIZE << 16);
+	tm_write(e, TM_REG_BMU_JUMBO_POOL, TM_JUMBO_BPPE_POOL_SIZE << 16);
 
 	dev_info(e->dev, "TM BMU init: %d instances configured, pool_size=%d, bp_size=%d, bppe@%pad\n",
 		 TM_NUM_BMU_INSTANCES, TM_BPPE_POOL_SIZE, TM_BP_SIZE,
@@ -8678,9 +8717,23 @@ static void zx_ft_pm_ext_init(struct zx_eth *eth)
 		eth->pm_ext_phys = carve;
 		eth->pm_ext = devm_ioremap(dev, carve, ZX_PM_EXT_SPAN);
 		if (eth->pm_ext) {
-			memset_io(eth->pm_ext, 0, ZX_PM_EXT_SPAN);
+			/* [wedge fix #2 2026-07-31] Zero ONLY from the ACL base
+			 * (+0x20000) onward. The 0x20000 head of this carve is
+			 * NOT ours: carve == CARVED_BPPE_OFF == 0x4E700000 = the
+			 * BMU BPPE free-list table (+ jumbo table at +0x10000)
+			 * that zx_tm_alloc_pools filled and zx_tm_bmu_init
+			 * primed EARLIER in probe. The old full-span memset
+			 * wiped it, leaving the BMU allocator pool-less (live:
+			 * bppe bpcnt 0 vs stock 8112, bppi 15 vs 79) — the
+			 * fabric then ran on a ~15-buffer recycle margin that
+			 * collapses chip-wide under sustained HW-forwarding
+			 * (the fabric-ingress endurance wedge). No FT offset
+			 * ever touches the head (ACL +0x20000, flow_info
+			 * +0x41C000/+0x49C000). */
+			memset_io(eth->pm_ext + 0x20000, 0,
+				  ZX_PM_EXT_SPAN - 0x20000);
 			dev_info(dev,
-				 "[phase6/ft] PM external tables: carve 0x%08x +0x%x mapped + zeroed (acl 0x%08x pm 0x%08x)\n",
+				 "[phase6/ft] PM external tables: carve 0x%08x +0x%x mapped, zeroed from +0x20000 (BPPE head preserved; acl 0x%08x pm 0x%08x)\n",
 				 carve, ZX_PM_EXT_SPAN, aclb, pmb);
 		}
 	}
@@ -8947,6 +9000,17 @@ static int zx_eth_probe(struct platform_device *pdev)
 	/* [phase6/ft] PM external tables — must be after PON/TM init (the base
 	 * registers read garbage while the PON-PP block clocks are gated). */
 	zx_ft_pm_ext_init(eth);
+
+	/* [wedge fix #2 2026-07-31] Post-pm_ext BMU pool sanity print. The pool
+	 * must have been produced at zx_tm_bmu_enable time (virgin-block 0->1
+	 * enable — see the BMU-range skip in zx_stock_apply_block) and must
+	 * still be intact here (zx_ft_pm_ext_init no longer wipes the BPPE
+	 * head). Stock-healthy idle: bppe_cnt ~8112, bppi_cnt ~79. A 0 here
+	 * means the fabric is running pool-less and WILL wedge under sustained
+	 * HW-forwarding. */
+	dev_info(eth->dev,
+		 "[wedge fix #2] BMU pool state post-pm_ext: bppe_cnt=%u bppi_cnt=%u (stock-healthy ~8112/~79)\n",
+		 tm_read(eth, 0x8080), tm_read(eth, 0x8088));
 
 	/* [Phase C R1 fix, 2026-07-27] Start the IDM RX ring consumer NOW (stock
 	 * idm_net_init unmasks at init) — at the END of probe, after all IDM/TM
