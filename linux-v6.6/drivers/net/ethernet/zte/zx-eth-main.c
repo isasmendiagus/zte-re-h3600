@@ -5482,9 +5482,17 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 				}
 				if (dsa && ingress_port < 0) {
 					/* DSA: no user port to demux an invalid ingress to;
-					 * drop here (frees the bp) rather than black-hole it
-					 * in the tagger with no accounting. */
-					zx_bmu_free_bp(e, bppe_idx, 0);
+					 * drop it (no delivery). The BP is freed by the
+					 * common release below — do NOT free it here too.
+					 * [wedge fix 2026-07-31] an extra zx_bmu_free_bp
+					 * in this branch double-freed the BP: the duplicate
+					 * index in the BPPE free ring made the HW allocator
+					 * hand ONE buffer to TWO in-flight frames, which is
+					 * the fabric-ingress endurance wedge (corrupted
+					 * parse keys, then chip-wide MAC-admit halt).
+					 * Live-proven: tm_rx_loopback_drops == the BMU
+					 * alloc/release ledger drift (149) at wedge onset. */
+					;
 				} else if (e->sw_dev &&
 					   !memcmp(src + 6, e->sw_dev->dev_addr, 6)) {
 					/* Loopback suppression: the switch fabric hairpins the
@@ -5502,7 +5510,12 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 						dev_info(e->dev, "LOOPBACK drop #%u src=%pM dst=%pM ethertype=%04x len=%u ingress=%d\n",
 							 e->tm_rx_loopback_drops, src + 6, src,
 							 ntohs(*(__be16 *)(src + 12)), len, ingress_port);
-					zx_bmu_free_bp(e, bppe_idx, 0);
+					/* [wedge fix 2026-07-31] BP freed ONLY by the common
+					 * release below. The extra zx_bmu_free_bp that used
+					 * to sit here was the primary double-free feeder:
+					 * every hairpinned CPU-egress frame poisoned the
+					 * BPPE free ring with a duplicate BP index (one per
+					 * loopback drop — ledger-verified live). */
 				} else if (ingress_port >= 15 &&
 					   zx_wifi_tm_rx_dispatch(e, bp_buf, len,
 						(u8)(ingress_port + 1))) {

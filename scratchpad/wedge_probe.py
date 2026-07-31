@@ -231,6 +231,7 @@ def gkey12():
 
 def wedgecap():
     print("==== WEDGE SIGNATURE CAPTURE ====")
+    bmu_show(bmu_read(), "wedge-onset")
     v1 = sample()
     show(v1, "wedge-A")
     for i in range(3):
@@ -302,6 +303,56 @@ def run(max_bursts=60, burst_mb=3):
           % (max_bursts, prev.get("tx_injected")))
 
 
+# BMU per-instance regs (tm_base 0x92340000 + 0x8000 + inst*0x400).
+# 0x8048 POOL cursor: hi16 = BPPE_POOL_SIZE (8192), lo16 = runtime level —
+# THE decisive read for the BP-pool drain hypothesis (2026-07-31 addendum).
+# 0x8080 bppe_avail / 0x8090 alloc-count / 0x8098 release-count: the
+# alloc-vs-release ledger (leak = alloc-rls diff climbing without bound).
+BMU_BASE = 0x92348000
+BMU_STRIDE = 0x400
+
+
+def bmu_read():
+    """One paced read of the BMU pool state for all 5 instances.
+    Returns {inst: {"pool":lo16, "pool_hi":hi16, "avail":..,
+                    "alloc":.., "rls":..}}"""
+    regs = []
+    for i in range(5):
+        b = BMU_BASE + i * BMU_STRIDE
+        regs += [("p%d" % i, b + 0x48), ("a%d" % i, b + 0x80),
+                 ("al%d" % i, b + 0x90), ("rl%d" % i, b + 0x98)]
+    cmds = ["echo %08x > /sys/kernel/debug/zx_eth/poke" % a for _, a in regs]
+    cmds.append("dmesg | busybox grep -a 'peek 0x' | busybox tail -%d"
+                % (len(regs) + 4))
+    out = ab_ctrs.zc(cmds, wait=2.5, hardcap=60)
+    raw = {}
+    for name, addr in regs:
+        m = re.findall(r"peek 0x%08x = 0x([0-9a-f]+)" % addr, out, re.I)
+        raw[name] = int(m[-1], 16) if m else None
+    v = {}
+    for i in range(5):
+        p = raw.get("p%d" % i)
+        v[i] = {"pool": (p & 0xffff) if p is not None else None,
+                "pool_hi": (p >> 16) if p is not None else None,
+                "avail": raw.get("a%d" % i),
+                "alloc": raw.get("al%d" % i),
+                "rls": raw.get("rl%d" % i)}
+    return v
+
+
+def bmu_show(v, tag=""):
+    print("== BMU %s ==" % tag)
+    for i in range(5):
+        d = v[i]
+        diff = None
+        if d["alloc"] is not None and d["rls"] is not None:
+            diff = (d["alloc"] - d["rls"]) & 0xffffffff
+        print("  inst%d: pool=%s/%s avail=%s alloc=%s rls=%s alloc-rls=%s" % (
+            i, d["pool"], d["pool_hi"], d["avail"], d["alloc"], d["rls"],
+            diff))
+    sys.stdout.flush()
+
+
 def lite_sample():
     """Light round: injected/fwd/miss + the SIPC drop nibbles only."""
     # gauge-trace set (2026-07-31): the 0x9238c28x/c29x live parse-pipeline
@@ -313,7 +364,12 @@ def lite_sample():
              ("tm_irq", 0x92340100),
              ("g280", 0x9238c280), ("g284", 0x9238c284), ("g290", 0x9238c290),
              ("g294", 0x9238c294), ("g298", 0x9238c298), ("g29c", 0x9238c29c),
-             ("bmu_res", 0x9234800c))
+             ("bmu_res", 0x9234800c),
+             # BMU BP-pool cursors (lo16 = runtime level), all 5 instances
+             ("bp0", 0x92348048), ("bp1", 0x92348448), ("bp2", 0x92348848),
+             ("bp3", 0x92348c48), ("bp4", 0x92349048),
+             # BMU alloc/release ledger (instances mirror; inst0 suffices)
+             ("bmu_al", 0x92348090), ("bmu_rl", 0x92348098))
     cmds = ["echo %08x > /sys/kernel/debug/zx_eth/poke" % a for _, a in names]
     cmds.append("dmesg | busybox grep -a 'peek 0x' | busybox tail -%d"
                 % (len(names) + 4))
@@ -344,10 +400,17 @@ def endur(target_frames=150000, burst_mb=8):
         dinj = (cur.get("tx_injected") or 0) - (prev.get("tx_injected") or 0)
         dfwd = d16(cur.get("cla_up_fwd"), prev.get("cla_up_fwd"))
         dmiss = d16(cur.get("cla_acl_fail"), prev.get("cla_acl_fail"))
+        bps = " ".join("bp%d=%s" % (i, (cur.get("bp%d" % i) & 0xffff)
+                                    if cur.get("bp%d" % i) is not None
+                                    else "?") for i in range(5))
+        al, rl = cur.get("bmu_al"), cur.get("bmu_rl")
+        bps += " al=%s rl=%s d=%s" % (al, rl,
+                                      (al - rl) if al is not None and
+                                      rl is not None else "?")
         print("-- burst %d: %.2f MB @ %.2f MB/s | dinj=%d dfwd=%s dmiss=%s "
-              "inj_total=%s sipc=%s" %
+              "inj_total=%s sipc=%s | %s" %
               (n, got / 1e6, got / el / 1e6, dinj, dfwd, dmiss,
-               cur.get("tx_injected"), hx(cur.get("sipc_drop"))))
+               cur.get("tx_injected"), hx(cur.get("sipc_drop")), bps))
         sys.stdout.flush()
         bad = (got < burst_mb * 1e6 * 0.2) or \
               (dinj > 500 and dmiss is not None and dmiss >= dinj * 0.8)
@@ -515,6 +578,8 @@ if __name__ == "__main__":
         ram1_sweep(rows, cmd)
     elif cmd == "wedgecap":
         wedgecap()
+    elif cmd == "bmu":
+        bmu_show(bmu_read(), "one-shot")
     elif cmd == "run":
         mb = int(sys.argv[3]) if len(sys.argv) > 3 else 3
         run(int(sys.argv[2]) if len(sys.argv) > 2 else 60, mb)
