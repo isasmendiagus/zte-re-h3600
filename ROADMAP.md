@@ -10,12 +10,12 @@ carries traffic, the OpenWrt port is the smaller (but still real) lift.
 ## Stage map
 
 ```
-[stage 0] Get SSH on stock firmware (✅ DONE — via orca.pet writeup + AES key)
-[stage 1] RE the proprietary stock drivers (✅ partial — TM/switch/PP/IDM)
-[stage 2] Build mainline 6.6 zx279128-eth driver (🚧 PING BIDI ✅ 2026-05-24, refactor pending)
-[stage 3] Sustained ping LAN↔device under mainline (✅ DONE — task #50)
-[stage 3b] iperf baseline + throughput (📋 task #37)
-[stage 3c] WiFi MT7915 over internal PCIe (✅ DONE — tasks/00.07.wifi/, 2026-05-04)
+[stage 0] SSH on stock firmware (✅ DONE)
+[stage 1] RE the stock drivers (✅ TM/switch/PP/IDM/BMU/CLA/pp_pm/SMCT/SIPC)
+[stage 2] Mainline 6.6 zx279128-eth DSA driver: lan0-4 + WAN, RX/TX/wire/hotplug (✅ DONE)
+[stage 3] Ethernet HW flow-offload — bidirectional DN+UP, NAT in silicon (✅ DONE, ~line rate, 10GB+)
+[stage 3a] Churn / RED CPU-queue "1024" wedge (✅ FIXED — RED_CFG bit6)
+[stage 3b] WiFi MT7915: STA + AP + slow-path (✅ DONE) + HW-offload mechanism DN+UP (✅ validated, ⚠️ "wedge #2" gates ftwifi OFF)
 [stage 4] Persist mainline kernel in NAND slot A (📋 planned)
 [stage 5] Port to OpenWrt as a target (🎯 the actual goal)
 [stage 6] Submit driver upstream to netdev (🎯 stretch)
@@ -43,32 +43,38 @@ carries traffic, the OpenWrt port is the smaller (but still real) lift.
    device, and watching output flow through `kmsg2uart` → UART. That is the
    next concrete RE methodology.
 
-## Now (2026-05-26 onward)
+## Now (2026-07-31)
 
-PING BIDI landed 2026-05-24 (task #50). RX/TX both alive on mainline.
-Manual printk-injection was superseded by **kotrace** (loader-notifier
-RAM patcher, `tasks/00.01.eth-driver/kotrace/`) — see LEARNED.md
-"How to observe what stock kernel modules do at runtime".
+Ethernet (DSA + **bidirectional HW offload**, NAT in silicon, line-rate) and WiFi
+(STA + AP + slow-path + a **HW-offload mechanism** validated in both directions)
+are all working on mainline. Working branch: `phase6-hw-offload` (== `main`).
+Current priorities, in order:
 
-### 1. iperf baseline + throughput (task #37)
-Measure what the mainline driver actually achieves now that ping is
-bidi. Compare to stock. Set the bar for the refactor below.
+### 1. WiFi HW-offload durability — "wedge #2" (the ONE blocker to `ftwifi` ON)
+Under sustained fabric-ingress HW-forwarding the fabric front-end starves and
+halts (~1k–72k frames, reboot-only). Deeply characterized; a **1-minute
+cold-start repro** exists (`scratchpad/wedge_coldstart.py`). Refuted so far:
+BMU-pool drain, top_crm clock bit, SIPC descriptor-ring, A09 AXI/QoS. Surviving
+lead: `sipc2cpu_aful_cnt_dn` ≠ 0 only on mainline → a frame class hitting a
+CPU-bound path with **no consumer** (the Phase-B q5-unbound pattern). Next: an
+A/B of ≥3 fresh boots (old build vs `pp_pmau`) then chase the no-consumer path.
+See `findings/wifi_stage3_*` + memory `zte-wifi-up-offload`. `ftwifi` stays OFF
+until fixed. (Two real bugs already fixed en route: BMU BP double-free + the
+pm_ext BPPE-table memset wipe.)
 
-### 2. Mainline-quality refactor (task #38)
-Replace the bulk register replay (22,363 stock regs + cla + pm) with
-explicit per-block init derived from the kotrace captures. Goal:
-upstream-clean code, no opaque firmware blobs.
+### 2. WiFi productionization (after the wedge)
+Auto-bind (hostapd vif → idm/ssid, drop the manual `wifi_bind` debugfs knob),
+multi-SSID + 2.4 GHz + multi-client, csum-to-HW (flow_info bit4 like eth),
+hardening + a regress battery, throughput tuning (strip debug hooks + MT7915
+11ax/TXBF calibration — the test client currently links at 11n).
 
-### 3. Remaining init/state knobs (tasks #40, #41, #42)
-- #40 — dpa HW responder + spa CPU port
-- #41 — sdet frame-length + greg port state validation
-- #42 — missing IRQs (PP/IDM/NPP/PON) + MMIO regions
-       (sys_ctrl_base, pin_mux_base)
+### 3. USB
+Pendrive mount / RW / throughput / hotplug (not started).
 
-## Later (after RX/TX work)
+### 4. Code cleanup before upstream (S1/S2/S3)
+FT/DSA dedup, monolith split, strip debug hooks — deferred until fully stable.
 
-### 4. End-to-end ping LAN ↔ device
-Host pings device, device replies. ARP works. Sustained traffic.
+## Later
 
 ### 5. Persistence
 - Flash mainline kernel to slot A on NAND.
