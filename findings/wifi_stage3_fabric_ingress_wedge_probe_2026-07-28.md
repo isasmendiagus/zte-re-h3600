@@ -156,3 +156,156 @@ modules loaded, ftwifi=0, idm1 down, lan4 unconfigured), UART bridge REPL
 live. Host: in.tftpd running on 192.168.1.50:69; return-route
 192.168.50.0/24 and :9099 sink rules cleaned (no iptables DROP added this
 session); adb phone still associated to nothing (AP gone with the reboot).
+
+---
+
+# ADDENDUM 2026-07-31 (same session): the DECISIVE discriminator — HW-forwarding is REQUIRED; injection alone is harmless
+
+## The control run (modem-independent, WiFi → LAN2 egress)
+
+Rig: phone → AP(wlan1) → idm1 → fabric → **lan2** (device) → host 192.168.1.50,
+`ftwifi=1`, nft flowtable on lan2, no WAN/modem in the path at all.
+(Cabling note: the DSA port names are 0-indexed — the host's physical LAN3
+cable is device **lan2**, LAN1 is **lan0**; `lan4` is the WAN/RGMII port.
+Getting this wrong costs a whole debug cycle: `lan3` links UP and pings
+nothing.)
+
+Observed: the FT entries installed and were destroyed normally, but the flow
+**never HW-forwarded** — `cla_up_fwd` AND `cla_dn_fwd` both flat, `acl_fail`
+climbing ~2× injections. Cause is a known-shaped gap, not a new bug: for
+fabric ingress the `up_idx_fix` cmd_flow_id repack (idx=pm_slot) is applied
+only when `eg_regport == ZX_WAN_REGPORT` (zx-eth-main.c ~:3330), so a
+fabric-ingress→LAN-egress entry is packed the old DN way and can never match.
+**WiFi→LAN HW-offload is therefore an unimplemented path**, separate from
+this wedge.
+
+That accident produced the cleanest possible control: **the same fabric
+INJECTION volume through the identical `zx_idm_xmit` path, with NO CLA
+HW-forward match** (frames trap to the CPU and are SW-forwarded out lan2).
+
+| run | HW-forwarding? | frames injected | wedge? |
+|---|---|---|---|
+| boots A–D (WAN egress) | YES (`cla_up_fwd` 1:1) | 0.9k / 2.4k / 5.1k / 32k | **WEDGED every time** |
+| this control (LAN egress) | **NO** (dfwd=0 all run) | **141,095** | **NO WEDGE** |
+
+Sustained ~0.75 MB/s for ~25 min, plus 20× `hashcalc` and 8× `fttest`
+install/destroy under live traffic — all clean. `tm_irq` steady 0x10,
+`0x9238c29x` gauges wandering in the healthy band the whole time
+(e5/5e/12/3a → f0/5e/2c/3f, no monotonic drift), BMU alloc-result 0.
+
+**Conclusions:**
+1. **CPU→fabric injection is NOT the trigger** — 141k injected frames are
+   harmless when they are trapped/SW-forwarded instead of HW-forwarded.
+   This retires the whole "IDM ring / SIPC / SMCT injection-side credit"
+   family (candidate 1 in all its forms) on positive evidence, not absence.
+2. **The trigger is HW-FORWARDING of fabric-ingress frames** — i.e. the
+   frame lifecycle that never reaches a CPU RX descriptor and therefore
+   never runs `zx_bmu_free_bp` (zx-eth-main.c:6015; the SW-forward control
+   above DOES run it for every frame, which is exactly why it survives).
+3. Re the egress/ring back-pressure hypothesis (a colleague's): the control
+   was SW-forwarding to a LAN port at similar packet rates without trouble,
+   and `tx_pending` is low/flowing at every wedge — back-pressure on the
+   IDM ring is not the mechanism. The correlate is HW-forward, not egress
+   port or ring depth. (Caveat, stated honestly: this control did not run
+   HW-forwarding to a LAN port — that path does not exist yet — so
+   "HW-forward to WAN specifically" vs "HW-forward generally" is not yet
+   separated.)
+
+## Prime suspect after this: the BMU buffer-pointer POOL DEPTH (HW level)
+
+Structural fit is now exact. Every admitted frame consumes a BMU BP.
+- CPU-delivered frames (SW path, the control): driver frees the BP per
+  descriptor → no leak → 141k frames clean.
+- HW-forwarded fabric-ingress frames: never touch a CPU RX descriptor, so
+  nothing in the driver frees their BP; if the fabric doesn't auto-return it
+  for this ingress identity, the pool drains monotonically → when it hits
+  bottom, **MAC ingress can no longer admit (chip-wide MAC→SPA halt — the
+  exact wedge signature) while CPU-injected frames, already DMA'd in, still
+  enter the parser and produce garbage keys** (the corruption signature).
+  This asymmetry explains BOTH halves of the wedge for the first time.
+- Note what is NOT being re-proposed: the driver's *software*
+  `tm_bmu_free_ok/fail` counters (they only cover the CPU-RX-consume path)
+  and RED ram1 — both already refuted. **The HW pool depth has never been
+  read.**
+
+Decisive probe (read-only, safe TM range): `0x92348048` low-16 (runtime
+level) for all 5 BMU instances (stride 0x400: 0x92348048 / 8448 / 8848 /
+8c48 / 9048), sampled against `idm_wifi_tx_injected` through a WAN-egress
+HW-forwarding run. Monotonic climb pinning at pool size (8192) at onset,
+same pinned value across the 20k/32k/70k-varied runs = the RED-1024
+signature = proof. Flat = clean refutation.
+
+# ADDENDUM 2026-07-31b: TM DMA-descriptor engine + ingress-buffer RE (static)
+
+Static RE sweep of the remaining undecoded blocks (stock decomp + mainline).
+Bases: `tm_base=0x92340000`, `npp_base=0x921c0000`, `pp_base=0x92380000`;
+`fpga widx = (phys-0x92000000)/4`.
+
+**The two `dma_des` interrupt instances = the two CPU↔fabric TM DMA rings.**
+`pon_tm_get_dma_des_int_state` (decomp_all_tm.c:34941) reads reg_id 9,
+`pon_tm_set_dma_des_int_mask` (tm.c:35119) RMWs reg_id 0xc; stock masks BOTH
+in `tm_pon_tm_reg_initial` (tm.c:42467-42468). Physical: status
+`0x92340100` **bit3 = instance 0 (UP ring)**, **bit4 = instance 1 (DN ring)**;
+mask `0x92340104` bits[4:3]. The rings themselves (`pon_tm_dma_init`,
+decomp_all_plat:6280-6300): UP base/kick/consume
+`0x92350050`/`54`/`58`, DN `0x92350060`/`64`/`68`. Raise condition = a
+descriptor-engine exception on that ring (fetch/write timeout per
+`DMA_TIMEOUT 0x92350030`=50000, or ring under/overflow); there is **no other
+per-ring error or level register** — only the consume counters.
+(Consistent with our live finding that `0x92340100` bit4 is set from boot on
+mainline and is not W1C-clearable: a poor canary. The per-instance bit3
+transition at onset is still an uncaptured read.)
+
+**Full stock footprint of the TM 0x10000 block (0x92350000):** `+0x00 |=
+0x2f0000` (DMA ctrl), `+0x20/+0x24 = 0x20` (burst/watermark UP/DN),
+`+0x28/+0x2c = 1` (ring enable), `+0x30 = 50000` (DMA_TIMEOUT), `+0x34 =
+0x40` (prefetch), `+0x3c = 0x400040` (ring geometry), the two ring triples
+above, `+0x388 = 0x131217` (arbitration). Descriptor refill/recycle is done
+in **software** (`pon_tm_get_next_txdesc` plat:6687, `pon_tm_queue_init`
+plat:6916); HW auto-consumes. Per-queue desc counts `0x92350100+q*4` are
+**never written** by stock. **Nothing in this block is written
+periodically** — `pon_tm_timer_func` (plat:6438) only *reads* the consume
+counters. ⇒ **There is no "mainline forgot a periodic poke" bug here.**
+
+**`0x9238c280`–`0x9238c28c` are NOT a separate register group** — the
+gparsehashkey latch is 12 words, `0x9238c260..0x9238c28c` (scratchpad/
+upkey.py:9,48). So the raw HTTP-header bytes this session found at
+`0x9238c200`+ are the *tail of the same corrupted key latch*, not an
+independent finding. `0x9238c290/294/298/29c` (fpga widx 0xe30a4-a7) are 4
+genuinely undocumented byte-range gauges right after the latch — inferred
+(by adjacency + live wander) to be parse-pipeline cursors/levels feeding the
+hash engine. Useful only as a leak canary; this session's control run traced
+them healthy under 141k frames.
+
+**Stock's IDM TX path touches NO register mainline is missing.**
+`idm_net_tx` (plat:4206): 2 desc words, DSB, **KICK `0x921c8040 =
+nframes<<16`** (plat:4290), reads **STATUS `0x921c8044`** for backpressure
+(plat:4239). Reclaim `idm_check_tx_done_nolock` (plat:3844): STATUS & 0xffff,
+cap 0x100, **KICK = done_count low-16 ACK** (plat:3891). Mainline
+`zx_idm_tx_reclaim` (zx-eth-main.c:1710-1745) replicates this exactly; init
+`pon_npp_idm_init` (plat:4342) writes only 0x8024/8018/801c/8010/8000, all
+matched (:1566-1574). ⇒ candidate 1b's "missing driver-side doorbell" is
+**dead for the IDM path** on positive evidence.
+**Base-gotcha correction (DATASHEET §3.2 lines 1577-1578 are STALE):** the
+"IDM 0x800c BMU bp-idx / 0x8014 BMU alloc-poll" rows are wrong — those are
+**BMU at tm_base+0x8000 = 0x92348000** (alloc-result `0x9234800c`, free
+`0x92348010`, alloc-poll `0x92348014`, per `pon_tm_bmu_alloc_bp` plat:5772 /
+`pp_bmu_free_bp` plat:5823). In the IDM block `0x921c800c` is RX_ENABLE and
+`0x921c8014` is unused. **Stock's IDM TX issues no BMU alloc/free — the
+fabric allocates/frees the BP internally**, which is precisely the
+lifecycle the BMU-pool hypothesis says breaks for HW-forwarded
+fabric-ingress frames.
+
+**SPA admit:** the only per-port MAC→SPA gate is the SOPC↔SMAC bridge
+`0x921d9068` (`smac_sopc_mode_switch` plat:2290; bit(port+5)=RO
+phy_mac_ready, bit(port)=SW admit) — per-port and SW/link-driven, so it
+cannot itself explain a chip-wide load-triggered halt. There is **no per-uni
+receive-enable inside SPA**: the only global backpressure surface is
+**buffer availability from the BMU pool feeding the crossbar** — again
+pointing at the BP pool.
+
+Honest limit (unchanged): the CPU→fabric HW-forward BP lifecycle is not in
+any readable stock function body (the decisive submit path is behind the
+missing `halt_baddata` import thunk), so the BMU-pool mechanism remains an
+inference from register semantics until `0x92348048` is read live through a
+wedge.

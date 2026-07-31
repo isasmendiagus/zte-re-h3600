@@ -308,6 +308,7 @@ def lite_sample():
     # words (stock-under-traffic fc/5b/18/3d) + BMU alloc-result — hunting a
     # monotonic drain that freezes at wedge (the RED-1024 signature).
     names = (("cla_up_fwd", 0x9238c3c0), ("cla_acl_fail", 0x9238c3c4),
+             ("cla_dn_fwd", 0x9238c3cc),   # LAN-egress forwards count HERE
              ("qmg_up_trap", 0x9234c05c), ("sipc_drop", 0x921cc004),
              ("tm_irq", 0x92340100),
              ("g280", 0x9238c280), ("g284", 0x9238c284), ("g290", 0x9238c290),
@@ -388,9 +389,13 @@ def _flow_health(sink, secs=12):
     b = lite_sample()
     with sink.lock:
         r1 = sink.rx
+    # fwd = UP counter + DN counter (a LAN egress counts in DN, a WAN egress
+    # in UP) so the health gate works for BOTH egress paths.
+    fu = d16(b.get("cla_up_fwd"), a.get("cla_up_fwd")) or 0
+    fd = d16(b.get("cla_dn_fwd"), a.get("cla_dn_fwd")) or 0
     return (r1 - r0,
             (b.get("tx_injected") or 0) - (a.get("tx_injected") or 0),
-            d16(b.get("cla_up_fwd"), a.get("cla_up_fwd")),
+            fu + fd,
             d16(b.get("cla_acl_fail"), a.get("cla_acl_fail")), b)
 
 
