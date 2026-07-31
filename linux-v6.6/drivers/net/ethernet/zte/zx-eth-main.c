@@ -98,6 +98,7 @@
 #define NPP_REG_RESET		0x0048
 #define NPP_REG_SIPC_INIT	0xC000
 #define NPP_REG_SMCT_INIT_0	0x10000
+#define NPP_REG_SMCT_PP_PMAU	0x10004	/* SMCT pp_pmau credit pools (phys 0x921d0004) */
 #define NPP_REG_SMCT_INIT_1	0x10010
 #define NPP_REG_INIT_VAL	0x10008
 #define NPP_REG_SPA_INIT	0x141C0
@@ -1602,6 +1603,12 @@ static void zx_npp_init(struct zx_eth *e)
 	npp_write(e, NPP_REG_SPA_INIT,    0);
 	npp_write(e, NPP_REG_SIPC_INIT,   0x11);
 	npp_write(e, NPP_REG_SMCT_INIT_0, 0xB);
+	/* [SIPC RE 2026-07-31] stock pon_npp_smct_init also writes npp+0x10004
+	 * (SMCT pp_pmau, phys 0x921d0004) = 0xB — hidden in the decomp behind a
+	 * Ghidra symbol collision (*(tm_set_onu_mac + npp_base + 4)). Mainline
+	 * never wrote it → POR value 0xA. PMAU = SMCT packet-memory credit
+	 * pools; the only init divergence in the whole SIPC/SMCT complex. */
+	npp_write(e, NPP_REG_SMCT_PP_PMAU, 0xB);
 	npp_write(e, NPP_REG_SMCT_INIT_1, 0x3810);
 
 	/* Final global mask + reset */

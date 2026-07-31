@@ -511,15 +511,39 @@ absolute phys in the tables below — they were computed from `base_off*4` direc
 | `0x921cc000` | 0 | RW | [0] | rx_en | ✅ |
 | `0x921cc000` | 1 | RW | [2] | cpu_up_en | ✅ |
 
-### SIPC→CPU drop/fill counters (decoded 2026-05-31, decomp_all_tm.c:46366-46369 up / :46597-46600 dn)
-| phys | bits (nibbles) | semantic | conf |
-|---|---|---|---|
-| `0x921cc004` | nibble fields | **cpu_short_drop / cpu_pkt_drop / sipc2cpu_aful_cnt / sipc2cpu_ful_cnt** (SIPC→CPU FIFO drop + almost-full/full alarms) | ✅ |
-| `0x921cc008` (+0x18/0x1c/0x20) | — | live FIFO-occupancy/credit GAUGES (wander up/down with flow, ~0x800 on stock; NOT config) | ✅ |
-| `0x921cc024` | — | sdet_shor_drop_cnt | 🟡 |
-| `0x921cc184` + uni*4 | — | **UNIn_DROP_HPMAU_CNT** (per-uni drop) | 🟡 |
+### SIPC block structure (full RE 2026-07-31, from zx_npp_twin_data.h boot capture + decomp sweep)
+TWO identical 0x2000 instances at npp+0xc000 (0x921cc000) and npp+0xe000 (0x921ce000), each with
+**8 channels at 0x400 stride** (16 channels total), ~50 config words per channel at +0x000..+0x2bc.
+Channel offsets +0x280..+0x2bf are an on-chip **packet-buffer window** (the boot capture even holds a
+stale SSH frame from the capture session). SIPC = on-chip multi-channel packet FIFO / credit bridge —
+**there is NO SIPC→CPU descriptor ring** (no DDR base / producer / consumer register exists anywhere
+in stock; exhaustive decomp sweep 2026-07-31). Stock performs **ZERO runtime SIPC accesses** — no
+ISR/NAPI/timer consumer; the counters below are read only by debug-shell commands. LIVE (2026-07-31):
+the per-channel status regs (e.g. 0xc008+n·0x400 and the 0xe000 twin) read **identical on all 16
+channels** — aliased/global, not per-channel state.
 
-NOTE: SIPC is a SINGLE shared block (NOT per-port) — it cannot discriminate one ingress port by itself. Live: cc004=0 (no SIPC drop) and cc008 wanders — confirmed NOT the port1 gate (poke/toggle had no effect). See `port1_sdet_ingress_gate_re.md`.
+### SIPC→CPU drop/fill counters (FULL decode 2026-07-31, tm_up_statistics_get :46235-46239/:46364-46367 + tm_dn_statistics_get :46525/:46597-46600)
+| phys | bits | semantic | conf |
+|---|---|---|---|
+| `0x921cc004` | [3:0] | cpu_short_drop_cnt (up) | ✅ |
+| `0x921cc004` | [7:4] | cpu_short_drop_cnt (dn) | ✅ |
+| `0x921cc004` | [11:8] | cpu_pkt_drop_cnt (dn) | ✅ |
+| `0x921cc004` | [15:12] | cpu_pkt_drop_cnt (up) | ✅ |
+| `0x921cc004` | [19:16] | **sipc2cpu_aful_cnt_dn** (SIPC→CPU DN FIFO almost-full events) | ✅ |
+| `0x921cc004` | [23:20] | **sipc2cpu_ful_cnt_dn** | ✅ |
+| `0x921cc004` | [27:24] | **sipc2cpu_aful_cnt_up** | ✅ |
+| `0x921cc004` | [31:28] | **sipc2cpu_ful_cnt_up** | ✅ |
+| `0x921cc008` | [23:12] | **NO stock reader/symbol exists.** Three 4-bit event counters that move in lockstep on mainline (RO, write-deaf; boot image writes 0x844 = blind replay no-op). LIVE 2026-07-31: fills AND drains at idle; insensitive to RX-trap traffic; wraps f→1; **saturation does NOT halt the fabric** (box passed traffic at fff) and a true wedge fired with it at 0x777 — it is a coincident symptom, NOT the wedge cause | ✅ |
+| `0x921cc024` | [3:0] | sdet_shor_drop_cnt | ✅ |
+| `0x921cc030` | [23:0] | sipc_sch_dbg | ✅ |
+| `0x921cc038`/`0x921cc03c` | — | static config (boot-written 0x318 both; sizes/thresholds, NOT counters) | ✅ |
+| `0x921cc040` | — | static config (boot-written 0x01980000) | ✅ |
+| `0x921cc044` | [3:0]/[7:4]/[11:8] | READ semantics ≠ write: **sipc_2spa sop / eop / sipc_drop** live nibble gauges (:46261-46265; boot-written 0x11) | ✅ |
+| `0x921cc184` + n*4 | — | **DROP_HPMAU_CNT** ×11, port order: up_cpu, UNI0-4, PON0-1, SOAM, wifi0, wifi1 | ✅ |
+| `0x921cc1c4` + n*4 | — | **DROP_AFUL_CNT** ×11, same port order | ✅ |
+
+NOTE: SIPC is a SINGLE shared block (NOT per-port) — it cannot discriminate one ingress port by itself. Confirmed NOT the port1 gate (poke/toggle had no effect). See `port1_sdet_ingress_gate_re.md`.
+NOTE (base-gotcha, both directions): stock's `tm_base+0xc008 = 0` write (plat :7080) is **QMG 0x9234c008**, unrelated to npp+0xc008.
 
 ## SMCT (CPU-port multi-channel xfer)
 
@@ -528,8 +552,19 @@ NOTE: SIPC is a SINGLE shared block (NOT per-port) — it cannot discriminate on
 | phys (sub0) | reg_id | R/W | bits | semantic name | conf |
 |---|---|---|---|---|---|
 | `0x921d0000` | 0 | RW | [9:0] | uni_pmau | ✅ |
-| `0x921d0004` | 1 | RW | [9:0] | pp_pmau | ✅ |
+| `0x921d0004` | 1 | RW | [9:0] | pp_pmau — **stock init writes 0xB** (pon_npp_smct_init plat :3333-3342, hidden behind a Ghidra symbol collision `*(tm_set_onu_mac + npp_base + 4)`); mainline POR = 0xA until the 2026-07-31 driver fix | ✅ |
 | `0x921d0008` | 2 | RW | [9:0] | ppmove_pmau | ✅ |
+
+### SMCT error/status regs (tm_error_monitor :46684-46698 decode 2026-07-31)
+| phys | bits | semantic | conf |
+|---|---|---|---|
+| `0x921d0050` | [0] | sipc_err | ✅ |
+| `0x921d00d4` | [29] | **sipc_desc_full_err** (the "sipc descriptor" FIFO is HW-internal SMCT↔SIPC; this bit is its only SW visibility) | ✅ |
+| `0x921d00d4` | [28] | **sipc_desc_empty_err** | ✅ |
+| `0x921d00d4` | [27:16] | bud_wrong | ✅ |
+| `0x921d00d4` | [5] | des_err | ✅ |
+| `0x921d00d8` | [9:0] | smct_left_pmau (PMAU credit-pool level gauge) | ✅ |
+| `0x921d0100` | [0] | dma_up_err | ✅ |
 
 ## UOPC (upstream OPC / tcont)
 
