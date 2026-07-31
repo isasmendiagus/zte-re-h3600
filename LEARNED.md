@@ -351,6 +351,81 @@ before pivoting to a side-channel.
 
 ---
 
+## Symptom: an endurance run "passes" once, but the bug comes back next boot
+**Cause**: the WiFi fabric-ingress "wedge #2" has **onset variance on ONE
+unchanged build spanning ~1.7k → 205k frames** before it halts. A single clean
+long run is therefore NOT evidence of a fix — it can just be a lucky boot (or an
+environmental confounder: a healthy modem = no retransmit windows = far fewer
+trapped frames, which once produced a bogus "205k pass" that wedged at 1,755 the
+next boot).
+**Fix**: never declare a durability/wedge fix on one run. Require **≥3 fresh-boot
+cold-starts** via `scratchpad/wedge_coldstart.py` (a ~1-minute repro). This is the
+standard of proof for anything endurance-related on this chip.
+**Reference**: `findings/wifi_stage3_fabric_ingress_wedge_*`, memory `zte-wifi-up-offload`.
+**Cost**: a whole session chasing a "fixed" wedge that wasn't.
+
+---
+
+## Symptom: WiFi HW-offload forwards to the wrong SSID / ssid tag is lost
+**Cause**: the ssid is not in the FDB or the outport — it rides the CLA flow
+entry's `gemport_uni_id = 0x10 | (idm_ring<<3) | ssid` (range 0x10–0x1f). The
+field was being **truncated to 4 bits (`& 0xf`)**, wiping the idm+ssid high bits.
+**Fix**: pack/read `gemport_uni_id` as **12 bits**, not 4. e.g. 0x1c = idm1/ssid4.
+**Reference**: `findings/wifi_stage3_ssid_encoding_spec_*`, memory `zte-wifi-up-offload`.
+
+---
+
+## Symptom: WiFi UP-direction offload installs but frames never HW-forward
+**Cause**: UP CLA entries were packed like DN (`direct=1`). The **fabric compare
+REJECTS `direct=1`** on the UP/ingress side.
+**Fix**: UP entries need **`direct=0` + `da_known=1`** → pack `0x0010004n`.
+(DN entries keep direct=1.) `ft_up_en` defaults ON only after this.
+**Reference**: memory `zte-wifi-up-offload`, `findings/wifi_stage3_up_offload_CLOSED_*`.
+
+---
+
+## Symptom: HW-forwarded (or NAT/TTL-edited) TCP flow — client silently drops every packet
+**Cause**: the PM **TTL-edit leaves the IP header checksum stale** (edits TTL but
+doesn't recompute csum) → the client's stack discards on bad IP checksum, no error
+anywhere on the device side (counters all healthy, "black hole").
+**Fix**: either recompute the csum in the CPU dispatch path, or set the PM
+`flow_info` **ip_chk_en bit4** (what stock does) so the engine fixes it. For WiFi UP,
+`ip_chk_en` was forced always-on.
+**Reference**: memory `zte-wifi-phaseC-dn-offload` / `zte-wifi-up-offload`.
+
+---
+
+## Symptom: WiFi-offloaded frames pile up in the IDM RX ring, `idm_rx_count` stays 0
+**Cause**: the IDM RX ring's consumer (`zx_idm_poll` NAPI + IDM IRQ) was only
+started in `zx_eth_open` (gated on `e->started`) — i.e. only when idm0/idm1 is
+admin-UP, which nothing in production does. Frames accumulate, never drained.
+Stock starts it at init (`idm_net_init` writes IRQ mask=0).
+**Fix**: **start the IDM engine at probe (stock parity), not at ndo_open** — enable
+NAPI + unmask the IRQ in `zx_eth_probe`; own the lifecycle in probe/remove only
+(never `napi_enable` twice).
+**Reference**: `findings/wifi_stage3_phaseC_R1_fix_2026-07-25.md`, zx-eth-main.c probe path.
+
+---
+
+## Symptom: `clawrite` to a CLA slot doesn't stick (readback shows old value)
+**Cause**: the first write to a CLA indirect slot **doesn't commit** — a known
+HW/driver quirk. Silently loses the write.
+**Fix**: always **readback-verify** after `clawrite`; re-issue if it didn't land.
+**Reference**: memory `zte-wifi-phaseB-dispatcher`.
+
+---
+
+## Symptom: greps of `ctr.py` output are mangled / counters look wrong under traffic
+**Cause**: `ctr.py`'s burst of pokes at tight spacing **overruns the ttyAMA input
+FIFO while the CPU is busy SW-forwarding** → the UART REPL drops characters, greps
+mangle. Idle-time snapshots are clean; under-load ones aren't.
+**Fix**: under traffic use **`ab_ctrs.py`** (0.25 s/line pacing). Also silence
+console printk first (`echo 1 > /proc/sys/kernel/printk`) — the periodic
+`TM-RX fabric NOPARSE` ARP dumps flood captures.
+**Reference**: `findings/wifi_stage3_phaseC_R1_fix_2026-07-25.md` §gotchas.
+
+---
+
 ## How to add a new entry
 
 1. Symptom (the OBSERVABLE thing).

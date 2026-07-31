@@ -1,5 +1,46 @@
 # STATE — what's on the device RIGHT NOW
 
+> **★ CURRENT STATE (2026-07-31)** — read this block first; everything below it is
+> the historical journey log (kept for the "why", newest-relevant milestones at the
+> section headers). Working branch: **`phase6-hw-offload` == `main`**.
+>
+> **Device right now:** ⚠️ **indeterminate / likely wedged.** The last device session
+> ended mid-investigation of "wedge #2" (WiFi fabric-ingress endurance). Do **not**
+> trust the live-register snapshots further down as current — **RAM-boot a fresh
+> mainline build to a known state before relying on any device reading.** Stock NAND
+> is untouched (read-only, as always).
+>
+> **What works on mainline (all HW-validated, committed to `main`):**
+> - **Ethernet:** DSA multi-port (`lan0-4` + WAN), hotplug, RX/TX/wire egress at line rate.
+> - **Ethernet HW flow-offload — BIDIRECTIONAL (DN+UP)**, NAT in silicon, 10 GB+ sustained,
+>   nft-flowtable path. Hit-rate ~99.99%.
+> - **Churn/RED "wedge #1"** fixed (RED_CFG bit6 charge-accounting).
+> - **WiFi (MT7915, in-tree mt76/mac80211):** STA proven; AP (soft-float hostapd) + real
+>   client + internet via CPU SW-NAT; slow-path ("Phase B" fabric⇄vif dispatcher) e2e.
+> - **WiFi HW-offload MECHANISM** validated both directions: DN 7.93 MB/s HW-forwarded
+>   (24.6× SW), UP 99.94% CLA hit (3.1× SW). ssid rides `gemport_uni_id = 0x10|(idm<<3)|ssid`.
+>
+> **The ONE open blocker → `ftwifi` stays default OFF: "wedge #2".**
+> Under sustained fabric-ingress HW-forwarding the fabric front-end starves and halts
+> (~1k–72k frames, reboot-only; all accounting banks read healthy). Refuted: BMU-pool
+> drain, top_crm clock bit, SIPC descriptor-ring, A09 AXI/QoS. Surviving lead:
+> `sipc2cpu_aful_cnt_dn` ≠ 0 only on mainline → a frame class hits a CPU-bound path with
+> **no consumer** (Phase-B q5-unbound pattern). ⚠️ **Onset variance on ONE unchanged build
+> spans 1.7k→205k frames → a single clean run is NOT proof of a fix; require ≥3 fresh-boot
+> cold-starts** (`scratchpad/wedge_coldstart.py`, ~1-min repro). Two real bugs already fixed
+> en route: BMU BP double-free (`bcee9471f`) + pm_ext BPPE-table memset wipe (`e82c6c385`).
+> See `findings/wifi_stage3_*` + memory `zte-wifi-up-offload` / `zte-wifi-phaseC-dn-offload`.
+>
+> **Next work order:** (1) close wedge #2 → turn `ftwifi` on; (2) WiFi productionization
+> (auto-bind vif→idm/ssid, multi-SSID + 2.4 GHz + multi-client, csum-to-HW via flow_info
+> bit4, hardening + regress, throughput tuning — test client links at 11n); (3) USB;
+> (4) code cleanup S1/S2/S3; (5) OpenWrt port. See `ROADMAP.md` §Now.
+>
+> **Fresh-agent onboarding:** `HANDOFF_FRESH_AGENT.md` (cold-start doc) → `CLAUDE.md`
+> → `ROADMAP.md` → `README.md`. Safety rules (do-not-brick): §3 of the handoff.
+
+---
+
 ## ★ MILESTONE (2026-06-04): SW control plane COMPLETE on `main`; HW offload next on its own branch
 `main` (commit dbcdc7b31) now carries the **complete, verified, self-starting SW router** — Phase 0
 L2 (incl. #36 TCP-ACK HW-forward) + Phases 1–4: WAN MAC4, netfilter+iptables, LAN DHCP, NAT
@@ -116,6 +157,45 @@ binaries); the chip-specific lifts are Phase 6 (HW offload), 9 (WiFi), 10 (GPON)
    both alive. Refactor + iperf still pending (tasks #37, #38, #47).
 7. **WiFi works** (2026-05-04, `tasks/00.07.wifi/`) — MT7915 over the
    internal PCIe link → wlan0 + internet.
+   **★ STA RE-VERIFIED end-to-end (2026-07-05, `findings/wifi_sta_reverify_2026-07-05.md`):**
+   full module chain (`pcie-zx279128s→cfg80211→mac80211→mt76→mt76-connac-lib→mt7915e`),
+   `[14c3:7915]` PCIe Gen1 x1, FW loaded, wlan0(2.4)/wlan1(5G) →
+   associated to Dino-WiFi-5GHz (WPA2/CCMP, 4-way OK) → DHCP → **ping
+   8.8.8.8 0% loss**. PHY negotiates HE-MCS11 NSS2 80MHz = 1.2 Gbps,
+   -35 dBm, 0 retries (radio/calibration HEALTHY).
+   - **★ KERNEL FIX that was missing (root cause of "regulatory never
+     worked"):** `net/wireless/certs/` shipped ONLY `sforshee.hex`, but
+     modern wireless-regdb (2023+) is signed by **`CN=wens`**, so
+     `CONFIG_CFG80211_REQUIRE_SIGNED_REGDB=y` rejected the db
+     (`cfg80211: loaded regulatory.db is malformed or signature ...
+     invalid`) → country 00 → all 5 GHz channels `No IR` → active scan
+     skipped Dino's ch40. **FIX: added `linux-v6.6/net/wireless/certs/wens.hex`**
+     (Makefile globs `certs/*.hex`) — permanent, needs a kernel rebuild.
+     Runtime workaround used this session: swap in a sforshee-signed
+     regdb (wireless-regdb 2022.06.06) + `iw reg reload` + `iw reg set ES`
+     → `country ES: DFS-ETSI`, Dino visible immediately.
+   - **Throughput is CPU-bound, NOT the radio:** ~15 Mbit/s LAN-local /
+     ~2.6 Mbit/s internet with the CPU (single core, soft-float) 95.7%
+     busy — plain mac80211 STA, no HW offload, legacy INTx IRQ
+     (`pci=nomsi`, shared w/ PCIe PME). Real speed needs the datasheet
+     fast path (CLA hardfast + IDM ports 6/7 WLAN + thin shuttle = the
+     Stage 3 WiFi offload, `findings/wifi_offload_feasibility_2026-07-04.md`).
+   - Boot-lib hardening: added `recover_stuck_nic()` to `lib/uart.py`
+     (dynamic USB-path derive + `authorized` re-enum) wired into
+     `flash_image_to_ram`/`reboot_mainline_wifi.py`. Also corrected the
+     TFTP host-NIC identity to `enxc8a362e95900` (live jack; matches
+     rig.py) — a stale duplicate `.50` on a carrier-down NIC was the real
+     cause of this session's `T T T` TFTP storm.
+   - **★ hostapd AP mode UP for the first time (2026-07-05):** `hostapd
+     -B` on wlan0 (2.4 ch6, WPA2) → `AP-ENABLED`, `type AP`, beaconing
+     (coexists with the wlan1 STA — separate phys). hostapd v2.11 was
+     built+staged but had never been run. This is the **gate for the WiFi
+     fastpath/HW-offload** effort. Remaining Stage-3 path (multi-day CLA
+     RE): client assoc + SW WiFi↔LAN forward → fabric ports 6/7 on the
+     IDM ring (mainline drives idm0/idm1) w/ ssid-tag + idmfdb dispatcher
+     → CLA hardfast + PM NAT so bulk forwards in HW. Speed on the STA
+     endpoint we tested is intrinsically CPU-bound (fastpath only helps
+     *forwarded* AP traffic, not locally-terminated STA traffic).
 8. **Now**: post-boot kotrace captures + Ghidra are the live RE loop.
    Shell access on the bake-in slot-A rootfs is via netshell
    (`nc 192.168.1.1 9001`) since the ZTE-patched dropbear wedges on
