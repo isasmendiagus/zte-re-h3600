@@ -77,8 +77,28 @@ for attempt in range(1, MAX_RETRIES + 1):
         continue
     print(f"[reboot_mainline_wifi] bootm sent — waiting {KERNEL_READY_TIMEOUT}s "
           f"for {KERNEL_READY_MARKER!r}", flush=True)
-    if uart.wait_for_marker(KERNEL_READY_MARKER, timeout=KERNEL_READY_TIMEOUT,
-                            start_offset=log_offset):
+    # BUG FIX 2026-07-31: run_uboot_seq() stops its log_loop pump when it
+    # returns (bootm only gets its fixed 5s wait), so NOTHING was writing
+    # the kernel's ~200s of boot output into uart.LOG anymore —
+    # wait_for_marker() polled a file that had stopped growing and timed
+    # out even on perfectly good boots (BOOT_FAIL with the REPL banner
+    # visibly printed). Keep our own pump alive for the marker wait.
+    import threading
+    _fout = open(uart.LOG, "ab")
+    _stop = threading.Event()
+    _t = threading.Thread(target=uart.log_loop,
+                          args=(ser, _fout, _stop, True), daemon=True)
+    _t.start()
+    found = uart.wait_for_marker(KERNEL_READY_MARKER,
+                                 timeout=KERNEL_READY_TIMEOUT,
+                                 start_offset=log_offset)
+    _stop.set()
+    _t.join(3)
+    try:
+        _fout.close()
+    except Exception:
+        pass
+    if found:
         ok = True
         break
     print("[reboot_mainline_wifi] kernel marker not seen — retry from DTR", flush=True)
