@@ -25,6 +25,7 @@ Usage:
 Preconditions: wifi_up.py all --adb --offload done; idm1 up; host return
 route 192.168.50.0/24 via 10.44.66.223 dev wlo1.
 """
+import os
 import re
 import socket
 import subprocess
@@ -36,7 +37,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ab_ctrs  # noqa: E402  (paced zc — console-safe)
 
-HOST_WAN_IP = "10.44.66.133"
+# WSINK override (2026-07-31): the LAN-egress control test sinks on a
+# directly-cabled LAN-port host NIC instead of the WAN/modem path.
+HOST_WAN_IP = os.environ.get("WSINK", "10.44.66.133")
 TEST_PORT = 9099
 POKE = "/sys/kernel/debug/zx_eth/poke"
 
@@ -301,15 +304,22 @@ def run(max_bursts=60, burst_mb=3):
 
 def lite_sample():
     """Light round: injected/fwd/miss + the SIPC drop nibbles only."""
-    cmds = ["echo %08x > /sys/kernel/debug/zx_eth/poke" % a for a in
-            (0x9238c3c0, 0x9238c3c4, 0x9234c05c, 0x921cc004, 0x92340100)]
-    cmds.append("dmesg | busybox grep -a 'peek 0x' | busybox tail -9")
+    # gauge-trace set (2026-07-31): the 0x9238c28x/c29x live parse-pipeline
+    # words (stock-under-traffic fc/5b/18/3d) + BMU alloc-result — hunting a
+    # monotonic drain that freezes at wedge (the RED-1024 signature).
+    names = (("cla_up_fwd", 0x9238c3c0), ("cla_acl_fail", 0x9238c3c4),
+             ("qmg_up_trap", 0x9234c05c), ("sipc_drop", 0x921cc004),
+             ("tm_irq", 0x92340100),
+             ("g280", 0x9238c280), ("g284", 0x9238c284), ("g290", 0x9238c290),
+             ("g294", 0x9238c294), ("g298", 0x9238c298), ("g29c", 0x9238c29c),
+             ("bmu_res", 0x9234800c))
+    cmds = ["echo %08x > /sys/kernel/debug/zx_eth/poke" % a for _, a in names]
+    cmds.append("dmesg | busybox grep -a 'peek 0x' | busybox tail -%d"
+                % (len(names) + 4))
     cmds.append("busybox grep -a tx_injected /sys/kernel/debug/zx_eth/wifi_bind")
-    out = ab_ctrs.zc(cmds, wait=2.5, hardcap=40)
+    out = ab_ctrs.zc(cmds, wait=2.5, hardcap=45)
     v = {}
-    for name, addr in (("cla_up_fwd", 0x9238c3c0), ("cla_acl_fail", 0x9238c3c4),
-                       ("qmg_up_trap", 0x9234c05c), ("sipc_drop", 0x921cc004),
-                       ("tm_irq", 0x92340100)):
+    for name, addr in names:
         m = re.findall(r"peek 0x%08x = 0x([0-9a-f]+)" % addr, out, re.I)
         v[name] = int(m[-1], 16) if m else None
     m = re.search(r"tx_injected=(\d+)", out)
@@ -404,9 +414,17 @@ def discrim():
         p.kill()
         return
     if dfwd is None or dfwd < dinj * 0.5:
-        print("!! flow not HW-offloaded (dfwd=%s dinj=%d) — aborting" % (dfwd, dinj))
-        p.kill()
-        return
+        # NOHWGATE=1 (2026-07-31): deliberately run the SW-forward variant —
+        # same fabric INJECTION volume via zx_idm_xmit, no CLA HW-forward
+        # match. If this wedges too, the wedge is in the inject/admit path,
+        # not in HW forwarding or egress back-pressure.
+        if os.environ.get("NOHWGATE") != "1":
+            print("!! flow not HW-offloaded (dfwd=%s dinj=%d) — aborting"
+                  % (dfwd, dinj))
+            p.kill()
+            return
+        print("!! NOT HW-offloaded (dfwd=%s) — continuing anyway per NOHWGATE "
+              "(SW-forward injection-only variant)" % dfwd)
 
     def check(tag):
         got, dinj, dfwd, dmiss, cur = _flow_health(sink, 12)
@@ -432,9 +450,12 @@ def discrim():
     while True:
         time.sleep(30)
         got, dinj, dfwd, dmiss, cur = _flow_health(sink, 12)
-        print("-- C: %.2f MB dinj=%d dfwd=%s dmiss=%s inj=%s tm_irq=%s" %
+        print("-- C: %.2f MB dinj=%d dfwd=%s dmiss=%s inj=%s tm_irq=%s | "
+              "g28x %s %s %s %s %s %s bmu=%s" %
               (got / 1e6, dinj, dfwd, dmiss, cur.get("tx_injected"),
-               hx(cur.get("tm_irq"))))
+               hx(cur.get("tm_irq")), hx(cur.get("g280")), hx(cur.get("g284")),
+               hx(cur.get("g290")), hx(cur.get("g294")), hx(cur.get("g298")),
+               hx(cur.get("g29c")), hx(cur.get("bmu_res"))))
         sys.stdout.flush()
         if got < 5e4:
             print("!!!! WEDGE during phase C (inj=%s) — NO SW collision "
