@@ -169,3 +169,99 @@ is disabled by the [red-arm] fix and all levels read zero).
 
 Rebooted clean on the fix build (#542+fixes), no rig, ftwifi=0 (default
 OFF, kzalloc-zero verified), UART bridge REPL live.
+
+---
+
+# ADDENDUM 2026-07-31d — STOCK-LIVE experiment done: the BMU **engine** is dead on mainline (not a missing register value); wedge #2 mechanism now coherent
+
+## What the stock-live experiment settled (READ-ONLY stock boot, SSH+devmem2)
+
+Live stock BMU block (under normal stock operation), vs live mainline:
+
+| reg | stock LIVE | mainline LIVE | note |
+|---|---|---|---|
+| 0x8048 bppe ptr | **0x50** | 0 | engine cursor (lo16=read) |
+| 0x8044 | **0x500001** | 0 | HW-maintained, no stock writer |
+| 0x8040 bppi ptr | 0x880039 (moves) | 0xfb00ec (moves) | both alive |
+| 0x8080 **bppe bpcnt** | **0x1FB0 (8112)** | **0** | the DDR free-list level |
+| 0x8084 | 0x16 | 0 | |
+| 0x8088 bppi bpcnt | **0x4F (79)** | 0xa–0xf | on-chip FIFO level |
+| 0x808c | 0x4F | 0 | |
+| 0x8050 / 0x8054 | 0 / 0 | 8 / 0xa | mainline-only |
+| 0x80d4 | **0x200** | 0x200 | **NOT a divergence** (the 2MiB text dump misled) |
+| 0x80dc bp stat | 0x40000111 | 0x00000111 | bit30 = RO engine-ready-ish |
+| 0x80e0 / 0x80e4 | **0 / 0** | 0xfb1 / 0x3b0 | mainline-only, climb with traffic |
+
+**Decisive result — SW cannot prime the pool, not even on stock**: the exact
+sequence `INIT=0 → 0x8048=POOL<<16 → INIT=1` executed on a live healthy stock
+box left `bppe_cnt` at 8112 and `0x8048` at 0x50 — **unchanged**. The cursor
+and level are **engine-maintained, SW-write-immune**. So mainline's zeros are
+NOT a missing/incorrect register write (full written-value parity vs live
+stock is verified reg-by-reg), and the whole "find the missing priming poke"
+thread is CLOSED as refuted.
+
+## Where the pool actually dies on mainline (new, localized)
+
+- The BPPE free-list **is correct in DDR**: `memdump 0x4e700000` on mainline
+  shows the be16 ramp 0,1,2,3,… intact (also confirms fix #1b holds — before
+  that fix this region was zeroed every boot). Cache-flush theory (stock's
+  `dma_cache_maint(bppe, 0x20000, 1)` vs mainline's bare `dma_wmb()`)
+  therefore also **refuted**.
+- **The DDR→chip prefetch engine never runs**: driving the alloc-kick
+  (`0x8014=1` ×4) on mainline **drained the on-chip FIFO 10 → 6 and never
+  refilled** from the valid DDR list. `0x80a0` (bp initsat) writes + enable
+  re-toggle: no effect.
+- Config regs latch fine (ctrl/bases/sizes/buckets all read back stock-exact)
+  while every *engine* register (cursor 0x8048/0x8044, levels 0x8080/0x8088
+  refill, prefetch) is inert ⇒ **the BMU's engine is unclocked / held in
+  reset on mainline, or was never released by the correct first-enable
+  window** — a top_crm/sys_ctrl clock-reset question, NOT a TM-register
+  question. That is the next thread (new RE surface: top_crm map).
+
+## Wedge #2 — coherent mechanism (fits every observation)
+
+With no DDR pool, the chip runs on the tiny on-chip BPPI recycle margin
+(~10–15 BPs) which is replenished almost entirely by the **SW free path**
+(`tm[0x8010]`, `zx_bmu_free_bp`, once per CPU-consumed RX descriptor).
+- **HW-forwarded frames never take the SW free path** → each one leaks a BP
+  from a ~15-deep margin → starvation halt after ~1k frames. **Matches the
+  measured post-fix onsets exactly (967 and ~965).**
+- At starvation: MAC RX-ok still counts (the MAC is outside the BMU) but
+  nothing can be *admitted* into the fabric → `red_trp_in`/SPA/qmg frozen,
+  frames die precisely **between MAC-admit and RED-in** (the observed
+  signature); CPU TX also dies (needs a BP to allocate) → **core dead in
+  both directions**; every accounting bank reads healthy because nothing is
+  over-charged — the resource is simply absent. Reboot-only because the
+  engine never produces.
+- Explains the survivors: eth-only HW-offload runs 12 GB fine because the
+  trap-all DSA-conduit architecture sends eth ingress to the CPU, which
+  SW-frees every BP; the 141k-frame SW control was clean for the same
+  reason; and WiFi UP/DN fabric forwards (ports 6/7) are the ONLY traffic
+  that consumes BPs without ever returning them.
+- Consistent with bug #1 too: on a ~15-BP margin, a *double*-free (adding a
+  phantom BP) was catastrophic in a different way — corruption rather than
+  starvation.
+
+## The wall (precise) + next step
+
+**Wall**: making the BMU engine produce its DDR pool is not reachable through
+any TM/BMU register — proven on both stock (SW writes immune) and mainline
+(every parity write + kick + initsat + enable-toggle inert). The gate is
+outside the block we have mapped/RE'd.
+
+**Next step (ordered)**:
+1. RE the **top_crm / sys_ctrl clock+reset map** for the TM/BMU sub-block
+   (`pon_base`/`top_crm_base`/`sys_ctrl_base` are already iomapped by the
+   PON node; stock's `zx_pon_clk_reset()` + `pon_reset` are the entry
+   points) and release/strobe the BMU engine before `zx_tm_bmu_enable`.
+   Success signal = `bppe_cnt` goes ~8112 in the boot log line already added.
+2. Independent of (1), a **software mitigation is now well-defined and
+   testable**: make the HW-forward path return BPs. Either find the fabric's
+   BP auto-return enable, or (pragmatic) keep a CPU-visible accounting of
+   fabric-forwarded frames and issue matching `tm[0x8010]` frees — but note
+   the BP index of a HW-forwarded frame is not known to SW, so this likely
+   needs the fabric-side enable, not a SW loop.
+3. Stock gotcha found the hard way: **writing TM 0x92340128/0x130 on a LIVE
+   stock box kills the datapath instantly** (box went unreachable mid-test;
+   recovered by power-cycle — read-only NAND, nothing lost but the tmpfs
+   capture). Do not strobe TM IRQ-enable regs on a running box.
