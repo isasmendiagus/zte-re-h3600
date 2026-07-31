@@ -25,6 +25,74 @@
 #include "zx-pon-plat.h"
 
 /*
+ * [A09] SoC AXI bus-matrix / QoS block @ phys 0x00a20000 — mirror of the
+ * STOCK KERNEL's `zx279128_init_machine` (vmlinux 4.1.25 @0xc06390f4), NOT
+ * of any stock kmod. This is why every driver-level stock-parity audit
+ * missed it: stock programs this block from arch_initcall(3), long before
+ * plat-zxylzb_9128S.ko loads, so it never appears in the kmod replay table.
+ * Mainline 6.6 has no equivalent machine-init hook, so on mainline the
+ * block is left at power-on defaults (verified live 2026-07-31: +0x00
+ * reads 0x01000000 and +0x78/+0x80/+0x84/+0x88 read 0 — i.e. every field
+ * stock programs is unset).
+ *
+ * Stock writes, in this exact order, each separated by outer_cache.sync():
+ *   [+0x80] = 0x40000001   (set:   bit30 + bit0)
+ *   [+0x84] = 0xBFFFFFFF   (clear: everything except bit30 — set/clear pair)
+ *   [+0x88] = 0x1F0F1F0F   (four 8-bit priority/threshold fields)
+ *   [+0x78] = 0x1F0F1F0F   (same shape — second master's fields)
+ *   [+0x00] = 0x0D000000   (mode/commit)
+ *
+ * The 0x1F0F1F0F priority fields + the bit30 set/clear pair are the shape of
+ * an interconnect QoS / arbitration configuration. Relevance to this driver:
+ * the fabric-ingress endurance wedge (findings/wifi_stage3_wedge_bmu_pool_
+ * 2026-07-28.md) halts a fabric-core arbiter under sustained load from the
+ * IDM/fabric masters while every datapath accounting bank still reads
+ * healthy — the signature of an unarbitrated/starved AXI master rather than
+ * an over-charged datapath counter. Restoring stock's arbitration weights is
+ * cheap, is exact stock parity, and removes this whole block as a variable.
+ *
+ * Ref: tasks/00.10.02.re-stock-kmods/findings/static_analysis_vmlinux_platform_init.md [vm-05]
+ */
+#define ZX_SOC_AXI_QOS_PHYS	0x00a20000UL
+#define ZX_SOC_AXI_QOS_SIZE	0x100
+
+static void zx_soc_axi_qos_init(const struct zx_pon_plat_ctx *ctx)
+{
+	static const struct {
+		u32 off;
+		u32 val;
+	} seq[] = {
+		{ 0x80, 0x40000001 },
+		{ 0x84, 0xBFFFFFFF },
+		{ 0x88, 0x1F0F1F0F },
+		{ 0x78, 0x1F0F1F0F },
+		{ 0x00, 0x0D000000 },
+	};
+	void __iomem *qos;
+	int i;
+
+	qos = ioremap(ZX_SOC_AXI_QOS_PHYS, ZX_SOC_AXI_QOS_SIZE);
+	if (!qos) {
+		dev_warn(ctx->dev, "[A09] ioremap(0x%lx) failed — AXI QoS left at POR\n",
+			 ZX_SOC_AXI_QOS_PHYS);
+		return;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(seq); i++) {
+		writel(seq[i].val, qos + seq[i].off);
+		/* stock interleaves outer_cache.sync() between every write;
+		 * mb() is the mainline equivalent (dsb + outer sync on ARM). */
+		mb();
+	}
+
+	dev_info(ctx->dev, "[A09] SoC AXI QoS programmed (stock machine-init parity): [0x00]=0x%08x [0x78]=0x%08x [0x80]=0x%08x [0x88]=0x%08x\n",
+		 readl(qos + 0x00), readl(qos + 0x78),
+		 readl(qos + 0x80), readl(qos + 0x88));
+
+	iounmap(qos);
+}
+
+/*
  * [A03] pon_reset — mirror of stock plat:7744 `pon_reset(mask)`.
  *
  * Stock decomp:
@@ -295,6 +363,11 @@ int zx_pon_plat_init(const struct zx_pon_plat_ctx *ctx)
 		pr_err("zx_pon_plat_init: missing pon_early/topcrm\n");
 		return -EINVAL;
 	}
+
+	/* [A09] SoC AXI bus-matrix/QoS — stock does this from machine init
+	 * (arch_initcall 3), i.e. BEFORE any datapath block is touched, so it
+	 * runs first here too. */
+	zx_soc_axi_qos_init(ctx);
 
 	/* [A03] pon_reset(0xffffffff) + 10ms settle. Cycles every bit of
 	 * pon_base[8], triggering a HW reset pulse for the pon sub-blocks.
