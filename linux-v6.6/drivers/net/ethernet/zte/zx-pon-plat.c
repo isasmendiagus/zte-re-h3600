@@ -85,7 +85,7 @@ static void zx_soc_axi_qos_init(const struct zx_pon_plat_ctx *ctx)
 		mb();
 	}
 
-	dev_info(ctx->dev, "[A09] SoC AXI QoS programmed (stock machine-init parity): [0x00]=0x%08x [0x78]=0x%08x [0x80]=0x%08x [0x88]=0x%08x\n",
+	dev_dbg(ctx->dev, "[A09] SoC AXI QoS programmed (stock machine-init parity): [0x00]=0x%08x [0x78]=0x%08x [0x80]=0x%08x [0x88]=0x%08x\n",
 		 readl(qos + 0x00), readl(qos + 0x78),
 		 readl(qos + 0x80), readl(qos + 0x88));
 
@@ -157,7 +157,7 @@ static void zx_serdes_apply_defaults(const struct zx_pon_plat_ctx *ctx)
 		writel(zx_serdes_defaults[i].val,
 		       ctx->pon_serdes + zx_serdes_defaults[i].off);
 
-	dev_info(ctx->dev, "[A06a] SERDES defaults applied (%d regs). pon_serdes[0x44]=0x%08x (stock pre-band-cal=0xea00a013)\n",
+	dev_dbg(ctx->dev, "[A06a] SERDES defaults applied (%d regs). pon_serdes[0x44]=0x%08x (stock pre-band-cal=0xea00a013)\n",
 		 (int)ARRAY_SIZE(zx_serdes_defaults),
 		 readl(ctx->pon_serdes + 0x44));
 }
@@ -223,7 +223,7 @@ static void zx_ref_clk_set(const struct zx_pon_plat_ctx *ctx, int mode)
 	}
 
 	udelay(100);                          /* stock: 50x __delay ≈ 100us */
-	dev_info(ctx->dev, "[A06c] ref_clk_set(mode=%d) done. topcrm[0x50]=0x%08x\n",
+	dev_dbg(ctx->dev, "[A06c] ref_clk_set(mode=%d) done. topcrm[0x50]=0x%08x\n",
 		 mode, readl(base));
 }
 
@@ -251,7 +251,7 @@ static void zx_serdes_mode_set_1(const struct zx_pon_plat_ctx *ctx)
 	v = readl(s + 0x24); writel((v & 0xff00ffff) | 0x570000, s + 0x24);
 	v = readl(s + 0x24); writel((v & 0x00ffffff) | 0x07000000, s + 0x24);
 
-	dev_info(ctx->dev, "[A06b] SERDES mode=1 set. pon_serdes[0x00]=0x%08x [0x24]=0x%08x\n",
+	dev_dbg(ctx->dev, "[A06b] SERDES mode=1 set. pon_serdes[0x00]=0x%08x [0x24]=0x%08x\n",
 		 readl(s + 0x00), readl(s + 0x24));
 }
 
@@ -302,7 +302,7 @@ static int zx_pon_clk_reset_init(const struct zx_pon_plat_ctx *ctx, int mode)
 			readl(sr + 0x68));
 		return -ETIMEDOUT;
 	}
-	dev_info(ctx->dev, "[A06d] rxpll_ready (waited %d × 50us)\n", 2000 - retries);
+	dev_dbg(ctx->dev, "[A06d] rxpll_ready (waited %d × 50us)\n", 2000 - retries);
 
 	/* PLL band ready (stock: 20 retries) */
 	retries = 20;
@@ -328,7 +328,7 @@ static int zx_pon_clk_reset_init(const struct zx_pon_plat_ctx *ctx, int mode)
 		else
 			coarse = (coarse - 3) & 0x3f;
 	}
-	dev_info(ctx->dev, "[A06d] serdes band cpu_temper:%u coarse:0x%x (raw 0x%x)\n",
+	dev_dbg(ctx->dev, "[A06d] serdes band cpu_temper:%u coarse:0x%x (raw 0x%x)\n",
 		 temp_c, coarse, raw_coarse);
 
 	v = readl(sr + 0x44);
@@ -336,7 +336,7 @@ static int zx_pon_clk_reset_init(const struct zx_pon_plat_ctx *ctx, int mode)
 
 	v = readl(sr + 0x40); writel(v | 0x04000000u, sr + 0x40);
 
-	dev_info(ctx->dev, "[A06d] band calc fin — pon_serdes[0x44]=0x%08x [0x40]=0x%08x\n",
+	dev_dbg(ctx->dev, "[A06d] band calc fin — pon_serdes[0x44]=0x%08x [0x40]=0x%08x\n",
 		 readl(sr + 0x44), readl(sr + 0x40));
 
 	/* sys_ctrl bit clear — purpose unknown; likely gates a downstream
@@ -375,7 +375,7 @@ int zx_pon_plat_init(const struct zx_pon_plat_ctx *ctx)
 	 * to re-establish the SERDES state that pon_reset wipes. */
 	zx_pon_reset(ctx, 0xffffffffU);
 	msleep(10);
-	dev_info(ctx->dev, "[A03] pon_reset(0xffffffff) done. pon[8]=0x%08x\n",
+	dev_dbg(ctx->dev, "[A03] pon_reset(0xffffffff) done. pon[8]=0x%08x\n",
 		 readl(ctx->pon_early + 8));
 
 	/* [Iter 22] Stock init_module (plat-zxylzb_9128S line 8925-8930)
@@ -388,7 +388,7 @@ int zx_pon_plat_init(const struct zx_pon_plat_ctx *ctx)
 	writel(0xf,        ctx->pon_early + 0x4001c);	/* [A05] */
 	writel(0xffffff7f, ctx->pon_early + 0x40044);	/* PON IRQ mask: bit 7 unmasked */
 
-	dev_info(ctx->dev, "PON chip pre-init: pon[0x40018]=0x%08x pon[0x4001c]=0x%08x pon[0x40044]=0x%08x\n",
+	dev_dbg(ctx->dev, "PON chip pre-init: pon[0x40018]=0x%08x pon[0x4001c]=0x%08x pon[0x40044]=0x%08x\n",
 		 readl(ctx->pon_early + 0x40018),
 		 readl(ctx->pon_early + 0x4001c),
 		 readl(ctx->pon_early + 0x40044));

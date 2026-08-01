@@ -5145,7 +5145,7 @@ static void zx_sch_init(struct zx_eth *e)
 					      ZX_SCH_BUCKET_CAP);
 		}
 	}
-	dev_info(e->dev, "SCH shaper RAM init: %u units x %u queues, rate=%u cap=%u\n",
+	dev_dbg(e->dev, "SCH shaper RAM init: %u units x %u queues, rate=%u cap=%u\n",
 		 ZX_SCH_UNITS, ZX_SCH_QUEUES, ZX_SCH_FILL_RATE, ZX_SCH_BUCKET_CAP);
 }
 
@@ -5289,7 +5289,7 @@ static void zx_tm_dma_init(struct zx_eth *e)
 	tm_write(e, 0xC044, 0x000004f4);
 	tm_write(e, 0xC060, 0x0000052e);
 
-	dev_info(e->dev, "TM DMA init: ctrl=%#x, timeout=%u, sch[0]=%#x\n",
+	dev_dbg(e->dev, "TM DMA init: ctrl=%#x, timeout=%u, sch[0]=%#x\n",
 		 tm_read(e, TM_REG_DMA_CTRL), tm_read(e, TM_REG_DMA_TIMEOUT),
 		 tm_read(e, 0x14000));
 }
@@ -5437,7 +5437,7 @@ static bool zx_wifi_tm_rx_dispatch(struct zx_eth *e, const u8 *bp, u16 len,
 	    flen > TM_BP_SIZE - (u16)(frm - bp)) {
 		e->tm_wifi_rx_noparse++;
 		if (e->tm_wifi_rx_noparse <= 4) {
-			dev_info(e->dev, "TM-RX fabric NOPARSE #%u len=%u\n",
+			dev_dbg(e->dev, "TM-RX fabric NOPARSE #%u len=%u\n",
 				 e->tm_wifi_rx_noparse, len);
 			print_hex_dump(KERN_INFO, "  bp: ", DUMP_PREFIX_OFFSET,
 				       16, 1, bp, 48, false);
@@ -8202,7 +8202,7 @@ static void zx_wan_zx5201_config(struct zx_eth *e, struct mii_bus *bus)
 		u32 pm = readl(e->pin_mux + 0x0c);
 
 		writel(pm & 0xffe7f7ff, e->pin_mux + 0x0c);
-		dev_info(e->dev, "[WAN-RGMII] pin_mux[0x0c] %08x -> %08x (clear pad bits 11/19/20)\n",
+		dev_dbg(e->dev, "[WAN-RGMII] pin_mux[0x0c] %08x -> %08x (clear pad bits 11/19/20)\n",
 			 pm, readl(e->pin_mux + 0x0c));
 	}
 	/* [WAN-RGMII] sys_ctrl[0x10] bit 11 = the RGMII select bit; stock boot
@@ -8213,7 +8213,7 @@ static void zx_wan_zx5201_config(struct zx_eth *e, struct mii_bus *bus)
 
 		if (sc & 0x800) {
 			writel(sc & ~0x800u, e->sys_ctrl + 0x10);
-			dev_info(e->dev, "[WAN-RGMII] sys_ctrl[0x10] %08x -> %08x (clear RGMII bit 11)\n",
+			dev_dbg(e->dev, "[WAN-RGMII] sys_ctrl[0x10] %08x -> %08x (clear RGMII bit 11)\n",
 				 sc, readl(e->sys_ctrl + 0x10));
 		}
 	}
@@ -8283,7 +8283,7 @@ static void zx_eth_init_phys(struct zx_eth *e)
 		n = 5;
 
 	if (ZX_SKIP_PHY_INIT) {
-		dev_info(dev, "ZX_SKIP_PHY_INIT=1 — leaving PHYs in U-Boot state, no phy_init_hw/attach\n");
+		dev_dbg(dev, "ZX_SKIP_PHY_INIT=1 — leaving PHYs in U-Boot state, no phy_init_hw/attach\n");
 		return;
 	}
 
@@ -8349,7 +8349,7 @@ static void zx_eth_init_phys(struct zx_eth *e)
 			put_device(&phydev->mdio.dev);
 		}
 	}
-	dev_info(dev, "PHY init complete (%d GePHYs attached)\n", n);
+	dev_dbg(dev, "PHY init complete (%d GePHYs attached)\n", n);
 
 	/* [WAN] bring up the external ZX5201 WAN PHY (MDIO 0x08) — not phylib-probed,
 	 * so config it directly on the mii_bus (borrow a GePHY's bus). */
@@ -8364,7 +8364,7 @@ static void zx_eth_init_phys(struct zx_eth *e)
 			}
 		if (bus) {
 			zx_wan_zx5201_config(e, bus);
-			dev_info(dev, "[WAN] ZX5201 PHY @ MDIO 0x08 configured (copper TX up)\n");
+			dev_dbg(dev, "[WAN] ZX5201 PHY @ MDIO 0x08 configured (copper TX up)\n");
 		} else {
 			dev_warn(dev, "[WAN] no mii_bus to config ZX5201 PHY\n");
 		}
@@ -8614,7 +8614,7 @@ static void zx_eth_init_chip_tm(struct zx_eth *eth)
 	zx_chip_tm_init_pro_action(eth);
 
 	writel(0xa, eth->fpga_base + 0);
-	dev_info(eth->dev, "FPGA IRQ enable: wrote 0xa to fpga+0 (sbrg_set_irq_en_mask equiv)\n");
+	dev_dbg(eth->dev, "FPGA IRQ enable: wrote 0xa to fpga+0 (sbrg_set_irq_en_mask equiv)\n");
 }
 
 /*
@@ -8697,7 +8697,7 @@ static void zx_eth_clear_spa_trap_dmac(struct zx_eth *eth)
 		writel(0, eth->base + ZX_SPA_TRAP_DMAC_BASE + sl * 8);
 		writel(0, eth->base + ZX_SPA_TRAP_DMAC_BASE + sl * 8 + 4);
 	}
-	dev_info(eth->dev, "SPA trap_dmac filter cleared (match stock; enables HW L3 forward)\n");
+	dev_dbg(eth->dev, "SPA trap_dmac filter cleared (match stock; enables HW L3 forward)\n");
 }
 
 /*
@@ -8725,13 +8725,13 @@ static void zx_eth_init_vlan_and_isolation(struct zx_eth *eth)
 		for (port = 0; port < 8; port++)
 			if (zx_vlan_add_port(eth, vid, port, 3) == 0)
 				n_ok++;
-	dev_info(dev, "VLAN setup: %d/%d port-vlan entries OK\n", n_ok, 16);
+	dev_dbg(dev, "VLAN setup: %d/%d port-vlan entries OK\n", n_ok, 16);
 
 	for (i = 0; i < 6; i++)
 		zx_port_isolate(eth, i, (u8)(~(1u << i) & 0xff));
 	zx_port_isolate(eth, 6, 0xFF);
 	zx_port_isolate(eth, 7, 0xFF);
-	dev_info(dev, "isolate ports 0..7 = %#x %#x %#x %#x %#x %#x %#x %#x\n",
+	dev_dbg(dev, "isolate ports 0..7 = %#x %#x %#x %#x %#x %#x %#x %#x\n",
 		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(0)),
 		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(1)),
 		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(2)),
@@ -8818,8 +8818,8 @@ static void zx_ft_pm_ext_init(struct zx_eth *eth)
 			 * reshuffle can no longer silently re-create the
 			 * overlap. */
 			memset_io(eth->pm_ext, 0, ZX_PM_EXT_SPAN);
-			dev_info(dev,
-				 "[phase6/ft] PM external tables: carve 0x%08x +0x%x mapped, fully zeroed (BPPE now at carve+0, no overlap; acl 0x%08x pm 0x%08x)\n",
+		dev_dbg(dev,
+			 "[phase6/ft] PM external tables: carve 0x%08x +0x%x mapped, fully zeroed (BPPE now at carve+0, no overlap; acl 0x%08x pm 0x%08x)\n",
 				 carve, ZX_PM_EXT_SPAN, aclb, pmb);
 		}
 	}
@@ -9013,7 +9013,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 		if (IS_ERR(eth->pon_serdes))
 			eth->pon_serdes = NULL;
 
-		dev_info(dev, "MMIO extras: sys_ctrl=%s pin_mux=%s pon_serdes=%s\n",
+		dev_dbg(dev, "MMIO extras: sys_ctrl=%s pin_mux=%s pon_serdes=%s\n",
 			 eth->sys_ctrl  ? "mapped" : "absent",
 			 eth->pin_mux   ? "mapped" : "absent",
 			 eth->pon_serdes ? "mapped" : "absent");
@@ -9121,7 +9121,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 			dev_warn(dev, "[A07] PON IRQ %d request failed: %d (continuing)\n",
 				 eth->irq_pon, err);
 		else
-			dev_info(dev, "[A07] PON IRQ %d registered\n",
+			dev_dbg(dev, "[A07] PON IRQ %d registered\n",
 				 eth->irq_pon);
 	}
 
