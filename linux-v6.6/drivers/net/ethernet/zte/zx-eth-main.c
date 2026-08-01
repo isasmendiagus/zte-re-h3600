@@ -9193,12 +9193,13 @@ static int zx_eth_probe(struct platform_device *pdev)
 
 	zx_debugfs_init(eth);
 
-	/* [WiFi productionization 2026-08-01] Auto-bind wlan interfaces.
-	 * Temporarily disabled — debugging AP data-path issue.
-	 * Re-enable when confirmed working.
+	/* [WiFi productionization 2026-08-01] Auto-bind wlan interfaces:
+	 * register a netdevice notifier so wlanX is automatically bound to
+	 * the next available idm/ssid slot when hostapd creates the vif.
+	 * The debugfs wifi_bind knob still works for manual overrides.
+	 */
 	eth->wlan_nb.notifier_call = zx_wlan_notifier;
 	register_netdevice_notifier(&eth->wlan_nb);
-	*/
 
 	return 0;
 
