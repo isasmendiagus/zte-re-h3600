@@ -1003,7 +1003,7 @@ static void zx_sbrg_set_unknown_unicast_flood_policy(struct zx_eth *e, u8 cpu_po
 		(pktdeal_all << 8) |
 		((u32)cpu_port_bitmap << 24);
 	writel(v, pp + PP_BRG_PKTDEAL_FLOOD);
-	dev_info(e->dev,
+	dev_dbg(e->dev,
 		 "SBRG flood policy: PP[0x8340] %08x -> %08x (pktdeal=0x%04x fwd_bitmap=0x%02x)\n",
 		 v_old, v, pktdeal_all, cpu_port_bitmap);
 }
@@ -1286,7 +1286,7 @@ static void zx_stock_apply_block(struct zx_eth *e, const char *name,
 			singles++;
 		}
 	}
-	dev_info(e->dev,
+	dev_dbg(e->dev,
 		 "stock-init %s: %u ops (%u runs/%u regs + %u singles, %u BMU-block skipped)\n",
 		 name, end - start, runs, regs_in_runs, singles, skipped_bmu);
 }
@@ -1469,7 +1469,7 @@ static void zx_pp_init(struct zx_eth *e)
 				writel(new_v, e->base + byte_off);
 			}
 		}
-		dev_info(e->dev, "spa_enty_pktdeal_cfg: applied val=%u for entities 0..7 × slots 0x43..0x7d\n",
+		dev_dbg(e->dev, "spa_enty_pktdeal_cfg: applied val=%u for entities 0..7 × slots 0x43..0x7d\n",
 			 zx_spa_pktdeal);
 	}
 
@@ -2253,7 +2253,7 @@ static int zx_eth_open(struct net_device *ndev)
 	 * upped (the R1 black hole). NAPI ownership lives in probe + remove.
 	 * findings/wifi_stage3_phaseC_R1_fix_2026-07-25.md
 	 */
-	netdev_info(ndev, "open\n");
+	netdev_dbg(ndev, "open\n");
 	netif_carrier_on(ndev);
 	netif_start_queue(ndev);
 	return 0;
@@ -2268,7 +2268,7 @@ static int zx_eth_stop(struct net_device *ndev)
 	 */
 	netif_stop_queue(ndev);
 	netif_carrier_off(ndev);
-	netdev_info(ndev, "stop\n");
+	netdev_dbg(ndev, "stop\n");
 	return 0;
 }
 
@@ -2371,7 +2371,7 @@ static int zx_tm_alloc_pools(struct zx_eth *e)
 		return -ENOMEM;
 	}
 	e->carved_va = base;
-	dev_info(e->dev, "carved region: phys 0x%lx + %lu MiB → va %p\n",
+	dev_dbg(e->dev, "carved region: phys 0x%lx + %lu MiB → va %p\n",
 		 CARVED_BASE_PHYS, CARVED_SIZE / (1024 * 1024), base);
 
 	/* Zero ACL RAM (4 MiB) — stock tm.ko aclRamInit equivalent. Without
@@ -2387,7 +2387,7 @@ static int zx_tm_alloc_pools(struct zx_eth *e)
 	 * slot 0). Stock's ring starts clean. */
 	memset_io(base + CARVED_TXUP_OFF, 0, 0x10000);
 	memset_io(base + CARVED_TXDN_OFF, 0, 0x10000);
-	dev_info(e->dev, "carved: zeroed ACL RAM (4 MiB @+0x%lx) + Flow RAM (1 MiB @+0x%lx) + TX UP/DN rings\n",
+	dev_dbg(e->dev, "carved: zeroed ACL RAM (4 MiB @+0x%lx) + Flow RAM (1 MiB @+0x%lx) + TX UP/DN rings\n",
 		 CARVED_ACL_OFF, CARVED_FLOW_OFF);
 
 	/* Pool entity layout: cpu (virt) = base + off; dma (phys) = CARVED + off. */
@@ -2428,7 +2428,7 @@ static int zx_tm_alloc_pools(struct zx_eth *e)
 	for (i = 0; i < TM_JUMBO_BPPE_POOL_SIZE; i++)
 		bppe[i] = cpu_to_be16(i);
 
-	dev_info(e->dev, "TM pools (carved): bppe@%pad, bp@%pad, rxdesc@%pad, txup@%pad, txdn@%pad\n",
+	dev_dbg(e->dev, "TM pools (carved): bppe@%pad, bp@%pad, rxdesc@%pad, txup@%pad, txdn@%pad\n",
 		 &e->bppe_dma, &e->bp_dma, &e->rxdesc_dma,
 		 &e->txdesc_dma, &e->dndesc_dma);
 	return 0;
@@ -2521,7 +2521,7 @@ static void zx_tm_bmu_init(struct zx_eth *e)
 	tm_write(e, TM_REG_BMU_POOL_SIZE,  TM_BPPE_POOL_SIZE << 16);
 	tm_write(e, TM_REG_BMU_JUMBO_POOL, TM_JUMBO_BPPE_POOL_SIZE << 16);
 
-	dev_info(e->dev, "TM BMU init: %d instances configured, pool_size=%d, bp_size=%d, bppe@%pad\n",
+	dev_dbg(e->dev, "TM BMU init: %d instances configured, pool_size=%d, bp_size=%d, bppe@%pad\n",
 		 TM_NUM_BMU_INSTANCES, TM_BPPE_POOL_SIZE, TM_BP_SIZE,
 		 &e->bppe_dma);
 }
@@ -2538,7 +2538,7 @@ static void zx_tm_bmu_enable(struct zx_eth *e)
 
 		tm_write(e, base + TM_REG_BMU_INIT, 1);
 	}
-	dev_info(e->dev, "TM BMU enabled (%d instances): tm[0x8000]=%#x tm[0x8400]=%#x tm[0x9000]=%#x\n",
+	dev_dbg(e->dev, "TM BMU enabled (%d instances): tm[0x8000]=%#x tm[0x8400]=%#x tm[0x9000]=%#x\n",
 		 TM_NUM_BMU_INSTANCES,
 		 tm_read(e, TM_REG_BMU_INIT),
 		 tm_read(e, 0x400 + TM_REG_BMU_INIT),
@@ -2753,7 +2753,7 @@ static void zx_pp_pm_apply_replay(struct zx_eth *e)
 		else
 			fail++;
 	}
-	dev_info(e->dev, "pp_pm init: %u ok, %u fail (%u embedded)\n",
+	dev_dbg(e->dev, "pp_pm init: %u ok, %u fail (%u embedded)\n",
 		 ok, fail, ZX_PM_INIT_TABLE_LEN);
 }
 
@@ -2908,7 +2908,7 @@ static void zx_cla_apply_replay(struct zx_eth *e)
 		else
 			fail++;
 	}
-	dev_info(e->dev, "CLA init: %u ok, %u fail (%u embedded + ram=7 0..%d)\n",
+	dev_dbg(e->dev, "CLA init: %u ok, %u fail (%u embedded + ram=7 0..%d)\n",
 		 ok, fail, ZX_CLA_INIT_TABLE_LEN, ZX_CLA_RAM7_LAST);
 }
 
@@ -2949,7 +2949,7 @@ static void zx_cla_ffe_extract_init(struct zx_eth *e)
 		else
 			fail++;
 	}
-	dev_info(e->dev,
+	dev_dbg(e->dev,
 		 "CLA FFE extract init: %u ok, %u fail (%zu ram1 rules + %zu ram0 index)\n",
 		 ok, fail, ARRAY_SIZE(zx_ffe_rules), ARRAY_SIZE(zx_ffe_index));
 }
@@ -4496,7 +4496,7 @@ static void zx_chip_tm_init_pro_action(struct zx_eth *e)
 					zx_pktdeal_ack_fwd_slots[i], 0);
 		}
 	}
-	dev_info(e->dev, "pro_action: %d ok, %d fail [%s]\n",
+	dev_dbg(e->dev, "pro_action: %d ok, %d fail [%s]\n",
 		 ok, fail,
 		 zx_proto_fwd_all ? "FORWARD-ALL (debug)" :
 		 "stock trap table + ACK-fwd slots (TCP ACKs HW-fwd, bcast traps)");
@@ -4524,7 +4524,7 @@ static void zx_chip_tm_init_isolate(struct zx_eth *e)
 		if (rc)
 			dev_warn(e->dev, "isolate port %d: %d\n", p, rc);
 	}
-	dev_info(e->dev, "isolate PP[0x83c0..dc] = %#x %#x %#x %#x %#x %#x %#x %#x\n",
+	dev_dbg(e->dev, "isolate PP[0x83c0..dc] = %#x %#x %#x %#x %#x %#x %#x %#x\n",
 		 readl(pp + PP_BRG_ISOLATE(0)) & 0xff, readl(pp + PP_BRG_ISOLATE(1)) & 0xff,
 		 readl(pp + PP_BRG_ISOLATE(2)) & 0xff, readl(pp + PP_BRG_ISOLATE(3)) & 0xff,
 		 readl(pp + PP_BRG_ISOLATE(4)) & 0xff, readl(pp + PP_BRG_ISOLATE(5)) & 0xff,
@@ -4607,7 +4607,7 @@ static void zx_chip_tm_init_trap_queues(struct zx_eth *e)
 				fail++;
 		}
 	}
-	dev_info(e->dev,
+	dev_dbg(e->dev,
 		 "trap_queue replay: %u ok, %u fail (%u entries x 8 banks incl. base/dir-1; %u q%u->q%u WiFi re-steers)\n",
 		 ok, fail, ZX_DEF_PTL_PKT_MAP_COUNT, resteer,
 		 ZX_WIFI_TRAP_DEAD_QID, ZX_WIFI_TRAP_LIVE_QID);
@@ -4749,7 +4749,7 @@ static void zx_tm_red_init(struct zx_eth *e)
 		u32 cfg = tm_read(e, TM_RED_CFG);
 
 		tm_write(e, TM_RED_CFG, cfg & ~TM_RED_CFG_CPUDN_CHARGE);
-		dev_info(e->dev, "TM RED init: %d failed of 1168 queue configs; RED_CFG 0x%02x -> 0x%02x (bit6 cpuDn charge-accounting OFF)\n",
+		dev_dbg(e->dev, "TM RED init: %d failed of 1168 queue configs; RED_CFG 0x%02x -> 0x%02x (bit6 cpuDn charge-accounting OFF)\n",
 			 fail, cfg, cfg & ~TM_RED_CFG_CPUDN_CHARGE);
 	}
 }
@@ -4849,7 +4849,7 @@ static void zx_red_block_init(struct zx_eth *e)
 		tm_write(e, RED_IND_CMD, q | (2u << 22));
 		tm_write(e, RED_IND_DATA0, (0x20u & 0x1fff) | ((0x200u & 0x7ffff) << 13));
 	}
-	dev_info(e->dev, "RED block init (0x92344000): globals + 400 out-buffer + 0x180 in-buffer queues\n");
+	dev_dbg(e->dev, "RED block init (0x92344000): globals + 400 out-buffer + 0x180 in-buffer queues\n");
 }
 
 /* pon_pp_ctrl_init equivalent — 2 writes + 52ms delay.
@@ -4863,7 +4863,7 @@ static void zx_pp_ctrl_init(struct zx_eth *e)
 	writel(0x01070104, pp + 0x28);
 	writel(0x00000002, pp + 0x00);
 	msleep(52);
-	dev_info(e->dev, "PP ctrl init: pp[0x28]=0x01070104 pp[0]=2 + 52ms delay\n");
+	dev_dbg(e->dev, "PP ctrl init: pp[0x28]=0x01070104 pp[0]=2 + 52ms delay\n");
 }
 
 /* pon_pp_brg_init equivalent — initializes the PP bridge so CPU TX egresses
@@ -5002,7 +5002,7 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	writel(readl(pp + 0x83d8) | 0xdf, pp + 0x83d8);	/* port 6 */
 	writel(readl(pp + 0x83dc) | 0xdf, pp + 0x83dc);	/* port 7 */
 
-	dev_info(e->dev, "PP bridge init: 13 regs + VLAN0/1 + port6/7 isolate done\n");
+	dev_dbg(e->dev, "PP bridge init: 13 regs + VLAN0/1 + port6/7 isolate done\n");
 }
 
 /* Post-BMU setup (tm_pon_tm_init between bmu_init and pon_tm_net_init).
@@ -6018,11 +6018,11 @@ static int zx_sw_open(struct net_device *ndev)
 {
 	struct zx_eth *e = *(struct zx_eth **)netdev_priv(ndev);
 
-	netdev_info(ndev, "sw open\n");
+	netdev_dbg(ndev, "sw open\n");
 	napi_enable(&e->tm_napi);
 	/* Unmask TM IRQs: CLEAR bits 0,1 (1=masked semantics) */
 	tm_and(e, TM_REG_IRQ_MASK, ~(u32)TM_IRQ_ARM_BITS);
-	netdev_info(ndev, "sw open: TM IRQ_MASK now 0x%08x (was 0xFFFFFFFF)\n",
+	netdev_dbg(ndev, "sw open: TM IRQ_MASK now 0x%08x (was 0xFFFFFFFF)\n",
 		    tm_read(e, TM_REG_IRQ_MASK));
 	netif_carrier_on(ndev);
 	netif_start_queue(ndev);
@@ -6063,7 +6063,7 @@ static int zx_sw_stop(struct net_device *ndev)
 	/* Mask all TM IRQs (1=masked) before disabling NAPI */
 	tm_write(e, TM_REG_IRQ_MASK, 0xFFFFFFFF);
 	napi_disable(&e->tm_napi);
-	netdev_info(ndev, "sw stop\n");
+	netdev_dbg(ndev, "sw stop\n");
 	return 0;
 }
 
@@ -6433,7 +6433,7 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 		return err;
 	}
 	e->sw_dev = ndev;
-	netdev_info(ndev, "sw registered (MAC %pM)\n", ndev->dev_addr);
+	netdev_dbg(ndev, "sw registered (MAC %pM)\n", ndev->dev_addr);
 
 	/* Stock kotrace captures exactly one sbrg_add_mactable call with
 	 * port=1; we mirror it. Don't seed port=6 here — it caused flood /
@@ -6442,7 +6442,7 @@ static int zx_sw_netdev_create(struct zx_eth *e)
 	{
 		int rc = zx_fdb_add(e, ndev->dev_addr, 0, 1);
 
-		netdev_info(ndev, "HW FDB seed (PP_BRG_RAM): self MAC port=1 rc=%d\n", rc);
+		netdev_dbg(ndev, "HW FDB seed (PP_BRG_RAM): self MAC port=1 rc=%d\n", rc);
 		/* Unknown-unicast FWD bitmap is configured in zx_pp_brg_init
 		 * (PP[0x8340] = 0x015555ff, CPU-only) to match stock LIVE. An
 		 * earlier attempt with bitmap 0x20 gave tx_done=0 / 100% loss,
@@ -7921,7 +7921,7 @@ static void zx_debugfs_init(struct zx_eth *e)
 	 * knob — BUILD-VERIFIED, UNTESTED ON HARDWARE (spec §5 step 2). */
 	debugfs_create_file("wifi_bind", 0644, zx_debugfs_root, e,
 			    &zx_wifi_bind_fops);
-	dev_info(e->dev, "debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem,pipeline_stats,regdump,poke,txtest}\n");
+	dev_dbg(e->dev, "debugfs ready: /sys/kernel/debug/zx_eth/{stats,mem,pipeline_stats,regdump,poke,txtest}\n");
 }
 
 static void zx_debugfs_exit(void)
@@ -7968,7 +7968,7 @@ static int zx_eth_probe_port(struct zx_eth *eth, int idx)
 		port->netdev = NULL;
 		return err;
 	}
-	netdev_info(ndev, "registered (MAC %pM)\n", ndev->dev_addr);
+	netdev_dbg(ndev, "registered (MAC %pM)\n", ndev->dev_addr);
 	return 0;
 }
 
@@ -9182,7 +9182,7 @@ static int zx_eth_probe(struct platform_device *pdev)
 	zx_debugfs_init(eth);
 
 	/* [WiFi productionization 2026-08-01] Auto-bind wlan interfaces.
-	 * Temporarily disabled — debugging AP data-path issue. 
+	 * Temporarily disabled — debugging AP data-path issue.
 	 * Re-enable when confirmed working.
 	eth->wlan_nb.notifier_call = zx_wlan_notifier;
 	register_netdevice_notifier(&eth->wlan_nb);
