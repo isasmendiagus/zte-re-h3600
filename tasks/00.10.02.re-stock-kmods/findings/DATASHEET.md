@@ -1140,7 +1140,7 @@ specific packet — use for spot-decode only, trust the counters for verdicts.
 | `0x92388004` | 9 | RW | [29] | desc_monitor_sel | 🟡 |
 | `0x92388008` | 10 | RW | [7:0] | inport_vl_chk_en | 🟡 |
 | `0x92388008` | 11 | RW | [15:8] | outport_vl_chk_en | 🟡 |
-| `0x92388008` | 12 | RW | [16] | cpu_chk_en | 🟡 |
+| `0x92388008` | 12 | RW | [16] | **cpu_chk_en** — bridge-level IP checksum auto-repair for CPU-bound frames. Stock API `sbrg_set_cpu_chk_en()` (decomp_all_tm.c:5206) writes this bit. Mainline writes 0x00000000 (clears bit16). ⚠️ If set, may eliminate SW `ip_fast_csum()` in DN WiFi dispatch path (`zx_idm_poll`). Untested hypothesis (2026-08-01). | ✅ |
 | `0x92388008` | 13 | RW | [17] | outport_vlan_sle | 🟡 |
 | `0x92388008` | 14 | RW | [18] | stat_clean_en | 🟡 |
 | `0x92388014` | 15 | RW | [11:0] | *semantics unknown* | ❓ |
@@ -1983,7 +1983,7 @@ flood/bcast/mcast, isolation, mirror; two indirect FDB tables.
   isolation matches, flood/VLAN verified stock-faithful — **not the gate**. ⚠ **Two real drifts
   flagged:** (1) `fdb_learning_enable_re.md` Q6: unknown-unicast fwd `0x92388340` mainline=0xff5555ff
   (flood-all) vs **stock 0x015555ff (CPU-only)** — single most-actionable FDB fix, matches the
-  loopback symptom; (2) vl-chk `0x92388008` mainline=0xff00 vs stock-runtime 0xdfdf (cspd-set);
+  loopback symptom; (2) vl-chk `0x92388008` mainline=0x00000000 vs stock-runtime 0xdfdf (cspd-set); bit16 `cpu_chk_en` may control DN WiFi checksum HW repair (see §PP_BRG register table).
   (3) mcast vl-trans `0x9238863c` mainline=0xaaaaaaaa vs stock 0 (`sopc_egress_port_gate_re.md`).
   Even after flood-bitmap fix → broadcast still didn't egress (session handoff "ruled out" for the
   fundamental gate, but the flood-policy drift is genuine and worth landing).
