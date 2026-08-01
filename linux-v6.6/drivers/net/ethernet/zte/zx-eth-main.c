@@ -2227,7 +2227,10 @@ static int zx_wifi_unregister_vif(struct zx_eth *e, u8 idm_ring, u8 ssid)
 	smp_wmb();
 	vif = node->wlan_ndev;
 	if (vif) {
-		netdev_rx_handler_unregister(vif);
+		rtnl_lock();
+		if (node->wlan_ndev == vif)
+			netdev_rx_handler_unregister(vif);
+		rtnl_unlock();
 		dev_put(vif);
 	}
 	node->wlan_ndev = NULL;
@@ -5539,10 +5542,11 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 
 			if (len > 0 && len < 1600 &&
 			    bppe_idx < TM_BPPE_POOL_SIZE && e->bp_cpu) {
-#if 0 /* BPDUMP — per-packet hexdump, useful for bring-up, stripped for production */
+				u8 *bp_buf = (u8 *)e->bp_cpu + (u32)bppe_idx * TM_BP_SIZE;
 				u16 et_at_0 = ntohs(*(const __be16 *)(bp_buf + 12));
 				const u8 *src = (et_at_0 >= 0x0600 && et_at_0 != 0xffff) ?
 						bp_buf : (bp_buf + 16);
+#if 0 /* BPDUMP — per-packet hexdump, useful for bring-up, stripped for production */
 				if (e->tm_rx_count + e->tm_rx_loopback_drops < 20) {
 					dev_info(e->dev,
 						"BPDUMP q=%d len=%u bppe=%u +00..0f=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x +10..1f=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x +20..2f=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
@@ -8923,10 +8927,17 @@ static int zx_wlan_notifier(struct notifier_block *nb,
 
 			if (READ_ONCE(wn->enabled) &&
 			    wn->wlan_ndev == ndev) {
-				zx_wifi_unregister_vif(e, wn->idm, wn->ssid);
+				/* Cache idm/ssid before clearing, unlock RTNL
+				 * for the rx_handler unregister (the handler
+				 * takes rtnl_lock internally). */
+				u8 idm = wn->idm, ssid = wn->ssid;
+
+				rtnl_unlock();
+				zx_wifi_unregister_vif(e, idm, ssid);
+				rtnl_lock();
 				dev_info(e->dev,
 					 "[wifi] auto-unbind: %s (was idm%u/ssid%u, slot %d)\n",
-					 ndev->name, wn->idm, wn->ssid, i);
+					 ndev->name, idm, ssid, i);
 				break;
 			}
 		}
@@ -9158,12 +9169,12 @@ static int zx_eth_probe(struct platform_device *pdev)
 
 	zx_debugfs_init(eth);
 
-	/* [WiFi productionization 2026-08-01] Auto-bind wlan interfaces:
-	 * register a netdevice notifier so wlanX is automatically bound to
-	 * the next available idm/ssid slot when hostapd creates the vif.
-	 * The debugfs wifi_bind knob still works for manual overrides. */
+	/* [WiFi productionization 2026-08-01] Auto-bind wlan interfaces.
+	 * Temporarily disabled — debugging AP data-path issue. 
+	 * Re-enable when confirmed working.
 	eth->wlan_nb.notifier_call = zx_wlan_notifier;
 	register_netdevice_notifier(&eth->wlan_nb);
+	*/
 
 	return 0;
 
