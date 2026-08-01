@@ -38,10 +38,10 @@ import bootpara as bp     # noqa: E402
 SLOT = nl.SLOT_A
 
 # How many bytes we actually flash into the kernel region (≤ slot kernel_max_size).
-# Bumped 0xb→0xc on 2026-05-24 when kernel + initramfs grew past 11 MiB.
+# Bumped 0xb→0xc→0xe→0x110 on 2026-08-01 when kernel + initramfs grew past 15 MiB.
 # header[0x34] is set to this exact value so cspstart CRCs ONLY what we wrote,
 # never the erased-but-untouched region beyond.
-NAND_WRITE_SIZE = 0xe00000
+NAND_WRITE_SIZE = 0x1100000
 
 LOAD_ADDR  = nl.RAM_LOAD_ADDR
 ENTRY_ADDR = nl.RAM_LOAD_ADDR + 0x40
@@ -106,7 +106,9 @@ def main():
     initramfs_mod_dir = Path("/tmp/initramfs_extract/lib/modules")
     initramfs_mod_src = ZXIC / "tasks/00.01.eth-driver/initramfs/lib/modules"
     for ko_pattern in ["drivers/net/wireless/**/*.ko", "net/wireless/*.ko",
-                         "net/mac80211/*.ko", "drivers/pci/controller/dwc/*.ko"]:
+                         "net/mac80211/*.ko", "drivers/pci/controller/dwc/*.ko",
+                         "drivers/usb/dwc3/*.ko", "drivers/usb/host/xhci*.ko",
+                         "drivers/usb/storage/*.ko"]:
         for ko in _glob.glob(str(BUILD / ko_pattern), recursive=True):
             dst = initramfs_mod_dir / Path(ko).name
             shutil.copy2(ko, str(dst))

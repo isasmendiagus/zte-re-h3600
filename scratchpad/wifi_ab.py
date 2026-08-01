@@ -50,7 +50,7 @@ result = {}
 def dl():
     t0 = time.time()
     p = subprocess.run(["adb", "shell",
-        'echo -e "GET /big.bin HTTP/1.0\\r\\nHost: x\\r\\n\\r\\n" | toybox timeout %d toybox nc 10.44.66.133 8080 | toybox wc -c' % dur],
+        'echo -e "GET /big.bin HTTP/1.0\\r\\nHost: x\\r\\n\\r\\n" | toybox timeout %d toybox nc 10.44.66.30 8088 | toybox wc -c' % dur],
         capture_output=True, text=True, timeout=dur + 25)
     result["bytes"] = p.stdout.strip()
     result["secs"] = time.time() - t0

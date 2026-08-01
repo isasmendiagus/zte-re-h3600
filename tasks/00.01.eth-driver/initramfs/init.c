@@ -46,6 +46,18 @@ int main(void) {
     kmsg("ip addr add 192.168.1.99/24 dev sw");
     sh("/bin/busybox ip addr add 192.168.1.99/24 dev sw");
 
+    /* USB subsystem: DWC3 core → ZX279128S glue → xHCI → storage */
+    kmsg("insmod dwc3.ko (USB DWC3 core)");
+    sh("/bin/busybox insmod /lib/modules/dwc3.ko");
+    kmsg("insmod dwc3-zx279128s.ko (ZX279128S DWC3 glue)");
+    sh("/bin/busybox insmod /lib/modules/dwc3-zx279128s.ko");
+    kmsg("insmod xhci-hcd.ko (xHCI host controller)");
+    sh("/bin/busybox insmod /lib/modules/xhci-hcd.ko");
+    kmsg("insmod xhci-plat-hcd.ko (xHCI platform)");
+    sh("/bin/busybox insmod /lib/modules/xhci-plat-hcd.ko");
+    kmsg("insmod usb-storage.ko (USB mass storage)");
+    sh("/bin/busybox insmod /lib/modules/usb-storage.ko");
+
     /* Router bring-up: run /etc/rc.router if present (LAN/WAN ifaces, udhcpd,
      * ip_forward, NAT rules). Config-as-data so we don't recompile PID 1 to
      * tweak the router setup. See tasks/00.01.eth-driver/configs/rc.router. */
