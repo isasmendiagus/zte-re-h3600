@@ -19,9 +19,13 @@ big-bang refactor.
 - **`tasks/00.10.02.re-stock-kmods/findings/DATASHEET.md`** — homemade ZX279128S
   ethernet/switch datasheet. Part 1 = block/memory map (DT windows, the **base-gotcha**
   npp_base 0x921c0000 vs tm_base 0x92340000, egress pipeline, what's NOT dumped); Part 2 =
-  per-register reference (623+ RE'd registers: phys, bit-field, R/W, semantic name,
+  per-register reference (644+ RE'd registers: phys, bit-field, R/W, semantic name,
   confidence). **Start here for any register/address question.** Respect the base-gotcha —
   it caused ~6 wasted iterations.
+  ⚠️ **MANDATORY: update DATASHEET.md every time you discover a new register,
+  confirm a field, or find a stock-vs-mainline divergence.** It's the durable
+  knowledge base — don't let findings scatter across agent transcripts.
+- **`HANDOFF_FRESH_AGENT.md`** — cold-start document for a new agent (read FIRST on every session).
 - **`STATE.md`** — live device state + journey log (#1–#20); the chronology of what was
   tried/ruled out for the TX-egress hunt.
 - **`tasks/00.10.02.re-stock-kmods/findings/session_2026-05-28_tx_egress_state.md`** —
@@ -323,6 +327,23 @@ own deletions**.
 - TFTP server runs on host at `192.168.1.50:69`, serving `zxic/tftp/`
 - Device IP: `192.168.1.1`. SSH creds: `admin / UkuGPeyRDU`. U-Boot pw: `Boot4128s!`
 - See `tools/dtr-mod/README.md` for the FTDI cable's DTR→relay hardware mod
+- **IMPORTANT: Only ONE agent touches the device at a time.** Use background agents for
+  device-free research (code reading, decomp analysis, finding docs), and ONE foreground
+  or background agent for build+boot+test. The orchestrator coordinates.
+
+### Subagent orchestration pattern (2026-08-01)
+
+- **Orchestrator (you)**: reads findings, makes decisions, edits code, commits, delegates.
+  Do NOT spend tokens reading large files — delegate to explorers.
+- **Explorer agents** (`subagent_type: explore`): device-free research. Search codebase, read
+  decomp, grep findings, analyze driver code. Use "medium" or "very thorough" levels.
+  Return structured findings. Run MULTIPLE explorers in parallel when tasks are independent.
+- **General agents** (`subagent_type: general`): build + boot + test on the device.
+  Exactly ONE at a time. Give them EXACT steps to follow.
+- **Background mode**: use `background: true` for long-running device tests (boot, wedge test).
+  You'll be notified when they finish. Do NOT poll or check on them.
+- **Always delegate DATASHEET.md updates to agents** — give them the new register knowledge
+  and tell them to merge it into the datasheet following existing format.
 
 #### Bench cable topology (host ↔ device wiring)
 Three USB-Ethernet adapters on the dev host, one cable each into a

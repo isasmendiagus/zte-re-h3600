@@ -432,4 +432,42 @@ console printk first (`echo 1 > /proc/sys/kernel/printk`) — the periodic
 2. Cause (what's actually happening underneath).
 3. Fix (the SPECIFIC change).
 4. Reference (file:line where the solution lives in code, OR the doc that documents it).
+
+---
+
+## Symptom: WiFi HW-offload wedge — fabric front-end halts after ~1k-72k HW-forwarded frames
+**Cause**: BMU DDR prefetch engine never auto-primes its pool on mainline
+(bppe_cnt=0 at 0x92348080 vs stock's ~8112). The chip survives on only a
+~10-entry on-chip BPPI recycle margin. Each HW-forwarded WiFi fabric-ingress
+frame consumes one BP without returning it → starvation halt.
+**Fix**: After BMU enable in zx_tm_bmu_enable(), loop freeing every BP index
+(0..8191) to TM_REG_BMU_FREE (0x8010). BPPI fills to ~191, excess spills to
+DDR BPPE pool (~1872). Verified: 139k frames, zero freeze.
+**References**:
+- findings/wifi_stage3_wedge2_fix_2026-08-01.md
+- zx-eth-main.c:2543 (BMU pool priming loop)
+- zx-eth-main.c:2558 (tm_write TM_REG_BMU_FREE)
+- DATASHEET.md §BMU, register 0x8010, 0x8080 (bppe_cnt)
+
+## Symptom: Kernel module fails to load with "version magic mismatch" / "Unknown symbol"
+**Cause**: Kernel modules in initramfs were built with a DIFFERENT version
+string (git tag) than the kernel. build_slotA.py only copied zx279128-eth.ko,
+not WiFi/PCIe modules. Each rebuild changes LOCALVERSION based on git describe.
+**Fix**: build_slotA.py now auto-copies ALL built .ko files from the build tree
+to both initramfs source and /tmp/initramfs_extract on every build.
+**Reference**: tasks/00.01.eth-driver/scripts/build_slotA.py (0b2 step)
+
+## Symptom: debugfs poke/peek returns [exit=4] (SIGILL) on REPL
+**Cause**: busybox binary in initramfs is hard-float (Tag_ABI_VFP_args: VFP
+registers). Cortex-A9 has NO VFP. Non-builtin applets SIGILL. Use the soft-float
+busybox at tasks/00.01.eth-driver/userland/busybox.softfloat.
+**Fix**: Copy busybox.softfloat → tasks/00.01.eth-driver/initramfs/bin/busybox
+**Reference**: tasks/00.01.eth-driver/userland/busybox.softfloat
+
+## Symptom: nftables "operation not supported" / "No such file or directory" for NAT
+**Cause**: nf_nat and nft_chain_nat kernel modules not built/loaded. Without
+iptables, need nft for NAT on the WiFi→WAN path. CONFIG_NF_NAT may be missing.
+**Fix (workaround)**: Add host-side route: `ip route add 192.168.50.0/24 via
+10.44.66.223` so host can reach phone subnet without NAT on device.
+**Reference**: scratchpad/wedge_coldstart.py (WSINK env var)
 5. Cost (rough wall-clock time to debug from scratch — motivates future-you to read this list).
