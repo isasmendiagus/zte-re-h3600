@@ -3278,7 +3278,8 @@ static void zx_ft_build_flow_info(u32 fi[8], const struct zx_ft_nat *n,
 
 	w1 |= ((u32)n->new_sport >> 14) & 0x3;		/* nat_sport[15:14] */
 	w1 |= 1u << 2;					/* hl_ttl_en (routed transit) */
-	if (rw)			w1 |= 1u << 3;		/* tcp_udp_chk_en */
+	if (rw)
+		w1 |= 1u << 3;				/* tcp_udp_chk_en */
 	/* ip_chk_en must accompany hl_ttl_en, not just NAT: the PM TTL edit
 	 * leaves the IP checksum STALE unless bit4 folds it (same defect class
 	 * as Phase-C R1, findings/wifi_stage3_phaseC_R1_validation; stock sets
@@ -3288,10 +3289,14 @@ static void zx_ft_build_flow_info(u32 fi[8], const struct zx_ft_nat *n,
 	 * only survived this because its frames pass the CPU dispatch, which
 	 * repairs the csum in SW. Unconditional: any TTL-edited frame needs it. */
 	w1 |= 1u << 4;					/* ip_chk_en */
-	if (n->dport_set)	w1 |= 1u << 5;		/* dport_en */
-	if (n->sport_set)	w1 |= 1u << 6;		/* sport_en */
-	if (n->dnat)		w1 |= 1u << 7;		/* dip_en */
-	if (n->snat)		w1 |= 1u << 8;		/* sip_en */
+	if (n->dport_set)
+		w1 |= 1u << 5;				/* dport_en */
+	if (n->sport_set)
+		w1 |= 1u << 6;				/* sport_en */
+	if (n->dnat)
+		w1 |= 1u << 7;				/* dip_en */
+	if (n->snat)
+		w1 |= 1u << 8;				/* sip_en */
 	w1 |= 1u << 9;					/* subnet_id = 1 (per stock capture) */
 	w1 |= ((u32)next_hop_idx & 0x1ff) << 18;	/* next_hop_idx[26:18] */
 
@@ -4814,11 +4819,18 @@ static void zx_red_block_init(struct zx_eth *e)
 	for (q = 0; q < 400; q++) {
 		u32 guart = 0x40, max_sp;
 
-		if (q < 0x10)		{ guart = 0x3ff; max_sp = 0; }
-		else if (q < 0x150)	{ max_sp = 0x7ff; }
-		else if (q < 0x178)	{ max_sp = (q & 7) ? 0x80 : 0x200; }
-		else if (q < 0x188)	{ max_sp = 0xc00; }
-		else			{ max_sp = 0x3ff; }
+		if (q < 0x10) {
+			guart = 0x3ff;
+			max_sp = 0;
+		} else if (q < 0x150) {
+			max_sp = 0x7ff;
+		} else if (q < 0x178) {
+			max_sp = (q & 7) ? 0x80 : 0x200;
+		} else if (q < 0x188) {
+			max_sp = 0xc00;
+		} else {
+			max_sp = 0x3ff;
+		}
 		zx_red_set_outbuf(e, q, guart, max_sp);
 	}
 
