@@ -4941,7 +4941,7 @@ static void zx_pp_brg_init(struct zx_eth *e)
 	 * verdict drop_PP'd (killed all WiFi/ring FORWARD-class unicast).
 	 * See findings/wifi_stage3_phaseB_e2e_realclient_2026-07-07.md.
 	 */
-	writel(0x00000000, pp + 0x8008);	/* vl_chk all OFF (was 0x0000ff00) */
+	writel(0x00010000, pp + 0x8008);	/* vl_chk all OFF + cpu_chk_en (bit16) */
 	dev_dbg(e->dev, "PP_BRG post-init: SMAC_LOOK_EN=%02x (CPU port 5 disabled)\n",
 		 readl(pp + 0x81c0));
 
