@@ -54,6 +54,11 @@ int main(void) {
 
     kmsg("=== entering REPL on /dev/console ===");
 
+    /* Keep kernel log noise off the REPL input stream.
+     * Single-byte read(fd0) treats every console byte (including
+     * printk output) as user input → garbled commands. */
+    sh("echo 3 4 1 7 > /proc/sys/kernel/printk");
+
     /* Open /dev/console for read+write, dup to stdio. */
     int fd = open("/dev/console", O_RDWR);
     if (fd >= 0) { dup2(fd, 0); dup2(fd, 1); dup2(fd, 2); if (fd>2) close(fd); }

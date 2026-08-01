@@ -49,7 +49,7 @@ with `tasks/00.01.eth-driver/scripts/build_slotA.py` then `tftp_boot_mainline.py
 
 ## Status
 
-_Updated 2026-07-31. Working branch: `phase6-hw-offload` (== `main`)._
+_Updated 2026-08-01. Working branch: `main`._
 
 | Subsystem | State |
 |-----------|-------|
@@ -60,14 +60,16 @@ _Updated 2026-07-31. Working branch: `phase6-hw-offload` (== `main`)._
 | WiFi STA (MediaTek MT7915, in-tree mt76/mac80211) | ✅ proven |
 | WiFi AP (soft-float hostapd) + real client + internet via CPU SW-forward | ✅ working (5 GHz WPA2, end-to-end) |
 | WiFi slow-path (fabric ⇄ vif dispatcher, "Phase B") | ✅ working end-to-end (real client) |
-| WiFi **HW offload** mechanism (Stage 3, DN + UP, `gemport_uni_id`/ports 6-7) | ✅ mechanism HW-validated, ⚠️ **gated OFF** — open fabric-ingress endurance "wedge #2" |
+| WiFi **HW offload** mechanism (Stage 3, DN + UP, `gemport_uni_id`/ports 6-7) | ✅ mechanism HW-validated, ✅ **wedge #2 FIXED** — ftwifi now defaults ON |
 | OpenWrt port | ⏳ not started (the end goal) |
 
-The only thing between "WiFi HW-offload works" and "on by default" is **wedge #2**:
-under sustained fabric-ingress HW-forwarding the fabric front-end starves and halts
-(~1k–72k frames, reboot-only). Deeply characterized + a 1-minute repro exists;
-several root-cause hypotheses refuted (BMU-pool, top_crm, SIPC-ring, A09 AXI/QoS).
-See `findings/wifi_stage3_*` + memory `zte-wifi-up-offload`. `ftwifi` stays default OFF.
+The only thing between \"WiFi HW-offload works\" and \"on by default\" was **wedge #2**:
+under sustained fabric-ingress HW-forwarding the fabric front-end starved and halted
+(~1k–72k frames, reboot-only). **FIXED 2026-08-01**: the BMU pool was never primed on
+mainline (bppe_cnt=0 vs stock's ~8112). Manually priming by freeing all 8192 BP indices
+after BMU enable populates the pool (bppe_cnt=1872). Verified with wedge_coldstart.py:
+139k WiFi frames, zero freeze. See `findings/wifi_stage3_wedge2_fix_2026-08-01.md`. 
+ftwifi now defaults ON.
 
 ## Where do I start? (fresh-agent path)
 

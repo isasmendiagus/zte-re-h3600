@@ -43,21 +43,25 @@ carries traffic, the OpenWrt port is the smaller (but still real) lift.
    device, and watching output flow through `kmsg2uart` → UART. That is the
    next concrete RE methodology.
 
-## Now (2026-07-31)
+## Now (2026-08-01)
 
 Ethernet (DSA + **bidirectional HW offload**, NAT in silicon, line-rate) and WiFi
-(STA + AP + slow-path + a **HW-offload mechanism** validated in both directions)
-are all working on mainline. Working branch: `phase6-hw-offload` (== `main`).
+(STA + AP + slow-path + **HW-offload mechanism** validated in both directions)
+are all working on mainline. Working branch: `main`.
 Current priorities, in order:
 
-### 1. WiFi HW-offload durability — "wedge #2" (the ONE blocker to `ftwifi` ON)
-Under sustained fabric-ingress HW-forwarding the fabric front-end starves and
-halts (~1k–72k frames, reboot-only). Deeply characterized; a **1-minute
-cold-start repro** exists (`scratchpad/wedge_coldstart.py`). Refuted so far:
-BMU-pool drain, top_crm clock bit, SIPC descriptor-ring, A09 AXI/QoS. Surviving
-lead: `sipc2cpu_aful_cnt_dn` ≠ 0 only on mainline → a frame class hitting a
-CPU-bound path with **no consumer** (the Phase-B q5-unbound pattern). Next: an
-A/B of ≥3 fresh boots (old build vs `pp_pmau`) then chase the no-consumer path.
+### 1. WiFi HW-offload durability — "wedge #2" ✅ DONE
+Root cause: BMU DDR prefetch engine never auto-primes its pool on mainline
+(bppe_cnt=0 vs stock's ~8112). Fix: manually prime by freeing all 8192 BP
+indices after BMU enable → bppe_cnt=1872, bppi_cnt=186. Verified: 
+139k WiFi fabric-ingress frames with ZERO freeze (wedge_coldstart.py, 60 rounds).
+ftwifi now defaults ON. See `findings/wifi_stage3_wedge2_fix_2026-08-01.md`.
+
+### 2. WiFi productionization (in progress)
+Auto-bind (netdevice notifier hooks hostapd vif creation), csum-to-HW
+(flow_info bit4, already unconditional), hardening + regress, throughput
+tuning (MT7915 11ax/TXBF — test client currently links at 11n).
+Multi-SSID + 2.4 GHz + multi-client deferred (need more test hardware).
 See `findings/wifi_stage3_*` + memory `zte-wifi-up-offload`. `ftwifi` stays OFF
 until fixed. (Two real bugs already fixed en route: BMU BP double-free + the
 pm_ext BPPE-table memset wipe.)

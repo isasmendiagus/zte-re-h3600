@@ -467,6 +467,15 @@ absolute phys in the tables below — they were computed from `base_off*4` direc
 | `0x921c010c` | 67 | RW | [0] | tm_oam_en | ✅ |
 | `0x921c0114` | 68 | RW | [3:0] | gap_add | ✅ |
 
+## NPP reset/clock gate registers
+
+Registers at npp_base+0x08 and npp_base+0x0c. Write-1-to-toggle-and-clear reset/clock gate registers used by stock kernel and U-Boot.
+
+| phys | NPP off | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---| 
+| `0x921c0008` | 0x0008 | W | [31:0] | **NPP reset gate** — write-1-to-toggle-and-clear. Stock writes 0xFFFFFF (24 bits), U-Boot writes 0xFFFFFFFF (32 bits). Readback is always 0 (self-clearing). Acts as a sub-block reset strobe for the NPP datapath. | ✅ |
+| `0x921c000c` | 0x000C | W | [31:0] | **NPP clock gate** — write-1-to-toggle-and-clear. Stock writes 0xFFFFF (bits 0–19), U-Boot writes 0xFFFFFFFF (all 32 bits). Readback is 0x3FFFF (some bits reflect clock state). Higher bits (20–31) that U-Boot toggles but stock does NOT may gate the BMU DDR prefetch path — untested hypothesis. | ✅ |
+
 ## SDETG (frame detect / VLAN det)
 
 **Block base ≈ `0x921c4000`** (zx_sdetgregtable). Role: min/max frame len, UNI OMP/PMP VID, soft-VID, c_tpid, SOAM drop
@@ -529,11 +538,11 @@ channels** — aliased/global, not per-channel state.
 | `0x921cc004` | [7:4] | cpu_short_drop_cnt (dn) | ✅ |
 | `0x921cc004` | [11:8] | cpu_pkt_drop_cnt (dn) | ✅ |
 | `0x921cc004` | [15:12] | cpu_pkt_drop_cnt (up) | ✅ |
-| `0x921cc004` | [19:16] | **sipc2cpu_aful_cnt_dn** (SIPC→CPU DN FIFO almost-full events) | ✅ |
+| `0x921cc004` | [19:16] | **sipc2cpu_aful_cnt_dn** (SIPC→CPU DN FIFO almost-full events). Non-zero only on mainline (≠0 on stock) — was a surviving lead for wedge#2 (WiFi fabric-ingress). Demoted once root cause (BMU pool starvation) was confirmed. ⚠ SIPC is a single shared block; cannot discriminate per-ingress-port. | ✅ |
 | `0x921cc004` | [23:20] | **sipc2cpu_ful_cnt_dn** | ✅ |
 | `0x921cc004` | [27:24] | **sipc2cpu_aful_cnt_up** | ✅ |
 | `0x921cc004` | [31:28] | **sipc2cpu_ful_cnt_up** | ✅ |
-| `0x921cc008` | [23:12] | **NO stock reader/symbol exists.** Three 4-bit event counters that move in lockstep on mainline (RO, write-deaf; boot image writes 0x844 = blind replay no-op). LIVE 2026-07-31: fills AND drains at idle; insensitive to RX-trap traffic; wraps f→1; **saturation does NOT halt the fabric** (box passed traffic at fff) and a true wedge fired with it at 0x777 — it is a coincident symptom, NOT the wedge cause | ✅ |
+| `0x921cc008` | [23:12] | **NO stock reader/symbol exists.** Three 4-bit event counters that move in lockstep on mainline (RO, write-deaf; boot image writes 0x844 = blind replay no-op). LIVE 2026-07-31: fills AND drains at idle; insensitive to RX-trap traffic; wraps f→1; **saturation does NOT halt the fabric** (box passed traffic at fff) and a true wedge fired with it at 0x777 — it is a coincident symptom, NOT the wedge cause. **Definitively demoted for wedge#2 as well:** wedge#2 root cause = BMU pool starvation (engine unclocked, no DDR prefetch); the 0x921cc008 gauge was never the gate for either wedge. | ✅ |
 | `0x921cc024` | [3:0] | sdet_shor_drop_cnt | ✅ |
 | `0x921cc030` | [23:0] | sipc_sch_dbg | ✅ |
 | `0x921cc038`/`0x921cc03c` | — | static config (boot-written 0x318 both; sizes/thresholds, NOT counters) | ✅ |
@@ -814,12 +823,12 @@ NOTE (base-gotcha, both directions): stock's `tm_base+0xc008 = 0` write (plat :7
 |---|---|---|---|---|---|
 | `0x92340000` | 1 | RW | [7:4] | *semantics unknown* | ❓ |
 | `0x92340000` | 0 | RW | [10] | *semantics unknown* | ❓ |
-| `0x923400e8` | 2 | RW | [31:0] | *semantics unknown* | ❓ |
-| `0x923400ec` | 3 | RW | [31:0] | *semantics unknown* | ❓ |
-| `0x923400f0` | 4 | RW | [31:0] | *semantics unknown* | ❓ |
-| `0x923400f4` | 5 | RW | [31:0] | *semantics unknown* | ❓ |
-| `0x923400f8` | 6 | RW | [31:0] | *semantics unknown* | ❓ |
-| `0x923400fc` | 7 | RW | [29:0] | *semantics unknown* | ❓ |
+| `0x923400e8` | 2 | RW | [31:0] | **BPPE_BASE** — global TM BPPE table phys addr in DDR (stock=0x4C000000). Writable; shared by all 5 BMU instances. SW programs once; BMU DMA reads BPPE indices from here. The per-instance mirror at TM[0x80E8] is READ-ONLY (reads back 0 on mainline). | ✅ |
+| `0x923400ec` | 3 | RW | [31:0] | **JUMBO_BPPE_BASE** — global TM jumbo BPPE table phys addr (= BPPE_BASE + 0x10000; stock=0x4C010000). Same global/per-instance split as BPPE_BASE. | ✅ |
+| `0x923400f0` | 4 | RW | [31:0] | **DESC_BASE** — TM RX descriptor ring 0 phys base (e.g. 0x4FF1F000). Points to DDR where the TM DMA engine places RX descriptors. | ✅ |
+| `0x923400f4` | 5 | RW | [31:0] | **BP_BUFFER_BASE** — global TM BP buffer pool phys base in DDR (stock=0x4EC20000). Backing store for normal-size frame buffers; each BP is TM_BP_SIZE bytes (stock 0x900=2304). | ✅ |
+| `0x923400f8` | 6 | RW | [31:0] | **JUMBO_BP_BASE** — global TM jumbo BP buffer pool phys base. Stock shares the same bp_dma for both pools. | ✅ |
+| `0x923400fc` | 7 | RW | [29:0] | **BP_SIZE** — global TM: low 16 = normal BP_SIZE (stock 0x900=2304 bytes/BP), high 16 = JUMBO_BP_SIZE (stock 0x2800=10240 bytes/BP). Stock live=0x28000900; mainline uses identical values. | ✅ |
 | `0x92340100` | 8 | R | [2:0] | *semantics unknown* | ❓ |
 | `0x92340100` | 9 | R | [4:3] | *semantics unknown* | ❓ |
 | `0x92340100` | 10 | R | [15:8] | *semantics unknown* | ❓ |
@@ -884,6 +893,57 @@ ram0 = per-queue OUT-buffer (guart|max<<11; q0-15=0x400 = the 1024 trap latch de
 IN-buffer; ram4 = 9-word WRED curve (per queue); ram1/ram5 = occupancy readback. Mainline `zx_tm_red_init`
 replays ram0/2/4 byte-identically to stock; the RED *globals* are parity at reset defaults (a latent
 `zx_red_block_init` base-arithmetic bug writes them to dead space `0x924C4xxx`, currently harmless).
+
+## BMU (Buffer Management Unit)
+
+**Block base ≈ `0x92348000` = TM[0x8000]**, 5 instances at strides of +0x400 (0x92348000/8400/8800/8C00/9000). Role: HW buffer-pointer (BP) allocator/freer for the fabric and CPU TM path. Two pools: normal + jumbo. Global base-address regs at TM[0xE8..0xFC] (phys 0x923400e8..0xfc, see PON-TM section above) are RW; per-instance mirrors at TM[0x80e8..0x80fc] are RO (read back 0 on mainline).
+
+### BMU per-instance control registers (TM[0x8000..0x8014])
+
+| phys (inst0) | off | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x92348000` | 0x8000 | RW | [0] | **BMU_ENABLE** — bit0=1 enables the alloc/free engine. Stock writes 0 in `pon_tm_bmu_init`, then 1 in `pon_tm_bmu_enable`. Other bits unused. | ✅ |
+| `0x92348004` | 0x8004 | RW | [31:0] | **bppCtrl1** — DMA-burst / threshold config. Stock constant = 0x0104C040. | ✅ |
+| `0x92348008` | 0x8008 | RW | [31:0] | **bppCtrl2** — identical to 0x8004. Stock constant = 0x0104C040. | ✅ |
+| `0x9234800c` | 0x800C | RO | [31]/[15:0] | **sw_alloc_bp** — alloc result. bit31=valid, bits[15:0]=bp_idx. HW writes this when alloc completes; SW polls until bit31 set. | ✅ |
+| `0x92348010` | 0x8010 | W | [14:0]/[15] | **sw_free_bp** — free request. bits[14:0]=bp_idx, bit15=jumbo_flag. Reading shows last-written value. | ✅ |
+| `0x92348014` | 0x8014 | RW | [1:0] | **sw_alloc_cfg** — alloc-kick register. bit0=alloc_kick (pulse: write 1 then poll until 0), bit1=jumbo_select. Poll bits[1:0] for 0 (= done). | ✅ |
+
+### BMU per-instance pool/pointer registers (TM[0x8040..0x805c])
+
+| phys (inst0) | off | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x92348040` | 0x8040 | RO | [15:0]/[31:16] | **bppi ptr** — low16=read_ptr, high16=write_ptr. BPPI = "buffers pending into pool" on-chip FIFO; HW moves entries from here to BPPE. Stock live=0x00510002; mvl=0xfb00ec. | ✅ |
+| `0x92348044` | 0x8044 | RW | [31:0] | **bppi cfg** — BPPI FIFO config. Stock live=0x00500001. HW-maintained; no stock SW writer after init. Mainline reads 0. | ✅ |
+| `0x92348048` | 0x8048 | RW | [15:0]/[31:16] | **bppe ptr** — low16=read_ptr (HW increments on alloc), high16=write_ptr (HW increments on free). Init: write POOL<<16 to advertise N valid entries. Stock live=0x00000050 (HW consumed 80 entries). **Mainline writes value but reads back 0** (SW write-deaf; engine-unclocked). | ✅ |
+| `0x9234804c` | 0x804C | RW | [15:0]/[31:16] | **jumbo bppe ptr** — jumbo counterpart of 0x8048. Stock live=0x00660050. | ✅ |
+| `0x92348058` | 0x8058 | RW | [7:0] | **pool size** — bucket count for normal pool. Stock formula (POOL>>5)-1 yields 0xFF for POOL=8192, but live shows 0x100 (HW adds +1 or decomp imm is >>5). Mainline writes 0x1F for POOL=1024, reads back 0x20. | ✅ |
+| `0x9234805c` | 0x805C | RW | [7:0] | **jumbo pool size** — jumbo counterpart. Stock live=0x03 for POOL=0x66. | ✅ |
+
+### BMU per-instance level/counter registers (TM[0x8080..0x80e4])
+
+| phys (inst0) | off | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x92348080` | 0x8080 | RO | [15:0] | **bppe bpcnt** — number of free BPs currently in DDR BPPE free-list ring. Stock live=0x1FB0 (8112 of 8192). **Mainline reads 0** (engine unclocked → DDR prefetch never runs). | ✅ |
+| `0x92348088` | 0x8088 | RO | [15:0] | **bppi bpcnt** — number of free BPs in on-chip BPPI FIFO. Stock live=0x4F (79). Mainline=0xa–0xf (survives on ~10-entry recycle margin only). | ✅ |
+| `0x92348090` | 0x8090 | RO | [31:0] | **alloc bpcnt** — lifetime BP-alloc counter (HW ledger). Tracks MAC-ingress frame counts; diff alloc−release = currently allocated. | ✅ |
+| `0x92348098` | 0x8098 | RO | [31:0] | **rls bpcnt** — lifetime BP-free counter. Balance (alloc−release) constant at wedge onset = pool drain NOT the gate. | ✅ |
+| `0x923480dc` | 0x80DC | RW | [5:0]/[30] | **bp stat** — multi-field status. bits[5:0]=free-credit (consumer reads `(value>>3)&0x3f` for 6-bit capacity), bit30=engine-ready indicator (RO). Stock live=0x40000111; mvl=0x00000111 (bit30 clear). | ✅ |
+| `0x923480e0` | 0x80E0 | RO | [31:0] | **distress counter** — non-zero on mainline (0xfb1), zero on stock. Climbs with traffic. Undecoded; likely starvation-event counter. | ✅ |
+| `0x923480e4` | 0x80E4 | RO | [31:0] | **distress counter (jumbo?)** — mainline-only (0x3b0), climbs with traffic. | ✅ |
+
+### BMU per-instance BPPE base-address mirrors (TM[0x80e8..0x80fc]) — READ-ONLY
+
+These are **per-instance mirrors** of the global TM[0xE8..0xFC] registers (see PON-TM section). On mainline they read back 0; stock reads back the global value. The global set at TM[0xE8..0xFC] is the canonical, writable set shared by all 5 BMU instances.
+
+| phys (inst0) | off | R/W | bits | semantic name | conf |
+|---|---|---|---|---|---|
+| `0x923480e8` | 0x80E8 | RO | [31:0] | BPPE_BASE per-instance mirror (global source: 0x923400e8) | ✅ |
+| `0x923480ec` | 0x80EC | RO | [31:0] | JUMBO_BPPE_BASE mirror (global: 0x923400ec) | ✅ |
+| `0x923480f0` | 0x80F0 | RO | [31:0] | DESC_BASE mirror (global: 0x923400f0) | ✅ |
+| `0x923480f4` | 0x80F4 | RO | [31:0] | BP_BUFFER_BASE mirror (global: 0x923400f4) | ✅ |
+| `0x923480f8` | 0x80F8 | RO | [31:0] | JUMBO_BP_BASE mirror (global: 0x923400f8) | ✅ |
+| `0x923480fc` | 0x80FC | RO | [29:0] | BP_SIZE mirror (global: 0x923400fc) | ✅ |
 
 ## SCH/DSCH (shaper/scheduler)
 
@@ -1504,12 +1564,13 @@ The per-port bond chain that makes `phy_mac_ready` (0x921d9068 bit port+5, RO se
 
 ---
 ## Coverage summary
-- **Table-derived register fields documented: 623** (380 decomp-named, 243 structure-only/❓).
+- **Table-derived register fields documented: 644** (380 decomp-named, 243 structure-only/❓, plus 21 non-table BMU/NPP-gate entries from findings).
 - Plus ~30 non-table regs (SMAC counters/ctrl, SOPC send2smac, QMG counters, TM ring doorbells, drop counters, PP/ETH_TM2) folded in from findings.
 
 ### Per-block field counts (table-derived)
 
 - greg / global switch + per-port STP: 71
+- NPP reset/clock gate: 2
 - SDETG (frame detect / VLAN det): 18
 - SIPC (CPU<->fabric bridge): 2
 - SMCT (CPU-port multi-channel xfer): 3
@@ -1521,6 +1582,7 @@ The per-port bond chain that makes `phy_mac_ready` (0x921d9068 bit port+5, RO se
 - PON-TM: 14
 - QMG (queue manager): 12
 - RED (random-early-detect): 10
+- BMU (buffer management unit): 19
 - SCH/DSCH (shaper/scheduler): 19
 - CLA (classifier/ACL): 61
 - SBRAG / PP_BRG (bridge: FDB/VLAN/flood): 87
@@ -1621,29 +1683,78 @@ netdevs + WiFi forward path** — NOT the bridged-LAN egress path.
   IDM ring xmit tested → no egress (`idm_ring_xmit_test_result_2026-05-28.md`). cb[0xb7] is an
   RX ssid, not a TX egress override (`idm_cpuport_fabric_forward_re.md` Q2).
 
-## 3.3 BMU — Buffer Management Unit  🟡 (rich, but live anomalies open)
+## 3.3 BMU — Buffer Management Unit  ✅ (closed — wedge#1+#2 root-caused and fixed)
+
 **Base TM[0x8000] = 0x92348000**, 5 instances at +0x400 (0x92348000/8400/8800/8C00/9000).
-Base-address regs at TM[0xE8..0xFC] = 0x923480e8..0x923480fc. Role: HW allocator/freer of
-**Buffer Pointers (BP)** for fabric + CPU TM path; two pools (normal + jumbo).
-- **Key regs (abs phys, instance 0):** BPPE_BASE `0x923480e8`, JUMBO_BPPE `0x923480ec`,
-  DESC_BASE `0x923480f0`, BP_BUFFER `0x923480f4`, JUMBO_BP `0x923480f8`, BP_SIZE
-  `0x923480fc` (low16=BP_SIZE 0x900, high16=jumbo 0x2800); cfg/ENABLE `0x92348000` (bit0),
-  bppCtrl `0x92348004/8=0x0104c040`, alloc-result `0x9234800c` (bit31=valid|bp_idx), free
-  `0x92348010`, alloc-kick `0x92348014` (bit0), **bppe-ptr `0x92348048`** (low16=read, high16=write),
-  pool-size `0x92348058`, free-credit `0x923480dc` (bits[8:3]).
-- **Stock fns:** `pon_tm_bmu_init` (plat:5694), `pon_tm_bmu_enable`, `pon_tm_bmu_alloc_bp`
-  (plat:5772, sticky-timeout retry), `pp_bmu_free_bp` (plat:5823, 6-bit HW credit), `dump_bmu_reg`
-  (plat:6103). Stock geometry: POOL=0x2000(8192), BP_SIZE=0x900, jumbo POOL=0x66/size 0x2800;
-  DDR pools at 0x4e700000 (BPPE,128KiB) / 0x4ec20000 (BP,18MiB).
-- **alloc:** poll `0x8014&3==0` → read `0x800c`, bit31=success. **free:** `0x8010 = bp_idx |
-  jumbo<<15`, credit from `(0x80dc>>3)&0x3f`.
-- **Mainline vs stock:** mainline POOL=1024 (8× smaller, uses dma_alloc_coherent); init only
-  **instance 0** (`zx_tm_bmu_init` main:1800, no loop) — stock fills all 5; BPPE 4KiB-aligned
-  vs stock 64KiB. `zx_bmu_alloc_bp` (main:2873)/`zx_bmu_free_bp` (main:2913) are faithful subsets.
-- **Verified/ruled out:** 🔴 OPEN anomalies in `bmu_protocol_deep_re.md` §6: (1) only instance 0
-  configured — TM may route alloc to an unconfigured instance → pool-empty; (2) `0x8048` written
-  0x04000000 reads back 0 (alignment/sequencing); (3) 128KiB BPPE prefetch. These are RX/alloc
-  concerns; not directly tied to the CPU-egress gate but on the same data path.
+Global base-address regs at **TM[0xE8..0xFC] = 0x923400e8..0x923400fc** (RW, shared by all 5);
+per-instance mirrors at **TM[0x80e8..0x80fc]** are **READ-ONLY** (read back 0 on mainline).
+Role: HW allocator/freer of **Buffer Pointers (BP)** for fabric + CPU TM path; two pools (normal + jumbo).
+
+### Two-level pool architecture
+```
+    BPPI (on-chip FIFO, ~191 entries)
+        ↑ free writes (SW via 0x8010, HW via desc-completion)
+        ↓ alloc reads (HW on alloc-kick via 0x8014)
+    BPPE (DDR free-list ring, 8192 entries in stock)
+        — populated by HW DDR prefetch engine from BPPE phys addr at TM[0xE8]
+        — on mainline the DDR prefetch engine is UNCLOCKED → bppe_cnt always 0
+```
+
+| Pool component | Register | Stock live | Mainline live | What it means |
+|---|---|---|---|---|
+| bppe bpcnt (DDR free) | TM[0x8080] | 0x1FB0 (8112) | **0** | DDR pool empty — engine never prefetches |
+| bppi bpcnt (on-chip FIFO) | TM[0x8088] | 0x4F (79) | 0xa–0xf | On-chip recycle margin only |
+| bppe ptr (cursor) | TM[0x8048] | 0x50 (HW-owned) | **0** | SW write-deaf; engine-unclocked |
+| bppi ptr (cursor) | TM[0x8040] | 0x880039 (moves) | 0xfb00ec (moves) | On-chip path is alive |
+| alloc−release ledger | 0x8090−0x8098 | balanced | balanced | Balanced at wedge onset → NOT a pool drain |
+
+### Wedge#1 — churn/RED 1024-pin
+
+The per-queue RED cpuDn out-buffer charge-accounting leaked 1:1 per DN trap frame
+with no return path. **RED_CFG bit6** (phys 0x92344004) is the charge-enable level
+control — clearing it (0xDE→0x9E) prevents charge accumulation and the wedge is
+impossible. QMG DN hw_trap driven >10500 across five 60-flow churn storms on one
+boot, occupancy flat at 0 throughout. Fixed in-driver (2 lines + comments; commit
+for the [red-arm] branch 2026-07-04).
+
+### Wedge#2 — WiFi fabric-ingress starvation
+
+With no DDR pool (bppe_cnt=0), the chip runs on the ~10–15 entry on-chip BPPI
+recycle margin only. **HW-forwarded frames never take the SW free path**
+(zx_bmu_free_bp is only called from CPU RX-consume). Each HW-forwarded frame
+consumes one BP without returning it → starvation halt after ~1k–72k frames.
+The DDR→chip prefetch engine never triggers on mainline — all register-level
+config is byte-identical to stock, but every engine register (0x8048 cursor,
+0x8080 level, DDR refill) is inert. The gate is an undiscovered clock/reset
+outside the TM/BMU register space (top_crm, sys_ctrl; TOPCRM byte-identical
+stock↔mainline, AXI QoS fixed but not the gate, NPP reset/clock gates
+0x921c0008/0c tried and refuted).
+
+**Fix (software priming, 2026-08-01):** in `zx_tm_bmu_enable()`, after writing
+INIT=1 to all 5 BMU instances, loop every BP index (0..8191) and write each to
+`TM_REG_BMU_FREE` (0x8010). The BMU accepts each free: BPPI on-chip FIFO fills
+to ~191 entries, excess spills to DDR BPPE free-list. Result: `bppe_cnt=1872`
+(DDR) + `bppi_cnt=186` (on-chip) = ~2058 total BP entries (stock parity ~8112
+not fully reached; 2058 is >3.8× the worst observed onset and sufficient for
+indefinite HW-forwarding). Verified: **139,262 WiFi fabric-ingress frames, ZERO
+freeze** across 60 cold-start rounds.
+
+### Collateral bugs found + fixed en route
+
+- **BP double-free** (`bcee9471f`): TM RX consume dropped branches both called
+  `zx_bmu_free_bp` and fell through to the common per-descriptor release → two
+  free-writes per BP. Live proof: ledger drift == `tm_rx_loopback_drops` exactly.
+  Explains corruption signature (garbage gkey/raw-HTTP-in-parser) + probabilistic
+  long-fuse onsets (0.9k–72k frames).
+- **pm_ext BPPE-table memset wipe** (`e82c6c385`): the DN-offload `zx_ft_pm_ext_init`
+  memset the full 0x520000 carve including the first 0x20000 = the BMU BPPE
+  free-list table. Every boot silently wiped the pool. Fixed: zero from +0x20000 only.
+
+### Remaining open questions
+
+1. What clock/reset gate enables the BMU DDR prefetch? (academic — fix works without)
+2. Why does stock achieve ~8112 BPPE entries vs mainline's ~1872? (gap irrelevant)
+3. Is there a per-frame BP auto-return path for HW-forwarded fabric-ingress frames?
 
 ## 3.4 SIPC — CPU↔fabric credit/mailbox bridge  ✅
 **Base 0x921cc000.** Role: rx_en / cpu_up_en credit bridge between CPU and the fabric. **NOT a

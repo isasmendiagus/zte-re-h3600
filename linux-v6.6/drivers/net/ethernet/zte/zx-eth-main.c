@@ -53,6 +53,7 @@
 				 * WiFi-dispatch IP-checksum repair */
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
+#include <linux/notifier.h>	/* [WiFi auto-bind] netdevice notifier */
 
 #include <asm/cacheflush.h>
 
@@ -616,6 +617,10 @@ struct zx_eth {
 	u64		ft_pm_verify_ok;
 	u64		ft_pm_verify_retry;
 	u64		ft_pm_verify_fail;
+
+	/* [WiFi productionization 2026-08-01] netdevice notifier for
+	 * auto-binding wlan interfaces to idm/ssid slots. */
+	struct notifier_block wlan_nb;
 };
 
 /* ============================================================
@@ -2187,9 +2192,7 @@ static int zx_wifi_register_vif(struct zx_eth *e, struct net_device *vif,
 	node->wlan_ndev	= vif;
 	node->wlan_ifindex = vif->ifindex;
 
-	rtnl_lock();
 	rc = netdev_rx_handler_register(vif, zx_wifi_rx_handler, node);
-	rtnl_unlock();
 	if (rc) {
 		node->wlan_ndev = NULL;
 		node->idm_ndev  = NULL;
@@ -2224,9 +2227,7 @@ static int zx_wifi_unregister_vif(struct zx_eth *e, u8 idm_ring, u8 ssid)
 	smp_wmb();
 	vif = node->wlan_ndev;
 	if (vif) {
-		rtnl_lock();
 		netdev_rx_handler_unregister(vif);
-		rtnl_unlock();
 		dev_put(vif);
 	}
 	node->wlan_ndev = NULL;
@@ -8894,6 +8895,55 @@ static int zx_eth_init_topcrm(struct zx_eth *eth)
 	return 0;
 }
 
+/* [WiFi productionization 2026-08-01] Netdevice notifier: auto-bind wlan
+ * interfaces to the next free idm/ssid slot when hostapd creates them.
+ * Uses the proven config as baseline (wlan1 → idm1/ssid4 corresponds to
+ * slot index = ssid + idm*8 = 4 + 1*8 = 12). Generic policy: assign
+ * sequentially starting from the first wlan slot.
+ */
+static int zx_wlan_notifier(struct notifier_block *nb,
+			    unsigned long event, void *ptr)
+{
+	struct net_device *ndev = netdev_notifier_info_to_dev(ptr);
+	struct zx_eth *e = container_of(nb, struct zx_eth, wlan_nb);
+	int i;
+
+	if (!ndev || !ndev->name)
+		goto out;
+
+	if (event == NETDEV_REGISTER &&
+	    !strncmp(ndev->name, "wlan", 4)) {
+		for (i = 0; i < 16; i++) {
+			if (!READ_ONCE(e->zx_wifi_dispatch[i].enabled)) {
+				u8 idm = i >> 3, ssid = i & 7;
+
+				if (zx_wifi_register_vif(e, ndev, idm, ssid) == 0) {
+					dev_info(e->dev,
+						 "[wifi] auto-bind: %s -> idm%u/ssid%u (slot %d)\n",
+						 ndev->name, idm, ssid, i);
+				}
+				break;
+			}
+		}
+	} else if (event == NETDEV_UNREGISTER &&
+		   !strncmp(ndev->name, "wlan", 4)) {
+		for (i = 0; i < 16; i++) {
+			struct zx_wifi_dispatch_node *wn = &e->zx_wifi_dispatch[i];
+
+			if (READ_ONCE(wn->enabled) &&
+			    wn->wlan_ndev == ndev) {
+				zx_wifi_unregister_vif(e, wn->idm, wn->ssid);
+				dev_info(e->dev,
+					 "[wifi] auto-unbind: %s (was idm%u/ssid%u, slot %d)\n",
+					 ndev->name, wn->idm, wn->ssid, i);
+				break;
+			}
+		}
+	}
+out:
+	return NOTIFY_DONE;
+}
+
 static int zx_eth_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -8910,6 +8960,12 @@ static int zx_eth_probe(struct platform_device *pdev)
 	 * see the comment in the tc-flower ADD handler above the ft_up_en gate.
 	 * debugfs "ftup" (0644) still allows forcing it back to 0 for A/B tests. */
 	eth->ft_up_en = 1;
+
+	/* [wedge #2 fix 2026-08-01] WiFi HW-offload defaults ON. The BMU pool
+	 * priming fix (zx_tm_bmu_enable) eliminated the fabric-ingress endurance
+	 * wedge — sustained WiFi UP HW-forwarding no longer starves the front-end.
+	 * debugfs "ftwifi" (0644) still allows forcing it back to 0 for A/B tests. */
+	eth->ft_wifi_en = 1;
 
 	/* DTS exposes two reg entries — "pon" and "npp". Map the npp one
 	 * by name so the driver is robust to reg-entry reordering. The pon
@@ -9110,6 +9166,14 @@ static int zx_eth_probe(struct platform_device *pdev)
 		 ZX_CPU_PORT);
 
 	zx_debugfs_init(eth);
+
+	/* [WiFi productionization 2026-08-01] Auto-bind wlan interfaces:
+	 * register a netdevice notifier so wlanX is automatically bound to
+	 * the next available idm/ssid slot when hostapd creates the vif.
+	 * The debugfs wifi_bind knob still works for manual overrides. */
+	eth->wlan_nb.notifier_call = zx_wlan_notifier;
+	register_netdevice_notifier(&eth->wlan_nb);
+
 	return 0;
 
 err_napi:
@@ -9130,6 +9194,8 @@ static int zx_eth_remove(struct platform_device *pdev)
 {
 	struct zx_eth *eth = platform_get_drvdata(pdev);
 	int i;
+
+	unregister_netdevice_notifier(&eth->wlan_nb);
 
 	/* 0. Stop the binder from calling into us once we tear down. */
 	zx_dsa_register_pm_ops(NULL);
