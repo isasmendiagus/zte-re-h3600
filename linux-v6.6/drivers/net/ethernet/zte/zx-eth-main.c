@@ -8958,6 +8958,18 @@ out:
 	return NOTIFY_DONE;
 }
 
+/**
+ * zx_eth_probe() - Initialize the ZX279128S integrated Ethernet driver
+ * @pdev: platform device matching "zte,zx279128s-eth"
+ *
+ * Maps 5 MMIO regions (pon, npp, sys_ctrl, pin_mux, pon_serdes),
+ * performs the full SoC clock/reset sequence, replays ~22k stock
+ * register writes, initializes the TM/BMU/RED/CLA/PP/IDM datapath,
+ * creates the DSA conduit (sw) and WiFi offload (idm0/idm1) netdevs,
+ * and registers debugfs and the PM ops bridge to the built-in DSA driver.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
 static int zx_eth_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -9204,6 +9216,15 @@ err_unregister:
 	return err;
 }
 
+/**
+ * zx_eth_remove() — Tear down the ZX279128S Ethernet driver
+ * @pdev: platform device
+ *
+ * Reverse of probe: stops DMA engines, frees IRQs, disables NAPI,
+ * unregisters netdevs, unmaps MMIO, and frees the carved DDR region.
+ *
+ * Return: 0.
+ */
 static int zx_eth_remove(struct platform_device *pdev)
 {
 	struct zx_eth *eth = platform_get_drvdata(pdev);
