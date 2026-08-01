@@ -12,15 +12,16 @@ For the naming convention itself, see `CLAUDE.md` "Task folder naming".
 
 ```
 00 openwrt-port              tasks/00.openwrt-port/              📋 PLANNED (root goal — stage 5/6)
-├── 00.01 eth-driver         tasks/00.01.eth-driver/             🚧 ACTIVE — RX all 4 ports (port1 gate fixed 2026-06-03); egress solved; tuning/iperf next
+├── 00.01 eth-driver         tasks/00.01.eth-driver/             🚧 ACTIVE — DSA + bidirectional HW offload; WiFi productionization
 │   ├── 00.01.01 fix-lief-rel-sections                            ✅ DONE — LIEF #661 patch
 │   │       Fix to LIEF's silent section-drop on ARM REL files.
-│   │       Forward decl + REL fast-path delegation.
+│   ├── 00.01.02 eth-cleanup   tasks/00.01.02.eth-cleanup/        🔧 PLANNED — upstream code cleanup
+│   │       S1: checkpatch, dev_info→dev_dbg, DT bindings sync, dead code.
+│   │       S2: dedup CLA/PM/flow/FDB, split monolith (~9K → 9 files).
+│   │       S3: table compression, kernel-doc.
 │   ├── kotrace/                                                  ✅ WORKING — RAM-patch tracer
 │   │       Idea A. Loader-notifier kmod that patches switch.ko's
-│   │       .text in RAM at MODULE_STATE_COMING. Sidesteps the bug
-│   │       classes documented in findings/ko_splice_bugs.md.
-│   │       First init trace captured 2026-05-23.
+│   │       .text in RAM at MODULE_STATE_COMING.
 │   ├─ research/rx_path_dead.md             🔥 WIP — the eth-driver blocker
 │   ├─ research/printk_injection_methodology.md   superseded by kotrace/
 │   ├─ findings/ko_splice_bugs.md           why on-disk LIEF splicing fails
@@ -48,11 +49,22 @@ For the naming convention itself, see `CLAUDE.md` "Task folder naming".
 │          for flash + monitor + kotrace. Integration into flash.py
 │          via UART_TCP=1 env-var is TaskList #29.
 │
-├── 00.07 wifi               tasks/00.07.wifi/                   ✅ DONE
-│      MT7915 WiFi 6 on internal PCIe. Custom DesignWare PCIe glue
-│      driver `pcie-zx279128s.ko` enables the bus; mainline `mt76` /
-│      `mt7915e` drives the radio. wlan0 STA mode + internet verified
-│      2026-05-04. MSI broken for this geometry → `pci=nomsi` workaround.
+├── 00.07 wifi               tasks/00.07.wifi/                   ✅ DONE — PCIe glue + mt7915e working; productionization in progress
+│   ├── 00.07.01 wifi-hardening   tasks/00.07.01.wifi-hardening/   🔧 PLANNED — 23-test regression battery
+│   │       Tier 1: traffic-free white-box guards (9 tests)
+│   │       Tier 2: module lifecycle (3 tests)
+│   │       Tier 3: AP lifecycle (2 tests)
+│   │       Tier 4: full integration + client traffic (9 tests)
+│   ├── 00.07.02 wifi-throughput   tasks/00.07.02.wifi-throughput/ 🔧 PLANNED — 11ac/11ax, debug strip, tuning
+│   │       Phase 1: enable 11ac (VHT) → 3-5x throughput
+│   │       Phase 2: enable 11ax (HE) → 8-12x (needs AX client)
+│   │       Phase 3: strip BPDUMP + hot-path debug hooks
+│   │       Phase 4: TXBF, SR scene detect, rate control tuning
+│
+├── 00.08 usb                tasks/00.08.usb/                     🔧 PLANNED — pendrive mount/RW/throughput/hotplug
+│      DWC3 glue driver complete (165 lines), DT enabled, kernel config
+│      ready. Pending: physical test (boot → mount pendrive → dd R/W →
+│      hotplug). Optional DWC2 later.
 │
 
 ├── 00.06 platform-drivers   tasks/00.06.platform-drivers/       📋 PLANNED (cherry-pick catalog)

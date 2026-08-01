@@ -2,7 +2,7 @@
 
 **ID**: 00.01
 **Parent**: [00 openwrt-port](../00.openwrt-port/)
-**Children**: [00.01.01.fix-lief-rel-sections](../00.01.01.fix-lief-rel-sections/) (LIEF upstream fix), [kotrace/](kotrace/) (loader-notifier RAM-patch tracer, working)
+**Children**: [00.01.01.fix-lief-rel-sections](../00.01.01.fix-lief-rel-sections/) (LIEF upstream fix), [00.01.02.eth-cleanup](../00.01.02.eth-cleanup/) (upstream cleanup), [kotrace/](kotrace/) (loader-notifier RAM-patch tracer, working)
 **TaskList items**: #53, #87, #89, #90, #91, #92, #93, #103, #104
 **Status (2026-05-28)**: RX works end-to-end. TX: CPU→LAN frames pass QMG + DSCH
 (the DSCH shaper-credit drop is **FIXED** via `zx_sch_init`) but die at the **SOPC

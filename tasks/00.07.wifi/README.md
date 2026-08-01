@@ -2,10 +2,9 @@
 
 **ID**: 00.07
 **Parent**: [00 openwrt-port](../00.openwrt-port/)
-**Children**: none
+**Children**: [00.07.01 wifi-hardening](../00.07.01.wifi-hardening/), [00.07.02 wifi-throughput](../00.07.02.wifi-throughput/)
 **TaskList items**: none directly
-**Status**: ✅ DONE — WiFi 6 STA mode confirmed end-to-end (2026-05-04). Open
-follow-ups tracked in [docs/WIFI_STATUS.md](../../docs/WIFI_STATUS.md) "Pendientes".
+**Status**: ✅ DONE — WiFi 6 STA mode confirmed end-to-end (2026-05-04). Productionization in progress (children).
 
 ## TL;DR
 
