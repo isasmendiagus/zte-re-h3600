@@ -5556,22 +5556,9 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 			    bppe_idx < TM_BPPE_POOL_SIZE && e->bp_cpu) {
 				u8 *bp_buf = (u8 *)e->bp_cpu + (u32)bppe_idx * TM_BP_SIZE;
 				u16 et_at_0 = ntohs(*(const __be16 *)(bp_buf + 12));
-				const u8 *src = (et_at_0 >= 0x0600 && et_at_0 != 0xffff) ?
-						bp_buf : (bp_buf + 16);
-#if 0 /* BPDUMP — per-packet hexdump, useful for bring-up, stripped for production */
-				if (e->tm_rx_count + e->tm_rx_loopback_drops < 20) {
-					dev_info(e->dev,
-						"BPDUMP q=%d len=%u bppe=%u +00..0f=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x +10..1f=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x +20..2f=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
-						q, len, bppe_idx,
-						bp_buf[0],  bp_buf[1],  bp_buf[2],  bp_buf[3],  bp_buf[4],  bp_buf[5],  bp_buf[6],  bp_buf[7],
-						bp_buf[8],  bp_buf[9],  bp_buf[10], bp_buf[11], bp_buf[12], bp_buf[13], bp_buf[14], bp_buf[15],
-						bp_buf[16], bp_buf[17], bp_buf[18], bp_buf[19], bp_buf[20], bp_buf[21], bp_buf[22], bp_buf[23],
-						bp_buf[24], bp_buf[25], bp_buf[26], bp_buf[27], bp_buf[28], bp_buf[29], bp_buf[30], bp_buf[31],
-						bp_buf[32], bp_buf[33], bp_buf[34], bp_buf[35], bp_buf[36], bp_buf[37], bp_buf[38], bp_buf[39],
-						bp_buf[40], bp_buf[41], bp_buf[42], bp_buf[43], bp_buf[44], bp_buf[45], bp_buf[46], bp_buf[47]);
-				}
-#endif
-				/* Ingress port comes from desc[6] bits 3..7 minus 1.
+			const u8 *src = (et_at_0 >= 0x0600 && et_at_0 != 0xffff) ?
+					bp_buf : (bp_buf + 16);
+			/* Ingress port comes from desc[6] bits 3..7 minus 1.
 				 * Per stock RE: `r2 = (desc[6] >> 3) & 0x1F; r2 -= 1;
 				 * pkt[180] = r2`. This is the UNI/PON port the packet
 				 * arrived on.
