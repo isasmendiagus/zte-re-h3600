@@ -72,10 +72,15 @@ def run(cmds, wait=3.0, label=""):
 
 
 def sanity():
+    run(["mkdir -p /proc /sys/kernel/debug /tmp 2>/dev/null",
+         "mount -t proc none /proc 2>/dev/null",
+         "mount -t sysfs none /sys 2>/dev/null",
+         "mount -t debugfs none /sys/kernel/debug 2>/dev/null",
+         "mount -t tmpfs none /tmp 2>/dev/null"], 3, "sanity: mount")
     run(["uname -a", "busybox ip link set lo up",
          "echo 1 > /proc/sys/kernel/printk"], 3, "sanity: uname + lo + printk")
     run(["ls /sys/kernel/debug/zx_eth/ | busybox grep -cE 'wifi_bind|ftwifi'"],
-        3, "sanity: debugfs nodes (expect 2)")
+         3, "sanity: debugfs nodes (expect 2)")
 
 
 def wan():
