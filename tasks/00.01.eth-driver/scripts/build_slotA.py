@@ -41,7 +41,7 @@ SLOT = nl.SLOT_A
 # Bumped 0xb→0xc on 2026-05-24 when kernel + initramfs grew past 11 MiB.
 # header[0x34] is set to this exact value so cspstart CRCs ONLY what we wrote,
 # never the erased-but-untouched region beyond.
-NAND_WRITE_SIZE = 0xc00000
+NAND_WRITE_SIZE = 0xe00000
 
 LOAD_ADDR  = nl.RAM_LOAD_ADDR
 ENTRY_ADDR = nl.RAM_LOAD_ADDR + 0x40
@@ -69,6 +69,16 @@ def main():
         run(["make", "-C", str(ZXIC / "linux-v6.6"),
              "ARCH=arm", "CROSS_COMPILE=arm-linux-gnueabi-",
              f"O={BUILD}", "olddefconfig"])
+        # Disable regulatory DB signature check — the initramfs regulatory.db
+        # may not match the kernel's built-in certificates. Must also enable
+        # CERTIFICATION_ONUS first, otherwise REQUIRE_SIGNED_REGDB is a hardcoded
+        # def_bool y that can't be overridden.
+        run([str(ZXIC / "linux-v6.6/scripts/config"),
+             "--file", str(BUILD / ".config"),
+             "--enable", "CFG80211_CERTIFICATION_ONUS"], cwd=str(ZXIC))
+        run([str(ZXIC / "linux-v6.6/scripts/config"),
+             "--file", str(BUILD / ".config"),
+             "--disable", "CFG80211_REQUIRE_SIGNED_REGDB"], cwd=str(ZXIC))
 
     # 0) FULL kernel rebuild — always. Previously we tried to gate this on
     #    'is zx279128-eth.c newer than the .ko?' but that missed changes to
@@ -89,6 +99,20 @@ def main():
     shutil = __import__("shutil")
     shutil.copy2(str(ko_src), str(initramfs_ko_dst))
     print(f"  ✓ copied {ko_src.name} → {initramfs_ko_dst}")
+
+    # 0b2) Copy ALL kernel modules from the build tree into the initramfs,
+    #     so version magic always matches. (cfg80211, mac80211, mt76, mt7915e, …)
+    import glob as _glob
+    initramfs_mod_dir = Path("/tmp/initramfs_extract/lib/modules")
+    initramfs_mod_src = ZXIC / "tasks/00.01.eth-driver/initramfs/lib/modules"
+    for ko_pattern in ["drivers/net/wireless/**/*.ko", "net/wireless/*.ko",
+                         "net/mac80211/*.ko", "drivers/pci/controller/dwc/*.ko"]:
+        for ko in _glob.glob(str(BUILD / ko_pattern), recursive=True):
+            dst = initramfs_mod_dir / Path(ko).name
+            shutil.copy2(ko, str(dst))
+        for ko in _glob.glob(str(BUILD / ko_pattern), recursive=True):
+            dst = initramfs_mod_src / Path(ko).name
+            shutil.copy2(ko, str(dst))
 
     # 0c) Re-embed the (possibly updated) initramfs by rebuilding zImage.
     #     Cheap when initramfs hash didn't change.
