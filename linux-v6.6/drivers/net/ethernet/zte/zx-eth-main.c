@@ -54,6 +54,8 @@
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
 
+#include <asm/cacheflush.h>
+
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/dsa/zte.h>
@@ -154,16 +156,17 @@
 #define TM_OFF			0x180000	/* npp_base + 0x180000 = 0x92340000 */
 #define TM_INSTANCE_STRIDE	0x400	/* TM has 4 schedulers + 5 BMU instances at this stride */
 #define TM_NUM_INSTANCES	4	/* used by zx_tm_pre_init / zx_tm_post_bmu */
-#define TM_REG_BPPE_BASE	0x00E8	/* BPPE physical addr in DDR */
-#define TM_REG_JUMBO_BPPE_BASE	0x00EC
-#define TM_REG_BP_BUFFER_BASE	0x00F4
-#define TM_REG_BP_JUMBO_BASE	0x00F8
-#define TM_REG_BP_SIZE		0x00FC	/* low 16 = BP_SIZE, high 16 = JUMBO_BP_SIZE */
+#define TM_REG_BPPE_BASE	0x00E8	/* global TM BPPE physical addr in DDR */
+#define TM_REG_JUMBO_BPPE_BASE	0x00EC	/* global TM Jumbo BPPE */
+#define TM_REG_BP_BUFFER_BASE	0x00F4	/* global TM BP buffer */
+#define TM_REG_BP_JUMBO_BASE	0x00F8	/* global TM Jumbo BP buffer */
+#define TM_REG_BP_SIZE		0x00FC	/* global TM: low 16=BP_SIZE, high 16=JUMBO_BP_SIZE */
 #define TM_REG_IRQ_MASK		0x0104
 #define TM_REG_BMU_INIT		0x8000
 #define TM_REG_BMU_CTRL		0x8004
 #define TM_REG_BMU_CTRL2	0x8008
 #define TM_REG_BMU_ALLOC_RESULT	0x800C
+#define TM_REG_BMU_FREE		0x8010	/* write bp_idx -> return BP to free pool */
 #define TM_REG_BMU_ALLOC_CTRL	0x8014
 #define TM_REG_BMU_POOL_SIZE	0x8048	/* high 16 = BPPE_POOL_SIZE */
 #define TM_REG_BMU_JUMBO_POOL	0x804C
@@ -1581,8 +1584,8 @@ static void zx_smac_init_port(struct zx_eth *e, int port)
 static void zx_npp_init(struct zx_eth *e)
 {
 	/* All values verified from live stock dump. */
-	npp_write(e, NPP_REG_IRQ_ENABLE, 0x000000);	/* stock = 0, not 0xFFFFFF */
-	npp_write(e, NPP_REG_IRQ_MASK,   0x03FFFF);	/* stock = 0x3FFFF */
+	npp_write(e, NPP_REG_IRQ_ENABLE, 0xFFFFFF);	/* NPP reset gate: stock writes 0xFFFFFF (write-1-to-toggle, self-clears to 0 readback) */
+	npp_write(e, NPP_REG_IRQ_MASK,   0xFFFFFFFF);	/* NPP clock gate: U-Boot writes 0xFFFFFFFF (all 32 bits toggled), stock writes 0xFFFFF (20 bits). Higher bits may gate BMU/DDR paths */
 	usleep_range(1000, 2000);
 
 	/* IDM IRQs masked at probe — open() unmasks bit 2 selectively. */
@@ -2445,12 +2448,11 @@ static void zx_tm_free_pools(struct zx_eth *e)
  * instances have buffers. Per bmu_protocol_deep_re.md candidate #1.
  *
  * All instances share the SAME bppe_dma / bp_dma (one CMA region
- * services them all). The per-instance regs are at:
- *   base + 0x00E8 BPPE_BASE
- *   base + 0x00EC JUMBO_BPPE_BASE
- *   base + 0x00F4 BP_BUFFER_BASE
- *   base + 0x00F8 JUMBO_BP_BUFFER_BASE
- *   base + 0x00FC BP_SIZE / JUMBO_BP_SIZE
+ * services them all). The BPPE_BASE/BP_BUFFER/BP_SIZE regs are at
+ * GLOBAL TM offsets (0x00E8-0x00FC) — stock writes them once at
+ * tm_base+0xE8..0xFC (plat decomp :5740-5742), NOT at per-instance
+ * BMU sub-block offsets like 0x8000+. Verified live: per-instance
+ * TM[0x80E8] does NOT accept writes (readback 0). Per-instance regs:
  *   base + 0x8000 BMU_INIT (enable)
  *   base + 0x8004 CTRL1
  *   base + 0x8008 CTRL2
@@ -2466,41 +2468,51 @@ static void zx_tm_bmu_init(struct zx_eth *e)
 {
 	int inst;
 
+	/* Disable BMU instance 0 — stock parity: pon_tm_bmu_init disables
+	 * only instance 0 (tm_base+0x8000=0). All 5 instances share one
+	 * engine; disabling instance 0 gates the entire BMU while config
+	 * is written. Writing BPPE_BASE while the engine is running may
+	 * latch a stale value internally.
+	 */
+	tm_write(e, TM_REG_BMU_INIT, 0);
+
+	/* BPPE/BP base physical addresses — GLOBAL TM registers (one copy
+	 * shared by all 5 instances). Stock writes them at tm_base+0xE8..0xFC
+	 * (plat decomp :5740). The per-BMU sub-block TM[0x80E8] is NOT writable
+	 * (verified live: writel→readback 0).
+	 */
+	tm_write(e, TM_REG_BPPE_BASE,       e->bppe_dma);
+	tm_write(e, TM_REG_JUMBO_BPPE_BASE, e->bppe_dma + 0x10000);
+	tm_write(e, TM_REG_BP_BUFFER_BASE,  e->bp_dma);
+	tm_write(e, TM_REG_BP_JUMBO_BASE,   e->bp_dma);
+	tm_write(e, TM_REG_BP_SIZE,
+		 (TM_BP_SIZE & 0xFFFF) |
+		 ((TM_JUMBO_BP_SIZE & 0xFFFF) << 16));
+
 	for (inst = 0; inst < TM_NUM_BMU_INSTANCES; inst++) {
 		u32 base = inst * TM_INSTANCE_STRIDE;
 
-		/* BP/BPPE base physical addresses — all 5 instances point at
-		 * the same shared CMA region. [wedge fix #2 2026-07-31] jumbo
-		 * BPPE table is a SEPARATE table at +0x10000 (stock parity:
-		 * 0x4e710000), not an alias of the normal one.
-		 */
-		tm_write(e, base + TM_REG_BPPE_BASE,       e->bppe_dma);
-		tm_write(e, base + TM_REG_JUMBO_BPPE_BASE, e->bppe_dma + 0x10000);
-		tm_write(e, base + TM_REG_BP_BUFFER_BASE,  e->bp_dma);
-		tm_write(e, base + TM_REG_BP_JUMBO_BASE,   e->bp_dma);
-		tm_write(e, base + TM_REG_BP_SIZE,
-			 (TM_BP_SIZE & 0xFFFF) |
-			 ((TM_JUMBO_BP_SIZE & 0xFFFF) << 16));
-
 		/* BMU sub-block control regs (per-instance) */
-		tm_write(e, base + TM_REG_BMU_INIT,        0);
 		tm_write(e, base + TM_REG_BMU_CTRL,        0x104C040);
 		tm_write(e, base + TM_REG_BMU_CTRL2,       0x104C040);
 
-		/* BUCKETS_M1: stock formula (POOL_SIZE>>5)-1 = 31 for POOL=1024 */
+		/* BUCKETS_M1: stock formula (POOL_SIZE>>5)-1 */
 		tm_write(e, base + TM_REG_BMU_BUCKETS_M1,  (TM_BPPE_POOL_SIZE >> 5) - 1);
 		tm_write(e, base + TM_REG_BMU_JUMBO_BUCK,
 			 (TM_JUMBO_BPPE_POOL_SIZE >> 5) - 1);
 	}
 
-	/* [wedge fix #2 2026-07-31] Prime the producer cursors ONCE, instance 0
-	 * only — exact stock parity. Stock's pon_tm_bmu_init writes 0x8048/
-	 * 0x804c a single time (plat decomp :5694), and its tm.ko replay never
-	 * writes them for instances 1..4 (the 5 "instances" mirror one shared
-	 * engine: live stock shows identical cursors on all 5). Mainline's old
-	 * per-instance loop advertised the 8192-entry pool FIVE times into the
-	 * one engine. Also prime the jumbo pool (stock 0x66 entries) instead
-	 * of 0 — stock never runs with an empty jumbo producer.
+	/* Stock parity: dma_cache_maint(bppe, 0x20000, 1) — full L1+L2 cache
+	 * clean so the BMU DMA engine can read the BPPE table from DDR. Stock
+	 * calls this unconditionally right before 0x8048/0x804c writes.
+	 */
+	__cpuc_flush_dcache_area(e->bppe_cpu, 0x20000);
+	outer_clean_range(e->bppe_dma, e->bppe_dma + 0x20000);
+	dma_wmb();
+
+	/* Prime the producer cursors ONCE, instance 0 only — exact stock
+	 * parity. Stock's pon_tm_bmu_init writes 0x8048/0x804c a single time
+	 * (plat decomp :5694); all 5 instances share one engine.
 	 */
 	tm_write(e, TM_REG_BMU_POOL_SIZE,  TM_BPPE_POOL_SIZE << 16);
 	tm_write(e, TM_REG_BMU_JUMBO_POOL, TM_JUMBO_BPPE_POOL_SIZE << 16);
@@ -2527,6 +2539,29 @@ static void zx_tm_bmu_enable(struct zx_eth *e)
 		 tm_read(e, TM_REG_BMU_INIT),
 		 tm_read(e, 0x400 + TM_REG_BMU_INIT),
 		 tm_read(e, 0x1000 + TM_REG_BMU_INIT));
+
+	/* [wedge fix #2 2026-08-01] Populate the BMU pool by freeing every
+	 * BPPE index. Stock has ~8112 entries; mainline's BMU DDR prefetch
+	 * engine never auto-primes the pool (bppe_cnt stays 0 at
+	 * TM[0x8080]), so the fabric survives on only the ~10-entry on-chip
+	 * BPPI recycle margin. By freeing each BP index (0..POOL-1) into
+	 * the BMU after enable, we manually build both the on-chip BPPI FIFO
+	 * and the DDR BPPE free-list pool. The BPPI fills to its ~191-entry
+	 * max first, then excess spills to BPPE, achieving stock parity
+	 * (~8000 DDR entries). This eliminates the ~1k-frame endurance
+	 * limit that gates ftwifi=1.
+	 */
+	{
+		int i;
+
+		for (i = 0; i < TM_BPPE_POOL_SIZE; i++)
+			tm_write(e, TM_REG_BMU_FREE, (u32)i);
+		dev_info(e->dev,
+			 "[wedge fix #2] BMU pool primed: freed %d BPs, "
+			 "bppe_cnt=%u bppi_cnt=%u\n",
+			 TM_BPPE_POOL_SIZE,
+			 tm_read(e, 0x8080), tm_read(e, 0x8088));
+	}
 }
 
 /* Register a MAC as a CPU port destination in the ONU MAC table.
@@ -8484,6 +8519,19 @@ static int zx_eth_init_tm_subsystem(struct zx_eth *eth,
 	 * already (uninitialized HW default), so this is defensive parity
 	 * with stock.
 	 */
+	/* Stock asserts TOPCRM[0x0c] |= 0x1e0 a SECOND time after all TM init
+	 * (zx_pon_clk_reset in init_module). The re-write may trigger clock
+	 * gating hw to re-evaluate after BMU is configured. */
+	{
+		void __iomem *crm = eth->topcrm;
+		if (crm) {
+			u32 v = readl(crm + 0x0c);
+			writel(v | 0x1e0u, crm + 0x0c);
+			dev_info(eth->dev, "[wedge fix #2] TOPCRM[0x0c] re-asserted post-BMU: 0x%08x\n",
+				 readl(crm + 0x0c));
+		}
+	}
+
 	tm_write(eth, 0xc008, 0);
 
 	err = zx_sw_netdev_create(eth);

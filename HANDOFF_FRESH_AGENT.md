@@ -62,7 +62,7 @@ no está en un finding o en un commit, no pasó.
 
 Estas evitan brickear el device o el datapath. **Respetalas al pie de la letra:**
 
-- **Password sudo `45788798`** — nunca escribirlo en archivos ni logs.
+- **Sudo no requiere password** en este host (NOPASSWD configurado). Usar `sudo` directamente, sin `echo ... | sudo -S`.
 - **RAM-boot / DTR únicamente.** El stock es NAND read-only. **No reflashear.**
 - ⚠️ **NUNCA** hacer memdump/dd de **MAC4 `0x92000000`**.
 - ⚠️ **NUNCA** escribir **TM `0x92340128` ni `0x92340130`** (mata el datapath).
