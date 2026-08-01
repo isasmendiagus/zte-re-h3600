@@ -153,6 +153,8 @@ def bind():
 
 
 def offload():
+    run(["ip link set idm0 up 2>/dev/null",
+         "ip link set idm1 up 2>/dev/null"], 2, "offload: idm0/idm1 up")
     run(["echo 1 > /proc/sys/net/ipv4/ip_forward",
          "nft flush ruleset",
          "nft add table inet ft",

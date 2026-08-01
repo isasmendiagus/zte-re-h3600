@@ -46,6 +46,13 @@ int main(void) {
     kmsg("ip addr add 192.168.1.99/24 dev sw");
     sh("/bin/busybox ip addr add 192.168.1.99/24 dev sw");
 
+    /* WiFi offload: bring idm interfaces UP so the rx_handler can inject frames.
+     * Without this, tx_injected stays 0 — all UP frames hit CPU instead of fabric. */
+    kmsg("ip link set idm0 up (WiFi offload UP conduit)");
+    sh("/bin/busybox ip link set idm0 up");
+    kmsg("ip link set idm1 up");
+    sh("/bin/busybox ip link set idm1 up");
+
     /* USB subsystem: DWC3 core → ZX279128S glue → xHCI → storage */
     kmsg("insmod dwc3.ko (USB DWC3 core)");
     sh("/bin/busybox insmod /lib/modules/dwc3.ko");
