@@ -20,18 +20,11 @@ OpenWrt port itself. See the Status table below.
 
 ## Releases / tags
 
-Two milestone tags mark the two working states of the driver. The DSA work has
-been **merged into `main`** (on top of the egress fix); the `v1.0-egress` tag
-preserves the pre-DSA single-port state if you need the simplest proven path.
-Check out a state with `git checkout <tag>`.
-
-| Tag | Base | What works | What it is |
-|-----|------|-----------|------------|
-| **`v1.0-egress`** | `main` @1c4a971e2 | Host↔device **ping 5/5** on the cabled jack (RX + TX) | Single-port CPU↔LAN datapath. **Not** a DSA driver: the on-chip switch is driven as one CPU↔LAN path with the **egress port hardcoded** (module param `zx_eg_port=2`, the DN-descriptor egress-port hint) + GePHY TX-DAC force-drive. No multi-port / no DSA tagging / no hotplug — the cable must be on the hardcoded jack. The stable reference. |
-| **`v2.0-dsa`** | `eth-dsa` @f62301ac0 | **Ports 0/2/3 ping bidirectional** via DSA slaves `lan0/2/3`; **hotplug** (move cable, no reboot); soft-float `ip`/`ping`/`brctl` | Real Linux **DSA** driver (`tag_zte` tagger, conduit `sw` + `lan0..3`). Egress port comes from the per-packet DSA tag (not the v1 hardcode). Link detection via **PHY_POLL** (the GePHY link IRQ doesn't fire). **Known issue:** port1/jack2 ingress→CPU broken — a dynamic, config-invisible per-port drop in the MAC→SPA→SDET admit stage; **not** hardware (stock pings on jack2) and **not** a register bit (every per-port reg byte-identical to working ports). Documented in `tasks/00.01.eth-driver/findings/` (multiport_root_cause_macinit, port1_sdet_ingress_gate_re, port1_spa_admit_gate_re) + `tasks/00.10.02.re-stock-kmods/findings/cla_ram_layout_re`. Debug tools: debugfs `clapeek`/`cladump`/`rx_per_ingress`. |
-
-`v2.0-dsa` builds on `v1.0-egress` (same egress fabric fix + TX-DAC). Rebuild
-with `tasks/00.01.eth-driver/scripts/build_slotA.py` then `tftp_boot_mainline.py`.
+| Tag | Base | What works |
+|-----|------|-----------|
+| **`v3.0-wifi-offload`** | `main` @268d52d85 | Wedge #2 fixed, WiFi HW offload DN+UP, USB, 40MHz channel, auto-bind, S1 cleanup |
+| **`v2.0-dsa`** | `eth-dsa` @f62301ac0 | DSA multi-port `lan0-4`, hotplug, bidirectional ping via DSA tagging |
+| **`v1.0-egress`** | `main` @1c4a971e2 | Single-port CPU↔LAN datapath, hardcoded egress port |
 
 ## Origin story (so the project doesn't lose its shape)
 
@@ -60,10 +53,11 @@ _Updated 2026-08-01. Working branch: `main`._
 | WiFi STA (MediaTek MT7915, in-tree mt76/mac80211) | ✅ proven |
 | WiFi AP (soft-float hostapd) + real client + internet via CPU SW-forward | ✅ working (5 GHz WPA2, end-to-end) |
 | WiFi slow-path (fabric ⇄ vif dispatcher, "Phase B") | ✅ working end-to-end (real client) |
-| WiFi **HW offload** mechanism (Stage 3, DN + UP, `gemport_uni_id`/ports 6-7) | ✅ mechanism HW-validated, ✅ **wedge #2 FIXED** — ftwifi now defaults ON |
+| WiFi **HW offload** DN + UP (Stage 3, `gemport_uni_id`/ports 6-7) | ✅ working — wedge #2 fixed, ftwifi defaults ON |
+| USB (DWC3, pendrive mount/RW) | ✅ working |
 | OpenWrt port | ⏳ not started (the end goal) |
 
-The only thing between \"WiFi HW-offload works\" and \"on by default\" was **wedge #2**:
+The only thing between "WiFi HW-offload works" and "on by default" was **wedge #2**:
 under sustained fabric-ingress HW-forwarding the fabric front-end starved and halted
 (~1k–72k frames, reboot-only). **FIXED 2026-08-01**: the BMU pool was never primed on
 mainline (bppe_cnt=0 vs stock's ~8112). Manually priming by freeing all 8192 BP indices
