@@ -5539,20 +5539,10 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 
 			if (len > 0 && len < 1600 &&
 			    bppe_idx < TM_BPPE_POOL_SIZE && e->bp_cpu) {
-				const u8 *bp_buf = (const u8 *)e->bp_cpu + (u32)bppe_idx * TM_BP_SIZE;
-				/* Detect frame offset by examining the ETHERTYPE field
-				 * (16-bit, bytes 12..13 of ethernet frame). Real ethertypes
-				 * are >= 0x0600 (per IEEE 802.3). If we see a valid value
-				 * at bp_buf+12, the frame is at +0 (looped-back TX).
-				 * Else at bp_buf+16 (fresh RX with HW prefix).
-				 */
+#if 0 /* BPDUMP — per-packet hexdump, useful for bring-up, stripped for production */
 				u16 et_at_0 = ntohs(*(const __be16 *)(bp_buf + 12));
 				const u8 *src = (et_at_0 >= 0x0600 && et_at_0 != 0xffff) ?
 						bp_buf : (bp_buf + 16);
-				/* Diagnostic: dump bytes 0..47 of bp_buf for the first
-				 * 20 packets. Distinguishes fresh-RX (HW prefix at 0..15,
-				 * frame at 16+) from looped-TX (frame at 0+, no prefix).
-				 */
 				if (e->tm_rx_count + e->tm_rx_loopback_drops < 20) {
 					dev_info(e->dev,
 						"BPDUMP q=%d len=%u bppe=%u +00..0f=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x +10..1f=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x +20..2f=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
@@ -5564,6 +5554,7 @@ static int zx_tm_napi_poll(struct napi_struct *napi, int budget)
 						bp_buf[32], bp_buf[33], bp_buf[34], bp_buf[35], bp_buf[36], bp_buf[37], bp_buf[38], bp_buf[39],
 						bp_buf[40], bp_buf[41], bp_buf[42], bp_buf[43], bp_buf[44], bp_buf[45], bp_buf[46], bp_buf[47]);
 				}
+#endif
 				/* Ingress port comes from desc[6] bits 3..7 minus 1.
 				 * Per stock RE: `r2 = (desc[6] >> 3) & 0x1F; r2 -= 1;
 				 * pkt[180] = r2`. This is the UNI/PON port the packet
