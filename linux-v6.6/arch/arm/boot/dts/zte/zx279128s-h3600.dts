@@ -14,12 +14,42 @@
 
 	chosen {
 		stdout-path = "serial0:115200n8";
-		bootargs = "console=ttyAMA0,115200n8 earlycon=pl011,0x94404000 earlyprintk keep_bootcon ignore_loglevel cma=16M@0x4ec00000";
+		/* Stock kernel uses `mem=192M` to hide top 64 MiB of RAM from
+		 * the kernel allocator. That region (0x4C000000-0x4FFFFFFF) is
+		 * the "carved" pdt_mem area where ALL TM BMU pool memory
+		 * lives in stock (BPPE, BP buffers, RX desc, ACL RAM, Flow RAM).
+		 * We replicate that by capping memory at 192 MiB + a dedicated
+		 * reserved-memory node, and letting the driver memremap()
+		 * the carved region directly. See findings/iter20_carved_*.md.
+		 */
+		bootargs = "console=ttyAMA0,115200n8 earlycon=pl011,0x94404000 earlyprintk keep_bootcon ignore_loglevel mem=192M cma=16M@0x48000000";
 	};
 
 	memory@40000000 {
 		device_type = "memory";
-		reg = <0x40000000 0x10000000>;	/* 256 MiB */
+		reg = <0x40000000 0x0c000000>;	/* 192 MiB (256 - 64 carved) */
+	};
+
+	/* Carved pdt_mem region — stock places BMU pools + ACL + Flow RAM here.
+	 * Driver memremap_wc()s this slab; HW DMA bases (TM[0xE8/F0/F4/10050/
+	 * 10060]) get pointed at offsets matching stock's layout:
+	 *   0x4C000000  ACL RAM (4 MiB, must be zeroed before BMU starts)
+	 *   0x4C420000  Flow RAM (1 MiB, must be zeroed)
+	 *   0x4E700000  BPPE table (128 KiB region — stock alignment)
+	 *   0x4EC20000  BP buffer pool (18 MiB)
+	 *   0x4FF1F000  TM RX desc ring (per-instance)
+	 *   0x4FFDF000  TM TX UP desc ring
+	 *   0x4FFEF000  TM TX DN desc ring
+	 */
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		eth_carved: eth-carved@4c000000 {
+			reg = <0x4c000000 0x04000000>;	/* 64 MiB */
+			no-map;
+		};
 	};
 
 	aliases {
@@ -33,5 +63,11 @@
 };
 
 &eth {
+	status = "okay";
+	memory-region = <&eth_carved>;
+};
+
+/* [HW test 2026-05-31] enable the DSA view of the on-chip switch. */
+&switch_dsa {
 	status = "okay";
 };

@@ -38,7 +38,8 @@
 		};
 
 		/* Real UART input clock from LSP0 (lb_lsp0_25m_wclk) — verified
-		 * from stock IBRD=13 FBRD=36: clk = 115200 * 16 * 13.5625 = 25 MHz */
+		 * from stock IBRD=13 FBRD=36: clk = 115200 * 16 * 13.5625 = 25 MHz
+		 */
 		uart_clk: uart_clk {
 			compatible = "fixed-clock";
 			#clock-cells = <0>;
@@ -68,6 +69,16 @@
 			clocks = <&osc24m>;
 		};
 
+		/* PL310 L2 cache controller. Currently DISABLED — stock kernel
+		 * runtime-patches __l2c210_op_pa_range via patch.ko to work
+		 * around a vendor-specific PL310 erratum. Until that erratum is
+		 * identified and mirrored (DT property or kernel patch), we keep
+		 * L2 off. ARM Cortex-A9 runs fine on L1-only; ~30-50% perf hit
+		 * but no correctness impact. Driver's DMA path uses
+		 * dma_alloc_coherent (uncached) so L2 state doesn't gate I/O.
+		 * Re-enable once patch.ko RE is complete.
+		 * See findings/iter18_l2_pl310_disabled_2026-05-27.md.
+		 */
 		l2cc: cache-controller@c00000 {
 			compatible = "arm,pl310-cache";
 			reg = <0x00c00000 0x1000>;
@@ -75,6 +86,7 @@
 			cache-level = <2>;
 			arm,data-latency = <2 2 2>;
 			arm,tag-latency = <2 2 2>;
+			status = "disabled";
 		};
 
 		uart0: serial@94404000 {
@@ -157,7 +169,8 @@
 
 			/* Required by of_irq_parse_pci so endpoint INTx are routed.
 			 * MT7915/16 use MSI so this is mostly to silence the warning,
-			 * but is required by the PCI core regardless. */
+			 * but is required by the PCI core regardless.
+			 */
 			#interrupt-cells = <1>;
 			interrupt-map-mask = <0 0 0 7>;
 			interrupt-map = <0 0 0 1 &gic GIC_SPI 0x3f IRQ_TYPE_LEVEL_HIGH>,
@@ -173,22 +186,196 @@
 			status = "disabled";
 		};
 
-		/* Integrated ethernet block: NPP @ 0x921c0000, MAC[0..4] and PP
-		 * follow at +0x40000 strides. Single ioremap covers the whole
-		 * 2 MiB stretch — sub-bases are derived inside the driver. */
+		/* Integrated ethernet block. Layout cross-checked against the
+		 * sibling ZX279128R reference DTS in refs/zte-zx279128R/:
+		 *   PON-side regs    : 0x92000000..0x921bffff
+		 *   NPP/TM/PP/IDM    : 0x921c0000..0x923bffff
+		 * The driver currently maps both windows but also still
+		 * devm_ioremaps the hardcoded addresses for the PON window
+		 * and TOPCRM — Phase 10b (task #71) migrates the driver to
+		 * read from these DT properties instead.
+		 */
 		eth: ethernet@921c0000 {
 			compatible = "zte,zx279128s-eth";
-			reg = <0x921c0000 0x200000>;
-			/* IRQs verified against stock DTS:
+			reg = <0x92000000 0x1c0000>,	/* pon (MAC[0..4]) */
+			      <0x921c0000 0x200000>,	/* npp + tm + pp + idm */
+			      <0x94100000 0x1000>,	/* sys_ctrl (gap [A02]) */
+			      <0x94200000 0x1000>,	/* pin_mux  (gap [A02]) */
+			      <0x9fe00000 0x100000>;	/* pon_serdes (gap [A02]) */
+			reg-names = "pon", "npp", "sys_ctrl", "pin_mux", "pon_serdes";
+			/* IRQs verified against stock + sibling DTS:
+			 *   PON main : GIC_SPI 0x42 (66) — pon (defensive, 0 fires on stock)
 			 *   NPP main : GIC_SPI 0x23 (35) — pon_npp
 			 *   TM       : GIC_SPI 0x24 (36) — pon_tm = CPU↔switch traffic ⭐
-			 *   PP       : GIC_SPI 0x25 (37) — pon_pp (not used)
-			 *   IDM      : GIC_SPI 0x26 (38) — WiFi forwarding only */
+			 *   PP       : GIC_SPI 0x25 (37) — pon_pp (defensive)
+			 *   IDM      : GIC_SPI 0x26 (38) — WiFi forwarding only
+			 */
 			interrupts = <GIC_SPI 0x26 IRQ_TYPE_LEVEL_HIGH>,	/* idm */
 				     <GIC_SPI 0x23 IRQ_TYPE_LEVEL_HIGH>,	/* npp */
-				     <GIC_SPI 0x24 IRQ_TYPE_LEVEL_HIGH>;	/* tm */
-			interrupt-names = "idm", "npp", "tm";
+				     <GIC_SPI 0x24 IRQ_TYPE_LEVEL_HIGH>,	/* tm */
+				     <GIC_SPI 0x42 IRQ_TYPE_LEVEL_HIGH>,	/* pon  (gap [A07]) */
+				     <GIC_SPI 0x25 IRQ_TYPE_LEVEL_HIGH>;	/* pp   (gap [A08]) */
+			interrupt-names = "idm", "npp", "tm", "pon", "pp";
+			zte,topcrm = <&topcrm>;
+			/* Phase 14: phylink-style PHY handles. We list all four
+			 * GePHYs so the driver can call phy_init_hw() on each
+			 * during probe — that runs the vendor LDO + TX DAC
+			 * power-up sequence in drivers/net/phy/phy-zte-gephy.c.
+			 */
+			zte,gephys = <&gephy0>, <&gephy1>, <&gephy2>, <&gephy3>, <&wanphy>;
 			status = "disabled";
+
+			/* [HW test 2026-05-31] Unique anchor node for the CPU-side
+			 * "sw" netdev so a DSA switch can select it as conduit
+			 * UNAMBIGUOUSLY. The controller registers three netdevs
+			 * (sw + idm0/idm1) all parented to this same eth device;
+			 * of_find_net_device_by_node()/of_dev_node_match() walks
+			 * dev->parent, so pointing `ethernet = <&eth>` matched ALL
+			 * three and FIFO registration order picked idm0 (wrong).
+			 * The driver sets only the sw netdev's of_node to this child,
+			 * which idm0/idm1's parent-walk never reaches -> sw wins. */
+			cpu_conduit: conduit {
+			};
+		};
+
+		/* MDIO bus to the four built-in GePHYs. Cross-checked with
+		 * the ZX279128R sibling DTS in refs/.
+		 */
+		mdio: mdio@9a101000 {
+			compatible = "zte,zx279128s-mdio";
+			reg = <0x9a101000 0x18>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			/* Four GePHYs (PHY ID 0x84b95031) confirmed at MDIO
+			 * addresses 10..13 by Phase 12 boot scan, matching
+			 * stock's uni_phy[]={0a,0b,0c,0d,...} table. phylib
+			 * will pick up the phy-zte-gephy driver by ID.
+			 *
+			 * Per-PHY link-change interrupts at GIC SPI 0x47..0x4a
+			 * (= 71..74 decimal). Verified via /proc/interrupts
+			 * on stock and via cable-swap counter increments on
+			 * each gphy[i] line.
+			 */
+			gephy0: ethernet-phy@a {
+				reg = <10>;
+				interrupt-parent = <&gic>;
+				interrupts = <GIC_SPI 0x47 IRQ_TYPE_LEVEL_HIGH>;
+			};
+			gephy1: ethernet-phy@b {
+				reg = <11>;
+				interrupt-parent = <&gic>;
+				interrupts = <GIC_SPI 0x48 IRQ_TYPE_LEVEL_HIGH>;
+			};
+			gephy2: ethernet-phy@c {
+				reg = <12>;
+				interrupt-parent = <&gic>;
+				interrupts = <GIC_SPI 0x49 IRQ_TYPE_LEVEL_HIGH>;
+			};
+			gephy3: ethernet-phy@d {
+				reg = <13>;
+				interrupt-parent = <&gic>;
+				interrupts = <GIC_SPI 0x4a IRQ_TYPE_LEVEL_HIGH>;
+			};
+			/* [WAN] MAC4's external PHY = the WAN RJ45 jack. Stock's
+			 * uni_phy[4]=0x08 (the "ZX5201" dual-page external PHY at
+			 * MDIO 0x08, companion page 0x09), same MDIO bus. Driver
+			 * polls it (PHY_POLL) like the GePHYs; no link IRQ wired.
+			 * See tasks/00.01.eth-driver/findings/wan_port_bringup_re.md. */
+			wanphy: ethernet-phy@8 {
+				reg = <8>;
+			};
+		};
+
+		/* DSA view of the on-chip 4-port switch. The `eth` node above is the
+		 * DSA conduit (CPU-port DMA). DRAFT — disabled until the P1 conduit
+		 * refactor is HW-verified (probe ordering + the lanN bring-up need
+		 * bench testing). Enable per-board with `&switch_dsa { status="okay"; }`.
+		 * See tasks/00.01.eth-driver/findings/dsa_conduit_refactor_guide.md.
+		 */
+		switch_dsa: switch {
+			compatible = "zte,zx279128-switch";
+			reg = <0x921c0000 0x1000>;	/* NPP greg window (shared w/ conduit) */
+			status = "disabled";
+
+			ethernet-ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				/* [HW test 2026-05-31] TRANSITIONAL: the conduit (zx-eth)
+				 * driver still owns + brings up the 4 GePHYs and their
+				 * MACs via its proven adjust_link path (smac_init +
+				 * speed/duplex + TM link reg — the egress fix). Declaring
+				 * the user ports with phy-handle made DSA's per-port
+				 * phylink ALSO try to phy_connect the same GePHYs -> EBUSY
+				 * and a dangling PHY state machine -> NULL-deref oops in
+				 * netif_carrier_off. Use fixed-link here so DSA does NOT
+				 * fight for the PHYs; DSA only provides the lanN netdevs +
+				 * the tagger datapath. Proper fix (P2): move MAC bring-up
+				 * into zx-dsa phylink_mac ops and restore phy-handle. */
+				port@0 {
+					reg = <0>;
+					label = "lan0";
+					phy-mode = "internal";
+					fixed-link {
+						speed = <1000>;
+						full-duplex;
+					};
+				};
+				port@1 {
+					reg = <1>;
+					label = "lan1";
+					phy-mode = "internal";
+					fixed-link {
+						speed = <1000>;
+						full-duplex;
+					};
+				};
+				port@2 {
+					reg = <2>;
+					label = "lan2";
+					phy-mode = "internal";
+					fixed-link {
+						speed = <1000>;
+						full-duplex;
+					};
+				};
+				port@3 {
+					reg = <3>;
+					label = "lan3";
+					phy-mode = "internal";
+					fixed-link {
+						speed = <1000>;
+						full-duplex;
+					};
+				};
+				/* [WAN] MAC4 = the separate WAN RJ45 (RGMII, external
+				 * ZX5201 PHY @ MDIO 0x08). Exposed as a standalone DSA
+				 * user port "lan4" — the L3 WAN interface (leave it OUT
+				 * of the LAN bridge). MAC4 PHY/MAC/SOPC bring-up is done
+				 * by the conduit driver (zx_eth_adjust_link is_wan path);
+				 * fixed-link here so DSA doesn't fight for the PHY. */
+				port@4 {
+					reg = <4>;
+					label = "lan4";
+					phy-mode = "rgmii";
+					fixed-link {
+						speed = <1000>;
+						full-duplex;
+					};
+				};
+
+				port@5 {
+					reg = <5>;
+					phy-mode = "internal";
+					ethernet = <&cpu_conduit>;	/* DSA conduit = the sw netdev (unique anchor) */
+					fixed-link {
+						speed = <1000>;
+						full-duplex;
+					};
+				};
+			};
 		};
 
 		pcie1: pcie@f100000 {
