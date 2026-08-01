@@ -49,10 +49,7 @@ LAN4_IP = "10.44.66.223"
 
 HOSTAPD_CONF = [
     "interface=wlan1", "driver=nl80211", f"ssid={AP_SSID}",
-    "country_code=ES", "hw_mode=a", "channel=36",
-    "ieee80211n=1", "ieee80211ac=1",
-    "vht_oper_chwidth=1",
-    "vht_capab=[MAX-MPDU-7991][SHORT-GI-80][TX-STBC-2BY1][RX-STBC-1][MAX-A-MPDU-LEN-EXP7][SU-BEAMFORMER][SU-BEAMFORMEE]",
+    "country_code=ES", "hw_mode=a", "channel=36", "ieee80211n=1",
     "wmm_enabled=1", "auth_algs=1", "wpa=2", "wpa_key_mgmt=WPA-PSK",
     "rsn_pairwise=CCMP", f"wpa_passphrase={AP_PASS}",
 ]
