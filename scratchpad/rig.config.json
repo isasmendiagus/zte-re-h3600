@@ -1,0 +1,11 @@
+{
+  "device": "h3600",
+  "host_nic": "eth1",
+  "wifi_client": {
+    "backend": "adb",
+    "ssid": "H3600-AP-Test",
+    "pass": "h3600aptest",
+    "adb": { "serial": null, "src_ip": "192.168.50.10" },
+    "usb": { "iface": "wlan0", "src_ip": null }
+  }
+}

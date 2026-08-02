@@ -65,7 +65,8 @@ from collections import namedtuple
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import rig      # scratchpad/rig.py — canonical rig lifecycle + primitives (dev/sh/poke_read/consts)
+import rig      # scratchpad/rig.py — shared primitives (dev/sh/poke_read/consts/UI)
+import devtool  # scratchpad/devtool.py — dev/RE commands (cmd_up/cmd_teardown live here now)
 import ctr      # scratchpad/ctr.py — canonical counter sweep (imported by rig.py too)
 
 TestResult = namedtuple("TestResult", "name status duration metrics notes")
@@ -3272,7 +3273,7 @@ def main():
 
     if not args.no_boot:
         rig.hdr("regress: rig up (boot+wan+client+offload) before the battery")
-        rc = rig.cmd_up(argparse.Namespace(long_dtr=args.long_boot))
+        rc = devtool.cmd_up(argparse.Namespace(long_dtr=args.long_boot, wifi=False))
         if rc != 0:
             print("\n[ABORT] rig up failed — cannot run the regression battery.")
             return 2
@@ -3292,7 +3293,7 @@ def main():
 
     if not args.no_teardown:
         rig.hdr("regress: host teardown (mandatory before any reboot)")
-        rig.cmd_teardown(argparse.Namespace(skip_device=False))
+        devtool.cmd_teardown(argparse.Namespace(skip_device=False))
 
     return 1 if n_fail else 0
 
