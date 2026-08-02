@@ -358,12 +358,25 @@ def cmd_build(args):
         # no ip_forward -> no routing/NAT. (2026-08-02, the "before" cpio had them.)
         sh("mkdir -p %s/proc %s/sys/kernel/debug %s/tmp"
            % (INITRAMFS_DIR, INITRAMFS_DIR, INITRAMFS_DIR))
-        # fresh in-tree modules → initramfs (vermagic must match this kernel)
+        # fresh in-tree modules → initramfs (vermagic must match this kernel).
+        # NOTE: BUILD may be a SYMLINK (repo/build -> linux-v6.6/build); plain
+        # `find <symlink>` (default -P) does NOT descend into it, which silently
+        # copied ZERO fresh modules and shipped the tracked base's STALE .kos
+        # (root-caused 2026-08-02: two boots ran a 12:08 eth driver while the
+        # kernel was 16:45). realpath() makes find always descend.
+        real_build = os.path.realpath(BUILD)
         sh("mkdir -p %s/lib/modules" % INITRAMFS_DIR)
-        sh("find %s -name '*.ko' \\( -path '*net/wireless*' -o -path '*mac80211*' "
-           "-o -path '*mt76*' -o -path '*ethernet/zte*' -o -path '*dwc3*' "
-           "-o -path '*xhci*' -o -path '*usb/storage*' \\) -exec cp {} %s/lib/modules/ \\;"
-           % (BUILD, INITRAMFS_DIR), timeout=60)
+        rc, out = sh("find %s -name '*.ko' \\( -path '*net/wireless*' -o -path '*mac80211*' "
+                     "-o -path '*mt76*' -o -path '*ethernet/zte*' -o -path '*dwc3*' "
+                     "-o -path '*xhci*' -o -path '*usb/storage*' \\) "
+                     "-exec cp {} %s/lib/modules/ \\; -print | wc -l"
+                     % (real_build, INITRAMFS_DIR), timeout=60)
+        n_ko = int(out.strip() or 0)
+        if n_ko < 5:
+            fail("module staging copied only %d .ko files — build tree find is broken "
+                 "(stale drivers would ship). Aborting." % n_ko)
+            return 1
+        info("staged %d fresh modules" % n_ko)
         # stage_userland recompiles /init from init.c and installs /etc/rc.router
         # (LAN/WAN bring-up, ip_forward, iptables MASQUERADE), iptables, udhcpd,
         # busybox. WITHOUT it the image boots but never sets up routing/NAT.
@@ -421,7 +434,11 @@ def cmd_eth_download(args):
         port = "lan%s" % m.group(1)
         info("boot-linked port detected: %s" % port)
     with step("device: LAN on %s (boot-linked, MAC-inited) + FORWARD ACCEPT" % port):
-        dev(["busybox ip addr flush dev %s 2>/dev/null" % port,
+        # Flush ALL LAN ports first: a stale LANIP on another lanN (fixed-link
+        # = carrier always up) leaves a duplicate 172.31.9.0/24 route that wins
+        # by FIB insertion order and black-holes every reply (the "intermittent
+        # rc=28" bug, root-caused 2026-08-02).
+        dev(["for d in lan0 lan1 lan2 lan3; do busybox ip addr flush dev $d 2>/dev/null; done",
              "busybox ip addr add %s/24 dev %s; busybox ip link set %s up" % (ETH_LAN_IP, port, port),
              "iptables -P FORWARD ACCEPT"], wait=3)
     out = dev(["cat /proc/sys/net/ipv4/ip_forward",
@@ -474,10 +491,306 @@ def cmd_eth_download(args):
     return 0
 
 
+# ---------------------------------------------------------------------------
+# eth-hammer — L2 stability regression guard. From a FRESH boot: bind the LAN
+# IP to the boot-linked port, start a device httpd, then fetch a 1 MiB file
+# from the host N times in a row. Guards the 2026-08-02 duplicate-route bug
+# (rc.router lan1 IP shadowing the boot-linked port -> intermittent rc=28).
+# PASS = 100% of fetches return http 200 AND device->host ping is 0% loss.
+# ---------------------------------------------------------------------------
+def _detect_boot_lan(default="lan2"):
+    """The lanN whose PHY the driver logged 'PHY[N] link UP' (N 0..3)."""
+    out = dev(["busybox dmesg 2>/dev/null | busybox grep -oE 'PHY\\[[0-3]\\] link UP' | busybox tail -1"], wait=2)
+    m = re.search(r"PHY\[([0-3])\]", out)
+    if m:
+        return "lan%s" % m.group(1)
+    warn("no 'PHY[N] link UP' in dmesg — falling back to %s" % default)
+    return default
+
+
+def _eth_lan_setup(port):
+    """Device: LAN IP on the boot-linked port ONLY (flush the rest — a stale
+    LANIP on another fixed-link lanN shadows the route, see l2_stability_re
+    finding), FORWARD ACCEPT, httpd :8090 with a 1 MiB test file. Host: test
+    IP on HOST_NIC."""
+    dev(["for d in lan0 lan1 lan2 lan3; do busybox ip addr flush dev $d 2>/dev/null; done",
+         "busybox ip addr add %s/24 dev %s; busybox ip link set %s up" % (ETH_LAN_IP, port, port),
+         "iptables -P FORWARD ACCEPT",
+         "busybox dd if=/dev/zero of=/tmp/tf bs=1k count=1024 2>/dev/null",
+         "busybox httpd -p 8090 -h /tmp 2>/dev/null"], wait=4)
+    sh(rig.SUDO + "ip addr add %s/24 dev %s 2>/dev/null" % (ETH_HOST_IP, rig.HOST_NIC))
+    sh(rig.SUDO + "ip link set %s up" % rig.HOST_NIC)
+
+
+def cmd_eth_hammer(args):
+    hdr("eth-hammer: L2 stability, %d consecutive host->device fetches" % args.n)
+    port = _detect_boot_lan(args.lan_port)
+    with step("device+host setup on %s (boot-linked)" % port):
+        _eth_lan_setup(port)
+    npass = 0
+    fails = []
+    for i in range(args.n):
+        rc, out = sh("curl -s -o /dev/null -m5 --interface %s -w '%%{http_code}' "
+                     "http://%s:8090/tf" % (ETH_HOST_IP, ETH_LAN_IP), timeout=10)
+        if out.strip() == "200":
+            npass += 1
+        else:
+            fails.append((i + 1, out.strip() or "rc=%s" % rc))
+    for i, code in fails[:5]:
+        warn("fetch %d failed (%s)" % (i, code))
+    out = dev(["ping -c 5 -W 2 %s | busybox grep 'packet loss'" % ETH_HOST_IP], wait=8)
+    ping_ok = " 0% packet loss" in out
+    (ok if ping_ok else warn)("device->host ping: %s" % ("0% loss" if ping_ok else out.strip()[-60:]))
+    (ok if npass == args.n else fail)("hammer: %d/%d http=200" % (npass, args.n))
+    return 0 if (npass == args.n and ping_ok) else 1
+
+
+# ---------------------------------------------------------------------------
+# eth-offload — one-shot HW flow-offload forwarding throughput, from a FRESH
+# boot, with a LAN-LOCAL fast source (the internet uplink is ~90 Mbps and
+# can't show the eth ceiling). client==server==this host, so the flow must be
+# forced onto the wire with a phantom SERVER IP — and the phantom translation
+# must live on the HOST so the DEVICE flow stays plain MASQUERADE (UP=src
+# rewrite, DN=dst rewrite — the ONLY per-direction rewrites the PM engine
+# supports/validated; a DN src-rewrite comes out as src=0.0.0.0, and dual-NAT
+# directions are declined to SW — see l2_stability_re_2026-08-02.md):
+#   client: curl --interface 172.31.9.50 -> http://10.99.99.99:8000/big.bin
+#           (10.99.99.99/32 routed via the device LAN gw on HOST_NIC)
+#   device: routes 10.99.99.99/32 dev lan4 (static ARP -> host eth0 MAC) and
+#           MASQUERADEs out lan4 — exactly the validated internet-NAT flow.
+#   host:   PREROUTING on eth0 DNATs 10.99.99.99 -> eth0's real IP, so the
+#           server socket answers; conntrack un-DNATs replies back to the
+#           phantom -> the whole flow rides the wire twice through the device.
+# Reports slow-path baseline vs offloaded MB/s + QMG DN hw_fwd delta, and
+# checks the dual-NAT fallback (device-side DNAT on 10.99.99.98 + masquerade)
+# still transfers via SW instead of black-holing.
+# ---------------------------------------------------------------------------
+ETH_PH_SRV = "10.99.99.99"       # phantom server IP (host eth0 PREROUTING DNAT)
+ETH_PH_SRV_DUAL = "10.99.99.98"  # device-side DNAT variant -> dual-NAT (SW fallback)
+ETH_SRV_PORT = 8000
+
+
+def _host_eth0_ip():
+    rc, out = sh("ip -o -4 addr show eth0 | head -1")
+    m = re.search(r"inet ([0-9.]+)/", out)
+    return m.group(1) if m else "10.44.66.30"
+
+
+def _qmg_dn_hw():
+    out = dev(["cat /sys/kernel/debug/zx_eth/pipeline_stats 2>/dev/null | busybox grep 'QMG DN'"], wait=3)
+    m = re.search(r"hw_fwd=(\d+)", out)
+    return int(m.group(1)) if m else -1
+
+
+def cmd_eth_offload(args):
+    srv_ip = _host_eth0_ip()
+    www = "/tmp/zx_ethtest"
+    hdr("eth-offload: LAN-local offloaded forwarding (host %s:%d through the device)"
+        % (srv_ip, ETH_SRV_PORT))
+
+    port = _detect_boot_lan(args.lan_port)
+    with step("device+host base setup on %s (boot-linked)" % port):
+        _eth_lan_setup(port)
+    rc, out = sh("ip -o link show eth0")
+    m = re.search(r"link/ether ([0-9a-f:]{17})", out)
+    if not m:
+        fail("cannot read host eth0 MAC")
+        return 1
+    eth0_mac = m.group(1)
+
+    with step("host: big.bin server on eth0 + phantom DNAT/routes"):
+        sh("mkdir -p %s" % www)
+        sh("[ -f %s/big.bin ] || dd if=/dev/urandom of=%s/big.bin bs=1M count=%d status=none"
+           % (www, www, args.mb), timeout=120)
+        rc, out = sh("ss -ltn 2>/dev/null | grep -c ':%d '" % ETH_SRV_PORT)
+        if out.strip() == "0":
+            sh("cd %s && nohup python3 -m http.server %d --bind %s >/dev/null 2>&1 &"
+               % (www, ETH_SRV_PORT, srv_ip))
+            time.sleep(1)
+        # phantom-server DNAT on the host's WAN-side NIC (see header comment)
+        sh(rig.SUDO + "iptables -t nat -C PREROUTING -i eth0 -d %s -j DNAT --to-destination %s 2>/dev/null || "
+           % (ETH_PH_SRV, srv_ip) +
+           rig.SUDO + "iptables -t nat -A PREROUTING -i eth0 -d %s -j DNAT --to-destination %s"
+           % (ETH_PH_SRV, srv_ip))
+        sh(rig.SUDO + "ip route replace %s/32 via %s dev %s" % (ETH_PH_SRV, ETH_LAN_IP, rig.HOST_NIC))
+        sh(rig.SUDO + "ip route replace %s/32 via %s dev %s" % (ETH_PH_SRV_DUAL, ETH_LAN_IP, rig.HOST_NIC))
+
+    with step("device: WAN addr + masquerade + phantom route out lan4 (static ARP)"):
+        # OWN the NAT state: stale PREROUTING rules (e.g. a leftover DNAT on
+        # ETH_PH_SRV from ad-hoc experiments) silently turn the flow dual-NAT
+        # -> declined to SW and the "offloaded" number measures nothing.
+        dev(["iptables -t nat -F PREROUTING", "iptables -t nat -F POSTROUTING",
+             "busybox ip addr flush dev lan4 2>/dev/null",
+             "busybox ip addr add %s/24 dev lan4; busybox ip link set lan4 up" % ETH_WAN_IP,
+             "iptables -t nat -A POSTROUTING -o lan4 -j MASQUERADE",
+             "busybox ip route add %s/32 dev lan4 2>/dev/null" % ETH_PH_SRV,
+             "busybox arp -s %s %s" % (ETH_PH_SRV, eth0_mac),
+             # dual-NAT variant: device-side DNAT (+ masquerade) on .98
+             "iptables -t nat -A PREROUTING -i %s -d %s -j DNAT --to-destination %s" % (port, ETH_PH_SRV_DUAL, srv_ip),
+             "echo 0 > /proc/sys/kernel/printk"], wait=8)
+
+    def fetch(ip, secs):
+        rc, out = sh("curl -s -o /dev/null -m %d --interface %s "
+                     "-w '%%{http_code} %%{size_download} %%{speed_download}' "
+                     "http://%s:%d/big.bin" % (secs, ETH_HOST_IP, ip, ETH_SRV_PORT),
+                     timeout=secs + 10)
+        m = re.search(r"(\d{3}) (\d+) ([0-9.]+)", out.strip())
+        if not m:
+            return "000", 0, 0.0
+        return m.group(1), int(m.group(2)), float(m.group(3))
+
+    with step("slow-path baseline (no flowtable)") as s:
+        dev(["nft flush ruleset"], wait=3)
+        code, size, bps = fetch(ETH_PH_SRV, args.base_dur)
+        base_mbs = bps / 1e6
+        if size == 0:
+            s.fail("baseline moved 0 bytes (http=%s) — phantom rig broken" % code)
+            return 1
+        s.note("%.2f MB/s (http=%s)" % (base_mbs, code))
+
+    with step("install nft flowtable offload {%s, lan4}" % port):
+        dev([c.replace("lan2", port) for c in rig.OFFLOAD_CMDS], wait=6)
+    hw0 = _qmg_dn_hw()
+    with step("OFFLOADED download (%d MiB)" % args.mb) as s:
+        code, size, bps = fetch(ETH_PH_SRV, args.dur)
+        off_mbs = bps / 1e6
+        s.note("%.1f MB/s http=%s %d bytes" % (off_mbs, code, size))
+    hw1 = _qmg_dn_hw()
+    hw_delta = hw1 - hw0 if (hw0 >= 0 and hw1 >= 0) else -1
+
+    with step("dual-NAT fallback (%s must transfer via SW, not black-hole)" % ETH_PH_SRV_DUAL) as s:
+        dcode, dsize, dbps = fetch(ETH_PH_SRV_DUAL, 10)
+        s.note("%.2f MB/s (http=%s)" % (dbps / 1e6, dcode))
+    out = dev(["busybox dmesg | busybox grep -c 'dual-NAT'"], wait=3)
+    declined = re.search(r"\n(\d+)", out) and int(re.search(r"\n(\d+)", out).group(1)) > 0
+
+    tbl = rig.Table(title="eth-offload (host->%s->device->lan4->host eth0)" % port)
+    tbl.add_column("leg"); tbl.add_column("MB/s", justify="right"); tbl.add_column("check")
+    tbl.add_row("slow-path baseline", "%.2f" % base_mbs, "")
+    tbl.add_row("HW-offloaded", "%.1f" % off_mbs, "qmg_dn_hw +%d" % hw_delta)
+    tbl.add_row("dual-NAT SW fallback", "%.2f" % (dbps / 1e6), "declined logged: %s" % bool(declined))
+    rig.CON.print(tbl)
+
+    passed = (size > 0 and off_mbs > args.min_mbs and hw_delta > 1000
+              and dsize > 0)
+    (ok if passed else fail)(
+        "eth-offload: offloaded %.1f MB/s (min %.0f), hw_fwd +%d, dual-NAT fallback %s"
+        % (off_mbs, args.min_mbs, hw_delta, "OK" if dsize else "BROKEN"))
+    return 0 if passed else 1
+
+
+# ---------------------------------------------------------------------------
+# wifi-offload — forwarded WiFi throughput from a FRESH boot: the adb phone
+# (192.168.50.10 on the device AP) downloads big.bin from the host's fast NIC
+# (eth0, on the WAN /24) THROUGH the device (wlan1 -> route+NAT -> lan4),
+# slow-path vs HW-offloaded (ftwifi=1 + nft flowtable {lanN, lan4}; wlan1 must
+# NOT be in the offload flowtable — it can't HW-bind; the UP leg is injected
+# into the fabric by the driver's rx_handler and both directions' FLOW_CLS
+# reach the driver via the lan4 block).
+# ---------------------------------------------------------------------------
+def _qmg_all():
+    out = dev(["cat /sys/kernel/debug/zx_eth/pipeline_stats 2>/dev/null | busybox grep 'QMG DN'"], wait=3)
+    m = re.search(r"QMG DN sw_fwd=(\d+) hw_fwd=(\d+) hw_trap=(\d+) \| UP sw_fwd=(\d+) hw_fwd=(\d+) hw_trap=(\d+)", out)
+    return [int(x) for x in m.groups()] if m else None
+
+
+def cmd_wifi_offload(args):
+    srv_ip = _host_eth0_ip()
+    www = "/tmp/zx_ethtest"
+    hdr("wifi-offload: phone -> wlan1 -> device -> lan4 -> host %s:%d" % (srv_ip, ETH_SRV_PORT))
+    port = _detect_boot_lan(args.lan_port)
+
+    with step("host: big.bin server on eth0"):
+        sh("mkdir -p %s" % www)
+        sh("[ -f %s/big.bin ] || dd if=/dev/urandom of=%s/big.bin bs=1M count=%d status=none"
+           % (www, www, args.mb), timeout=120)
+        rc, out = sh("ss -ltn 2>/dev/null | grep -c ':%d '" % ETH_SRV_PORT)
+        if out.strip() == "0":
+            sh("cd %s && nohup python3 -m http.server %d --bind %s >/dev/null 2>&1 &"
+               % (www, ETH_SRV_PORT, srv_ip))
+            time.sleep(1)
+
+    if rig.wifi_up_ap() != 0:
+        fail("AP bring-up failed")
+        return 1
+    client = rig.wifi_client()
+    if hasattr(client, "assoc") and not client.assoc():
+        return 1
+
+    with step("device: FORWARD ACCEPT + masquerade out lan4"):
+        dev(["iptables -P FORWARD ACCEPT",
+             "iptables -t nat -C POSTROUTING -o lan4 -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -o lan4 -j MASQUERADE",
+             "echo 0 > /proc/sys/kernel/printk"], wait=5)
+
+    def phone_fetch(secs):
+        rc, out = sh("adb shell \"curl -s -o /dev/null -m %d --interface %s "
+                     "-w '%%{http_code} %%{size_download} %%{speed_download}' "
+                     "http://%s:%d/big.bin\"" % (secs, rig.wifi_client().src_ip
+                                                 if hasattr(client, 'src_ip') else "192.168.50.10",
+                                                 srv_ip, ETH_SRV_PORT),
+                     timeout=secs + 15)
+        m = re.search(r"(\d{3}) (\d+) ([0-9.]+)", out.strip())
+        return (m.group(1), int(m.group(2)), float(m.group(3))) if m else ("000", 0, 0.0)
+
+    with step("slow-path baseline (no flowtable, ftwifi irrelevant)") as s:
+        dev(["nft flush ruleset"], wait=3)
+        code, size, bps = fetchv = phone_fetch(args.base_dur)
+        base_mbs = bps / 1e6
+        if size == 0:
+            s.fail("baseline moved 0 bytes (http=%s)" % code)
+            return 1
+        s.note("%.2f MB/s (http=%s)" % (base_mbs, code))
+
+    with step("install flowtable {%s, lan4} + ftwifi=1" % port):
+        dev([c.replace("lan2", port) for c in rig.OFFLOAD_CMDS] +
+            ["echo 1 > /sys/kernel/debug/zx_eth/ftwifi"], wait=6)
+    v1 = _qmg_all()
+    with step("OFFLOADED phone download (%d MiB)" % args.mb) as s:
+        code, size, bps = phone_fetch(args.dur)
+        off_mbs = bps / 1e6
+        s.note("%.2f MB/s http=%s %d bytes" % (off_mbs, code, size))
+    v2 = _qmg_all()
+    delta = {}
+    if v1 and v2:
+        delta = dict(zip(["dn_sw", "dn_hw", "dn_trap", "up_sw", "up_hw", "up_trap"],
+                         [b - a for a, b in zip(v1, v2)]))
+        info("QMG deltas: %s" % delta)
+
+    tbl = rig.Table(title="wifi-offload (phone->wlan1->device->lan4->host eth0)")
+    tbl.add_column("leg"); tbl.add_column("MB/s", justify="right"); tbl.add_column("check")
+    tbl.add_row("slow-path baseline", "%.2f" % base_mbs, "")
+    tbl.add_row("HW-offloaded", "%.2f" % off_mbs, "dn_hw +%d" % delta.get("dn_hw", -1))
+    rig.CON.print(tbl)
+    passed = size > 0 and off_mbs >= base_mbs * 0.9
+    (ok if passed else fail)("wifi-offload: %.2f MB/s offloaded vs %.2f slow-path"
+                             % (off_mbs, base_mbs))
+    return 0 if passed else 1
+
+
 def main():
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    sp = sub.add_parser("wifi-offload", help="forwarded WiFi throughput (phone->device->lan4->host), slow vs offloaded")
+    sp.add_argument("--mb", type=int, default=1024)
+    sp.add_argument("--dur", type=int, default=60)
+    sp.add_argument("--base-dur", type=int, default=20)
+    sp.add_argument("--lan-port", default="lan2")
+    sp.set_defaults(func=cmd_wifi_offload)
+
+    sp = sub.add_parser("eth-hammer", help="L2 stability: N consecutive host->device fetches (regression guard)")
+    sp.add_argument("--n", type=int, default=30)
+    sp.add_argument("--lan-port", default="lan2", help="fallback if dmesg PHY-link detect fails")
+    sp.set_defaults(func=cmd_eth_hammer)
+
+    sp = sub.add_parser("eth-offload", help="HW flow-offload line-rate test (LAN-local phantom rig)")
+    sp.add_argument("--mb", type=int, default=1024, help="test file size MiB")
+    sp.add_argument("--dur", type=int, default=90, help="offloaded fetch max seconds")
+    sp.add_argument("--base-dur", type=int, default=10, help="slow-path baseline seconds")
+    sp.add_argument("--min-mbs", type=float, default=20.0, help="PASS threshold MB/s")
+    sp.add_argument("--lan-port", default="lan2", help="fallback if dmesg PHY-link detect fails")
+    sp.set_defaults(func=cmd_eth_offload)
 
     sp = sub.add_parser("eth-download", help="ethernet forwarding throughput (client->device->WAN)")
     sp.add_argument("--n", type=int, default=4, help="number of runs")

@@ -37,6 +37,20 @@
 			clock-output-names = "osc24m";
 		};
 
+		/* Cortex-A9 PERIPHCLK (feeds the MPCore global timer). HW-measured
+		 * 2026-08-02: with the global timer (mis)clocked from osc24m the
+		 * kernel clock ran 20.1-21.6x fast over a 60 s wall-clock window —
+		 * exactly 500 MHz / 24 MHz = 20.83x. PERIPHCLK = CPUCLK/2 = 1 GHz/2.
+		 * The 20.8x clock broke every kernel timer (TCP RTO, conntrack &
+		 * flowtable GC ~1 s real instead of 30 s, ping -W, sleep) — see
+		 * tasks/00.01.eth-driver/findings/l2_stability_re_2026-08-02.md. */
+		periphclk: periphclk {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <500000000>;
+			clock-output-names = "periphclk";
+		};
+
 		/* Real UART input clock from LSP0 (lb_lsp0_25m_wclk) — verified
 		 * from stock IBRD=13 FBRD=36: clk = 115200 * 16 * 13.5625 = 25 MHz
 		 */
@@ -66,7 +80,7 @@
 			compatible = "arm,cortex-a9-global-timer";
 			reg = <0x00800200 0x20>;
 			interrupts = <GIC_PPI 11 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&osc24m>;
+			clocks = <&periphclk>;	/* A9 GT counts PERIPHCLK, NOT osc24m */
 		};
 
 		/* PL310 L2 cache controller. Currently DISABLED — stock kernel

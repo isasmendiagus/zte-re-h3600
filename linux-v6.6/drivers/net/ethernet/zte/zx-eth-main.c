@@ -4018,6 +4018,25 @@ static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
 					nat.new_ip = (__force __be32)act->mangle.val;
 					nat.dnat = true;
 				}
+				/* [dual-NAT 2026-08-02] A direction with BOTH a
+				 * saddr and a daddr rewrite (e.g. the reply half of
+				 * a DNAT+MASQUERADE "hairpin" flow) cannot be HW-
+				 * offloaded: the PM rewrite engine has exactly ONE
+				 * replacement address per flow direction (next_hop
+				 * ram next_ip — stock pp_pm_set_next_hop_ram_info
+				 * carries next_mac + ONE next_dip; flow_info has no
+				 * second address field). Installing it anyway
+				 * black-holes the flow: live capture 2026-08-02
+				 * showed HW-forwarded frames with src=0.0.0.0 and
+				 * the OTHER rewrite's address in dst. Decline so
+				 * the flow stays on the SW flowtable fast-path,
+				 * which handles dual NAT correctly. */
+				if (nat.snat && nat.dnat) {
+					dev_info(e->dev,
+						 "[phase6/ft] cookie=%lx dual-NAT (SNAT+DNAT) direction — PM has one rewrite address/dir, declining offload (stays SW)\n",
+						 cls->cookie);
+					return -EOPNOTSUPP;
+				}
 			} else if (act->mangle.htype ==
 					FLOW_ACT_MANGLE_HDR_TYPE_TCP ||
 				   act->mangle.htype ==
@@ -5900,6 +5919,29 @@ static void zx_mac_keepalive_fn(struct work_struct *w)
 
 	if (!e)
 		goto resched;
+
+	/* [red-arm keepalive 2026-08-02] RED_CFG bit6 (cpuDn charge-accounting)
+	 * MUST stay cleared (see zx_tm_red_init) or WAN-ingress traps leak the
+	 * RED out-buffer to its 1024 depth and the lan4 RX->CPU path latches
+	 * dead (reboot-only). Both probe-time writers clear it, yet on SOME
+	 * boots it reads the 0xDE reset value again at runtime (live-caught
+	 * 2026-08-02: fresh boot, hw_trap frozen at exactly 1024, RED_CFG=0xDE,
+	 * lan4 dead while MAC4 RX climbs) — something post-probe resets the
+	 * RED block intermittently. Until that writer is pinned, re-assert the
+	 * clear every keepalive tick (100 ms — the charge can only ever reach
+	 * a few frames) and LOG when a revert is caught so the culprit's
+	 * timing shows up in dmesg. */
+	{
+		u32 cfg = tm_read(e, TM_RED_CFG);
+
+		if (cfg & TM_RED_CFG_CPUDN_CHARGE) {
+			tm_write(e, TM_RED_CFG,
+				 cfg & ~TM_RED_CFG_CPUDN_CHARGE);
+			dev_info_ratelimited(e->dev,
+				"[red-arm] RED_CFG reverted to %#x (bit6 set) - re-cleared by keepalive\n",
+				cfg);
+		}
+	}
 	for (i = 0; i < 5; i++) {	/* [WAN] incl. MAC4/WAN; NULL gephy[i] skipped below */
 		struct phy_device *phy = e->gephy[i];
 		void __iomem *mc = e->base + mac_off(i, MAC_REG_CONTROL);
