@@ -8517,6 +8517,41 @@ static void zx_pm_spa_init(struct zx_eth *e)
 	npp_write(e, 0x14054, readl(e->base + 0x14054) | 0x03000000);
 	npp_write(e, 0x1407c, 0x00000001);		/* SPA match_mode = 1 */
 
+	/* [ptype-fwd 2026-08-03] Clear the SPA match-RAM (11 indirect entries,
+	 * ram_id=0, 3 blocks × 6 words). The stock driver initializes this via
+	 * spa_set_matchram ×11 from _LANCHOR1+0x160 bytes in tm_pon_npp_spa_initial.
+	 * Mainline omits this — stale/fabric-default match entries may cause the
+	 * SPA classifier to assign trap-ptypes (e.g. 0x4B) to forwarded TCP.
+	 * Clear to all-zeros so the SPA defaults to forward-through-CLA.
+	 * Indirect protocol: CMD at 0x921d4014 (addr|0<<22|rw<<27),
+	 * DONE at 0x921d4018 (poll bit0), DATA at 0x921d401c..30 (6 words).
+	 */
+	{
+		void __iomem *spa = e->base + 0x14000;
+		u32 zero[6] = {0};
+		int blk;
+
+		for (blk = 0; blk < 3; blk++) {
+			int retry;
+
+			for (retry = 0; retry < 20; retry++)
+				if (!(readl(spa + 0x18) & 1)) break;
+			writel(blk | (1u << 27), spa + 0x14);	/* READ-prefetch */
+			for (retry = 0; retry < 20; retry++)
+				if (!(readl(spa + 0x18) & 1)) break;
+			writel(blk, spa + 0x14);		/* CMD write */
+			for (retry = 0; retry < 20; retry++)
+				if (!(readl(spa + 0x18) & 1)) break;
+			writel(zero[0], spa + 0x1c);
+			writel(zero[1], spa + 0x20);
+			writel(zero[2], spa + 0x24);
+			writel(zero[3], spa + 0x28);
+			writel(zero[4], spa + 0x2c);
+			writel(zero[5], spa + 0x30);
+		}
+		dev_dbg(e->dev, "SPA match-RAM: cleared 3 blocks (zero-fill)\n");
+	}
+
 	/* [port1 ingress fix 2026-06-02] SPA port_vlan_filter (0x142ac + port*4, [5:0]).
 	 * Mainline left it at a non-zero reset default (p0=0x36 p1=0x26 p2=0x36 p3=0x27
 	 * p4=0x36); stock clears all of them to 0. That non-zero per-port VLAN filter
