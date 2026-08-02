@@ -1,666 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/* Included from zx-eth-main.c — single translation unit. */
-
-static inline u32 tm_read(struct zx_eth *e, u32 off)
-{
-	return readl(e->base + TM_OFF + off);
-}
-
-static inline void tm_write(struct zx_eth *e, u32 off, u32 val)
-{
-	writel(val, e->base + TM_OFF + off);
-}
-
-static inline void tm_or(struct zx_eth *e, u32 off, u32 bits)
-{
-	tm_write(e, off, tm_read(e, off) | bits);
-}
-
-static inline void tm_and(struct zx_eth *e, u32 off, u32 mask)
-{
-	tm_write(e, off, tm_read(e, off) & mask);
-}
-
-/* [Iter 20] Carved 64 MiB region at phys 0x4C000000. Stock kernel uses
- * mem=192M to hide this from the kernel allocator; we replicate via
- * reserved-memory DT + direct memremap_wc (bypassing dma_alloc_coherent
- * because the kernel doesn't manage this region — it's outside `mem=192M`).
- * Carved layout matches stock per agent 3 vmlinux RE:
- *   +0x00000000  BPPE table (16 KiB) + jumbo BPPE at +0x10000  <-- stock-exact
- *   +0x00020000  ACL RAM    (4 MiB, zeroed before BMU enable)
- *   +0x00420000  Flow RAM   (1 MiB, zeroed)
- *   +0x02C20000  BP buffer pool
- *   +0x03F1F000  TM RX desc ring
- *   +0x03FDF000  TM TX UP desc ring
- *   +0x03FEF000  TM TX DN desc ring
- *
- * [wedge #2 lead 2026-07-31] BPPE moved +0x02700000 -> +0x00000000 (stock's
- * exact address 0x4C000000; stock: bppe@carve+0, jumbo@+0x10000,
- * ACL@+0x20000, flow@+0x420000 — see static_analysis_vmlinux_platform_init.md
- * §5). It had been parked at +0x02700000 to coincide with the HW-dictated
- * PM/ACL carve base (0x4E700000 = fpga[0x3a0024]-0x20000), i.e. inside the
- * 128 KiB head that carve reserves ahead of the ACL table — which is exactly
- * what made zx_ft_pm_ext_init's full-span memset silently wipe the BP pool
- * every boot (fix #1b). carve+0..+0x20000 is otherwise unused (ACL starts at
- * +0x20000) and is precisely the size stock's BPPE region occupies, so this
- * both restores stock parity and permanently removes that overlap hazard.
- * It also tests whether the BMU DDR-prefetch engine has an address/window
- * constraint, which is the last untested explanation for bppe_cnt==0
- * (every value-parity write, re-prime edge, kick and cache-flush theory is
- * already refuted — findings/wifi_stage3_wedge_topcrm_axiqos_2026-07-31.md).
- */
-#define CARVED_BASE_PHYS	0x4C000000UL
-#define CARVED_SIZE		(64UL * 1024 * 1024)
-#define CARVED_ACL_OFF		0x00020000UL
-#define CARVED_ACL_SIZE		(4UL * 1024 * 1024)
-#define CARVED_FLOW_OFF		0x00420000UL
-#define CARVED_FLOW_SIZE	(1UL * 1024 * 1024)
-#define CARVED_BPPE_OFF		0x00000000UL	/* stock-exact; see layout note */
-#define CARVED_BP_OFF		0x02C20000UL
-#define CARVED_RXDESC_OFF	0x03F1F000UL
-#define CARVED_TXUP_OFF		0x03FDF000UL
-#define CARVED_TXDN_OFF		0x03FEF000UL
-
-static int zx_tm_alloc_pools(struct zx_eth *e)
-{
-	void __iomem *base;
-	u16 *bppe;
-	int i;
-
-	/* memremap_wc the entire 64 MiB carved region. WC = write-combine,
-	 * uncached. CPU writes go directly to DDR via the write buffer; HW
-	 * DMA reads see fresh data without cache flush. Same model stock uses.
-	 */
-	base = memremap(CARVED_BASE_PHYS, CARVED_SIZE, MEMREMAP_WC);
-	if (!base) {
-		dev_err(e->dev, "memremap_wc(0x%lx, %lu MiB) failed\n",
-			CARVED_BASE_PHYS, CARVED_SIZE / (1024 * 1024));
-		return -ENOMEM;
-	}
-	e->carved_va = base;
-	dev_dbg(e->dev, "carved region: phys 0x%lx + %lu MiB → va %p\n",
-		 CARVED_BASE_PHYS, CARVED_SIZE / (1024 * 1024), base);
-
-	/* Zero ACL RAM (4 MiB) — stock tm.ko aclRamInit equivalent. Without
-	 * this the classifier rules match random data → frames misrouted.
-	 * Also zero Flow RAM (1 MiB).
-	 */
-	memset_io(base + CARVED_ACL_OFF, 0, CARVED_ACL_SIZE);
-	memset_io(base + CARVED_FLOW_OFF, 0, CARVED_FLOW_SIZE);
-	/* [egress fix 2026-05-29] Zero the TX UP+DN descriptor rings (64 KiB each).
-	 * Without this, stale DDR content with leftover VALID bits sits in the rings;
-	 * HW auto-fetches those phantom descriptors and its DN produce pointer desyncs
-	 * (observed tm[0x10068] high16 stuck at 0x13, never draining our real desc at
-	 * slot 0). Stock's ring starts clean. */
-	memset_io(base + CARVED_TXUP_OFF, 0, 0x10000);
-	memset_io(base + CARVED_TXDN_OFF, 0, 0x10000);
-	dev_dbg(e->dev, "carved: zeroed ACL RAM (4 MiB @+0x%lx) + Flow RAM (1 MiB @+0x%lx) + TX UP/DN rings\n",
-		 CARVED_ACL_OFF, CARVED_FLOW_OFF);
-
-	/* Pool entity layout: cpu (virt) = base + off; dma (phys) = CARVED + off. */
-	e->bppe_cpu   = (void *)(base + CARVED_BPPE_OFF);
-	e->bppe_dma   = CARVED_BASE_PHYS + CARVED_BPPE_OFF;
-	e->bp_cpu     = (void *)(base + CARVED_BP_OFF);
-	e->bp_dma     = CARVED_BASE_PHYS + CARVED_BP_OFF;
-	e->rxdesc_cpu = (void *)(base + CARVED_RXDESC_OFF);
-	e->rxdesc_dma = CARVED_BASE_PHYS + CARVED_RXDESC_OFF;
-	/* RX ring 1 (DN/WAN): the HW derives it as the ring-0 region + 0x20000 (no
-	 * separate base register — only TM[+0xF0] is programmed; stock queue_init
-	 * RE). The DN/uplink (MAC4/WAN) ingress→CPU frames land here. Zero both rings
-	 * (0x40000) so stale VALID/len bits don't make the scan deliver phantoms. */
-	e->rxdesc_dn_cpu = (void *)(base + CARVED_RXDESC_OFF + 0x20000);
-	e->rxdesc_dn_dma = CARVED_BASE_PHYS + CARVED_RXDESC_OFF + 0x20000;
-	memset_io(base + CARVED_RXDESC_OFF, 0, 0x40000);
-	e->txdesc_cpu = (void *)(base + CARVED_TXUP_OFF);
-	e->txdesc_dma = CARVED_BASE_PHYS + CARVED_TXUP_OFF;
-	e->dndesc_cpu = (void *)(base + CARVED_TXDN_OFF);
-	e->dndesc_dma = CARVED_BASE_PHYS + CARVED_TXDN_OFF;
-	e->tx_head = 0;
-	spin_lock_init(&e->tm_tx_lock);
-	spin_lock_init(&e->bmu_free_lock);
-	e->bmu_free_credit = 0;
-
-	/* Populate BPPE: stock writes byteswapped u16 indices 0..N-1.
-	 * Each entry says "BP slot index". HW pulls these one at a time when
-	 * RX needs a buffer. Verified vs stock pon_tm_bmu_init decomp:5694 —
-	 * loop trace: bppe[0]=0, bppe[i]=bswap16(i) for all i.
-	 */
-	bppe = (u16 *)e->bppe_cpu;
-	for (i = 0; i < TM_BPPE_POOL_SIZE; i++)
-		bppe[i] = cpu_to_be16(i);
-	/* [wedge fix #2] jumbo BPPE table at +0x10000 (stock layout), be16
-	 * indices 0..TM_JUMBO_BPPE_POOL_SIZE-1 — stock primes a real jumbo
-	 * pool (0x66 entries); mainline used to advertise an empty one. */
-	bppe = (u16 *)((u8 *)e->bppe_cpu + 0x10000);
-	for (i = 0; i < TM_JUMBO_BPPE_POOL_SIZE; i++)
-		bppe[i] = cpu_to_be16(i);
-
-	dev_dbg(e->dev, "TM pools (carved): bppe@%pad, bp@%pad, rxdesc@%pad, txup@%pad, txdn@%pad\n",
-		 &e->bppe_dma, &e->bp_dma, &e->rxdesc_dma,
-		 &e->txdesc_dma, &e->dndesc_dma);
-	return 0;
-}
-
-static void zx_tm_free_pools(struct zx_eth *e)
-{
-	/* Carved region — single memremap; no per-block dma_free. */
-	if (e->carved_va) {
-		memunmap(e->carved_va);
-		e->carved_va = NULL;
-	}
-	e->bppe_cpu = e->bp_cpu = e->rxdesc_cpu = e->txdesc_cpu = e->dndesc_cpu = NULL;
-}
-
-/* Five BMU instances at TM[0x8000 + N * 0x400] for N in 0..4. Stock
- * register snapshot + stock_table.h replay shows all five enabled with
- * identical config. The HW alloc engine routes per-port to whichever
- * instance services that port — if any instance is unconfigured, its
- * BPPE table is empty → "pool empty" alloc failure even when other
- * instances have buffers. Per bmu_protocol_deep_re.md candidate #1.
- *
- * All instances share the SAME bppe_dma / bp_dma (one CMA region
- * services them all). The BPPE_BASE/BP_BUFFER/BP_SIZE regs are at
- * GLOBAL TM offsets (0x00E8-0x00FC) — stock writes them once at
- * tm_base+0xE8..0xFC (plat decomp :5740-5742), NOT at per-instance
- * BMU sub-block offsets like 0x8000+. Verified live: per-instance
- * TM[0x80E8] does NOT accept writes (readback 0). Per-instance regs:
- *   base + 0x8000 BMU_INIT (enable)
- *   base + 0x8004 CTRL1
- *   base + 0x8008 CTRL2
- *   base + 0x8048 POOL_SIZE producer cursor
- *   base + 0x804C JUMBO_POOL_SIZE
- *   base + 0x8058 BUCKETS_M1
- *   base + 0x805C JUMBO_BUCK
- */
-#define TM_NUM_BMU_INSTANCES   5
-
-/* pon_tm_bmu_init equivalent — register pool addrs + sizes with BMU */
-static void zx_tm_bmu_init(struct zx_eth *e)
-{
-	int inst;
-
-	/* Disable BMU instance 0 — stock parity: pon_tm_bmu_init disables
-	 * only instance 0 (tm_base+0x8000=0). All 5 instances share one
-	 * engine; disabling instance 0 gates the entire BMU while config
-	 * is written. Writing BPPE_BASE while the engine is running may
-	 * latch a stale value internally.
-	 */
-	tm_write(e, TM_REG_BMU_INIT, 0);
-
-	/* BPPE/BP base physical addresses — GLOBAL TM registers (one copy
-	 * shared by all 5 instances). Stock writes them at tm_base+0xE8..0xFC
-	 * (plat decomp :5740). The per-BMU sub-block TM[0x80E8] is NOT writable
-	 * (verified live: writel→readback 0).
-	 */
-	tm_write(e, TM_REG_BPPE_BASE,       e->bppe_dma);
-	tm_write(e, TM_REG_JUMBO_BPPE_BASE, e->bppe_dma + 0x10000);
-	tm_write(e, TM_REG_BP_BUFFER_BASE,  e->bp_dma);
-	tm_write(e, TM_REG_BP_JUMBO_BASE,   e->bp_dma);
-	tm_write(e, TM_REG_BP_SIZE,
-		 (TM_BP_SIZE & 0xFFFF) |
-		 ((TM_JUMBO_BP_SIZE & 0xFFFF) << 16));
-
-	for (inst = 0; inst < TM_NUM_BMU_INSTANCES; inst++) {
-		u32 base = inst * TM_INSTANCE_STRIDE;
-
-		/* BMU sub-block control regs (per-instance) */
-		tm_write(e, base + TM_REG_BMU_CTRL,        0x104C040);
-		tm_write(e, base + TM_REG_BMU_CTRL2,       0x104C040);
-
-		/* BUCKETS_M1: stock formula (POOL_SIZE>>5)-1 */
-		tm_write(e, base + TM_REG_BMU_BUCKETS_M1,  (TM_BPPE_POOL_SIZE >> 5) - 1);
-		tm_write(e, base + TM_REG_BMU_JUMBO_BUCK,
-			 (TM_JUMBO_BPPE_POOL_SIZE >> 5) - 1);
-	}
-
-	/* Stock parity: dma_cache_maint(bppe, 0x20000, 1) — full L1+L2 cache
-	 * clean so the BMU DMA engine can read the BPPE table from DDR. Stock
-	 * calls this unconditionally right before 0x8048/0x804c writes.
-	 */
-	__cpuc_flush_dcache_area(e->bppe_cpu, 0x20000);
-	outer_clean_range(e->bppe_dma, e->bppe_dma + 0x20000);
-	dma_wmb();
-
-	/* Prime the producer cursors ONCE, instance 0 only — exact stock
-	 * parity. Stock's pon_tm_bmu_init writes 0x8048/0x804c a single time
-	 * (plat decomp :5694); all 5 instances share one engine.
-	 */
-	tm_write(e, TM_REG_BMU_POOL_SIZE,  TM_BPPE_POOL_SIZE << 16);
-	tm_write(e, TM_REG_BMU_JUMBO_POOL, TM_JUMBO_BPPE_POOL_SIZE << 16);
-
-	dev_dbg(e->dev, "TM BMU init: %d instances configured, pool_size=%d, bp_size=%d, bppe@%pad\n",
-		 TM_NUM_BMU_INSTANCES, TM_BPPE_POOL_SIZE, TM_BP_SIZE,
-		 &e->bppe_dma);
-}
-
-/* pon_tm_bmu_enable — turn on all 5 BMU instances. Without this they
- * stay idle.
- */
-static void zx_tm_bmu_enable(struct zx_eth *e)
-{
-	int inst;
-
-	for (inst = 0; inst < TM_NUM_BMU_INSTANCES; inst++) {
-		u32 base = inst * TM_INSTANCE_STRIDE;
-
-		tm_write(e, base + TM_REG_BMU_INIT, 1);
-	}
-	dev_dbg(e->dev, "TM BMU enabled (%d instances): tm[0x8000]=%#x tm[0x8400]=%#x tm[0x9000]=%#x\n",
-		 TM_NUM_BMU_INSTANCES,
-		 tm_read(e, TM_REG_BMU_INIT),
-		 tm_read(e, 0x400 + TM_REG_BMU_INIT),
-		 tm_read(e, 0x1000 + TM_REG_BMU_INIT));
-
-	/* [wedge fix #2 2026-08-01] Populate the BMU pool by freeing every
-	 * BPPE index. Stock has ~8112 entries; mainline's BMU DDR prefetch
-	 * engine never auto-primes the pool (bppe_cnt stays 0 at
-	 * TM[0x8080]), so the fabric survives on only the ~10-entry on-chip
-	 * BPPI recycle margin. By freeing each BP index (0..POOL-1) into
-	 * the BMU after enable, we manually build both the on-chip BPPI FIFO
-	 * and the DDR BPPE free-list pool. The BPPI fills to its ~191-entry
-	 * max first, then excess spills to BPPE, achieving stock parity
-	 * (~8000 DDR entries). This eliminates the ~1k-frame endurance
-	 * limit that gates ftwifi=1.
-	 */
-	{
-		int i;
-
-		for (i = 0; i < TM_BPPE_POOL_SIZE; i++)
-			tm_write(e, TM_REG_BMU_FREE, (u32)i);
-		dev_info(e->dev,
-			 "[wedge fix #2] BMU pool primed: freed %d BPs, "
-			 "bppe_cnt=%u bppi_cnt=%u\n",
-			 TM_BPPE_POOL_SIZE,
-			 tm_read(e, 0x8080), tm_read(e, 0x8088));
-	}
-}
-
-/* Register a MAC as a CPU port destination in the ONU MAC table.
- * From stock spa_set_onu_mac_addr (in tm.ko, calls tmOnuRegWrite via spaRegTable).
- * Hardware: spaRegTable entries [0x16] + [0x17] target NPP+0x14120 + slot*8.
- * Layout per slot (8 bytes):
- *   +0: mac[2]<<24 | mac[3]<<16 | mac[4]<<8 | mac[5]
- *   +4: mac[0]<<8  | mac[1]                                    (low 16 bits)
- * When switch sees frame with dst_mac matching a slot → routes to CPU port.
- */
-#define ZX_SPA_ONU_MAC_BASE	0x14120
-/* SPA destination-MAC filter table ("trap_dmac"): 4 slots x 8 bytes at
- * NPP+0x141A0. Same byte layout as ONU-MAC. When a slot holds a device MAC,
- * the SPA parser sends frames with that dst_mac to the CPU (action_rsn
- * UDF_DMAC0) *before* the CLA forward hash, which prevents HW L3 forwarding of
- * routed to-me-MAC transit. Stock leaves this table EMPTY (it is populated only
- * on demand at runtime by tm_soft_protocol_dmac_set, never by init); the SoC
- * boot ROM, however, pre-loads it with the device MACs from fuses. We clear it
- * to match stock so routed transit reaches the CLA (first packet -> LOOK_UP_MISS
- * -> CPU routes, subsequent packets -> CLA HW forward). To-me management traffic
- * is unaffected: it reaches the CPU via the L3-local (dst-IP) path, not this
- * dst-MAC trap. See findings/trap_dmac_clear_HW_FORWARD_2026-06-28.md.
- */
-#define ZX_SPA_TRAP_DMAC_BASE	0x141A0
-/* pp_pm indirect access regs (relative to npp_base). From ppPmRegTable decode:
- *   [0] cmd        0x1dc014 (mask fcfffff)
- *   [1] done_bit   0x1dc018 (mask 1)
- *   [2] data slot 0..3 starting 0x1dc01c (stride 4)
- *   [3] data slot 4..7 starting 0x1dc100 (stride 4)
- */
-#define PP_PM_REG_CMD		0x1DC014
-#define PP_PM_REG_DONE		0x1DC018
-#define PP_PM_REG_DATA0		0x1DC01C	/* data slot 0..3 stride 4 */
-#define PP_PM_REG_DATA4		0x1DC100	/* data slot 4..7 stride 4 */
-
-static int zx_pp_pm_wait_done(struct zx_eth *e)
-{
-	int t = 100;
-
-	while (t-- && !(readl(e->base + PP_PM_REG_DONE) & 1))
-		udelay(50);
-	return t < 0 ? -EBUSY : 0;
-}
-
-/* Mirrors stock pp_pm_set_indirect_cmd(rw=0, ram_id=0xc, idx).
- * cmd = idx | (ram_id << 22) | (rw << 27)
- */
-static void zx_pp_pm_set_cmd(struct zx_eth *e, u8 rw, u8 ram_id, u32 addr)
-{
-	writel(addr | ((u32)ram_id << 22) | ((u32)rw << 27),
-	       e->base + PP_PM_REG_CMD);
-}
-
-/* Write an 8-word pp_pm RAM entry. Data slots 0..3 at +0x01C, slots 4..7 at +0x100. */
-static int zx_pp_pm_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
-				const u32 data[8])
-{
-	int i;
-
-	if (zx_pp_pm_wait_done(e))
-		return -EBUSY;
-	/* CMD-FIRST then data (descending) — matches stock pp_pm_set_*_ram_info
-	 * (kotrace: X cmd then Y data_id 2,1,0) and the verified zx_pp_pm_set_cpu_mac.
-	 * The old data-first order did NOT commit PM entries. */
-	zx_pp_pm_set_cmd(e, 0, ram_id, ram_addr);
-	for (i = 7; i >= 4; i--)
-		writel(data[i], e->base + PP_PM_REG_DATA4 + (i - 4) * 4);
-	for (i = 3; i >= 0; i--)
-		writel(data[i], e->base + PP_PM_REG_DATA0 + i * 4);
-	return 0;
-}
-
-/* Read an 8-word pp_pm RAM entry via the indirect iface (rw=1). */
-static int zx_pp_pm_read_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
-			       u32 data[8])
-{
-	int i;
-
-	if (zx_pp_pm_wait_done(e))
-		return -EBUSY;
-	zx_pp_pm_set_cmd(e, 1, ram_id, ram_addr);	/* rw=1 read */
-	if (zx_pp_pm_wait_done(e))
-		return -EBUSY;
-	for (i = 0; i < 4; i++)
-		data[i] = readl(e->base + PP_PM_REG_DATA0 + i * 4);
-	for (i = 4; i < 8; i++)
-		data[i] = readl(e->base + PP_PM_REG_DATA4 + (i - 4) * 4);
-	return 0;
-}
-
-/* [H5 fix 2026-07-04] Write a PM indirect-RAM entry AND read-back-verify the
- * write actually committed, retrying up to ZX_PM_WR_RETRIES times.
- *
- * zx_pp_pm_write_entry() only waits for the engine DONE bit BEFORE issuing its
- * command; it never confirms the write's data landed. This indirect engine has
- * been observed to silently drop a write under contention -- the DSA side
- * needed the identical 8-iteration readback-retry loop against the same HW
- * (zx-dsa.c zx_pm_wr(), "the bare write was observed not to commit"). On the FT
- * install path a silently-dropped PM write arms a live CLA verdict pointing at
- * a stale/zero pm_slot, so the flow HW-forwards with the previous occupant's
- * next-hop MAC / NAT state (findings/qa_static_bughunt_2026-07-04.md H5).
- * Verify word0+word1 (enough to tell our payload from stale/zero -- every FT
- * PM entry has a nonzero, unique-per-slot word0: next_hop IP, flow_info descr,
- * ram6 sub=pm_slot>=8, ram3 cmd=0x00800000) and retry; return -EIO on
- * persistent mismatch so the caller fails the install cleanly (rollback via
- * zx_ft_uninstall). MUST be called with zx_hwlock held -- same as the bare
- * write it wraps; it issues both a write and a read on the shared PM engine. */
-#define ZX_PM_WR_RETRIES 8
-static int zx_pp_pm_write_verify(struct zx_eth *e, u8 ram_id, u32 ram_addr,
-				 const u32 data[8])
-{
-	u32 rb[8];
-	int try, rc;
-
-	for (try = 0; try < ZX_PM_WR_RETRIES; try++) {
-		rc = zx_pp_pm_write_entry(e, ram_id, ram_addr, data);
-		if (rc)
-			continue;	/* engine busy pre-write -- retry */
-		rc = zx_pp_pm_read_entry(e, ram_id, ram_addr, rb);
-		if (rc)
-			continue;	/* engine busy pre-read -- retry */
-		if (rb[0] == data[0] && rb[1] == data[1]) {
-			e->ft_pm_verify_ok++;
-			if (try) {
-				e->ft_pm_verify_retry++;
-				dev_info(e->dev,
-					 "[phase6/ft] pm_write ram%u[%#x] committed after %d retr%s\n",
-					 ram_id, ram_addr, try, try == 1 ? "y" : "ies");
-			}
-			return 0;
-		}
-		dev_warn(e->dev,
-			 "[phase6/ft] pm_write ram%u[%#x] try%d NOT committed: wrote %08x %08x readback %08x %08x\n",
-			 ram_id, ram_addr, try, data[0], data[1], rb[0], rb[1]);
-	}
-	e->ft_pm_verify_fail++;
-	dev_warn(e->dev,
-		 "[phase6/ft] pm_write ram%u[%#x] FAILED to commit after %d tries -- failing install\n",
-		 ram_id, ram_addr, ZX_PM_WR_RETRIES);
-	return rc ? rc : -EIO;
-}
-
-/* ---- PM-ops bridge to the built-in DSA flow-offload binder ----
- *
- * The binder (zx-dsa.c, built-in) cannot commit PM RAM through its own ioremap;
- * the conduit's zx_pp_pm_write_entry/read_entry (via e->base) provably do. We
- * register a {write,read} pair the binder calls. Capture `e` in a module-global
- * set at probe (single instance — like zx_bmu_dump_eth above). */
-static struct zx_eth *zx_pm_ops_eth;
-
-static int zx_pm_ops_write(u8 ram_id, u32 addr, const u32 d[8])
-{
-	if (!zx_pm_ops_eth)
-		return -ENODEV;
-	return zx_pp_pm_write_entry(zx_pm_ops_eth, ram_id, addr, d);
-}
-
-static int zx_pm_ops_read(u8 ram_id, u32 addr, u32 d[8])
-{
-	if (!zx_pm_ops_eth)
-		return -ENODEV;
-	return zx_pp_pm_read_entry(zx_pm_ops_eth, ram_id, addr, d);
-}
-
-static struct zx_pm_ops zx_eth_pm_ops = {
-	.write = zx_pm_ops_write,
-	.read  = zx_pm_ops_read,
-};
-
-/* Replay all pp_pm entries dumped from stock (ram=3 default flow_info
- * + ram=6 global). Embedded static C array — see zx_pm_table.h for the
- * regeneration command.
- */
-#include "zx_pm_table.h"
-
-static void zx_pp_pm_apply_replay(struct zx_eth *e)
-{
-	u32 i, ok = 0, fail = 0;
-
-	for (i = 0; i < ZX_PM_INIT_TABLE_LEN; i++) {
-		if (zx_pp_pm_write_entry(e, zx_pm_init_table[i].ram_id,
-					 zx_pm_init_table[i].ram_addr,
-					 zx_pm_init_table[i].data) == 0)
-			ok++;
-		else
-			fail++;
-	}
-	dev_dbg(e->dev, "pp_pm init: %u ok, %u fail (%u embedded)\n",
-		 ok, fail, ZX_PM_INIT_TABLE_LEN);
-}
-
-static int zx_pp_pm_set_cpu_mac(struct zx_eth *e, u8 slot, const u8 *mac)
-{
-	u32 hi = ((u32)mac[0] << 8) | mac[1];
-	u32 lo = ((u32)mac[2] << 24) | ((u32)mac[3] << 16) |
-		 ((u32)mac[4] << 8)  | mac[5];
-
-	if (zx_pp_pm_wait_done(e))
-		return -EBUSY;
-	zx_pp_pm_set_cmd(e, 0, 0xc, slot);
-	writel(hi, e->base + PP_PM_REG_DATA0 + 1 * 4);	/* data slot 1 */
-	writel(lo, e->base + PP_PM_REG_DATA0 + 0 * 4);	/* data slot 0 */
-	dev_dbg(e->dev, "pp_pm CPU MAC ram[%u] = %pM (data1=%#x data0=%#x)\n",
-		 slot, mac, hi, lo);
-	return 0;
-}
-
-/* ============================================================
- *   CLA (Classifier) indirect RAM access — for ACL hash table writes
- *   From RE of cla_set_indirect_rw_cmd/data/status in tm.ko.
- *   claRegTable entries:
- *     [0] cmd  = pp[0xC014]   bits: addr[21:0] | ram_id[26:22] | rw_en[27]
- *     [1] done = pp[0xC018]   bit 0
- *     [2] data = pp[0xC01C..0xC05C] stride 4, 17 slots (data[0..16])
- * ============================================================
- */
-#define CLA_REG_CMD		0x1CC014	/* pp+0xC014 — npp_base+0x1CC014 */
-#define CLA_REG_DONE		0x1CC018
-#define CLA_REG_DATA0		0x1CC01C	/* stride 4, slots 0..16 */
-#define CLA_RAM_READ		(1u << 27)
-
-static int zx_cla_wait_done(struct zx_eth *e)
-{
-	int t = 100;
-
-	while (t-- && !(readl(e->base + CLA_REG_DONE) & 1))
-		udelay(5);
-	return t < 0 ? -EBUSY : 0;
-}
-
-/* Write one CLA RAM entry: 17 data words to data slots, then cmd reg.
- * Per RE: write data first, then cmd with rw=0 triggers commit.
- */
-static int zx_cla_write_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr,
-			      const u32 data[17])
-{
-	int i;
-
-	if (zx_cla_wait_done(e))
-		return -EBUSY;
-	for (i = 0; i < 17; i++)
-		writel(data[i], e->base + CLA_REG_DATA0 + i * 4);
-	writel(ram_addr | ((u32)ram_id << 22), e->base + CLA_REG_CMD);
-	return zx_cla_wait_done(e);
-}
-
-/* CLA HASH write (ram2-6 + ram1 per the FFE hardfast install). Per the live stock
- * kotrace of cla_set_hash_table → cla_set_indirect_rw_cmd + cla_set_indirect_rw_data
- * (Phase 6, findings/phase6_stock_hardfast_trace.md): the WRITE protocol is
- *   (1) CMD(rw=0, ram_id, addr)  FIRST  — arms the slot,
- *   (2) then write the data words in DESCENDING data_id order (word[n-1]..word[0]).
- * This differs from zx_cla_write_entry (data-first, ascending) which only commits
- * word0 for the hash rams. nwords = 15 for ram2-6 hash, 17 for ram1. */
-static int zx_cla_write_hash(struct zx_eth *e, u8 ram_id, u32 ram_addr,
-			     const u32 *data, int nwords)
-{
-	int i;
-
-	if (zx_cla_wait_done(e))
-		return -EBUSY;
-	writel(ram_addr | ((u32)ram_id << 22), e->base + CLA_REG_CMD); /* CMD first, rw=0 */
-	for (i = nwords - 1; i >= 0; i--)
-		writel(data[i], e->base + CLA_REG_DATA0 + i * 4);
-	return zx_cla_wait_done(e);
-}
-
-/* CLA HW hash engine (Phase 6, VERIFIED on mainline 2026-06-04). Write the 12-word
- * (45-byte) flow key to HASH_KEY0.., pulse the trigger, read the 16-bit raw hash. The
- * HW computes the same 4-poly CRC as the SW cla_acl_hash_addr_gen — so we get the slot
- * the chip itself will use on ingress, with NO SW CRC reimpl and NO engine init (the
- * block is live out of reset). The caller masks the raw hash to a ram2-6 slot
- * (mask = (0x400<<(6-ACL_OUT_SPACE_SEL))-1, + way bits + free-slot probe).
- * GOTCHA: load the key FIRST, trigger LAST (HASH_TRIG is a control reg, not key data;
- * triggering before the key is loaded yields 0). See
- * findings/phase6_cla_hw_hash_CRACKED.md + memory zte-cla-hw-hash-engine. */
-#define CLA_HASH_TRIG		0x1CC2C0	/* fpga 0xe30b0 — write 1 to latch+compute */
-#define CLA_HASH_KEY0		0x1CC2C4	/* fpga 0xe30b1 — 12 key words, stride 4 */
-#define CLA_HASH_OUT		0x1CC2FC	/* fpga 0xe30bf — 16-bit raw hash result */
-
-static u16 zx_cla_hash_raw(struct zx_eth *e, const u32 key[12])
-{
-	int i;
-
-	for (i = 0; i < 12; i++)
-		writel(key[i], e->base + CLA_HASH_KEY0 + i * 4);
-	writel(1, e->base + CLA_HASH_TRIG);	/* trigger AFTER loading the key */
-	return readl(e->base + CLA_HASH_OUT) & 0xffff;
-}
-
-/* Indirect READ of one CLA RAM entry (17 words). Mirror of zx_cla_write_entry
- * with the CLA_RAM_READ bit set: write the cmd (rw=1), wait done, read DATA0..16.
- * Debug-only — used by the cladump/clapeek debugfs to compare per-port classify
- * state (e.g. why port1 ingress isn't trapped to CPU while port0/2/3 are).
- */
-static int zx_cla_read_entry(struct zx_eth *e, u8 ram_id, u32 ram_addr, u32 data[17])
-{
-	int i;
-
-	if (zx_cla_wait_done(e))
-		return -EBUSY;
-	writel(ram_addr | ((u32)ram_id << 22) | CLA_RAM_READ, e->base + CLA_REG_CMD);
-	if (zx_cla_wait_done(e))
-		return -EBUSY;
-	/* NOTE (2026-06-01): this back-to-back indirect read returns data[1..16]
-	 * correctly but data[0] (word0) is OFFSET BY ONE ENTRY — readback word0 of
-	 * the entry at addr A actually yields the NEXT entry's word0 (verified 7/7
-	 * vs zx_cla_table.h: read[A].word0 == table[A+1].word0). Stock's fpga path
-	 * does not show this (its CMD and data reads are ms apart). The STORED data
-	 * is correct; only this tool's word0 read is shifted. Don't trust word0 from
-	 * a single read — cross-check via the previous entry, or use stock fpga. */
-	for (i = 0; i < 17; i++)
-		data[i] = readl(e->base + CLA_REG_DATA0 + i * 4);
-	return 0;
-}
-
-/* CLA RAM init: walk a captured (ram_id, addr, 17-word payload) array
- * and write each one through the CLA command register sequence. Static
- * embedded data — no firmware_request — see zx_cla_table.h header for
- * the regeneration command.
- */
-#include "zx_cla_table.h"
-
-static void zx_cla_apply_replay(struct zx_eth *e)
-{
-	u32 i, ok = 0, fail = 0;
-	u32 ram7_data[17] = {7, 0,};
-
-	for (i = 0; i < ZX_CLA_INIT_TABLE_LEN; i++) {
-		if (zx_cla_write_entry(e, zx_cla_init_table[i].ram_id,
-				       zx_cla_init_table[i].ram_addr,
-				       zx_cla_init_table[i].data) == 0)
-			ok++;
-		else
-			fail++;
-	}
-	/* ram=7 (CPU queue): all entries have data[0]=7, rest 0 — generate runtime */
-	for (i = ZX_CLA_RAM7_FIRST; i <= ZX_CLA_RAM7_LAST; i++) {
-		if (zx_cla_write_entry(e, 7, i, ram7_data) == 0)
-			ok++;
-		else
-			fail++;
-	}
-	dev_dbg(e->dev, "CLA init: %u ok, %u fail (%u embedded + ram=7 0..%d)\n",
-		 ok, fail, ZX_CLA_INIT_TABLE_LEN, ZX_CLA_RAM7_LAST);
-}
-
-/* ===================================================================
- * Phase 6 — FFE extract-infrastructure init (zx_cla_ffe_extract_init).
- *
- * Ports the stock tm_acl_fast_init / tm_acl_l2_fast_init /
- * tm_acl_3tuple_fast_init one-time setup: write the CLA ram1 extract
- * RULES (5-tuple/3-tuple window descriptors) + the ram0 extract-INDEX
- * tables (with the index_valid "fast-enable" bits). Without this the CLA
- * has no extract rules, cannot compute the 5-tuple hash, and traps every
- * routed flow to the CPU. See zx_ffe_table.h header for full provenance.
- *
- * The table is verified byte-exact against the live stock CLA dump. Each
- * ram1 rule is 17 words (zx_cla_write_hash ram_id=1), each ram0 index is 5
- * words (zx_cla_write_hash ram_id=0) — both CMD-first + descending.
- * ===================================================================
- */
-#include "zx_ffe_table.h"
-
-static void zx_cla_ffe_extract_init(struct zx_eth *e)
-{
-	u32 ok = 0, fail = 0, i;
-
-	/* ram1 extract rules first (the window descriptors the index points at) */
-	for (i = 0; i < ARRAY_SIZE(zx_ffe_rules); i++) {
-		if (zx_cla_write_hash(e, 1, zx_ffe_rules[i].id,
-				      zx_ffe_rules[i].w, 17) == 0)
-			ok++;
-		else
-			fail++;
-	}
-	/* ram0 extract-index tables (carry the index_valid fast-enable bits) */
-	for (i = 0; i < ARRAY_SIZE(zx_ffe_index); i++) {
-		if (zx_cla_write_hash(e, 0, zx_ffe_index[i].id,
-				      zx_ffe_index[i].w, 5) == 0)
-			ok++;
-		else
-			fail++;
-	}
-	dev_dbg(e->dev,
-		 "CLA FFE extract init: %u ok, %u fail (%zu ram1 rules + %zu ram0 index)\n",
-		 ok, fail, ARRAY_SIZE(zx_ffe_rules), ARRAY_SIZE(zx_ffe_index));
-}
-
 /* ===================================================================
  * Phase 6 / Workstream B — HW flow-offload binder (conduit side).
  *
@@ -1392,3 +729,663 @@ static int zx_ft_flow_reserve(struct zx_eth *e, unsigned long cookie, u16 raw,
 		 * external flow_info block on every re-delivery is non-atomic
 		 * under active HW lookup -> transient LOOK_UP_MISS trap bursts
 		 * (measured 2026-07-04: ~12% of DN packets punted to SW, RED
+		 * drops killing concurrent handshakes). Same cookie + same raw
+		 * = same tuple (NAT recipe immutable for a conntrack flow) ->
+		 * nothing to update: report "already installed" (rc 1) so the
+		 * caller skips the HW rewrite entirely.
+		 */
+		if (e->ft_flows[self].raw == raw) {
+			*pm_slot = e->ft_flows[self].pm_slot;
+			return 1;
+		}
+		/* [H3 fix 2026-07-04] Self-REPLACE with a CHANGED 5-tuple: the
+		 * caller (zx_ft_flower_replace) is about to install a brand-new
+		 * raw/raw0 recipe at this cookie's pm_slot, but the OLD raw's 5
+		 * ways (and OLD raw0's poly-0 bucket, if it had one) are a
+		 * SEPARATE CLA address from the new ones and are never touched by
+		 * the upcoming install -- so if we didn't clear them here they'd
+		 * be orphaned: still valid_en, still HW-forwarding the dead
+		 * tuple, forever (a plain DESTROY later only clears the CURRENT
+		 * raw/raw0, never a replaced-away one). This is finding H3(a) /
+		 * H3a (findings/qa_static_bughunt_2026-07-04.md); the C2 fix
+		 * deliberately left it out of scope. Uses the same
+		 * zx_ft_uninstall() helper untrack()/partial-install-rollback
+		 * use, so "clear a flow's old footprint" has exactly one
+		 * implementation. */
+		dev_info(e->dev,
+			 "[phase6/ft] self-replace old-footprint clear: cookie=%lx old_raw=0x%04x old_raw0=%s0x%04x -> new_raw=0x%04x pm_slot=%u\n",
+			 cookie, e->ft_flows[self].raw,
+			 e->ft_flows[self].has_raw0 ? "" : "n/a-",
+			 e->ft_flows[self].raw0, raw, e->ft_flows[self].pm_slot);
+		zx_ft_uninstall(e, e->ft_flows[self].raw,
+				e->ft_flows[self].has_raw0,
+				e->ft_flows[self].raw0,
+				e->ft_flows[self].pm_slot);
+		e->ft_flows[self].raw = raw;
+		e->ft_flows[self].raw0 = raw0;
+		e->ft_flows[self].has_raw0 = has_raw0;
+		*pm_slot = e->ft_flows[self].pm_slot;
+		return 0;
+	}
+	if (free < 0)
+		return -ENOSPC;			/* tracking table full */
+	e->ft_flows[free].cookie = cookie;
+	e->ft_flows[free].raw = raw;
+	e->ft_flows[free].raw0 = raw0;
+	e->ft_flows[free].has_raw0 = has_raw0;
+	e->ft_flows[free].pm_slot = ZX_FT_PM_BASE + free;
+	e->ft_flows[free].used = true;
+	*pm_slot = e->ft_flows[free].pm_slot;
+	return 0;
+}
+
+/* Undo a reservation (no CLA write / HW write failed): free the slot. */
+static void zx_ft_flow_release(struct zx_eth *e, unsigned long cookie)
+{
+	int i;
+
+	for (i = 0; i < ZX_FT_MAX_FLOWS; i++)
+		if (e->ft_flows[i].used && e->ft_flows[i].cookie == cookie) {
+			e->ft_flows[i].used = false;
+			return;
+		}
+}
+
+/* Invalidate the buckets a tracked FT flow occupies (zero the entry in all 5 way
+ * banks -> valid_en off -> key-compare misses -> flow traps). Returns 0 if
+ * found+cleared, -ENOENT else.
+ *
+ * [C2 fix] Also zero the DN-only poly-0 ram2 bucket (raw0 & 0xff) when the
+ * flow has one. That bucket is a SEPARATE ram2 address from way0
+ * (raw & 0xff, cleared by the 5-way loop below) -- it is the entry
+ * zx_ft_install_recipe additionally writes for DN flows because it's the
+ * slot the WAN-ingress lookup actually consults. Before this fix it was
+ * never cleared here, so a destroyed flow's dead tuple kept HW-forwarding
+ * (stale poly-0 hit) until its pm_slot got reused by an unrelated new flow,
+ * at which point the stale entry started applying the NEW flow's NAT to the
+ * OLD (supposedly dead) tuple's traffic (findings/qa_static_bughunt_2026-07-04.md
+ * C2 fail#1).
+ *
+ * [H2 fix] The unconditional 5-way zero below is safe against wiping a LIVE
+ * other flow's higher-way bucket (ram3/4/5/6) only because zx_ft_flow_reserve
+ * now declines (never admits) any two tracked flows that would ever share a
+ * way address in any of the 5 banks (findings/qa_static_bughunt_2026-07-04.md
+ * H2) -- i.e. the collision is prevented at install time, not papered over
+ * here at destroy time. Do not relax reserve()'s higher-way check without
+ * revisiting this loop.
+ *
+ * [H3 fix 2026-07-04] The actual clearing is now zx_ft_uninstall() (shared
+ * with the self-REPLACE and partial-install-failure rollback call sites) --
+ * this function used to duplicate the same 5-way+poly-0+ext-block zeroing
+ * ad hoc. On a nonzero rc (a CLA/PM indirect-engine write reporting -EBUSY --
+ * the only failure mode observed on this silicon, a wait_done timeout) retry
+ * ONCE, then dev_warn loudly naming the still-possibly-live entry rather
+ * than the old behavior of silently discarding the rc entirely (findings/
+ * qa_static_bughunt_2026-07-04.md H3(c)). Deliberately NOT an unbounded
+ * retry loop: this runs under zx_hwlock (held for the whole zx_ft_setup_cb
+ * body), so retrying forever here would stall every other FT/DSA/debugfs
+ * user of the same hardware indefinitely. The tracking slot is freed either
+ * way -- the cookie is already gone from conntrack by the time DESTROY
+ * fires, so there is no live SW-side owner left to keep the slot reserved
+ * for. */
+static int zx_ft_flow_untrack(struct zx_eth *e, unsigned long cookie)
+{
+	int i, rc;
+
+	for (i = 0; i < ZX_FT_MAX_FLOWS; i++) {
+		if (e->ft_flows[i].used && e->ft_flows[i].cookie == cookie) {
+			rc = zx_ft_uninstall(e, e->ft_flows[i].raw,
+					     e->ft_flows[i].has_raw0,
+					     e->ft_flows[i].raw0,
+					     e->ft_flows[i].pm_slot);
+			if (rc) {
+				rc = zx_ft_uninstall(e, e->ft_flows[i].raw,
+						     e->ft_flows[i].has_raw0,
+						     e->ft_flows[i].raw0,
+						     e->ft_flows[i].pm_slot);
+				if (rc)
+					dev_warn(e->dev,
+						 "[phase6/ft] flow del cookie=%lx: HW clear FAILED rc=%d (after 1 retry) -- raw=0x%04x pm_slot=%u may still be live/forwarding the dead tuple; freeing tracking slot anyway (cookie already gone from conntrack, can't retry forever under zx_hwlock)\n",
+						 cookie, rc, e->ft_flows[i].raw,
+						 e->ft_flows[i].pm_slot & 0xff);
+			}
+			dev_info(e->dev,
+				 "[phase6/ft] flow del cookie=%lx -> cleared raw=0x%04x (5 ways) poly0=%s(ram2[0x%02x]) ext blk %u rc=%d\n",
+				 cookie, e->ft_flows[i].raw,
+				 e->ft_flows[i].has_raw0 ? "cleared" : "n/a",
+				 e->ft_flows[i].raw0 & 0xff,
+				 e->ft_flows[i].pm_slot & 0xff, rc);
+			e->ft_flows[i].used = false;
+			e->ft_flows[i].has_raw0 = false;
+			return rc;
+		}
+	}
+	return -ENOENT;
+}
+
+/* Resolve the next-hop MAC via route + neigh on the egress dev (mirrors stock FFE). */
+static bool zx_ft_resolve_nh(struct net_device *odev, __be32 daddr, u8 nh_mac[ETH_ALEN])
+{
+	struct neighbour *n;
+	struct rtable *rt;
+	__be32 nh_ip = daddr;
+	bool ok = false;
+
+	if (!odev)
+		return false;
+	rt = ip_route_output(dev_net(odev), daddr, 0, 0, odev->ifindex);
+	if (!IS_ERR(rt)) {
+		if (rt->rt_gw_family == AF_INET && rt->rt_gw4)
+			nh_ip = rt->rt_gw4;
+		ip_rt_put(rt);
+	}
+	n = neigh_lookup(&arp_tbl, &nh_ip, odev);
+	if (n) {
+		if (n->nud_state & NUD_VALID) {
+			read_lock_bh(&n->lock);
+			ether_addr_copy(nh_mac, n->ha);
+			read_unlock_bh(&n->lock);
+			ok = !is_zero_ether_addr(nh_mac);
+		}
+		neigh_release(n);
+	}
+	return ok;
+}
+
+/* Map a redirect/egress netdev to its chip regport. DSA per-port (lanN) slaves
+ * carry their port index via dsa_port_from_netdev().
+ *
+ * [H4 fix 2026-07-04, findings/qa_static_bughunt_2026-07-04.md] This USED to
+ * fall back to regport 2 (lan1) whenever odev was NULL or not one of our DSA
+ * user ports -- which the nf_flowtable legitimately hands us for a bridge
+ * master, a VLAN upper, a ppp device, or a wifi netdev sitting on top of a
+ * DSA port. Guessing lan1 armed a real HW direct-forward CLA entry that
+ * steered that flow's actual traffic to whatever host physically sits on
+ * lan1 -- silent misdelivery to the wrong port, not merely a missed
+ * optimization. There is no valid regport for a non-DSA-user-port egress
+ * device, so this now returns a sentinel and the caller declines the
+ * offload (stays on the SW path) instead of installing a guessed route. */
+#define ZX_FT_EGRESS_INVALID	0xff
+static const u8 zx_ft_regport[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
+static u8 zx_ft_egress_regport(struct net_device *odev)
+{
+	struct dsa_port *dp;
+
+	if (!odev || !dsa_slave_dev_check(odev))
+		return ZX_FT_EGRESS_INVALID;
+	dp = dsa_port_from_netdev(odev);
+	if (IS_ERR_OR_NULL(dp))
+		return ZX_FT_EGRESS_INVALID;
+	return zx_ft_regport[dp->index & 7];
+}
+
+/* [Stage-3 WiFi Phase C 2026-07-27] Resolve a flow's egress netdev to the WLAN
+ * logical port (`essid = 0x10 | (idm_ring<<3) | ssid`, 0x10-0x1f) when it is a
+ * vif currently bound in the Phase-B (idm,ssid)<->vif dispatch table — the
+ * mainline equivalent of stock's get_sw_port_from_devname()
+ * (decomp_all_switch.c:4515: WLAN devname -> 0x10+ssid / 0x18+ssid), which is
+ * where stock's hardfast installer gets the gemport_uni_id for a WiFi DN flow
+ * (switch.c:1697). Returns ZX_FT_EGRESS_INVALID when disabled, unbound, or not
+ * a wifi vif — the caller then declines exactly as the pre-Phase-C H4 guard.
+ *
+ * Locking: called under zx_hwlock (zx_ft_setup_cb). wifi_bind's
+ * register/unregister do NOT take zx_hwlock, so a concurrent unbind can race
+ * this scan — same convention as the zx_idm_poll RX dispatch, and benign for
+ * the same reason: only pointer EQUALITY with odev (held live by the caller's
+ * flow rule) plus two u8s are read, nothing is dereferenced through
+ * wlan_ndev; the worst case installs a flow whose frames then land on a
+ * now-unbound node and are counted as idm_wifi_rx_nobind (delivered to the
+ * idmN stack fallback), not misdelivered. */
+static u8 zx_ft_wifi_essid(struct zx_eth *e, const struct net_device *odev)
+{
+	int i;
+
+	if (!odev || !READ_ONCE(e->ft_wifi_en))
+		return ZX_FT_EGRESS_INVALID;
+	for (i = 0; i < 16; i++) {
+		struct zx_wifi_dispatch_node *wn = &e->zx_wifi_dispatch[i];
+
+		if (READ_ONCE(wn->enabled) && wn->wlan_ndev == odev)
+			return 0x10 | ((wn->idm & 1) << 3) | (wn->ssid & 7);
+	}
+	return ZX_FT_EGRESS_INVALID;
+}
+
+/* [Stage-3 WiFi UP 2026-07-28] Resolve a flow's INGRESS ifindex (from the
+ * nf_flow_table rule's FLOW_DISSECTOR_KEY_META) to the flow-key header byte:
+ * a currently-bound WiFi vif returns the fabric rule header for its ring
+ * (0x38 = idm1, 0x30 = idm0); anything else returns the eth header 0x48.
+ * Gated by ftwifi like zx_ft_wifi_essid, so ftwifi=0 keeps every install
+ * byte-identical to the pre-fix driver. Same locking convention as
+ * zx_ft_wifi_essid (integer compare against the bind-time cached ifindex; a
+ * racing unbind at worst mis-keys one install, which then just LOOK_UP_MISSes
+ * and stays on the SW path). */
+static u8 zx_ft_wifi_ing_hdr(struct zx_eth *e, int ifindex)
+{
+	int i;
+
+	if (!ifindex || !READ_ONCE(e->ft_wifi_en))
+		return ZX_FT_KEY_HDR_ETH;
+	for (i = 0; i < 16; i++) {
+		struct zx_wifi_dispatch_node *wn = &e->zx_wifi_dispatch[i];
+
+		if (READ_ONCE(wn->enabled) && wn->wlan_ifindex == ifindex)
+			return ZX_FT_KEY_HDR_IDM(wn->idm);
+	}
+	return ZX_FT_KEY_HDR_ETH;
+}
+
+/* Parse a flow_cls_offload 5-tuple + actions and install/remove the HW recipe. */
+static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
+{
+	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
+	struct flow_action_entry *act;
+	struct net_device *odev = NULL;
+	__be32 saddr = 0, daddr = 0;
+	__be16 sport = 0, dport = 0;
+	u8 nh_mac[ETH_ALEN] = {0};
+	bool have_mac = false;
+	u8 ip_proto = 0;
+	u8 eg_regport;
+	u8 key_hdr = ZX_FT_KEY_HDR_ETH;
+	int ing_ifindex = 0;
+	u16 raw, raw0 = 0, pm_slot = 0;
+	bool is_dn, has_raw0;
+	struct zx_ft_nat nat = {0};
+	int i, rc;
+
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
+		struct flow_match_basic m;
+
+		flow_rule_match_basic(rule, &m);
+		ip_proto = m.key->ip_proto;
+	}
+	/* [Stage-3 WiFi UP 2026-07-28] nf_flow_table_offload.c always emits the
+	 * META key with ingress_ifindex = the direction's iifidx — the ONLY
+	 * ingress identity in the rule, needed to key fabric-ingress (WiFi vif)
+	 * flows for their per-inport CLA extract rule (see key_hdr below). */
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_META)) {
+		struct flow_match_meta m;
+
+		flow_rule_match_meta(rule, &m);
+		ing_ifindex = m.key->ingress_ifindex;
+	}
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IPV4_ADDRS)) {
+		struct flow_match_ipv4_addrs m;
+
+		flow_rule_match_ipv4_addrs(rule, &m);
+		saddr = m.key->src;
+		daddr = m.key->dst;
+	}
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_PORTS)) {
+		struct flow_match_ports m;
+
+		flow_rule_match_ports(rule, &m);
+		sport = m.key->src;
+		dport = m.key->dst;
+	}
+
+	/* Only L3 5-tuple flows (TCP/UDP) are offloadable; ICMP/no-port -> SW. */
+	if ((ip_proto != IPPROTO_TCP && ip_proto != IPPROTO_UDP) || !daddr)
+		return -EOPNOTSUPP;
+
+	flow_action_for_each(i, act, &rule->action) {
+		switch (act->id) {
+		case FLOW_ACTION_REDIRECT:
+		case FLOW_ACTION_REDIRECT_INGRESS:
+			odev = act->dev;
+			break;
+		case FLOW_ACTION_MANGLE:
+			if (act->mangle.htype == FLOW_ACT_MANGLE_HDR_TYPE_ETH) {
+				u32 v = act->mangle.val;
+
+				if (act->mangle.offset == 0) {
+					nh_mac[0] = v & 0xff;
+					nh_mac[1] = (v >> 8) & 0xff;
+					nh_mac[2] = (v >> 16) & 0xff;
+					nh_mac[3] = (v >> 24) & 0xff;
+				} else if (act->mangle.offset == 4) {
+					nh_mac[4] = v & 0xff;
+					nh_mac[5] = (v >> 8) & 0xff;
+				}
+				have_mac = true;
+			} else if (act->mangle.htype ==
+				   FLOW_ACT_MANGLE_HDR_TYPE_IP4) {
+				/* nf_flow_table: offset 12=saddr(SNAT), 16=daddr(DNAT);
+				 * val = the new __be32 address (mask covers all 32b). */
+				if (act->mangle.offset ==
+				    offsetof(struct iphdr, saddr)) {
+					nat.new_ip = (__force __be32)act->mangle.val;
+					nat.snat = true;
+				} else if (act->mangle.offset ==
+					   offsetof(struct iphdr, daddr)) {
+					nat.new_ip = (__force __be32)act->mangle.val;
+					nat.dnat = true;
+				}
+			} else if (act->mangle.htype ==
+					FLOW_ACT_MANGLE_HDR_TYPE_TCP ||
+				   act->mangle.htype ==
+					FLOW_ACT_MANGLE_HDR_TYPE_UDP) {
+				/* nf_flow_table: L4 ports at word offset 0. mask
+				 * ~0xffff0000 => rewrite SOURCE port (high 16b),
+				 * val=htonl(port<<16); mask ~0xffff => DEST port
+				 * (low 16b), val=htonl(port). */
+				u32 v = ntohl((__force __be32)act->mangle.val);
+
+				if (act->mangle.mask == (__force u32)~htonl(0xffff0000)) {
+					nat.new_sport = (v >> 16) & 0xffff;
+					nat.sport_set = true;
+				} else if (act->mangle.mask ==
+					   (__force u32)~htonl(0xffff)) {
+					nat.new_dport = v & 0xffff;
+					nat.dport_set = true;
+				}
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
+	if (!have_mac && !zx_ft_resolve_nh(odev, daddr, nh_mac)) {
+		dev_info(e->dev,
+			 "[phase6/ft] cookie=%lx %pI4:%u->%pI4:%u no resolved nh-MAC, skip\n",
+			 cls->cookie, &saddr, ntohs(sport), &daddr, ntohs(dport));
+		return -EOPNOTSUPP;
+	}
+
+	eg_regport = zx_ft_egress_regport(odev);
+	if (eg_regport == ZX_FT_EGRESS_INVALID) {
+		/* [Stage-3 WiFi Phase C 2026-07-27] Before declining, try the
+		 * WiFi resolution: a bound vif egress resolves to the WLAN
+		 * logical port essid (0x10-0x1f), which the recipe installs as
+		 * gemport_uni_id (the HW-validated egress-steering field, now
+		 * carrying stock's WiFi encoding). Gated by debugfs "ftwifi"
+		 * (default off -> this block is a no-op and the H4 decline
+		 * below is byte-identical to the pre-Phase-C behavior). */
+		eg_regport = zx_ft_wifi_essid(e, odev);
+		if (eg_regport != ZX_FT_EGRESS_INVALID)
+			dev_info(e->dev,
+				 "[phaseC/ft] cookie=%lx egress %s -> wifi essid 0x%02x (idm%u ssid%u), installing DN hardfast\n",
+				 cls->cookie, netdev_name(odev), eg_regport,
+				 (eg_regport >> 3) & 1, eg_regport & 7);
+	}
+	if (eg_regport == ZX_FT_EGRESS_INVALID) {
+		/* [H4 fix 2026-07-04] odev is not a DSA user port of this switch
+		 * (bridge master / VLAN upper / ppp / wifi / NULL) -- there is no
+		 * regport to hand the HW, and guessing one (the old lan1
+		 * fallback) misdelivers real traffic. Decline; the flow stays on
+		 * the SW flowtable fast-path, which handles any egress device. */
+		dev_info(e->dev,
+			 "[phase6/ft] offload declined: egress dev %s is not a DSA user port of this switch (H4 guard) -> stays in SW\n",
+			 odev ? netdev_name(odev) : "(null)");
+		return -EOPNOTSUPP;
+	}
+
+	/* [up-hwoffload 2026-07-04] UPSTREAM (LAN->WAN, egress = WAN regport) used to
+	 * stay on the SW flowtable fast-path: the UP direction's HW-forwarded frames
+	 * reached the MAC4 wire but with src IP 0.0.0.0 (the PM engine's flow_info
+	 * FETCH for the UP direction lands on a different address than the external
+	 * dir-0 table the old recipe wrote — measured 2026-07-04 via the sport-encoded
+	 * fill: the server never saw the encoded ports). Root cause (RE'd, see
+	 * findings/stock_red_drain_up_RE_2026-07-04.md CANDIDATE 2 and the up_idx_fix
+	 * comment on zx_ft_pack_cla): mainline packed cmd_flow_id as pm_slot*128+1 for
+	 * BOTH directions; DN's fetch happens to land >=0x400 (external DDR, which the
+	 * recipe also populates -> works by coincidence), UP's identical fetch lands on
+	 * the SAME resolved index but nothing was ever written there for UP's values.
+	 * FIXED by repacking the UP entry's cmd_flow_id = pm_slot directly (<0x400,
+	 * dir=UP=0 -> internal ram0[pm_slot], which the recipe already writes).
+	 * Verified on-device 2026-07-04: UP HW-forwarded frames now carry the correct
+	 * SNAT src IP (was 0.0.0.0), cla_up_fwd increments, ACKs no longer trap to the
+	 * CPU -> removes the RED-drop flood that fed the residual sustained-download
+	 * admission latch (findings/wedge_txflowctrl_fix_2026-07-04.md). e->ft_up_en
+	 * now DEFAULTS to 1 (see zx_eth_probe); the debugfs "ftup" knob still allows
+	 * forcing UP back to SW-only for regression testing. */
+	if (eg_regport == ZX_WAN_REGPORT && !READ_ONCE(e->ft_up_en)) {
+		/* Ratelimited: the nf_flow_table re-REPLACE storm (see
+		 * zx_ft_flow_reserve) re-delivers this several times per second
+		 * for every live download; unlimited it floods/wraps the dmesg
+		 * ring (QA 2026-07-04) and each line costs a slow UART printk. */
+		dev_info_ratelimited(e->dev,
+			 "[phase6/ft] cookie=%lx %pI4:%u->%pI4:%u UP dir -> SW fast-path (no HW install)\n",
+			 cls->cookie, &saddr, ntohs(sport), &daddr, ntohs(dport));
+		return 0;
+	}
+
+	/* Reserve a tracking slot BEFORE writing the CLA: decline (stay SW) on a
+	 * bucket collision or a full table instead of clobbering/leaking. The
+	 * reserve-time hash MUST match the install-time hash, so derive the same
+	 * ingress-awareness (WAN-ingress = egress toward a LAN port) here.
+	 *
+	 * [C2 fix] zx_ft_install_recipe ALSO writes a poly-0 ram2 entry
+	 * (raw0 & 0xff) for DN flows (eg_regport != ZX_WAN_REGPORT) -- the slot
+	 * the WAN-ingress lookup actually consults. Compute that same raw0 here
+	 * (pure SW CRC, no HW engine access, same pattern already used for
+	 * `raw` which install_recipe independently recomputes too) so reserve()
+	 * can collision-check it and untrack() can later clear it. */
+	is_dn = eg_regport != ZX_WAN_REGPORT;
+	/* [Stage-3 WiFi UP 2026-07-28] The UP direction of a WiFi client's flow
+	 * ingresses the FABRIC (bound vif -> rx_handler -> idm ring), which
+	 * classifies under its per-inport CLA group (rule 0x70/0x60), NOT the
+	 * eth group-9 rule 0x90 — so the key header, the entry's extr_index,
+	 * and consequently raw/raw0 all change. Resolve the ingress ifindex
+	 * against the wifi_bind table (ftwifi-gated; eth flows and ftwifi=0 stay
+	 * byte-identical). Only the UP direction (egress == WAN) can be
+	 * fabric-ingress on this topology; DN's ingress is the WAN port. */
+	if (!is_dn)
+		key_hdr = zx_ft_wifi_ing_hdr(e, ing_ifindex);
+	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport, is_dn,
+			      key_hdr);
+	/* WiFi-ingress UP flows get NO poly-0 slot (fabric probes the poly-1
+	 * way set, proven live — see zx_ft_install_recipe), so has_raw0 stays
+	 * DN-only. */
+	has_raw0 = is_dn;
+	if (has_raw0)
+		raw0 = zx_ft_flow_hash_poly0(ip_proto, saddr, daddr, sport,
+					     dport, is_dn, key_hdr);
+	if (key_hdr != ZX_FT_KEY_HDR_ETH)
+		dev_info(e->dev,
+			 "[phaseC/ft] cookie=%lx ingress ifindex %d is a bound wifi vif -> fabric key_hdr=0x%02x (rule 0x%02x), installing UP hardfast\n",
+			 cls->cookie, ing_ifindex, key_hdr, key_hdr << 1);
+	rc = zx_ft_flow_reserve(e, cls->cookie, raw, has_raw0, raw0, &pm_slot);
+	if (rc == 1)		/* identical flow already live: idempotent no-op */
+		return 0;
+	if (rc == -EOPNOTSUPP) {
+		dev_info(e->dev,
+			 "[phase6/ft] offload declined: CLA bucket collision cookie=%lx raw 0x%04x (way0 0x%02x owned) -> stays in SW\n",
+			 cls->cookie, raw, raw & 0xff);
+		return rc;
+	}
+	if (rc < 0) {
+		dev_info(e->dev,
+			 "[phase6/ft] offload declined: flow table full (max %d) cookie=%lx -> stays in SW\n",
+			 ZX_FT_MAX_FLOWS, cls->cookie);
+		return -EOPNOTSUPP;
+	}
+
+	rc = zx_ft_install_recipe(e, ip_proto, saddr, daddr, sport, dport,
+				  nh_mac, eg_regport, pm_slot, &nat, key_hdr);
+	if (rc < 0) {
+		/* [H3 fix 2026-07-04] Partial-install failure (findings/
+		 * qa_static_bughunt_2026-07-04.md H3(b)): zx_ft_install_recipe
+		 * accumulates rc across ALL 5 way writes + the poly-0 write (it
+		 * does not bail out after the first failure), so by the time we
+		 * get here anywhere from 0 to all of those writes may have
+		 * landed. zx_ft_flow_release() alone (the old behavior) only
+		 * freed the TRACKING slot -- any ways/poly-0/PM entries that DID
+		 * land stayed live and untracked, and once the freed pm_slot got
+		 * reused by a future flow, THAT flow's install fed the orphan
+		 * entry its rewrite state (same corruption class as C2). Unwind
+		 * with the exact (raw, raw0, pm_slot) this attempt just used --
+		 * re-zeroing a location that was never actually written is a
+		 * harmless no-op, so it's safe to call unconditionally rather
+		 * than trying to track which subset of writes succeeded. */
+		zx_ft_uninstall(e, raw, has_raw0, raw0, pm_slot);
+		zx_ft_flow_release(e, cls->cookie);
+		return rc;
+	}
+	return 0;
+}
+
+/* FLOW_CLS_STATS: the nf_flow_table GC polls every HW-offloaded flow for activity
+ * and refreshes flow->timeout from the reported lastused
+ * (nf_flow_table_core.c:nf_flow_offload_gc_step -> nf_flow_offload_stats ->
+ * flow_offload_work_stats: flow->timeout = max(timeout, lastused + get_timeout)).
+ * HW-forwarded packets BYPASS the CPU, so with no stats report the core sees the
+ * flow as idle, ages it out (FLOW_CLS_DESTROY) and re-installs on the next trapped
+ * packet (FLOW_CLS_REPLACE) -> the heavy install/destroy churn that leaves the HW
+ * entry absent most of the time (the ~17 % hit-rate). For a resident tracked flow
+ * report lastused = now (keepalive) so the core keeps it offloaded and does NOT GC
+ * it while our HW entry is installed.
+ *
+ * The CLA exposes no per-flow/per-bucket HW hit counter indexable by pm_slot (only
+ * the global cla_tx_fwd 0x9238c3c0 and a per-entry age bit in ram2 byte0x10 bit6),
+ * so pkts/bytes are reported 0; the keepalive relies on conntrack teardown /
+ * FLOW_CLS_DESTROY and the 32-entry cap to release a flow. FLOW_ACTION_HW_STATS_
+ * DELAYED matches the GC-poll cadence (mtk_ppe/mlx5 pattern). Returns -EOPNOTSUPP
+ * for a cookie we do not track so the core never refreshes a flow we don't own. */
+static int zx_ft_flower_stats(struct zx_eth *e, struct flow_cls_offload *cls)
+{
+	int i;
+
+	for (i = 0; i < ZX_FT_MAX_FLOWS; i++)
+		if (e->ft_flows[i].used && e->ft_flows[i].cookie == cls->cookie) {
+			flow_stats_update(&cls->stats, 0, 0, 0, jiffies,
+					  FLOW_ACTION_HW_STATS_DELAYED);
+			return 0;
+		}
+	return -EOPNOTSUPP;
+}
+
+static int zx_ft_setup_cb(enum tc_setup_type type, void *type_data, void *cb_priv)
+{
+	struct zx_eth *e = cb_priv;
+	struct flow_cls_offload *cls = type_data;
+	int rc;
+
+	if (type != TC_SETUP_CLSFLOWER)
+		return -EOPNOTSUPP;
+
+	/* [ft_lock 2026-07-04] nf_flow_table dispatches REPLACE/DESTROY/STATS
+	 * on three separate WQ_UNBOUND workqueues — mutually concurrent, and
+	 * concurrent with the DSA tc-flower path (rtnl) + debugfs pokes that
+	 * drive the identical CLA/PM/hash-engine hardware and the ft_flows[]
+	 * table. Serialize the whole callback body (reserve/install/untrack)
+	 * with the shared cross-module lock. See
+	 * findings/qa_static_bughunt_2026-07-04.md finding C1. */
+	mutex_lock(&zx_hwlock);
+	switch (cls->command) {
+	case FLOW_CLS_REPLACE:
+		rc = zx_ft_flower_replace(e, cls);
+		break;
+	case FLOW_CLS_DESTROY:
+		dev_info(e->dev, "[phase6/ft] flower destroy cookie=%lx\n", cls->cookie);
+		/* [H3 fix 2026-07-04] Look at the untrack rc instead of discarding
+		 * it (findings/qa_static_bughunt_2026-07-04.md H3(c)) -- the
+		 * dev_warn on a real failure now happens inside
+		 * zx_ft_flow_untrack() itself (it has the raw/pm_slot details to
+		 * make the warning actionable); nf_flow_table has no use for a
+		 * nonzero FLOW_CLS_DESTROY return (there's no "undo a destroy"),
+		 * so this callback still always reports success upstream. */
+		rc = zx_ft_flow_untrack(e, cls->cookie);
+		if (rc && rc != -ENOENT)
+			dev_warn_ratelimited(e->dev,
+				"[phase6/ft] destroy cookie=%lx: untrack reported rc=%d -- see the HW clear FAILED warning above if the retry also failed\n",
+				cls->cookie, rc);
+		rc = 0;
+		break;
+	case FLOW_CLS_STATS:
+		rc = zx_ft_flower_stats(e, cls);
+		break;
+	default:
+		rc = -EOPNOTSUPP;
+		break;
+	}
+	mutex_unlock(&zx_hwlock);
+	return rc;
+}
+
+static LIST_HEAD(zx_ft_block_cb_list);
+
+static int zx_eth_setup_block(struct zx_eth *e, struct flow_block_offload *f)
+{
+	struct flow_block_cb *block_cb;
+
+	/* NB: on Linux 6.6 the nf_flow_table offload core binds its block with
+	 * binder_type = FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS (see
+	 * nf_flow_table_block_offload_init(), nf_flow_table_offload.c) and
+	 * dispatches it via ndo_setup_tc(dev, TC_SETUP_FT, bo). There is NO
+	 * distinct FLOW_BLOCK_BINDER_TYPE_FT in this kernel, so the FT flowtable
+	 * block is accepted by the CLSACT_INGRESS arm below — no extra case
+	 * needed. (Newer kernels add FLOW_BLOCK_BINDER_TYPE_FT; add it here if
+	 * this driver is forward-ported.) */
+	if (f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS &&
+	    f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_EGRESS)
+		return -EOPNOTSUPP;
+
+	f->driver_block_list = &zx_ft_block_cb_list;
+
+	switch (f->command) {
+	case FLOW_BLOCK_BIND:
+		block_cb = flow_block_cb_alloc(zx_ft_setup_cb, e, e, NULL);
+		if (IS_ERR(block_cb))
+			return PTR_ERR(block_cb);
+		flow_block_cb_add(block_cb, f);
+		list_add_tail(&block_cb->driver_list, &zx_ft_block_cb_list);
+		return 0;
+	case FLOW_BLOCK_UNBIND:
+		block_cb = flow_block_cb_lookup(f->block, zx_ft_setup_cb, e);
+		if (!block_cb)
+			return -ENOENT;
+		flow_block_cb_remove(block_cb, f);
+		list_del(&block_cb->driver_list);
+		return 0;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static int zx_eth_setup_tc(struct net_device *ndev, enum tc_setup_type type,
+			   void *type_data)
+{
+	struct zx_eth *e;
+
+	/* Two netdev flavours share this hook with DIFFERENT netdev_priv
+	 * layouts: the idm%d user netdevs store a (struct zx_eth_port *),
+	 * while the `sw` conduit stores a (struct zx_eth *) directly. DSA's
+	 * TC_SETUP_FT delegation targets the conduit (sw), so detect it and
+	 * decode priv accordingly — misreading it here would deref garbage. */
+	if (ndev->netdev_ops == &zx_eth_netdev_ops) {
+		struct zx_eth_port *port = *(struct zx_eth_port **)netdev_priv(ndev);
+
+		e = port->eth;
+	} else {
+		e = *(struct zx_eth **)netdev_priv(ndev);
+	}
+
+	switch (type) {
+	case TC_SETUP_BLOCK:
+	case TC_SETUP_FT:
+		return zx_eth_setup_block(e, type_data);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+/* chip_tm_init's trap_queue setup — replays def_ptl_pkt_map via cla_set_cpu_queue_id.
+ * RE'd from switch.ko:chip_tm_init @ 0x36ac calling tm.ko functions.
+ * Per stock, maps each (ptype, port) → CPU queue id. Port 5 is CPU (skipped).
+ */
+#include "zx_pkt_map.h"
+
+static int zx_cla_set_cpu_queue_id(struct zx_eth *e, u32 addr, u8 qid)
+{
+	u32 ram7_data[17] = {0,};
+
+	ram7_data[0] = qid;
+	/* Reuses zx_cla_write_entry: writes data[0..16] then CMD with ram_id<<22.
+	 * For trap_queue setup we only set data[0]=qid, rest 0.
+	 */
+	return zx_cla_write_entry(e, 7, addr, ram7_data);
+}
+

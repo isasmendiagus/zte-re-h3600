@@ -1,666 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/* Included from zx-eth-main.c — single translation unit. */
-
-	if (copy_from_user(buf, ubuf, count))
-		return -EFAULT;
-	buf[count] = 0;
-	if (!e->pm_ext)
-		return -ENODEV;
-	if (sscanf(buf, "%7s", cmd) != 1)
-		return -EINVAL;
-
-	/* [ft_lock] this node pokes the SAME PM-external DDR carve that
-	 * zx_ft_ext_flow_write/_clear (the FT install/untrack path, held
-	 * under zx_hwlock via zx_ft_setup_cb) read/write per-flow — serialize
-	 * every branch below against that path + sibling debugfs tools. */
-	mutex_lock(&zx_hwlock);
-	if (!strcmp(cmd, "z")) {
-		memset_io(e->pm_ext + ZX_PM_EXT_FLOW_DIR0, 0, 0x8000 * 16);
-		memset_io(e->pm_ext + ZX_PM_EXT_FLOW_DIR1, 0, 0x8000 * 16);
-		mutex_unlock(&zx_hwlock);
-		pr_info("[ZXETH] extwrite: BOTH dir tables zeroed\n");
-		return count;
-	}
-	if (!strcmp(cmd, "r")) {
-		u8 ent[16];
-		void __iomem *p;
-
-		if (sscanf(buf, "%*s %x %x", &dir, &idx) != 2 || idx >= 0x8000) {
-			mutex_unlock(&zx_hwlock);
-			return -EINVAL;
-		}
-		p = e->pm_ext +
-		    (dir ? ZX_PM_EXT_FLOW_DIR1 : ZX_PM_EXT_FLOW_DIR0) + idx * 16;
-		memcpy_fromio(ent, p, 16);
-		mutex_unlock(&zx_hwlock);
-		pr_info("[ZXETH] ext dir%u[%#x] = %16ph\n", dir & 1, idx, ent);
-		return count;
-	}
-	if (!strcmp(cmd, "w")) {
-		if (sscanf(buf, "%*s %x %x %x %x %x",
-			   &dir, &idx, &w[0], &w[1], &w[2]) != 5 || idx >= 0x8000) {
-			mutex_unlock(&zx_hwlock);
-			return -EINVAL;
-		}
-		zx_extwrite_one(e, dir & 1, idx, w);
-		mutex_unlock(&zx_hwlock);
-		pr_info("[ZXETH] extwrite dir%u[%#x] = %08x %08x %08x\n",
-			dir & 1, idx, w[0], w[1], w[2]);
-		return count;
-	}
-	if (!strcmp(cmd, "f") || !strcmp(cmd, "enc")) {
-		bool enc = cmd[0] == 'e';
-
-		if (sscanf(buf, "%*s %x %x %x %x %x %x",
-			   &dir, &idx, &cnt, &w[0], &w[1], &w[2]) != 6 ||
-		    idx >= 0x8000 || cnt > 0x8000 || idx + cnt > 0x8000) {
-			mutex_unlock(&zx_hwlock);
-			return -EINVAL;
-		}
-		for (i = idx; i < idx + cnt; i++) {
-			u32 fi[3] = { w[0], w[1], w[2] };
-
-			if (enc) {
-				u16 sp = ((dir & 1) << 15) | (i & 0x7fff);
-
-				fi[0] = (fi[0] & ~(0x3fffu << 18)) |
-					((u32)(sp & 0x3fff) << 18);
-				fi[1] = (fi[1] & ~3u) | (sp >> 14);
-			}
-			zx_extwrite_one(e, dir & 1, i, fi);
-		}
-		mutex_unlock(&zx_hwlock);
-		pr_info("[ZXETH] extwrite %s dir%u[%#x..%#x] base %08x %08x %08x\n",
-			cmd, dir & 1, idx, idx + cnt - 1, w[0], w[1], w[2]);
-		return count;
-	}
-	mutex_unlock(&zx_hwlock);
-	return -EINVAL;
-}
-
-static const struct file_operations zx_extwrite_fops = {
-	.owner = THIS_MODULE,
-	.open  = simple_open,
-	.write = zx_extwrite_write,
-	.llseek = default_llseek,
-};
-
-/* fttest: DEBUG/TEST-ONLY entry point into the real zx_ft_flow_reserve() /
- * zx_ft_install_recipe() / zx_ft_flow_untrack() functions with a
- * synthetic, test-controlled cookie and 5-tuple, so a regression test
- * (scratchpad/regress.py's replace_orphan) can drive the exact production
- * self-REPLACE / partial-install / DESTROY code paths — including the
- * [H3 fix 2026-07-04] zx_ft_uninstall() rollback call — deterministically,
- * without depending on nf_flowtable ever choosing to redeliver a real
- * connection's cookie with a changed tuple (it structurally can't:
- * nf_flow_table_offload.c assigns cls->cookie = (unsigned long)&tuple, a
- * fixed sub-struct address inside the flow_offload object for that
- * direction, so a genuinely different 5-tuple on the SAME cookie never
- * occurs via real traffic on this conduit path — see
- * findings/fix_h3_rollback_2026-07-04.md for the full reachability
- * analysis). This node reuses the exact static functions the real
- * FLOW_CLS_REPLACE/DESTROY dispatch (zx_ft_setup_cb) calls; it does not
- * duplicate any install/rollback logic of its own.
- *   install <cookie> <saddr> <daddr> <sport> <dport> <eg_regport>  (all hex
- *     except eg_regport, which is decimal; TCP always assumed)
- *   destroy <cookie>                                                (hex)
- * A fixed test next-hop MAC (02:00:00:00:00:01, locally-administered) is
- * used for install — the recipe's CLA/PM writes don't require a resolvable
- * real neighbor, only zx_ft_flower_replace's caller-side zx_ft_resolve_nh()
- * does, and this node bypasses that caller entirely. */
-static ssize_t zx_fttest_write(struct file *f, const char __user *ubuf,
-			       size_t count, loff_t *ppos)
-{
-	struct zx_eth *e = f->private_data;
-	static const u8 test_mac[ETH_ALEN] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x01 };
-	struct zx_ft_nat nat = {0};
-	char buf[128];
-	unsigned long cookie;
-	unsigned int saddr, daddr, sport, dport, eg_regport;
-	unsigned int key_hdr = ZX_FT_KEY_HDR_ETH;
-	u16 raw, raw0 = 0, pm_slot = 0;
-	bool is_dn, has_raw0;
-	int n, rc;
-
-	if (count == 0 || count >= sizeof(buf))
-		return -EINVAL;
-	if (copy_from_user(buf, ubuf, count))
-		return -EFAULT;
-	buf[count] = 0;
-
-	if (sscanf(buf, "destroy %lx", &cookie) == 1) {
-		mutex_lock(&zx_hwlock);
-		rc = zx_ft_flow_untrack(e, cookie);
-		mutex_unlock(&zx_hwlock);
-		pr_info("[fttest] destroy cookie=%lx rc=%d\n", cookie, rc);
-		return count;
-	}
-	/* [H4 fix 2026-07-04, findings/qa_static_bughunt_2026-07-04.md] "resolve
-	 * <devname>": drive the REAL, unmodified zx_ft_egress_regport() (the
-	 * exact function zx_ft_flower_replace() calls on every REPLACE) against
-	 * a live net_device looked up by name, and apply the same
-	 * ZX_FT_EGRESS_INVALID guard zx_ft_flower_replace() applies, so a
-	 * regression test can deterministically prove the H4 fix without
-	 * needing to stage a genuine non-DSA nf_flowtable egress on real
-	 * traffic. (Staging that live was attempted and found infeasible on
-	 * this rig's topology -- see the regress.py h4_nondsa_decline
-	 * docstring/findings/fix_h4_nondsa_2026-07-04.md for why -- so this
-	 * exercises the identical production resolver + sentinel check via a
-	 * deterministic, HW-write-free debugfs query instead. No installs, no
-	 * HW state touched -- purely a resolve-and-report.) */
-	{
-		char devname[IFNAMSIZ];
-
-		if (sscanf(buf, "resolve %15s", devname) == 1) {
-			struct net_device *d = dev_get_by_name(&init_net, devname);
-			u8 rp = zx_ft_egress_regport(d);
-			/* [Phase C 2026-07-27] also report the wifi resolution
-			 * (real helper, gated by ftwifi like production). */
-			u8 we = zx_ft_wifi_essid(e, d);
-
-			if (rp != ZX_FT_EGRESS_INVALID)
-				pr_info("[fttest] resolve dev=%s -> VALID regport=%u\n",
-					devname, rp);
-			else if (we != ZX_FT_EGRESS_INVALID)
-				pr_info("[fttest] resolve dev=%s -> WIFI essid=0x%02x (idm%u ssid%u)\n",
-					devname, we, (we >> 3) & 1, we & 7);
-			else
-				pr_info("[fttest] resolve dev=%s -> INVALID (H4 guard would decline; ftwifi=%u)\n",
-					devname, READ_ONCE(e->ft_wifi_en));
-			if (d)
-				dev_put(d);
-			return count;
-		}
-	}
-	/* [Stage-3 WiFi UP 2026-07-28] optional 7th arg = key_hdr (hex): the
-	 * flow-key header byte (0x48 eth default; 0x38/0x30 = fabric idm1/idm0)
-	 * so the WiFi-UP fabric-keyed install path is white-box testable
-	 * without staging a live WiFi client (mirrors the production
-	 * zx_ft_wifi_ing_hdr resolution, which real traffic exercises). */
-	n = sscanf(buf, "install %lx %x %x %x %x %u %x",
-		   &cookie, &saddr, &daddr, &sport, &dport, &eg_regport,
-		   &key_hdr);
-	if (n == 6 || n == 7) {
-		if (n == 6)
-			key_hdr = ZX_FT_KEY_HDR_ETH;
-		is_dn = eg_regport != ZX_WAN_REGPORT;
-		has_raw0 = is_dn;	/* fabric UP: poly-1 ways only */
-		mutex_lock(&zx_hwlock);
-		raw = zx_ft_flow_hash(e, IPPROTO_TCP, htonl(saddr), htonl(daddr),
-				      htons((u16)sport), htons((u16)dport), is_dn,
-				      (u8)key_hdr);
-		if (has_raw0)
-			raw0 = zx_ft_flow_hash_poly0(IPPROTO_TCP, htonl(saddr),
-						     htonl(daddr), htons((u16)sport),
-						     htons((u16)dport), is_dn,
-						     (u8)key_hdr);
-		rc = zx_ft_flow_reserve(e, cookie, raw, has_raw0, raw0, &pm_slot);
-		if (rc == 0)
-			rc = zx_ft_install_recipe(e, IPPROTO_TCP, htonl(saddr),
-						  htonl(daddr), htons((u16)sport),
-						  htons((u16)dport), test_mac,
-						  eg_regport & 0xff, pm_slot, &nat,
-						  (u8)key_hdr);
-		mutex_unlock(&zx_hwlock);
-		pr_info("[fttest] install cookie=%lx key_hdr=0x%02x raw=0x%04x raw0=0x%04x pm_slot=%u rc=%d\n",
-			cookie, key_hdr, raw, raw0, pm_slot, rc);
-		return count;
-	}
-	return -EINVAL;
-}
-
-static const struct file_operations zx_fttest_fops = {
-	.owner = THIS_MODULE,
-	.open  = simple_open,
-	.write = zx_fttest_write,
-	.llseek = default_llseek,
-};
-
-/* pmpeek: read back a PM RAM entry. "<ram_id> <addr>" (hex) → logs 8 words. */
-static ssize_t zx_pmpeek_write(struct file *f, const char __user *ubuf,
-			       size_t count, loff_t *ppos)
-{
-	struct zx_eth *e = f->private_data;
-	char buf[64];
-	u32 ram_id = 0, addr = 0, data[8] = {0};
-	int rc;
-
-	if (count == 0 || count >= sizeof(buf))
-		return -EINVAL;
-	if (copy_from_user(buf, ubuf, count))
-		return -EFAULT;
-	buf[count] = 0;
-	if (sscanf(buf, "%x %x", &ram_id, &addr) != 2)
-		return -EINVAL;
-	/* [ft_lock] serialize against the FT/DSA offload paths + sibling
-	 * debugfs pokes on the PM engine. */
-	mutex_lock(&zx_hwlock);
-	rc = zx_pp_pm_read_entry(e, ram_id & 0xff, addr, data);
-	mutex_unlock(&zx_hwlock);
-	pr_info("[ZXETH] pmpeek pm-ram%u addr%#x rc=%d: %08x %08x %08x %08x %08x %08x %08x %08x\n",
-		ram_id, addr, rc, data[0], data[1], data[2], data[3],
-		data[4], data[5], data[6], data[7]);
-	return rc ? rc : count;
-}
-
-static const struct file_operations zx_pmpeek_fops = {
-	.owner = THIS_MODULE,
-	.open  = simple_open,
-	.write = zx_pmpeek_write,
-	.llseek = default_llseek,
-};
-
-/* pmfill: write ONE PM flow_info entry (8 words) to ALL in-PM ram0 slots [0..0x3ff],
- * to brute-force the CLA→flow_info linkage index (analogue of fill520 for the CLA hash).
- * "<w0> ... <w7>" hex. Used to test whether a routed flow HW-forwards once the flow_info
- * (→next-hop) is present at whatever index the CLA match links to. */
-static ssize_t zx_pmfill_write(struct file *f, const char __user *ubuf,
-			       size_t count, loff_t *ppos)
-{
-	struct zx_eth *e = f->private_data;
-	char buf[160];
-	u32 data[8] = {0};
-	int n = 0, consumed, ok = 0;
-	unsigned int a;
-	char *p;
-
-	if (count == 0 || count >= sizeof(buf))
-		return -EINVAL;
-	if (copy_from_user(buf, ubuf, count))
-		return -EFAULT;
-	buf[count] = 0;
-	p = buf;
-	while (n < 8 && sscanf(p, "%x%n", &data[n], &consumed) == 1) {
-		n++;
-		p += consumed;
-	}
-	/* [ft_lock] serialize this bulk 0x400-slot write against the FT/DSA
-	 * offload paths + sibling debugfs pokes on the PM engine. */
-	mutex_lock(&zx_hwlock);
-	for (a = 0; a < 0x400; a++)
-		if (zx_pp_pm_write_entry(e, 0, a, data) == 0)
-			ok++;
-	mutex_unlock(&zx_hwlock);
-	pr_info("[ZXETH] pmfill: flow_info (%d words) -> %d ram0 slots\n", n, ok);
-	return count;
-}
-
-static const struct file_operations zx_pmfill_fops = {
-	.owner = THIS_MODULE,
-	.open  = simple_open,
-	.write = zx_pmfill_write,
-	.llseek = default_llseek,
-};
-
-/* mdio: live read/write of a PHY register via the mii_bus (WAN ZX5201 = phy 8).
- * "<phy> <reg>" reads (logs value); "<phy> <reg> <val>" writes. For diagnosing +
- * bringing up the WAN copper link without a rebuild per attempt. */
-static ssize_t zx_mdio_write(struct file *f, const char __user *ubuf,
-			     size_t count, loff_t *ppos)
-{
-	struct zx_eth *e = f->private_data;
-	struct mii_bus *bus = NULL;
-	char buf[64];
-	u32 phy = 0, reg = 0, val = 0;
-	int n, k, v;
-
-	if (count == 0 || count >= sizeof(buf))
-		return -EINVAL;
-	if (copy_from_user(buf, ubuf, count))
-		return -EFAULT;
-	buf[count] = 0;
-	n = sscanf(buf, "%x %x %x", &phy, &reg, &val);
-	if (n < 2)
-		return -EINVAL;
-	for (k = 0; k < 5; k++)
-		if (e->gephy[k]) {
-			bus = e->gephy[k]->mdio.bus;
-			break;
-		}
-	if (!bus) {
-		pr_err("[ZXETH] mdio: no mii_bus\n");
-		return -ENODEV;
-	}
-	if (n == 3) {
-		mdiobus_write(bus, phy, reg, val);
-		pr_info("[ZXETH] mdio W phy%u reg%#x = %#06x\n", phy, reg, val);
-	} else {
-		v = mdiobus_read(bus, phy, reg);
-		pr_info("[ZXETH] mdio R phy%u reg%#x = %#06x\n", phy, reg, v);
-	}
-	return count;
-}
-
-static const struct file_operations zx_mdio_fops = {
-	.owner = THIS_MODULE,
-	.open  = simple_open,
-	.write = zx_mdio_write,
-	.llseek = default_llseek,
-};
-
-/* hashcalc: drive the CLA HW hash engine (Phase 6 Stage 2b). Write up to 12 hex key
- * words "<k0> <k1> ... <k11>"; zx_cla_hash_raw loads them, triggers, and reads the
- * 16-bit raw hash, logged here. This is the slot oracle the chip uses on ingress —
- * cls_flower_add builds the key from a flow's 5-tuple+ports and uses the same path.
- * Verified vs manual poke: key 0x11/0x22../0xcc → 0x4a15. Fewer than 12 words →
- * the rest are zero. (Slot = raw & mask + way bits; mask from the outspace cfg.) */
-static ssize_t zx_hashcalc_write(struct file *f, const char __user *ubuf,
-				 size_t count, loff_t *ppos)
-{
-	struct zx_eth *e = f->private_data;
-	char buf[160], *p;
-	u32 key[12] = {0};
-	int n = 0, consumed;
-	u16 raw;
-
-	if (count == 0 || count >= sizeof(buf))
-		return -EINVAL;
-	if (copy_from_user(buf, ubuf, count))
-		return -EFAULT;
-	buf[count] = 0;
-	p = buf;
-	while (n < 12 && sscanf(p, "%x%n", &key[n], &consumed) == 1) {
-		n++;
-		p += consumed;
-	}
-	/* [ft_lock] the hash engine's key/trigger/result regs are shared with
-	 * the FT/DSA offload install paths — a concurrent install's key load
-	 * could otherwise interleave with this one's trigger. */
-	mutex_lock(&zx_hwlock);
-	raw = zx_cla_hash_raw(e, key);
-	mutex_unlock(&zx_hwlock);
-	pr_info("[ZXETH] hashcalc %d words -> raw hash 0x%04x\n", n, raw);
-	return count;
-}
-
-static const struct file_operations zx_hashcalc_fops = {
-	.owner = THIS_MODULE,
-	.open  = simple_open,
-	.write = zx_hashcalc_write,
-	.llseek = default_llseek,
-};
-
-/* poke: live register write for reflash-free experiments. Write "<phys> <val>"
- * (hex), e.g.  sh -c "echo '92280008 80000001' > /sys/kernel/debug/zx_eth/poke"
- * phys must be in [0x921c0000, 0x923c0000) (the e->base MMIO window) and 4-aligned.
- * Pairs with memdump/regdump for peeks. DEBUG ONLY.
- */
-static ssize_t zx_poke_write(struct file *f, const char __user *ubuf,
-			     size_t count, loff_t *ppos)
-{
-	struct zx_eth *e = f->private_data;
-	char buf[64];
-	u32 phys, val, off;
-
-	if (count == 0 || count >= sizeof(buf))
-		return -EINVAL;
-	if (copy_from_user(buf, ubuf, count))
-		return -EFAULT;
-	buf[count] = 0;
-	{
-		int n = sscanf(buf, "%x %x", &phys, &val);
-
-		if (n < 1)
-			return -EINVAL;
-		if (phys < 0x921c0000u || phys >= 0x921c0000u + 0x200000u || (phys & 3))
-			return -EINVAL;
-		off = phys - 0x921c0000u;
-		if (n == 1) {	/* one arg = read-only PEEK (unlocks arbitrary mainline reg reads) */
-			pr_info("[ZXETH] peek 0x%08x = 0x%08x\n", phys, readl(e->base + off));
-			return count;
-		}
-		writel(val, e->base + off);
-		pr_info("[ZXETH] poke 0x%08x = 0x%08x (readback 0x%08x)\n",
-			phys, val, readl(e->base + off));
-		return count;
-	}
-}
-
-static const struct file_operations zx_poke_fops = {
-	.owner  = THIS_MODULE,
-	.open   = simple_open,
-	.write  = zx_poke_write,
-	.llseek = default_llseek,
-};
-
-/* fdbadd: seed one static HW (sbrag) FDB entry so the switch DIRECTS a unicast
- * to <port> instead of flooding it. Write "<port> <aa:bb:cc:dd:ee:ff>", e.g.
- *   echo '2 c8:a3:62:e9:59:00' > /sys/kernel/debug/zx_eth/fdbadd
- * Proves the HW-FDB-learning hypothesis for the lan2 dup storm. DEBUG ONLY.
- */
-static ssize_t zx_fdbadd_write(struct file *f, const char __user *ubuf,
-			       size_t count, loff_t *ppos)
-{
-	struct zx_eth *e = f->private_data;
-	unsigned int port, m[6];
-	char buf[64];
-	u8 mac[6];
-	int i, rc;
-
-	if (count == 0 || count >= sizeof(buf))
-		return -EINVAL;
-	if (copy_from_user(buf, ubuf, count))
-		return -EFAULT;
-	buf[count] = 0;
-	if (sscanf(buf, "%u %x:%x:%x:%x:%x:%x", &port,
-		   &m[0], &m[1], &m[2], &m[3], &m[4], &m[5]) != 7)
-		return -EINVAL;
-	for (i = 0; i < 6; i++)
-		mac[i] = m[i] & 0xff;
-	rc = zx_sbrag_add_mac(e, mac, 0, port & 0xff);
-	pr_info("[ZXETH] fdbadd %pM -> port %u = %d\n", mac, port, rc);
-	return rc ? rc : count;
-}
-
-static const struct file_operations zx_fdbadd_fops = {
-	.owner  = THIS_MODULE,
-	.open   = simple_open,
-	.write  = zx_fdbadd_write,
-	.llseek = default_llseek,
-};
-
-/* [Iter AI] pktdeal: live-bisect the per-protocol SPA pktdeal RAM (0x921d4300).
- * Write "<proto> <deal>" to set that protocol-slot's action (0=forward 1=trap
- * 2=drop 3=copy) on ALL 8 ports at runtime, no reboot. Used to find which ptype
- * slot the chip assigns to TCP pure-ACKs: flip slots to 0 while a TCP flow runs
- * and watch tm_rx_count stop climbing. proto range 0..0x46 (slot 0x43+proto).
- *   echo '6 0' > /sys/kernel/debug/zx_eth/pktdeal   # forward proto-slot 6
- * Special: "all 0" forwards every slot 0..0x46 (= forward-all, breaks broadcast);
- * "stock" restores the zx_pp_pro_actions trap table. DEBUG ONLY. */
-static ssize_t zx_pktdeal_write(struct file *f, const char __user *ubuf,
-				size_t count, loff_t *ppos)
-{
-	struct zx_eth *e = f->private_data;
-	unsigned int proto, deal;
-	char buf[64];
-	int port, i, ok = 0;
-
-	if (count == 0 || count >= sizeof(buf))
-		return -EINVAL;
-	if (copy_from_user(buf, ubuf, count))
-		return -EFAULT;
-	buf[count] = 0;
-
-	if (!strncmp(buf, "stock", 5)) {
-		for (i = 0; i < ZX_PP_PRO_ACTION_COUNT; i++)
-			for (port = 0; port < 8; port++)
-				zx_spa_set_enty_pktdeal_cfg(e, port,
-					zx_pp_pro_actions[i].proto,
-					zx_pp_pro_actions[i].action_pp0);
-		pr_info("[ZXETH] pktdeal: restored stock trap table\n");
-		return count;
-	}
-	if (!strncmp(buf, "all ", 4) && sscanf(buf + 4, "%u", &deal) == 1) {
-		for (proto = 0; proto <= 0x46; proto++)
-			for (port = 0; port < 8; port++)
-				if (zx_spa_set_enty_pktdeal_cfg(e, port, proto, deal & 3) == 0)
-					ok++;
-		pr_info("[ZXETH] pktdeal: ALL slots 0..0x46 -> deal=%u (%d writes)\n", deal & 3, ok);
-		return count;
-	}
-	if (sscanf(buf, "%u %u", &proto, &deal) != 2 || proto > 0x46)
-		return -EINVAL;
-	for (port = 0; port < 8; port++)
-		if (zx_spa_set_enty_pktdeal_cfg(e, port, proto & 0xff, deal & 3) == 0)
-			ok++;
-	pr_info("[ZXETH] pktdeal: proto-slot %u -> deal=%u on %d ports\n", proto, deal & 3, ok);
-	return count;
-}
-
-static const struct file_operations zx_pktdeal_fops = {
-	.owner  = THIS_MODULE,
-	.open   = simple_open,
-	.write  = zx_pktdeal_write,
-	.llseek = default_llseek,
-};
-
-/* txtest: inject N known TX frames straight through zx_sw_xmit — isolates the
- * TX/egress path (no ARP/RX/ping involved). Frame: dst = host MAC (FDB-resolved
- * to internal port 3 / MAC[2]), src = device MAC, ethertype 0x88b5 (local
- * experimental, so it isn't mistaken for ARP/IP if it loops back), payload
- * "ZXTX"+seq. Read the pipeline counters before/after to see where it dies.
- *   sh -c "echo 5 > /sys/kernel/debug/zx_eth/txtest"
- */
-static ssize_t zx_txtest_write(struct file *f, const char __user *ubuf,
-			       size_t count, loff_t *ppos)
-{
-	struct zx_eth *e = f->private_data;
-	static const u8 host_mac[6] = { 0xc8, 0xa3, 0x62, 0xe9, 0x59, 0x00 };
-	char buf[16];
-	unsigned int n = 1, i;
-
-	if (!e->sw_dev)
-		return -ENODEV;
-	if (count >= sizeof(buf))
-		return -EINVAL;
-	if (copy_from_user(buf, ubuf, count))
-		return -EFAULT;
-	buf[count] = 0;
-	if (kstrtouint(buf, 0, &n) || n == 0)
-		n = 1;
-	if (n > 64)
-		n = 64;
-
-	for (i = 0; i < n; i++) {
-		struct sk_buff *skb = netdev_alloc_skb(e->sw_dev, 64);
-		u8 *p;
-
-		if (!skb)
-			break;
-		p = skb_put(skb, 64);
-		memset(p, 0, 64);
-		memcpy(p, host_mac, 6);
-		memcpy(p + 6, e->sw_dev->dev_addr, 6);
-		p[12] = 0x88; p[13] = 0xb5;
-		p[14] = 'Z'; p[15] = 'X'; p[16] = 'T'; p[17] = 'X'; p[18] = (u8)i;
-		skb->dev = e->sw_dev;
-		zx_sw_xmit(skb, e->sw_dev);
-	}
-	pr_info("[ZXETH] txtest: injected %u known frames (dst=host, ethertype 0x88b5)\n", i);
-	return count;
-}
-
-static const struct file_operations zx_txtest_fops = {
-	.owner  = THIS_MODULE,
-	.open   = simple_open,
-	.write  = zx_txtest_write,
-	.llseek = default_llseek,
-};
-
-/* [Stage-3 WiFi Phase B, 2026-07-23] wifi_bind: manually bind/unbind a WiFi
- * vif to an IDM ring + ssid (spec §5 step 2 — decouples "does the dispatch
- * mechanism work" from "how is the (idm,ssid) mapping discovered", the latter
- * being an open policy question, spec §6.3). BUILD-VERIFIED, UNTESTED ON
- * HARDWARE.
- *   Bind:    echo '<ifname> <idm> <ssid>' > wifi_bind   # e.g. 'wlan1 0 0'
- *   Unbind:  echo 'del <idm> <ssid>'      > wifi_bind   # e.g. 'del 0 0'
- * Reading the file dumps the current 16-node table.
- * NOTE: netdev_rx_handler_register returns -EBUSY if the vif already has an
- * rx_handler (it does while a br0 member) — `brctl delif br0 <vif>` first
- * (spec §2.3 coexistence caveat). */
-static ssize_t zx_wifi_bind_write(struct file *f, const char __user *ubuf,
-				  size_t count, loff_t *ppos)
-{
-	/* .open is single_open() (for the seq-file read side), so
-	 * f->private_data is the struct seq_file — the zx_eth pointer is in
-	 * seq->private (== inode->i_private). Every OTHER write knob in this
-	 * driver uses simple_open (private_data = i_private directly); this one
-	 * combines a seq-file reader with a writer, hence the extra hop.
-	 * [Fixed 2026-07-24 during on-device validation: the original
-	 * build-verified code read f->private_data directly and would have
-	 * dereferenced the seq_file as a zx_eth on the very first write.] */
-	struct zx_eth *e = ((struct seq_file *)f->private_data)->private;
-	char buf[64], ifname[IFNAMSIZ];
-	unsigned int idm, ssid;
-	struct net_device *vif;
-	int rc;
-
-	if (count == 0 || count >= sizeof(buf))
-		return -EINVAL;
-	if (copy_from_user(buf, ubuf, count))
-		return -EFAULT;
-	buf[count] = 0;
-
-	if (sscanf(buf, "del %u %u", &idm, &ssid) == 2) {
-		rc = zx_wifi_unregister_vif(e, idm & 0xff, ssid & 0xff);
-		pr_info("[ZXETH] wifi_bind: del idm%u ssid%u = %d [UNTESTED]\n",
-			idm, ssid, rc);
-		return rc ? rc : count;
-	}
-
-	if (sscanf(buf, "%15s %u %u", ifname, &idm, &ssid) != 3)
-		return -EINVAL;
-
-	vif = dev_get_by_name(&init_net, ifname);
-	if (!vif)
-		return -ENODEV;
-	rc = zx_wifi_register_vif(e, vif, idm & 0xff, ssid & 0xff);
-	dev_put(vif);	/* register took its own ref on success */
-	pr_info("[ZXETH] wifi_bind: %s idm%u ssid%u = %d [UNTESTED]\n",
-		ifname, idm, ssid, rc);
-	return rc ? rc : count;
-}
-
-static int zx_wifi_bind_show(struct seq_file *s, void *unused)
-{
-	struct zx_eth *e = s->private;
-	int i;
-
-	seq_puts(s, "# IDM<->WiFi dispatch table (Stage-3 Phase B)\n");
-	seq_printf(s, "# rx_dispatched=%u rx_nobind=%u tx_injected=%u\n",
-		   e->idm_wifi_rx_dispatched, e->idm_wifi_rx_nobind,
-		   e->idm_wifi_tx_injected);
-	seq_printf(s, "# tm_rx_fabric=%u tm_rx_dispatched=%u tm_rx_nobind=%u noparse=%u (Phase B.2)\n",
-		   e->tm_rx_fabric, e->tm_wifi_rx_dispatched,
-		   e->tm_wifi_rx_nobind, e->tm_wifi_rx_noparse);
-	seq_puts(s, "# node idm ssid  vif        idm_ndev\n");
-	for (i = 0; i < 16; i++) {
-		struct zx_wifi_dispatch_node *n = &e->zx_wifi_dispatch[i];
-
-		if (!n->enabled)
-			continue;
-		seq_printf(s, "  %2d   %u    %u    %-10s %s\n",
-			   i, n->idm, n->ssid,
-			   n->wlan_ndev ? n->wlan_ndev->name : "(null)",
-			   n->idm_ndev ? n->idm_ndev->name : "(null)");
-	}
-	return 0;
-}
-
-static int zx_wifi_bind_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, zx_wifi_bind_show, inode->i_private);
-}
-
-static const struct file_operations zx_wifi_bind_fops = {
-	.owner   = THIS_MODULE,
-	.open    = zx_wifi_bind_open,
-	.read    = seq_read,
-	.write   = zx_wifi_bind_write,
-	.llseek  = seq_lseek,
-	.release = single_release,
-};
-
 /* ============================================================
  *   pipeline_stats — mirror stock /sys/devices/platform/tm/tmTest/{tmup,tmdn}
  *
@@ -1349,13 +686,13 @@ static void zx_eth_apply_stock_init(struct zx_eth *eth)
 	zx_stock_apply_block(eth, "PON_B",
 			     ZX_STOCK_OPS_PON_B_START,    ZX_STOCK_OPS_PON_B_END);
 	zx_pon_tail_lookup_init(eth);         /* 16 KB lookup RAM */
-	zx_pon_tail_explicit_init(eth);       /* 10 C loops replace 343 bursts */
+	zx_pon_tail_explicit_init(eth);       /* 2 C loops replace 272 PON_TAIL bursts */
 	zx_npp_twin_init(eth);                /* 3 twin-pair sub-blocks */
 	zx_stock_apply_block(eth, "NPP",
 			     ZX_STOCK_OPS_NPP_START,      ZX_STOCK_OPS_NPP_END);
 	zx_npp_aux_init(eth);                 /* 13 × 12 identical writes */
 	zx_tm_per_instance_init(eth);         /* 16 instance tables */
-	zx_tm_explicit_init(eth);             /* 9 C loops replace 205 TM bursts */
+	zx_tm_explicit_init(eth);             /* 2 C loops replace 31 TM bursts */
 	zx_stock_apply_block(eth, "PP_FUC",
 			     ZX_STOCK_OPS_PP_FUC_START,   ZX_STOCK_OPS_PP_FUC_END);
 }
@@ -1602,3 +939,660 @@ static void zx_eth_repoint_tm_descriptors(struct zx_eth *eth)
  * is less than 4. That spreads the four MACs across 16 groups of 16,
  * presumably indexed by GEMPORT / T-CONT for the GPON side.
  *
+ * Empirically the first 4 of each group of 16 are populated (slots
+ * 0..3, 16..19, 32..35, ... 240..243). We mirror exactly that pattern
+ * so the HW lookup hits a registered MAC regardless of which group
+ * index it computes.
+ */
+static void zx_eth_register_cpu_mac_slots(struct zx_eth *eth)
+{
+	u8 mac[6];
+	int sl;
+
+	for (sl = 0; sl < 256; sl++) {
+		if ((sl & 0xF) >= 4)
+			continue;  /* only first 4 of each group of 16 */
+		memcpy(mac, eth->sw_dev->dev_addr, 6);
+		mac[5] += (sl & 0x03);
+		zx_register_cpu_mac(eth, (u8)sl, mac);
+	}
+}
+
+/* Clear the SPA destination-MAC filter table to match stock (empty).
+ * The boot ROM pre-loads trap_dmac[0..3] with the device MACs (from fuses),
+ * which makes the SPA parser send routed to-me-MAC transit to the CPU before
+ * the CLA forward hash, blocking HW L3 forwarding. Stock keeps it empty; we do
+ * too. ONU-MAC (registered above) stays populated so l3_en still arms.
+ */
+static void zx_eth_clear_spa_trap_dmac(struct zx_eth *eth)
+{
+	int sl;
+
+	for (sl = 0; sl < 4; sl++) {
+		writel(0, eth->base + ZX_SPA_TRAP_DMAC_BASE + sl * 8);
+		writel(0, eth->base + ZX_SPA_TRAP_DMAC_BASE + sl * 8 + 4);
+	}
+	dev_dbg(eth->dev, "SPA trap_dmac filter cleared (match stock; enables HW L3 forward)\n");
+}
+
+/*
+ * VLAN port-membership + per-port isolation masks. Mirrors the tail of
+ * stock's pon_pp_brg_init.
+ *
+ * VLAN: vid 0 and 1, every one of the 8 ports gets membership type 3
+ * (= tagged + untagged egress). 16 entries total, all should succeed.
+ *
+ * Isolation: per-port "block egress to these ports" bitmap.
+ *   port 0..5: no self-loop (mask = ~(1<<port) & 0xff)
+ *   port 6, 7 (CPU): 0xff = block ALL egress (CPU traffic exits via the
+ *                    direct CPU FWD register, not the switch fabric)
+ * Stock pon_pp_brg_init only OR'd 0xdf into ports 6/7 because the chip
+ * already has HW defaults; mainline boots leave the masks zero, so we
+ * write all eight explicitly.
+ */
+static void zx_eth_init_vlan_and_isolation(struct zx_eth *eth)
+{
+	struct device *dev = eth->dev;
+	int vid, port, n_ok = 0;
+	int i;
+
+	for (vid = 0; vid < 2; vid++)
+		for (port = 0; port < 8; port++)
+			if (zx_vlan_add_port(eth, vid, port, 3) == 0)
+				n_ok++;
+	dev_dbg(dev, "VLAN setup: %d/%d port-vlan entries OK\n", n_ok, 16);
+
+	for (i = 0; i < 6; i++)
+		zx_port_isolate(eth, i, (u8)(~(1u << i) & 0xff));
+	zx_port_isolate(eth, 6, 0xFF);
+	zx_port_isolate(eth, 7, 0xFF);
+	dev_dbg(dev, "isolate ports 0..7 = %#x %#x %#x %#x %#x %#x %#x %#x\n",
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(0)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(1)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(2)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(3)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(4)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(5)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(6)),
+		 readl(eth->base + PP_OFF + PP_BRG_ISOLATE(7)));
+}
+
+/*
+ * Map the two extra MMIO windows the driver needs alongside the DT-listed
+ * "npp" resource:
+ *
+ *   pon_early : the "pon" reg-name resource (1.75 MiB at PON base),
+ *               used by negative-offset stock writes.
+ *   fpga_base : a unified 4 MiB window starting at the same PON base,
+ *               used by descriptor-driven zx_fpga_table_write access.
+ *               It overlaps the "pon" + "npp" resources plus a small
+ *               tail; that's why it's not its own DT reg entry (DT
+ *               bindings forbid overlapping resources).
+ *
+ * Both use plain devm_ioremap (no request_mem_region) so they can coexist
+ * with the byname mapping of "pon" without resource-collision errors.
+ */
+static int zx_eth_init_extra_mmio(struct zx_eth *eth,
+				  struct platform_device *pdev)
+{
+	struct device *dev = eth->dev;
+	struct resource *pon_res;
+
+	pon_res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pon");
+	if (!pon_res)
+		return dev_err_probe(dev, -ENODEV, "missing 'pon' reg\n");
+
+	eth->pon_early = devm_ioremap(dev, pon_res->start,
+				      resource_size(pon_res));
+	if (!eth->pon_early)
+		return dev_err_probe(dev, -ENOMEM, "ioremap PON early\n");
+
+	eth->fpga_base = devm_ioremap(dev, pon_res->start, 0x400000);
+	if (!eth->fpga_base)
+		return dev_err_probe(dev, -ENOMEM, "ioremap fpga_base failed\n");
+
+	return 0;
+}
+
+/* [phase6/ft] Map + ZERO the PM external table carve (see the pm_ext field
+ * comment). The bases (acl @0x923a0024, pm @0x923a0020 = acl + 0x400000) are
+ * pre-programmed (boot ROM / U-Boot) but read as GARBAGE until the PON/PP
+ * block clocks are up — so this MUST run late in probe (after
+ * zx_eth_init_pon_chip + the TM subsystem replay), NOT at iomap time.
+ * Erased DDR there is 0xff, which the PM engine decodes as an all-enables
+ * flow_info with garbage NAT values -> every HW-forwarded frame is mangled
+ * (MACs/IPs zeroed, ports 0xffff). Stock zeroes this at aclRamInit.
+ * pfn_valid() guard: NEVER touch pages the kernel owns (if a boot pointed
+ * the bases into kernel RAM, skip instead of corrupt). */
+static void zx_ft_pm_ext_init(struct zx_eth *eth)
+{
+	struct device *dev = eth->dev;
+	u32 aclb = readl(eth->fpga_base + 0x3a0024);
+	u32 pmb  = readl(eth->fpga_base + 0x3a0020);
+	u32 carve = aclb - 0x20000u;
+
+	if (aclb >= 0x40000000u && pmb == aclb + 0x400000u &&
+	    region_intersects(carve, ZX_PM_EXT_SPAN, IORESOURCE_SYSTEM_RAM,
+			      IORES_DESC_NONE) == REGION_DISJOINT) {
+		eth->pm_ext_phys = carve;
+		eth->pm_ext = devm_ioremap(dev, carve, ZX_PM_EXT_SPAN);
+		if (eth->pm_ext) {
+			/* Zero the FULL span again (safe as of 2026-07-31).
+			 * History worth keeping straight: this memset used to
+			 * clobber the BMU BPPE free-list, because BPPE was
+			 * parked at CARVED_BPPE_OFF == this same carve base
+			 * (0x4E700000), inside the 0x20000 head that the carve
+			 * reserves ahead of the ACL table. Fix #1b worked around
+			 * it by skipping the head. BPPE now lives at
+			 * CARVED_BASE_PHYS+0 (stock-exact 0x4C000000), so the
+			 * head is nobody's and the original full-span zero is
+			 * both correct and desirable — erased DDR reads 0xff,
+			 * which the PM engine decodes as an all-enables
+			 * flow_info with garbage NAT values. Removing the
+			 * special case removes the landmine: any future carve
+			 * reshuffle can no longer silently re-create the
+			 * overlap. */
+			memset_io(eth->pm_ext, 0, ZX_PM_EXT_SPAN);
+		dev_dbg(dev,
+			 "[phase6/ft] PM external tables: carve 0x%08x +0x%x mapped, fully zeroed (BPPE now at carve+0, no overlap; acl 0x%08x pm 0x%08x)\n",
+				 carve, ZX_PM_EXT_SPAN, aclb, pmb);
+		}
+	}
+	if (!eth->pm_ext)
+		dev_warn(dev,
+			 "[phase6/ft] PM external tables UNAVAILABLE (acl 0x%08x pm 0x%08x) — HW-forward NAT rewrite would read erased DDR; offload rewrite disabled\n",
+			 aclb, pmb);
+}
+
+static void zx_eth_iounmap_action(void *iomem)
+{
+	iounmap((void __iomem *)iomem);
+}
+
+/*
+ * [A03][A05][A06] Chip-level PON init — pon_reset + 0x4001c poke +
+ * full SERDES bring-up. Body lives in zx-pon-plat.c so the main eth
+ * driver stays focused on netdev / NAPI / TX-RX hot path. We thread
+ * just the IO bases through a small ctx struct so zx-pon-plat doesn't
+ * have to know about struct zx_eth.
+ */
+static void zx_eth_init_pon_chip(struct zx_eth *eth)
+{
+	struct zx_pon_plat_ctx ctx = {
+		.dev        = eth->dev,
+		.pon_early  = eth->pon_early,
+		.topcrm     = eth->topcrm,
+		.sys_ctrl   = eth->sys_ctrl,
+		.pin_mux    = eth->pin_mux,
+		.pon_serdes = eth->pon_serdes,
+	};
+
+	zx_pon_plat_init(&ctx);
+}
+
+static int zx_eth_init_topcrm(struct zx_eth *eth)
+{
+	struct device *dev = eth->dev;
+	struct device_node *np;
+	int rc;
+
+	np = of_parse_phandle(dev->of_node, "zte,topcrm", 0);
+	if (!np)
+		return dev_err_probe(dev, -ENODEV,
+				     "missing zte,topcrm phandle\n");
+
+	eth->topcrm = of_iomap(np, 0);
+	of_node_put(np);
+	if (!eth->topcrm)
+		return dev_err_probe(dev, -ENOMEM,
+				     "of_iomap TOPCRM failed\n");
+
+	rc = devm_add_action_or_reset(dev, zx_eth_iounmap_action,
+				      (void *)eth->topcrm);
+	if (rc)
+		return rc;
+
+	writel(readl(eth->topcrm + TOPCRM_REG_PON_CLK) | TOPCRM_PON_CLK_BITS,
+	       eth->topcrm + TOPCRM_REG_PON_CLK);
+	dev_dbg(dev, "TOPCRM[0x0C] = %#x (PON clocks enabled)\n",
+		readl(eth->topcrm + TOPCRM_REG_PON_CLK));
+
+	writel(0x0003cfff, eth->topcrm + 0x4c);
+	/* TOPCRM[0x08] = PON-domain reset/clock control. Stock + U-Boot do a
+	 * reset-deassert EDGE on bits 4,5 (clear 0x30 → set 0x20 → set 0x10), NOT
+	 * a single slam — the falling edge is what actually un-resets the egress
+	 * sub-block (ETH_TM2 mux @0x923a0000, the SOPC egress). Slamming the final
+	 * value left the block in its power-up reset state, silently dropping
+	 * writes (0x923a00e0 read back 0; SMAC TX never incremented). See
+	 * fpga_access_and_egress_clock_re.md + U-Boot FUN_40e4fc7c.
+	 */
+	writel(0x1ff7ffff & ~0x30u, eth->topcrm + 0x08);        /* deassert: clear reset bits 4,5 */
+	udelay(100);
+	writel((0x1ff7ffff & ~0x30u) | 0x20u, eth->topcrm + 0x08); /* set bit 5 */
+	udelay(100);
+	writel(0x1ff7ffff, eth->topcrm + 0x08);                 /* set bit 4 → final stock value, edge complete */
+	dev_dbg(dev, "TOPCRM[0x4c]=%#x [0x08]=%#x (stock-match)\n",
+		readl(eth->topcrm + 0x4c), readl(eth->topcrm + 0x08));
+
+	return 0;
+}
+
+/* [WiFi productionization 2026-08-01] Netdevice notifier: auto-bind wlan
+ * interfaces to the next free idm/ssid slot when hostapd creates them.
+ * Uses the proven config as baseline (wlan1 → idm1/ssid4 corresponds to
+ * slot index = ssid + idm*8 = 4 + 1*8 = 12). Generic policy: assign
+ * sequentially starting from the first wlan slot.
+ */
+static int zx_wlan_notifier(struct notifier_block *nb,
+			    unsigned long event, void *ptr)
+{
+	struct net_device *ndev = netdev_notifier_info_to_dev(ptr);
+	struct zx_eth *e = container_of(nb, struct zx_eth, wlan_nb);
+	int i;
+
+	if (!ndev || !ndev->name)
+		goto out;
+
+	if (event == NETDEV_REGISTER &&
+	    !strncmp(ndev->name, "wlan", 4)) {
+		for (i = 0; i < 16; i++) {
+			if (!READ_ONCE(e->zx_wifi_dispatch[i].enabled)) {
+				u8 idm = i >> 3, ssid = i & 7;
+
+				if (zx_wifi_register_vif(e, ndev, idm, ssid) == 0) {
+					dev_info(e->dev,
+						 "[wifi] auto-bind: %s -> idm%u/ssid%u (slot %d)\n",
+						 ndev->name, idm, ssid, i);
+				}
+				break;
+			}
+		}
+	} else if (event == NETDEV_UNREGISTER &&
+		   !strncmp(ndev->name, "wlan", 4)) {
+		for (i = 0; i < 16; i++) {
+			struct zx_wifi_dispatch_node *wn = &e->zx_wifi_dispatch[i];
+
+			if (READ_ONCE(wn->enabled) &&
+			    wn->wlan_ndev == ndev) {
+				/* Cache idm/ssid before clearing, unlock RTNL
+				 * for the rx_handler unregister (the handler
+				 * takes rtnl_lock internally). */
+				u8 idm = wn->idm, ssid = wn->ssid;
+
+				rtnl_unlock();
+				zx_wifi_unregister_vif(e, idm, ssid);
+				rtnl_lock();
+				dev_info(e->dev,
+					 "[wifi] auto-unbind: %s (was idm%u/ssid%u, slot %d)\n",
+					 ndev->name, idm, ssid, i);
+				break;
+			}
+		}
+	}
+out:
+	return NOTIFY_DONE;
+}
+
+/**
+ * zx_eth_probe() - Initialize the ZX279128S integrated Ethernet driver
+ * @pdev: platform device matching "zte,zx279128s-eth"
+ *
+ * Maps 5 MMIO regions (pon, npp, sys_ctrl, pin_mux, pon_serdes),
+ * performs the full SoC clock/reset sequence, replays ~22k stock
+ * register writes, initializes the TM/BMU/RED/CLA/PP/IDM datapath,
+ * creates the DSA conduit (sw) and WiFi offload (idm0/idm1) netdevs,
+ * and registers debugfs and the PM ops bridge to the built-in DSA driver.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+static int zx_eth_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct zx_eth *eth;
+	int err, i;
+
+	eth = devm_kzalloc(dev, sizeof(*eth), GFP_KERNEL);
+	if (!eth)
+		return -ENOMEM;
+	eth->dev = dev;
+	spin_lock_init(&eth->tx_lock);
+	/* [up-hwoffload 2026-07-04] UP HW-offload defaults ON now that the
+	 * cmd_flow_id fetch-index packing is fixed (zx_ft_pack_cla up_idx_fix) —
+	 * see the comment in the tc-flower ADD handler above the ft_up_en gate.
+	 * debugfs "ftup" (0644) still allows forcing it back to 0 for A/B tests. */
+	eth->ft_up_en = 1;
+
+	/* [wedge #2 fix 2026-08-01] WiFi HW-offload defaults ON. The BMU pool
+	 * priming fix (zx_tm_bmu_enable) eliminated the fabric-ingress endurance
+	 * wedge — sustained WiFi UP HW-forwarding no longer starves the front-end.
+	 * debugfs "ftwifi" (0644) still allows forcing it back to 0 for A/B tests. */
+	eth->ft_wifi_en = 1;
+
+	/* DTS exposes two reg entries — "pon" and "npp". Map the npp one
+	 * by name so the driver is robust to reg-entry reordering. The pon
+	 * mapping (and the topcrm syscon mapping) is done in dedicated
+	 * helpers further below.
+	 */
+	eth->base = devm_platform_ioremap_resource_byname(pdev, "npp");
+	if (IS_ERR(eth->base))
+		return dev_err_probe(dev, PTR_ERR(eth->base), "ioremap NPP\n");
+
+	/* [A02] Optional extras — older DTBs without these names won't error.
+	 * We use the *_optional() byname helper so a missing resource returns
+	 * NULL instead of failing probe. Subsequent iters (zx_pon_clk_reset_init
+	 * et al.) will check for NULL and skip the feature if absent.
+	 */
+	{
+		struct resource *r;
+
+		r = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sys_ctrl");
+		eth->sys_ctrl = r ? devm_ioremap_resource(dev, r) : NULL;
+		if (IS_ERR(eth->sys_ctrl))
+			eth->sys_ctrl = NULL;
+
+		r = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pin_mux");
+		eth->pin_mux = r ? devm_ioremap_resource(dev, r) : NULL;
+		if (IS_ERR(eth->pin_mux))
+			eth->pin_mux = NULL;
+
+		r = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pon_serdes");
+		eth->pon_serdes = r ? devm_ioremap_resource(dev, r) : NULL;
+		if (IS_ERR(eth->pon_serdes))
+			eth->pon_serdes = NULL;
+
+		dev_dbg(dev, "MMIO extras: sys_ctrl=%s pin_mux=%s pon_serdes=%s\n",
+			 eth->sys_ctrl  ? "mapped" : "absent",
+			 eth->pin_mux   ? "mapped" : "absent",
+			 eth->pon_serdes ? "mapped" : "absent");
+	}
+
+	eth->irq_idm = platform_get_irq_byname(pdev, "idm");
+	if (eth->irq_idm < 0)
+		eth->irq_idm = platform_get_irq(pdev, 0);
+	eth->irq_npp = platform_get_irq_byname_optional(pdev, "npp");
+	/* [A07][A08] Optional PON / PP IRQs — present if DT has them. */
+	eth->irq_pon = platform_get_irq_byname_optional(pdev, "pon");
+	eth->irq_pp  = platform_get_irq_byname_optional(pdev, "pp");
+
+	platform_set_drvdata(pdev, eth);
+
+	/* Set the DMA mask before allocating coherent buffers */
+	err = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(32));
+	if (err)
+		return dev_err_probe(dev, err, "failed to set DMA mask\n");
+
+	err = zx_eth_init_topcrm(eth);
+	if (err)
+		return err;
+
+	zx_pp_init(eth);
+	zx_npp_init(eth);
+
+	err = zx_eth_init_extra_mmio(eth, pdev);
+	if (err)
+		return err;
+
+	/* [A03][A05] Chip-level pon_reset + small writes, before the bulk
+	 * stock_table.h replay touches NPP/PP/TM regs. Stock init_module
+	 * does these between of_iomap and tm_pon_tm_init.
+	 */
+	zx_eth_init_pon_chip(eth);
+
+	zx_eth_apply_stock_init(eth);
+
+	/* [txflowctrl] distinct UP/DN rings (stock topology); shared only under
+	 * the zx_tx_dualkick=1 legacy fallback. */
+	tm_write(eth, TM_REG_DMA_TX_UP_BASE, eth->txdesc_dma);
+	tm_write(eth, TM_REG_DMA_TX_DN_BASE,
+		 zx_tx_dualkick ? eth->txdesc_dma : eth->dndesc_dma);
+
+	dev_dbg(dev, "PP[0x2c] (CPU_FWD) = %#x, IDM[0x8000] CTRL = %#x\n",
+		 readl(eth->base + PP_OFF + PP_REG_CPU_FWD),
+		 readl(eth->base + IDM_REG_CONTROL));
+
+	zx_eth_init_vlan_and_isolation(eth);
+
+	err = zx_idm_init(eth);
+	if (err)
+		return dev_err_probe(dev, err, "IDM init failed\n");
+
+	/* netdevs — register first so napi has a real device */
+	for (i = 0; i < ZX_NPORTS; i++) {
+		err = zx_eth_probe_port(eth, i);
+		if (err)
+			goto err_unregister;
+	}
+	/* NAPI attached to port 0 (arbitrary). Weight 512 to match stock pon NAPI
+	 * (boot UART capture).
+	 */
+	netif_napi_add_weight(eth->ports[0].netdev, &eth->napi, zx_idm_poll, 512);
+
+	err = devm_request_irq(dev, eth->irq_idm, zx_idm_irq, 0,
+			       DRV_NAME "-idm", eth);
+	if (err) {
+		dev_err(dev, "failed to request IDM IRQ %d: %d\n",
+			eth->irq_idm, err);
+		goto err_napi;
+	}
+
+	err = zx_eth_init_tm_subsystem(eth, pdev);
+	if (err)
+		goto err_napi;
+
+	/* Source→egress authorizer (PM/SPA) — stock runs it, mainline omitted it. Runs
+	 * after the bulk replay + TM subsystem so 0x921e00xx isn't clobbered. Without this
+	 * CPU-sourced frames loop back to the CPU instead of egressing a physical MAC. */
+	zx_pm_spa_init(eth);
+
+	/* Re-assert the PON-subsystem clocks AFTER the datapath replay. Stock's
+	 * pon_init (lan_up mode) calls zx_pon_clk_reset() (TOPCRM[0x0c] |= 0x1e0)
+	 * as its TERMINAL step — after tm/pp/npp init — to re-bless the egress
+	 * half, which the bulk replay can leave gated. Mainline only asserted it
+	 * once in probe (zx_eth_init_topcrm), before the datapath. See
+	 * eth_egress_clock_reset_re.md.
+	 */
+	if (eth->topcrm)
+		writel(readl(eth->topcrm + TOPCRM_REG_PON_CLK) | TOPCRM_PON_CLK_BITS,
+		       eth->topcrm + TOPCRM_REG_PON_CLK);
+
+	/* [A07] Register PON aggregate IRQ — stock's register_pon_int
+	 * equivalent. Mainline previously fetched irq_pon from DT but
+	 * never requested it; the level-triggered GIC line would assert
+	 * for any pending bit in pon[0x40040] AND ~pon[0x40044] and stay
+	 * asserted with no service. Optional in DT (skip cleanly if absent).
+	 */
+	if (eth->irq_pon > 0) {
+		err = devm_request_irq(dev, eth->irq_pon, zx_pon_irq, 0,
+				       DRV_NAME "-pon", eth);
+		if (err)
+			dev_warn(dev, "[A07] PON IRQ %d request failed: %d (continuing)\n",
+				 eth->irq_pon, err);
+		else
+			dev_dbg(dev, "[A07] PON IRQ %d registered\n",
+				 eth->irq_pon);
+	}
+
+	/* PHY power-up (LDO + TX DAC) + attach to sw netdev for link-state
+	 * tracking. Must run AFTER zx_eth_init_tm_subsystem so e->sw_dev is
+	 * valid for phy_attach_direct.
+	 */
+	zx_eth_init_phys(eth);
+
+	/* Intentionally no FDB seeding here.
+	 *
+	 * Stock helpSpa shows the switch port mapping as 0-4=UNI / 5=PON /
+	 * 6-7=WiFi — i.e. there is NO "CPU" port number. CPU-bound traffic
+	 * reaches the host via a side channel: cpu_qid + da_known_cpu,
+	 * which we already programmed through the pp_pm RAM[12] CPU MAC
+	 * slots in zx_eth_register_cpu_mac_slots().
+	 *
+	 * An earlier revision added an FDB entry pointing at port 5 (PON)
+	 * for the host MAC, which silently routed CPU egress out the
+	 * fiber. For broadcasts we rely on the switch's flood; for unicast
+	 * we rely on the da_known_cpu lookup.
+	 */
+
+	/* [phase6/ft] PM external tables — must be after PON/TM init (the base
+	 * registers read garbage while the PON-PP block clocks are gated). */
+	zx_ft_pm_ext_init(eth);
+
+	/* [wedge fix #2 2026-07-31] Post-pm_ext BMU pool sanity print. The pool
+	 * must have been produced at zx_tm_bmu_enable time (virgin-block 0->1
+	 * enable — see the BMU-range skip in zx_stock_apply_block) and must
+	 * still be intact here (zx_ft_pm_ext_init no longer wipes the BPPE
+	 * head). Stock-healthy idle: bppe_cnt ~8112, bppi_cnt ~79. A 0 here
+	 * means the fabric is running pool-less and WILL wedge under sustained
+	 * HW-forwarding. */
+	dev_info(eth->dev,
+		 "[wedge fix #2] BMU pool state post-pm_ext: bppe_cnt=%u bppi_cnt=%u (stock-healthy ~8112/~79)\n",
+		 tm_read(eth, 0x8080), tm_read(eth, 0x8088));
+
+	/* [Phase C R1 fix, 2026-07-27] Start the IDM RX ring consumer NOW (stock
+	 * idm_net_init unmasks at init) — at the END of probe, after all IDM/TM
+	 * init that could re-mask (the init-time IDM_IRQ_ALL_MASKED). The consumer
+	 * (zx_idm_poll NAPI + IDM IRQ) must run even when no idm0/idm1 netdev is
+	 * administratively UP: WiFi HW-offload egress lands hw-forwarded frames on
+	 * the IDM RX ring with no netdev ever upped. Without this, ftwifi=1 traffic
+	 * accumulates in the ring (RX_PENDING climbs) while idm_rx_count stays 0
+	 * (the R1 black hole); proven live — bringing idm links up drained the ring
+	 * 0->93, all ssid=4 (essid 0x1c). NAPI ownership is HERE (+ zx_eth_remove),
+	 * not in open/stop. findings/wifi_stage3_phaseC_R1_fix_2026-07-25.md
+	 */
+	napi_enable(&eth->napi);
+	npp_and(eth, IDM_REG_IRQ_MASK, ~IDM_IRQ_NAPI_MASK);
+	eth->started = true;
+
+	dev_info(dev, "ZX279128S ethernet ready (IRQ=%d, base=%pR, CPU_PORT=%d)\n",
+		 eth->irq_idm, platform_get_resource(pdev, IORESOURCE_MEM, 0),
+		 ZX_CPU_PORT);
+
+	zx_debugfs_init(eth);
+
+	/* [WiFi productionization 2026-08-01] Auto-bind wlan interfaces:
+	 * register a netdevice notifier so wlanX is automatically bound to
+	 * the next available idm/ssid slot when hostapd creates the vif.
+	 * The debugfs wifi_bind knob still works for manual overrides.
+	 */
+	eth->wlan_nb.notifier_call = zx_wlan_notifier;
+	register_netdevice_notifier(&eth->wlan_nb);
+
+	return 0;
+
+err_napi:
+	netif_napi_del(&eth->napi);
+err_unregister:
+	while (--i >= 0) {
+		unregister_netdev(eth->ports[i].netdev);
+		free_netdev(eth->ports[i].netdev);
+	}
+	zx_idm_free_rx(eth);
+	if (eth->desc_cpu)
+		dma_free_coherent(dev, IDM_DESC_BUF_BYTES + 0x20,
+				  eth->desc_cpu, eth->desc_dma);
+	return err;
+}
+
+/**
+ * zx_eth_remove() — Tear down the ZX279128S Ethernet driver
+ * @pdev: platform device
+ *
+ * Reverse of probe: stops DMA engines, frees IRQs, disables NAPI,
+ * unregisters netdevs, unmaps MMIO, and frees the carved DDR region.
+ *
+ * Return: 0.
+ */
+static int zx_eth_remove(struct platform_device *pdev)
+{
+	struct zx_eth *eth = platform_get_drvdata(pdev);
+	int i;
+
+	unregister_netdevice_notifier(&eth->wlan_nb);
+
+	/* 0. Stop the binder from calling into us once we tear down. */
+	zx_dsa_register_pm_ops(NULL);
+	zx_pm_ops_eth = NULL;
+
+	/* 1. Mask ALL IDM IRQs at HW (don't rely on devm_free_irq alone) */
+	npp_write(eth, IDM_REG_IRQ_MASK, IDM_IRQ_ALL_MASKED);
+	/* 2. Disable RX path in IDM control */
+	npp_write(eth, IDM_REG_RX_ENABLE, 0);
+
+	/* 3. Free IRQ before touching NAPI (handler won't schedule new work) */
+	devm_free_irq(eth->dev, eth->irq_idm, eth);
+
+	/* 4. If NAPI was ever enabled, disable it cleanly. Safe even if
+	 * never enabled — napi_disable handles NAPI_STATE_DISABLE check.
+	 */
+	if (eth->started) {
+		napi_disable(&eth->napi);
+		eth->started = false;
+	}
+	netif_napi_del(&eth->napi);
+
+	/* 5. Unregister netdevs (this calls ndo_stop on each UP iface — our
+	 *    zx_eth_stop already handles IRQ mask, but masked again above).
+	 */
+	for (i = ZX_NPORTS - 1; i >= 0; i--) {
+		if (eth->ports[i].netdev) {
+			unregister_netdev(eth->ports[i].netdev);
+			free_netdev(eth->ports[i].netdev);
+		}
+	}
+
+	/* 6. Free DMA last (nothing should reference it now) */
+	zx_idm_free_rx(eth);
+	if (eth->desc_cpu)
+		dma_free_coherent(eth->dev, IDM_DESC_BUF_BYTES + 0x20,
+				  eth->desc_cpu, eth->desc_dma);
+
+	/* 7. TM teardown — order matters! HW DMA must be quiescent before
+	 *    we free its memory or the bus will hang.
+	 */
+	if (eth->sw_dev) {
+		/* a) Mask all TM IRQs (1=masked semantics) so handler can't re-schedule */
+		tm_write(eth, TM_REG_IRQ_MASK, 0xFFFFFFFF);
+		/* b) Disable BMU — stops HW from allocating new BPs */
+		tm_write(eth, TM_REG_BMU_INIT, 0);
+		/* c) Clear DMA control bits (stop TX/RX engines) */
+		tm_write(eth, TM_REG_DMA_CTRL, 0);
+		/* d) Tiny delay to let in-flight transactions complete */
+		usleep_range(10000, 11000);
+		/* e) Now safe to free IRQ + NAPI + netdev */
+		devm_free_irq(eth->dev, eth->irq_tm, eth);
+		/* [txflowctrl] stop the 1-jiffy TX reclaim timer before the
+		 * netdev goes away (the reclaim wakes its queue). */
+		if (zx_sw_tx_reclaim_timer_ready) {
+			zx_tm_tx_reclaim_eth = NULL;
+			del_timer_sync(&zx_sw_tx_reclaim_timer);
+		}
+		unregister_netdev(eth->sw_dev);
+		netif_napi_del(&eth->tm_napi);
+		free_netdev(eth->sw_dev);
+		eth->sw_dev = NULL;
+	}
+	zx_tm_free_pools(eth);
+
+	zx_debugfs_exit();
+
+	return 0;
+}
+
+static const struct of_device_id zx_eth_of_match[] = {
+	{ .compatible = "zte,zx279128s-eth" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, zx_eth_of_match);
+
+static struct platform_driver zx_eth_driver = {
+	.probe		= zx_eth_probe,
+	.remove		= zx_eth_remove,
+	.driver = {
+		.name		= DRV_NAME,
+		.of_match_table	= zx_eth_of_match,
+	},
+};
+module_platform_driver(zx_eth_driver);
+
+MODULE_AUTHOR("H3600 mainline port");
+MODULE_DESCRIPTION("ZTE ZX279128S integrated Ethernet driver (NPP+IDM+MACs)");
+MODULE_LICENSE("GPL");

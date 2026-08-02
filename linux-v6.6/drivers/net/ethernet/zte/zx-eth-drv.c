@@ -1,666 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/* Included from zx-eth-main.c — single translation unit. */
-
-		 * drops killing concurrent handshakes). Same cookie + same raw
-		 * = same tuple (NAT recipe immutable for a conntrack flow) ->
-		 * nothing to update: report "already installed" (rc 1) so the
-		 * caller skips the HW rewrite entirely.
-		 */
-		if (e->ft_flows[self].raw == raw) {
-			*pm_slot = e->ft_flows[self].pm_slot;
-			return 1;
-		}
-		/* [H3 fix 2026-07-04] Self-REPLACE with a CHANGED 5-tuple: the
-		 * caller (zx_ft_flower_replace) is about to install a brand-new
-		 * raw/raw0 recipe at this cookie's pm_slot, but the OLD raw's 5
-		 * ways (and OLD raw0's poly-0 bucket, if it had one) are a
-		 * SEPARATE CLA address from the new ones and are never touched by
-		 * the upcoming install -- so if we didn't clear them here they'd
-		 * be orphaned: still valid_en, still HW-forwarding the dead
-		 * tuple, forever (a plain DESTROY later only clears the CURRENT
-		 * raw/raw0, never a replaced-away one). This is finding H3(a) /
-		 * H3a (findings/qa_static_bughunt_2026-07-04.md); the C2 fix
-		 * deliberately left it out of scope. Uses the same
-		 * zx_ft_uninstall() helper untrack()/partial-install-rollback
-		 * use, so "clear a flow's old footprint" has exactly one
-		 * implementation. */
-		dev_info(e->dev,
-			 "[phase6/ft] self-replace old-footprint clear: cookie=%lx old_raw=0x%04x old_raw0=%s0x%04x -> new_raw=0x%04x pm_slot=%u\n",
-			 cookie, e->ft_flows[self].raw,
-			 e->ft_flows[self].has_raw0 ? "" : "n/a-",
-			 e->ft_flows[self].raw0, raw, e->ft_flows[self].pm_slot);
-		zx_ft_uninstall(e, e->ft_flows[self].raw,
-				e->ft_flows[self].has_raw0,
-				e->ft_flows[self].raw0,
-				e->ft_flows[self].pm_slot);
-		e->ft_flows[self].raw = raw;
-		e->ft_flows[self].raw0 = raw0;
-		e->ft_flows[self].has_raw0 = has_raw0;
-		*pm_slot = e->ft_flows[self].pm_slot;
-		return 0;
-	}
-	if (free < 0)
-		return -ENOSPC;			/* tracking table full */
-	e->ft_flows[free].cookie = cookie;
-	e->ft_flows[free].raw = raw;
-	e->ft_flows[free].raw0 = raw0;
-	e->ft_flows[free].has_raw0 = has_raw0;
-	e->ft_flows[free].pm_slot = ZX_FT_PM_BASE + free;
-	e->ft_flows[free].used = true;
-	*pm_slot = e->ft_flows[free].pm_slot;
-	return 0;
-}
-
-/* Undo a reservation (no CLA write / HW write failed): free the slot. */
-static void zx_ft_flow_release(struct zx_eth *e, unsigned long cookie)
-{
-	int i;
-
-	for (i = 0; i < ZX_FT_MAX_FLOWS; i++)
-		if (e->ft_flows[i].used && e->ft_flows[i].cookie == cookie) {
-			e->ft_flows[i].used = false;
-			return;
-		}
-}
-
-/* Invalidate the buckets a tracked FT flow occupies (zero the entry in all 5 way
- * banks -> valid_en off -> key-compare misses -> flow traps). Returns 0 if
- * found+cleared, -ENOENT else.
- *
- * [C2 fix] Also zero the DN-only poly-0 ram2 bucket (raw0 & 0xff) when the
- * flow has one. That bucket is a SEPARATE ram2 address from way0
- * (raw & 0xff, cleared by the 5-way loop below) -- it is the entry
- * zx_ft_install_recipe additionally writes for DN flows because it's the
- * slot the WAN-ingress lookup actually consults. Before this fix it was
- * never cleared here, so a destroyed flow's dead tuple kept HW-forwarding
- * (stale poly-0 hit) until its pm_slot got reused by an unrelated new flow,
- * at which point the stale entry started applying the NEW flow's NAT to the
- * OLD (supposedly dead) tuple's traffic (findings/qa_static_bughunt_2026-07-04.md
- * C2 fail#1).
- *
- * [H2 fix] The unconditional 5-way zero below is safe against wiping a LIVE
- * other flow's higher-way bucket (ram3/4/5/6) only because zx_ft_flow_reserve
- * now declines (never admits) any two tracked flows that would ever share a
- * way address in any of the 5 banks (findings/qa_static_bughunt_2026-07-04.md
- * H2) -- i.e. the collision is prevented at install time, not papered over
- * here at destroy time. Do not relax reserve()'s higher-way check without
- * revisiting this loop.
- *
- * [H3 fix 2026-07-04] The actual clearing is now zx_ft_uninstall() (shared
- * with the self-REPLACE and partial-install-failure rollback call sites) --
- * this function used to duplicate the same 5-way+poly-0+ext-block zeroing
- * ad hoc. On a nonzero rc (a CLA/PM indirect-engine write reporting -EBUSY --
- * the only failure mode observed on this silicon, a wait_done timeout) retry
- * ONCE, then dev_warn loudly naming the still-possibly-live entry rather
- * than the old behavior of silently discarding the rc entirely (findings/
- * qa_static_bughunt_2026-07-04.md H3(c)). Deliberately NOT an unbounded
- * retry loop: this runs under zx_hwlock (held for the whole zx_ft_setup_cb
- * body), so retrying forever here would stall every other FT/DSA/debugfs
- * user of the same hardware indefinitely. The tracking slot is freed either
- * way -- the cookie is already gone from conntrack by the time DESTROY
- * fires, so there is no live SW-side owner left to keep the slot reserved
- * for. */
-static int zx_ft_flow_untrack(struct zx_eth *e, unsigned long cookie)
-{
-	int i, rc;
-
-	for (i = 0; i < ZX_FT_MAX_FLOWS; i++) {
-		if (e->ft_flows[i].used && e->ft_flows[i].cookie == cookie) {
-			rc = zx_ft_uninstall(e, e->ft_flows[i].raw,
-					     e->ft_flows[i].has_raw0,
-					     e->ft_flows[i].raw0,
-					     e->ft_flows[i].pm_slot);
-			if (rc) {
-				rc = zx_ft_uninstall(e, e->ft_flows[i].raw,
-						     e->ft_flows[i].has_raw0,
-						     e->ft_flows[i].raw0,
-						     e->ft_flows[i].pm_slot);
-				if (rc)
-					dev_warn(e->dev,
-						 "[phase6/ft] flow del cookie=%lx: HW clear FAILED rc=%d (after 1 retry) -- raw=0x%04x pm_slot=%u may still be live/forwarding the dead tuple; freeing tracking slot anyway (cookie already gone from conntrack, can't retry forever under zx_hwlock)\n",
-						 cookie, rc, e->ft_flows[i].raw,
-						 e->ft_flows[i].pm_slot & 0xff);
-			}
-			dev_info(e->dev,
-				 "[phase6/ft] flow del cookie=%lx -> cleared raw=0x%04x (5 ways) poly0=%s(ram2[0x%02x]) ext blk %u rc=%d\n",
-				 cookie, e->ft_flows[i].raw,
-				 e->ft_flows[i].has_raw0 ? "cleared" : "n/a",
-				 e->ft_flows[i].raw0 & 0xff,
-				 e->ft_flows[i].pm_slot & 0xff, rc);
-			e->ft_flows[i].used = false;
-			e->ft_flows[i].has_raw0 = false;
-			return rc;
-		}
-	}
-	return -ENOENT;
-}
-
-/* Resolve the next-hop MAC via route + neigh on the egress dev (mirrors stock FFE). */
-static bool zx_ft_resolve_nh(struct net_device *odev, __be32 daddr, u8 nh_mac[ETH_ALEN])
-{
-	struct neighbour *n;
-	struct rtable *rt;
-	__be32 nh_ip = daddr;
-	bool ok = false;
-
-	if (!odev)
-		return false;
-	rt = ip_route_output(dev_net(odev), daddr, 0, 0, odev->ifindex);
-	if (!IS_ERR(rt)) {
-		if (rt->rt_gw_family == AF_INET && rt->rt_gw4)
-			nh_ip = rt->rt_gw4;
-		ip_rt_put(rt);
-	}
-	n = neigh_lookup(&arp_tbl, &nh_ip, odev);
-	if (n) {
-		if (n->nud_state & NUD_VALID) {
-			read_lock_bh(&n->lock);
-			ether_addr_copy(nh_mac, n->ha);
-			read_unlock_bh(&n->lock);
-			ok = !is_zero_ether_addr(nh_mac);
-		}
-		neigh_release(n);
-	}
-	return ok;
-}
-
-/* Map a redirect/egress netdev to its chip regport. DSA per-port (lanN) slaves
- * carry their port index via dsa_port_from_netdev().
- *
- * [H4 fix 2026-07-04, findings/qa_static_bughunt_2026-07-04.md] This USED to
- * fall back to regport 2 (lan1) whenever odev was NULL or not one of our DSA
- * user ports -- which the nf_flowtable legitimately hands us for a bridge
- * master, a VLAN upper, a ppp device, or a wifi netdev sitting on top of a
- * DSA port. Guessing lan1 armed a real HW direct-forward CLA entry that
- * steered that flow's actual traffic to whatever host physically sits on
- * lan1 -- silent misdelivery to the wrong port, not merely a missed
- * optimization. There is no valid regport for a non-DSA-user-port egress
- * device, so this now returns a sentinel and the caller declines the
- * offload (stays on the SW path) instead of installing a guessed route. */
-#define ZX_FT_EGRESS_INVALID	0xff
-static const u8 zx_ft_regport[8] = { 1, 2, 3, 4, 5, 0, 6, 7 };
-static u8 zx_ft_egress_regport(struct net_device *odev)
-{
-	struct dsa_port *dp;
-
-	if (!odev || !dsa_slave_dev_check(odev))
-		return ZX_FT_EGRESS_INVALID;
-	dp = dsa_port_from_netdev(odev);
-	if (IS_ERR_OR_NULL(dp))
-		return ZX_FT_EGRESS_INVALID;
-	return zx_ft_regport[dp->index & 7];
-}
-
-/* [Stage-3 WiFi Phase C 2026-07-27] Resolve a flow's egress netdev to the WLAN
- * logical port (`essid = 0x10 | (idm_ring<<3) | ssid`, 0x10-0x1f) when it is a
- * vif currently bound in the Phase-B (idm,ssid)<->vif dispatch table — the
- * mainline equivalent of stock's get_sw_port_from_devname()
- * (decomp_all_switch.c:4515: WLAN devname -> 0x10+ssid / 0x18+ssid), which is
- * where stock's hardfast installer gets the gemport_uni_id for a WiFi DN flow
- * (switch.c:1697). Returns ZX_FT_EGRESS_INVALID when disabled, unbound, or not
- * a wifi vif — the caller then declines exactly as the pre-Phase-C H4 guard.
- *
- * Locking: called under zx_hwlock (zx_ft_setup_cb). wifi_bind's
- * register/unregister do NOT take zx_hwlock, so a concurrent unbind can race
- * this scan — same convention as the zx_idm_poll RX dispatch, and benign for
- * the same reason: only pointer EQUALITY with odev (held live by the caller's
- * flow rule) plus two u8s are read, nothing is dereferenced through
- * wlan_ndev; the worst case installs a flow whose frames then land on a
- * now-unbound node and are counted as idm_wifi_rx_nobind (delivered to the
- * idmN stack fallback), not misdelivered. */
-static u8 zx_ft_wifi_essid(struct zx_eth *e, const struct net_device *odev)
-{
-	int i;
-
-	if (!odev || !READ_ONCE(e->ft_wifi_en))
-		return ZX_FT_EGRESS_INVALID;
-	for (i = 0; i < 16; i++) {
-		struct zx_wifi_dispatch_node *wn = &e->zx_wifi_dispatch[i];
-
-		if (READ_ONCE(wn->enabled) && wn->wlan_ndev == odev)
-			return 0x10 | ((wn->idm & 1) << 3) | (wn->ssid & 7);
-	}
-	return ZX_FT_EGRESS_INVALID;
-}
-
-/* [Stage-3 WiFi UP 2026-07-28] Resolve a flow's INGRESS ifindex (from the
- * nf_flow_table rule's FLOW_DISSECTOR_KEY_META) to the flow-key header byte:
- * a currently-bound WiFi vif returns the fabric rule header for its ring
- * (0x38 = idm1, 0x30 = idm0); anything else returns the eth header 0x48.
- * Gated by ftwifi like zx_ft_wifi_essid, so ftwifi=0 keeps every install
- * byte-identical to the pre-fix driver. Same locking convention as
- * zx_ft_wifi_essid (integer compare against the bind-time cached ifindex; a
- * racing unbind at worst mis-keys one install, which then just LOOK_UP_MISSes
- * and stays on the SW path). */
-static u8 zx_ft_wifi_ing_hdr(struct zx_eth *e, int ifindex)
-{
-	int i;
-
-	if (!ifindex || !READ_ONCE(e->ft_wifi_en))
-		return ZX_FT_KEY_HDR_ETH;
-	for (i = 0; i < 16; i++) {
-		struct zx_wifi_dispatch_node *wn = &e->zx_wifi_dispatch[i];
-
-		if (READ_ONCE(wn->enabled) && wn->wlan_ifindex == ifindex)
-			return ZX_FT_KEY_HDR_IDM(wn->idm);
-	}
-	return ZX_FT_KEY_HDR_ETH;
-}
-
-/* Parse a flow_cls_offload 5-tuple + actions and install/remove the HW recipe. */
-static int zx_ft_flower_replace(struct zx_eth *e, struct flow_cls_offload *cls)
-{
-	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
-	struct flow_action_entry *act;
-	struct net_device *odev = NULL;
-	__be32 saddr = 0, daddr = 0;
-	__be16 sport = 0, dport = 0;
-	u8 nh_mac[ETH_ALEN] = {0};
-	bool have_mac = false;
-	u8 ip_proto = 0;
-	u8 eg_regport;
-	u8 key_hdr = ZX_FT_KEY_HDR_ETH;
-	int ing_ifindex = 0;
-	u16 raw, raw0 = 0, pm_slot = 0;
-	bool is_dn, has_raw0;
-	struct zx_ft_nat nat = {0};
-	int i, rc;
-
-	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
-		struct flow_match_basic m;
-
-		flow_rule_match_basic(rule, &m);
-		ip_proto = m.key->ip_proto;
-	}
-	/* [Stage-3 WiFi UP 2026-07-28] nf_flow_table_offload.c always emits the
-	 * META key with ingress_ifindex = the direction's iifidx — the ONLY
-	 * ingress identity in the rule, needed to key fabric-ingress (WiFi vif)
-	 * flows for their per-inport CLA extract rule (see key_hdr below). */
-	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_META)) {
-		struct flow_match_meta m;
-
-		flow_rule_match_meta(rule, &m);
-		ing_ifindex = m.key->ingress_ifindex;
-	}
-	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IPV4_ADDRS)) {
-		struct flow_match_ipv4_addrs m;
-
-		flow_rule_match_ipv4_addrs(rule, &m);
-		saddr = m.key->src;
-		daddr = m.key->dst;
-	}
-	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_PORTS)) {
-		struct flow_match_ports m;
-
-		flow_rule_match_ports(rule, &m);
-		sport = m.key->src;
-		dport = m.key->dst;
-	}
-
-	/* Only L3 5-tuple flows (TCP/UDP) are offloadable; ICMP/no-port -> SW. */
-	if ((ip_proto != IPPROTO_TCP && ip_proto != IPPROTO_UDP) || !daddr)
-		return -EOPNOTSUPP;
-
-	flow_action_for_each(i, act, &rule->action) {
-		switch (act->id) {
-		case FLOW_ACTION_REDIRECT:
-		case FLOW_ACTION_REDIRECT_INGRESS:
-			odev = act->dev;
-			break;
-		case FLOW_ACTION_MANGLE:
-			if (act->mangle.htype == FLOW_ACT_MANGLE_HDR_TYPE_ETH) {
-				u32 v = act->mangle.val;
-
-				if (act->mangle.offset == 0) {
-					nh_mac[0] = v & 0xff;
-					nh_mac[1] = (v >> 8) & 0xff;
-					nh_mac[2] = (v >> 16) & 0xff;
-					nh_mac[3] = (v >> 24) & 0xff;
-				} else if (act->mangle.offset == 4) {
-					nh_mac[4] = v & 0xff;
-					nh_mac[5] = (v >> 8) & 0xff;
-				}
-				have_mac = true;
-			} else if (act->mangle.htype ==
-				   FLOW_ACT_MANGLE_HDR_TYPE_IP4) {
-				/* nf_flow_table: offset 12=saddr(SNAT), 16=daddr(DNAT);
-				 * val = the new __be32 address (mask covers all 32b). */
-				if (act->mangle.offset ==
-				    offsetof(struct iphdr, saddr)) {
-					nat.new_ip = (__force __be32)act->mangle.val;
-					nat.snat = true;
-				} else if (act->mangle.offset ==
-					   offsetof(struct iphdr, daddr)) {
-					nat.new_ip = (__force __be32)act->mangle.val;
-					nat.dnat = true;
-				}
-			} else if (act->mangle.htype ==
-					FLOW_ACT_MANGLE_HDR_TYPE_TCP ||
-				   act->mangle.htype ==
-					FLOW_ACT_MANGLE_HDR_TYPE_UDP) {
-				/* nf_flow_table: L4 ports at word offset 0. mask
-				 * ~0xffff0000 => rewrite SOURCE port (high 16b),
-				 * val=htonl(port<<16); mask ~0xffff => DEST port
-				 * (low 16b), val=htonl(port). */
-				u32 v = ntohl((__force __be32)act->mangle.val);
-
-				if (act->mangle.mask == (__force u32)~htonl(0xffff0000)) {
-					nat.new_sport = (v >> 16) & 0xffff;
-					nat.sport_set = true;
-				} else if (act->mangle.mask ==
-					   (__force u32)~htonl(0xffff)) {
-					nat.new_dport = v & 0xffff;
-					nat.dport_set = true;
-				}
-			}
-			break;
-		default:
-			break;
-		}
-	}
-
-	if (!have_mac && !zx_ft_resolve_nh(odev, daddr, nh_mac)) {
-		dev_info(e->dev,
-			 "[phase6/ft] cookie=%lx %pI4:%u->%pI4:%u no resolved nh-MAC, skip\n",
-			 cls->cookie, &saddr, ntohs(sport), &daddr, ntohs(dport));
-		return -EOPNOTSUPP;
-	}
-
-	eg_regport = zx_ft_egress_regport(odev);
-	if (eg_regport == ZX_FT_EGRESS_INVALID) {
-		/* [Stage-3 WiFi Phase C 2026-07-27] Before declining, try the
-		 * WiFi resolution: a bound vif egress resolves to the WLAN
-		 * logical port essid (0x10-0x1f), which the recipe installs as
-		 * gemport_uni_id (the HW-validated egress-steering field, now
-		 * carrying stock's WiFi encoding). Gated by debugfs "ftwifi"
-		 * (default off -> this block is a no-op and the H4 decline
-		 * below is byte-identical to the pre-Phase-C behavior). */
-		eg_regport = zx_ft_wifi_essid(e, odev);
-		if (eg_regport != ZX_FT_EGRESS_INVALID)
-			dev_info(e->dev,
-				 "[phaseC/ft] cookie=%lx egress %s -> wifi essid 0x%02x (idm%u ssid%u), installing DN hardfast\n",
-				 cls->cookie, netdev_name(odev), eg_regport,
-				 (eg_regport >> 3) & 1, eg_regport & 7);
-	}
-	if (eg_regport == ZX_FT_EGRESS_INVALID) {
-		/* [H4 fix 2026-07-04] odev is not a DSA user port of this switch
-		 * (bridge master / VLAN upper / ppp / wifi / NULL) -- there is no
-		 * regport to hand the HW, and guessing one (the old lan1
-		 * fallback) misdelivers real traffic. Decline; the flow stays on
-		 * the SW flowtable fast-path, which handles any egress device. */
-		dev_info(e->dev,
-			 "[phase6/ft] offload declined: egress dev %s is not a DSA user port of this switch (H4 guard) -> stays in SW\n",
-			 odev ? netdev_name(odev) : "(null)");
-		return -EOPNOTSUPP;
-	}
-
-	/* [up-hwoffload 2026-07-04] UPSTREAM (LAN->WAN, egress = WAN regport) used to
-	 * stay on the SW flowtable fast-path: the UP direction's HW-forwarded frames
-	 * reached the MAC4 wire but with src IP 0.0.0.0 (the PM engine's flow_info
-	 * FETCH for the UP direction lands on a different address than the external
-	 * dir-0 table the old recipe wrote — measured 2026-07-04 via the sport-encoded
-	 * fill: the server never saw the encoded ports). Root cause (RE'd, see
-	 * findings/stock_red_drain_up_RE_2026-07-04.md CANDIDATE 2 and the up_idx_fix
-	 * comment on zx_ft_pack_cla): mainline packed cmd_flow_id as pm_slot*128+1 for
-	 * BOTH directions; DN's fetch happens to land >=0x400 (external DDR, which the
-	 * recipe also populates -> works by coincidence), UP's identical fetch lands on
-	 * the SAME resolved index but nothing was ever written there for UP's values.
-	 * FIXED by repacking the UP entry's cmd_flow_id = pm_slot directly (<0x400,
-	 * dir=UP=0 -> internal ram0[pm_slot], which the recipe already writes).
-	 * Verified on-device 2026-07-04: UP HW-forwarded frames now carry the correct
-	 * SNAT src IP (was 0.0.0.0), cla_up_fwd increments, ACKs no longer trap to the
-	 * CPU -> removes the RED-drop flood that fed the residual sustained-download
-	 * admission latch (findings/wedge_txflowctrl_fix_2026-07-04.md). e->ft_up_en
-	 * now DEFAULTS to 1 (see zx_eth_probe); the debugfs "ftup" knob still allows
-	 * forcing UP back to SW-only for regression testing. */
-	if (eg_regport == ZX_WAN_REGPORT && !READ_ONCE(e->ft_up_en)) {
-		/* Ratelimited: the nf_flow_table re-REPLACE storm (see
-		 * zx_ft_flow_reserve) re-delivers this several times per second
-		 * for every live download; unlimited it floods/wraps the dmesg
-		 * ring (QA 2026-07-04) and each line costs a slow UART printk. */
-		dev_info_ratelimited(e->dev,
-			 "[phase6/ft] cookie=%lx %pI4:%u->%pI4:%u UP dir -> SW fast-path (no HW install)\n",
-			 cls->cookie, &saddr, ntohs(sport), &daddr, ntohs(dport));
-		return 0;
-	}
-
-	/* Reserve a tracking slot BEFORE writing the CLA: decline (stay SW) on a
-	 * bucket collision or a full table instead of clobbering/leaking. The
-	 * reserve-time hash MUST match the install-time hash, so derive the same
-	 * ingress-awareness (WAN-ingress = egress toward a LAN port) here.
-	 *
-	 * [C2 fix] zx_ft_install_recipe ALSO writes a poly-0 ram2 entry
-	 * (raw0 & 0xff) for DN flows (eg_regport != ZX_WAN_REGPORT) -- the slot
-	 * the WAN-ingress lookup actually consults. Compute that same raw0 here
-	 * (pure SW CRC, no HW engine access, same pattern already used for
-	 * `raw` which install_recipe independently recomputes too) so reserve()
-	 * can collision-check it and untrack() can later clear it. */
-	is_dn = eg_regport != ZX_WAN_REGPORT;
-	/* [Stage-3 WiFi UP 2026-07-28] The UP direction of a WiFi client's flow
-	 * ingresses the FABRIC (bound vif -> rx_handler -> idm ring), which
-	 * classifies under its per-inport CLA group (rule 0x70/0x60), NOT the
-	 * eth group-9 rule 0x90 — so the key header, the entry's extr_index,
-	 * and consequently raw/raw0 all change. Resolve the ingress ifindex
-	 * against the wifi_bind table (ftwifi-gated; eth flows and ftwifi=0 stay
-	 * byte-identical). Only the UP direction (egress == WAN) can be
-	 * fabric-ingress on this topology; DN's ingress is the WAN port. */
-	if (!is_dn)
-		key_hdr = zx_ft_wifi_ing_hdr(e, ing_ifindex);
-	raw = zx_ft_flow_hash(e, ip_proto, saddr, daddr, sport, dport, is_dn,
-			      key_hdr);
-	/* WiFi-ingress UP flows get NO poly-0 slot (fabric probes the poly-1
-	 * way set, proven live — see zx_ft_install_recipe), so has_raw0 stays
-	 * DN-only. */
-	has_raw0 = is_dn;
-	if (has_raw0)
-		raw0 = zx_ft_flow_hash_poly0(ip_proto, saddr, daddr, sport,
-					     dport, is_dn, key_hdr);
-	if (key_hdr != ZX_FT_KEY_HDR_ETH)
-		dev_info(e->dev,
-			 "[phaseC/ft] cookie=%lx ingress ifindex %d is a bound wifi vif -> fabric key_hdr=0x%02x (rule 0x%02x), installing UP hardfast\n",
-			 cls->cookie, ing_ifindex, key_hdr, key_hdr << 1);
-	rc = zx_ft_flow_reserve(e, cls->cookie, raw, has_raw0, raw0, &pm_slot);
-	if (rc == 1)		/* identical flow already live: idempotent no-op */
-		return 0;
-	if (rc == -EOPNOTSUPP) {
-		dev_info(e->dev,
-			 "[phase6/ft] offload declined: CLA bucket collision cookie=%lx raw 0x%04x (way0 0x%02x owned) -> stays in SW\n",
-			 cls->cookie, raw, raw & 0xff);
-		return rc;
-	}
-	if (rc < 0) {
-		dev_info(e->dev,
-			 "[phase6/ft] offload declined: flow table full (max %d) cookie=%lx -> stays in SW\n",
-			 ZX_FT_MAX_FLOWS, cls->cookie);
-		return -EOPNOTSUPP;
-	}
-
-	rc = zx_ft_install_recipe(e, ip_proto, saddr, daddr, sport, dport,
-				  nh_mac, eg_regport, pm_slot, &nat, key_hdr);
-	if (rc < 0) {
-		/* [H3 fix 2026-07-04] Partial-install failure (findings/
-		 * qa_static_bughunt_2026-07-04.md H3(b)): zx_ft_install_recipe
-		 * accumulates rc across ALL 5 way writes + the poly-0 write (it
-		 * does not bail out after the first failure), so by the time we
-		 * get here anywhere from 0 to all of those writes may have
-		 * landed. zx_ft_flow_release() alone (the old behavior) only
-		 * freed the TRACKING slot -- any ways/poly-0/PM entries that DID
-		 * land stayed live and untracked, and once the freed pm_slot got
-		 * reused by a future flow, THAT flow's install fed the orphan
-		 * entry its rewrite state (same corruption class as C2). Unwind
-		 * with the exact (raw, raw0, pm_slot) this attempt just used --
-		 * re-zeroing a location that was never actually written is a
-		 * harmless no-op, so it's safe to call unconditionally rather
-		 * than trying to track which subset of writes succeeded. */
-		zx_ft_uninstall(e, raw, has_raw0, raw0, pm_slot);
-		zx_ft_flow_release(e, cls->cookie);
-		return rc;
-	}
-	return 0;
-}
-
-/* FLOW_CLS_STATS: the nf_flow_table GC polls every HW-offloaded flow for activity
- * and refreshes flow->timeout from the reported lastused
- * (nf_flow_table_core.c:nf_flow_offload_gc_step -> nf_flow_offload_stats ->
- * flow_offload_work_stats: flow->timeout = max(timeout, lastused + get_timeout)).
- * HW-forwarded packets BYPASS the CPU, so with no stats report the core sees the
- * flow as idle, ages it out (FLOW_CLS_DESTROY) and re-installs on the next trapped
- * packet (FLOW_CLS_REPLACE) -> the heavy install/destroy churn that leaves the HW
- * entry absent most of the time (the ~17 % hit-rate). For a resident tracked flow
- * report lastused = now (keepalive) so the core keeps it offloaded and does NOT GC
- * it while our HW entry is installed.
- *
- * The CLA exposes no per-flow/per-bucket HW hit counter indexable by pm_slot (only
- * the global cla_tx_fwd 0x9238c3c0 and a per-entry age bit in ram2 byte0x10 bit6),
- * so pkts/bytes are reported 0; the keepalive relies on conntrack teardown /
- * FLOW_CLS_DESTROY and the 32-entry cap to release a flow. FLOW_ACTION_HW_STATS_
- * DELAYED matches the GC-poll cadence (mtk_ppe/mlx5 pattern). Returns -EOPNOTSUPP
- * for a cookie we do not track so the core never refreshes a flow we don't own. */
-static int zx_ft_flower_stats(struct zx_eth *e, struct flow_cls_offload *cls)
-{
-	int i;
-
-	for (i = 0; i < ZX_FT_MAX_FLOWS; i++)
-		if (e->ft_flows[i].used && e->ft_flows[i].cookie == cls->cookie) {
-			flow_stats_update(&cls->stats, 0, 0, 0, jiffies,
-					  FLOW_ACTION_HW_STATS_DELAYED);
-			return 0;
-		}
-	return -EOPNOTSUPP;
-}
-
-static int zx_ft_setup_cb(enum tc_setup_type type, void *type_data, void *cb_priv)
-{
-	struct zx_eth *e = cb_priv;
-	struct flow_cls_offload *cls = type_data;
-	int rc;
-
-	if (type != TC_SETUP_CLSFLOWER)
-		return -EOPNOTSUPP;
-
-	/* [ft_lock 2026-07-04] nf_flow_table dispatches REPLACE/DESTROY/STATS
-	 * on three separate WQ_UNBOUND workqueues — mutually concurrent, and
-	 * concurrent with the DSA tc-flower path (rtnl) + debugfs pokes that
-	 * drive the identical CLA/PM/hash-engine hardware and the ft_flows[]
-	 * table. Serialize the whole callback body (reserve/install/untrack)
-	 * with the shared cross-module lock. See
-	 * findings/qa_static_bughunt_2026-07-04.md finding C1. */
-	mutex_lock(&zx_hwlock);
-	switch (cls->command) {
-	case FLOW_CLS_REPLACE:
-		rc = zx_ft_flower_replace(e, cls);
-		break;
-	case FLOW_CLS_DESTROY:
-		dev_info(e->dev, "[phase6/ft] flower destroy cookie=%lx\n", cls->cookie);
-		/* [H3 fix 2026-07-04] Look at the untrack rc instead of discarding
-		 * it (findings/qa_static_bughunt_2026-07-04.md H3(c)) -- the
-		 * dev_warn on a real failure now happens inside
-		 * zx_ft_flow_untrack() itself (it has the raw/pm_slot details to
-		 * make the warning actionable); nf_flow_table has no use for a
-		 * nonzero FLOW_CLS_DESTROY return (there's no "undo a destroy"),
-		 * so this callback still always reports success upstream. */
-		rc = zx_ft_flow_untrack(e, cls->cookie);
-		if (rc && rc != -ENOENT)
-			dev_warn_ratelimited(e->dev,
-				"[phase6/ft] destroy cookie=%lx: untrack reported rc=%d -- see the HW clear FAILED warning above if the retry also failed\n",
-				cls->cookie, rc);
-		rc = 0;
-		break;
-	case FLOW_CLS_STATS:
-		rc = zx_ft_flower_stats(e, cls);
-		break;
-	default:
-		rc = -EOPNOTSUPP;
-		break;
-	}
-	mutex_unlock(&zx_hwlock);
-	return rc;
-}
-
-static LIST_HEAD(zx_ft_block_cb_list);
-
-static int zx_eth_setup_block(struct zx_eth *e, struct flow_block_offload *f)
-{
-	struct flow_block_cb *block_cb;
-
-	/* NB: on Linux 6.6 the nf_flow_table offload core binds its block with
-	 * binder_type = FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS (see
-	 * nf_flow_table_block_offload_init(), nf_flow_table_offload.c) and
-	 * dispatches it via ndo_setup_tc(dev, TC_SETUP_FT, bo). There is NO
-	 * distinct FLOW_BLOCK_BINDER_TYPE_FT in this kernel, so the FT flowtable
-	 * block is accepted by the CLSACT_INGRESS arm below — no extra case
-	 * needed. (Newer kernels add FLOW_BLOCK_BINDER_TYPE_FT; add it here if
-	 * this driver is forward-ported.) */
-	if (f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS &&
-	    f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_EGRESS)
-		return -EOPNOTSUPP;
-
-	f->driver_block_list = &zx_ft_block_cb_list;
-
-	switch (f->command) {
-	case FLOW_BLOCK_BIND:
-		block_cb = flow_block_cb_alloc(zx_ft_setup_cb, e, e, NULL);
-		if (IS_ERR(block_cb))
-			return PTR_ERR(block_cb);
-		flow_block_cb_add(block_cb, f);
-		list_add_tail(&block_cb->driver_list, &zx_ft_block_cb_list);
-		return 0;
-	case FLOW_BLOCK_UNBIND:
-		block_cb = flow_block_cb_lookup(f->block, zx_ft_setup_cb, e);
-		if (!block_cb)
-			return -ENOENT;
-		flow_block_cb_remove(block_cb, f);
-		list_del(&block_cb->driver_list);
-		return 0;
-	default:
-		return -EOPNOTSUPP;
-	}
-}
-
-static int zx_eth_setup_tc(struct net_device *ndev, enum tc_setup_type type,
-			   void *type_data)
-{
-	struct zx_eth *e;
-
-	/* Two netdev flavours share this hook with DIFFERENT netdev_priv
-	 * layouts: the idm%d user netdevs store a (struct zx_eth_port *),
-	 * while the `sw` conduit stores a (struct zx_eth *) directly. DSA's
-	 * TC_SETUP_FT delegation targets the conduit (sw), so detect it and
-	 * decode priv accordingly — misreading it here would deref garbage. */
-	if (ndev->netdev_ops == &zx_eth_netdev_ops) {
-		struct zx_eth_port *port = *(struct zx_eth_port **)netdev_priv(ndev);
-
-		e = port->eth;
-	} else {
-		e = *(struct zx_eth **)netdev_priv(ndev);
-	}
-
-	switch (type) {
-	case TC_SETUP_BLOCK:
-	case TC_SETUP_FT:
-		return zx_eth_setup_block(e, type_data);
-	default:
-		return -EOPNOTSUPP;
-	}
-}
-
-/* chip_tm_init's trap_queue setup — replays def_ptl_pkt_map via cla_set_cpu_queue_id.
- * RE'd from switch.ko:chip_tm_init @ 0x36ac calling tm.ko functions.
- * Per stock, maps each (ptype, port) → CPU queue id. Port 5 is CPU (skipped).
- */
-#include "zx_pkt_map.h"
-
-static int zx_cla_set_cpu_queue_id(struct zx_eth *e, u32 addr, u8 qid)
-{
-	u32 ram7_data[17] = {0,};
-
-	ram7_data[0] = qid;
-	/* Reuses zx_cla_write_entry: writes data[0..16] then CMD with ram_id<<22.
-	 * For trap_queue setup we only set data[0]=qid, rest 0.
-	 */
-	return zx_cla_write_entry(e, 7, addr, ram7_data);
-}
-
 /* ===================================================================
  * Per-function C ports of stock chip_tm_init's call chain.
  *
@@ -3364,3 +2701,663 @@ static ssize_t zx_extwrite_write(struct file *f, const char __user *ubuf,
 
 	if (count == 0 || count >= sizeof(buf))
 		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (!e->pm_ext)
+		return -ENODEV;
+	if (sscanf(buf, "%7s", cmd) != 1)
+		return -EINVAL;
+
+	/* [ft_lock] this node pokes the SAME PM-external DDR carve that
+	 * zx_ft_ext_flow_write/_clear (the FT install/untrack path, held
+	 * under zx_hwlock via zx_ft_setup_cb) read/write per-flow — serialize
+	 * every branch below against that path + sibling debugfs tools. */
+	mutex_lock(&zx_hwlock);
+	if (!strcmp(cmd, "z")) {
+		memset_io(e->pm_ext + ZX_PM_EXT_FLOW_DIR0, 0, 0x8000 * 16);
+		memset_io(e->pm_ext + ZX_PM_EXT_FLOW_DIR1, 0, 0x8000 * 16);
+		mutex_unlock(&zx_hwlock);
+		pr_info("[ZXETH] extwrite: BOTH dir tables zeroed\n");
+		return count;
+	}
+	if (!strcmp(cmd, "r")) {
+		u8 ent[16];
+		void __iomem *p;
+
+		if (sscanf(buf, "%*s %x %x", &dir, &idx) != 2 || idx >= 0x8000) {
+			mutex_unlock(&zx_hwlock);
+			return -EINVAL;
+		}
+		p = e->pm_ext +
+		    (dir ? ZX_PM_EXT_FLOW_DIR1 : ZX_PM_EXT_FLOW_DIR0) + idx * 16;
+		memcpy_fromio(ent, p, 16);
+		mutex_unlock(&zx_hwlock);
+		pr_info("[ZXETH] ext dir%u[%#x] = %16ph\n", dir & 1, idx, ent);
+		return count;
+	}
+	if (!strcmp(cmd, "w")) {
+		if (sscanf(buf, "%*s %x %x %x %x %x",
+			   &dir, &idx, &w[0], &w[1], &w[2]) != 5 || idx >= 0x8000) {
+			mutex_unlock(&zx_hwlock);
+			return -EINVAL;
+		}
+		zx_extwrite_one(e, dir & 1, idx, w);
+		mutex_unlock(&zx_hwlock);
+		pr_info("[ZXETH] extwrite dir%u[%#x] = %08x %08x %08x\n",
+			dir & 1, idx, w[0], w[1], w[2]);
+		return count;
+	}
+	if (!strcmp(cmd, "f") || !strcmp(cmd, "enc")) {
+		bool enc = cmd[0] == 'e';
+
+		if (sscanf(buf, "%*s %x %x %x %x %x %x",
+			   &dir, &idx, &cnt, &w[0], &w[1], &w[2]) != 6 ||
+		    idx >= 0x8000 || cnt > 0x8000 || idx + cnt > 0x8000) {
+			mutex_unlock(&zx_hwlock);
+			return -EINVAL;
+		}
+		for (i = idx; i < idx + cnt; i++) {
+			u32 fi[3] = { w[0], w[1], w[2] };
+
+			if (enc) {
+				u16 sp = ((dir & 1) << 15) | (i & 0x7fff);
+
+				fi[0] = (fi[0] & ~(0x3fffu << 18)) |
+					((u32)(sp & 0x3fff) << 18);
+				fi[1] = (fi[1] & ~3u) | (sp >> 14);
+			}
+			zx_extwrite_one(e, dir & 1, i, fi);
+		}
+		mutex_unlock(&zx_hwlock);
+		pr_info("[ZXETH] extwrite %s dir%u[%#x..%#x] base %08x %08x %08x\n",
+			cmd, dir & 1, idx, idx + cnt - 1, w[0], w[1], w[2]);
+		return count;
+	}
+	mutex_unlock(&zx_hwlock);
+	return -EINVAL;
+}
+
+static const struct file_operations zx_extwrite_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_extwrite_write,
+	.llseek = default_llseek,
+};
+
+/* fttest: DEBUG/TEST-ONLY entry point into the real zx_ft_flow_reserve() /
+ * zx_ft_install_recipe() / zx_ft_flow_untrack() functions with a
+ * synthetic, test-controlled cookie and 5-tuple, so a regression test
+ * (scratchpad/regress.py's replace_orphan) can drive the exact production
+ * self-REPLACE / partial-install / DESTROY code paths — including the
+ * [H3 fix 2026-07-04] zx_ft_uninstall() rollback call — deterministically,
+ * without depending on nf_flowtable ever choosing to redeliver a real
+ * connection's cookie with a changed tuple (it structurally can't:
+ * nf_flow_table_offload.c assigns cls->cookie = (unsigned long)&tuple, a
+ * fixed sub-struct address inside the flow_offload object for that
+ * direction, so a genuinely different 5-tuple on the SAME cookie never
+ * occurs via real traffic on this conduit path — see
+ * findings/fix_h3_rollback_2026-07-04.md for the full reachability
+ * analysis). This node reuses the exact static functions the real
+ * FLOW_CLS_REPLACE/DESTROY dispatch (zx_ft_setup_cb) calls; it does not
+ * duplicate any install/rollback logic of its own.
+ *   install <cookie> <saddr> <daddr> <sport> <dport> <eg_regport>  (all hex
+ *     except eg_regport, which is decimal; TCP always assumed)
+ *   destroy <cookie>                                                (hex)
+ * A fixed test next-hop MAC (02:00:00:00:00:01, locally-administered) is
+ * used for install — the recipe's CLA/PM writes don't require a resolvable
+ * real neighbor, only zx_ft_flower_replace's caller-side zx_ft_resolve_nh()
+ * does, and this node bypasses that caller entirely. */
+static ssize_t zx_fttest_write(struct file *f, const char __user *ubuf,
+			       size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	static const u8 test_mac[ETH_ALEN] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x01 };
+	struct zx_ft_nat nat = {0};
+	char buf[128];
+	unsigned long cookie;
+	unsigned int saddr, daddr, sport, dport, eg_regport;
+	unsigned int key_hdr = ZX_FT_KEY_HDR_ETH;
+	u16 raw, raw0 = 0, pm_slot = 0;
+	bool is_dn, has_raw0;
+	int n, rc;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+
+	if (sscanf(buf, "destroy %lx", &cookie) == 1) {
+		mutex_lock(&zx_hwlock);
+		rc = zx_ft_flow_untrack(e, cookie);
+		mutex_unlock(&zx_hwlock);
+		pr_info("[fttest] destroy cookie=%lx rc=%d\n", cookie, rc);
+		return count;
+	}
+	/* [H4 fix 2026-07-04, findings/qa_static_bughunt_2026-07-04.md] "resolve
+	 * <devname>": drive the REAL, unmodified zx_ft_egress_regport() (the
+	 * exact function zx_ft_flower_replace() calls on every REPLACE) against
+	 * a live net_device looked up by name, and apply the same
+	 * ZX_FT_EGRESS_INVALID guard zx_ft_flower_replace() applies, so a
+	 * regression test can deterministically prove the H4 fix without
+	 * needing to stage a genuine non-DSA nf_flowtable egress on real
+	 * traffic. (Staging that live was attempted and found infeasible on
+	 * this rig's topology -- see the regress.py h4_nondsa_decline
+	 * docstring/findings/fix_h4_nondsa_2026-07-04.md for why -- so this
+	 * exercises the identical production resolver + sentinel check via a
+	 * deterministic, HW-write-free debugfs query instead. No installs, no
+	 * HW state touched -- purely a resolve-and-report.) */
+	{
+		char devname[IFNAMSIZ];
+
+		if (sscanf(buf, "resolve %15s", devname) == 1) {
+			struct net_device *d = dev_get_by_name(&init_net, devname);
+			u8 rp = zx_ft_egress_regport(d);
+			/* [Phase C 2026-07-27] also report the wifi resolution
+			 * (real helper, gated by ftwifi like production). */
+			u8 we = zx_ft_wifi_essid(e, d);
+
+			if (rp != ZX_FT_EGRESS_INVALID)
+				pr_info("[fttest] resolve dev=%s -> VALID regport=%u\n",
+					devname, rp);
+			else if (we != ZX_FT_EGRESS_INVALID)
+				pr_info("[fttest] resolve dev=%s -> WIFI essid=0x%02x (idm%u ssid%u)\n",
+					devname, we, (we >> 3) & 1, we & 7);
+			else
+				pr_info("[fttest] resolve dev=%s -> INVALID (H4 guard would decline; ftwifi=%u)\n",
+					devname, READ_ONCE(e->ft_wifi_en));
+			if (d)
+				dev_put(d);
+			return count;
+		}
+	}
+	/* [Stage-3 WiFi UP 2026-07-28] optional 7th arg = key_hdr (hex): the
+	 * flow-key header byte (0x48 eth default; 0x38/0x30 = fabric idm1/idm0)
+	 * so the WiFi-UP fabric-keyed install path is white-box testable
+	 * without staging a live WiFi client (mirrors the production
+	 * zx_ft_wifi_ing_hdr resolution, which real traffic exercises). */
+	n = sscanf(buf, "install %lx %x %x %x %x %u %x",
+		   &cookie, &saddr, &daddr, &sport, &dport, &eg_regport,
+		   &key_hdr);
+	if (n == 6 || n == 7) {
+		if (n == 6)
+			key_hdr = ZX_FT_KEY_HDR_ETH;
+		is_dn = eg_regport != ZX_WAN_REGPORT;
+		has_raw0 = is_dn;	/* fabric UP: poly-1 ways only */
+		mutex_lock(&zx_hwlock);
+		raw = zx_ft_flow_hash(e, IPPROTO_TCP, htonl(saddr), htonl(daddr),
+				      htons((u16)sport), htons((u16)dport), is_dn,
+				      (u8)key_hdr);
+		if (has_raw0)
+			raw0 = zx_ft_flow_hash_poly0(IPPROTO_TCP, htonl(saddr),
+						     htonl(daddr), htons((u16)sport),
+						     htons((u16)dport), is_dn,
+						     (u8)key_hdr);
+		rc = zx_ft_flow_reserve(e, cookie, raw, has_raw0, raw0, &pm_slot);
+		if (rc == 0)
+			rc = zx_ft_install_recipe(e, IPPROTO_TCP, htonl(saddr),
+						  htonl(daddr), htons((u16)sport),
+						  htons((u16)dport), test_mac,
+						  eg_regport & 0xff, pm_slot, &nat,
+						  (u8)key_hdr);
+		mutex_unlock(&zx_hwlock);
+		pr_info("[fttest] install cookie=%lx key_hdr=0x%02x raw=0x%04x raw0=0x%04x pm_slot=%u rc=%d\n",
+			cookie, key_hdr, raw, raw0, pm_slot, rc);
+		return count;
+	}
+	return -EINVAL;
+}
+
+static const struct file_operations zx_fttest_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_fttest_write,
+	.llseek = default_llseek,
+};
+
+/* pmpeek: read back a PM RAM entry. "<ram_id> <addr>" (hex) → logs 8 words. */
+static ssize_t zx_pmpeek_write(struct file *f, const char __user *ubuf,
+			       size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[64];
+	u32 ram_id = 0, addr = 0, data[8] = {0};
+	int rc;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (sscanf(buf, "%x %x", &ram_id, &addr) != 2)
+		return -EINVAL;
+	/* [ft_lock] serialize against the FT/DSA offload paths + sibling
+	 * debugfs pokes on the PM engine. */
+	mutex_lock(&zx_hwlock);
+	rc = zx_pp_pm_read_entry(e, ram_id & 0xff, addr, data);
+	mutex_unlock(&zx_hwlock);
+	pr_info("[ZXETH] pmpeek pm-ram%u addr%#x rc=%d: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+		ram_id, addr, rc, data[0], data[1], data[2], data[3],
+		data[4], data[5], data[6], data[7]);
+	return rc ? rc : count;
+}
+
+static const struct file_operations zx_pmpeek_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_pmpeek_write,
+	.llseek = default_llseek,
+};
+
+/* pmfill: write ONE PM flow_info entry (8 words) to ALL in-PM ram0 slots [0..0x3ff],
+ * to brute-force the CLA→flow_info linkage index (analogue of fill520 for the CLA hash).
+ * "<w0> ... <w7>" hex. Used to test whether a routed flow HW-forwards once the flow_info
+ * (→next-hop) is present at whatever index the CLA match links to. */
+static ssize_t zx_pmfill_write(struct file *f, const char __user *ubuf,
+			       size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[160];
+	u32 data[8] = {0};
+	int n = 0, consumed, ok = 0;
+	unsigned int a;
+	char *p;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	p = buf;
+	while (n < 8 && sscanf(p, "%x%n", &data[n], &consumed) == 1) {
+		n++;
+		p += consumed;
+	}
+	/* [ft_lock] serialize this bulk 0x400-slot write against the FT/DSA
+	 * offload paths + sibling debugfs pokes on the PM engine. */
+	mutex_lock(&zx_hwlock);
+	for (a = 0; a < 0x400; a++)
+		if (zx_pp_pm_write_entry(e, 0, a, data) == 0)
+			ok++;
+	mutex_unlock(&zx_hwlock);
+	pr_info("[ZXETH] pmfill: flow_info (%d words) -> %d ram0 slots\n", n, ok);
+	return count;
+}
+
+static const struct file_operations zx_pmfill_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_pmfill_write,
+	.llseek = default_llseek,
+};
+
+/* mdio: live read/write of a PHY register via the mii_bus (WAN ZX5201 = phy 8).
+ * "<phy> <reg>" reads (logs value); "<phy> <reg> <val>" writes. For diagnosing +
+ * bringing up the WAN copper link without a rebuild per attempt. */
+static ssize_t zx_mdio_write(struct file *f, const char __user *ubuf,
+			     size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	struct mii_bus *bus = NULL;
+	char buf[64];
+	u32 phy = 0, reg = 0, val = 0;
+	int n, k, v;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	n = sscanf(buf, "%x %x %x", &phy, &reg, &val);
+	if (n < 2)
+		return -EINVAL;
+	for (k = 0; k < 5; k++)
+		if (e->gephy[k]) {
+			bus = e->gephy[k]->mdio.bus;
+			break;
+		}
+	if (!bus) {
+		pr_err("[ZXETH] mdio: no mii_bus\n");
+		return -ENODEV;
+	}
+	if (n == 3) {
+		mdiobus_write(bus, phy, reg, val);
+		pr_info("[ZXETH] mdio W phy%u reg%#x = %#06x\n", phy, reg, val);
+	} else {
+		v = mdiobus_read(bus, phy, reg);
+		pr_info("[ZXETH] mdio R phy%u reg%#x = %#06x\n", phy, reg, v);
+	}
+	return count;
+}
+
+static const struct file_operations zx_mdio_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_mdio_write,
+	.llseek = default_llseek,
+};
+
+/* hashcalc: drive the CLA HW hash engine (Phase 6 Stage 2b). Write up to 12 hex key
+ * words "<k0> <k1> ... <k11>"; zx_cla_hash_raw loads them, triggers, and reads the
+ * 16-bit raw hash, logged here. This is the slot oracle the chip uses on ingress —
+ * cls_flower_add builds the key from a flow's 5-tuple+ports and uses the same path.
+ * Verified vs manual poke: key 0x11/0x22../0xcc → 0x4a15. Fewer than 12 words →
+ * the rest are zero. (Slot = raw & mask + way bits; mask from the outspace cfg.) */
+static ssize_t zx_hashcalc_write(struct file *f, const char __user *ubuf,
+				 size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[160], *p;
+	u32 key[12] = {0};
+	int n = 0, consumed;
+	u16 raw;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	p = buf;
+	while (n < 12 && sscanf(p, "%x%n", &key[n], &consumed) == 1) {
+		n++;
+		p += consumed;
+	}
+	/* [ft_lock] the hash engine's key/trigger/result regs are shared with
+	 * the FT/DSA offload install paths — a concurrent install's key load
+	 * could otherwise interleave with this one's trigger. */
+	mutex_lock(&zx_hwlock);
+	raw = zx_cla_hash_raw(e, key);
+	mutex_unlock(&zx_hwlock);
+	pr_info("[ZXETH] hashcalc %d words -> raw hash 0x%04x\n", n, raw);
+	return count;
+}
+
+static const struct file_operations zx_hashcalc_fops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.write = zx_hashcalc_write,
+	.llseek = default_llseek,
+};
+
+/* poke: live register write for reflash-free experiments. Write "<phys> <val>"
+ * (hex), e.g.  sh -c "echo '92280008 80000001' > /sys/kernel/debug/zx_eth/poke"
+ * phys must be in [0x921c0000, 0x923c0000) (the e->base MMIO window) and 4-aligned.
+ * Pairs with memdump/regdump for peeks. DEBUG ONLY.
+ */
+static ssize_t zx_poke_write(struct file *f, const char __user *ubuf,
+			     size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	char buf[64];
+	u32 phys, val, off;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	{
+		int n = sscanf(buf, "%x %x", &phys, &val);
+
+		if (n < 1)
+			return -EINVAL;
+		if (phys < 0x921c0000u || phys >= 0x921c0000u + 0x200000u || (phys & 3))
+			return -EINVAL;
+		off = phys - 0x921c0000u;
+		if (n == 1) {	/* one arg = read-only PEEK (unlocks arbitrary mainline reg reads) */
+			pr_info("[ZXETH] peek 0x%08x = 0x%08x\n", phys, readl(e->base + off));
+			return count;
+		}
+		writel(val, e->base + off);
+		pr_info("[ZXETH] poke 0x%08x = 0x%08x (readback 0x%08x)\n",
+			phys, val, readl(e->base + off));
+		return count;
+	}
+}
+
+static const struct file_operations zx_poke_fops = {
+	.owner  = THIS_MODULE,
+	.open   = simple_open,
+	.write  = zx_poke_write,
+	.llseek = default_llseek,
+};
+
+/* fdbadd: seed one static HW (sbrag) FDB entry so the switch DIRECTS a unicast
+ * to <port> instead of flooding it. Write "<port> <aa:bb:cc:dd:ee:ff>", e.g.
+ *   echo '2 c8:a3:62:e9:59:00' > /sys/kernel/debug/zx_eth/fdbadd
+ * Proves the HW-FDB-learning hypothesis for the lan2 dup storm. DEBUG ONLY.
+ */
+static ssize_t zx_fdbadd_write(struct file *f, const char __user *ubuf,
+			       size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	unsigned int port, m[6];
+	char buf[64];
+	u8 mac[6];
+	int i, rc;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (sscanf(buf, "%u %x:%x:%x:%x:%x:%x", &port,
+		   &m[0], &m[1], &m[2], &m[3], &m[4], &m[5]) != 7)
+		return -EINVAL;
+	for (i = 0; i < 6; i++)
+		mac[i] = m[i] & 0xff;
+	rc = zx_sbrag_add_mac(e, mac, 0, port & 0xff);
+	pr_info("[ZXETH] fdbadd %pM -> port %u = %d\n", mac, port, rc);
+	return rc ? rc : count;
+}
+
+static const struct file_operations zx_fdbadd_fops = {
+	.owner  = THIS_MODULE,
+	.open   = simple_open,
+	.write  = zx_fdbadd_write,
+	.llseek = default_llseek,
+};
+
+/* [Iter AI] pktdeal: live-bisect the per-protocol SPA pktdeal RAM (0x921d4300).
+ * Write "<proto> <deal>" to set that protocol-slot's action (0=forward 1=trap
+ * 2=drop 3=copy) on ALL 8 ports at runtime, no reboot. Used to find which ptype
+ * slot the chip assigns to TCP pure-ACKs: flip slots to 0 while a TCP flow runs
+ * and watch tm_rx_count stop climbing. proto range 0..0x46 (slot 0x43+proto).
+ *   echo '6 0' > /sys/kernel/debug/zx_eth/pktdeal   # forward proto-slot 6
+ * Special: "all 0" forwards every slot 0..0x46 (= forward-all, breaks broadcast);
+ * "stock" restores the zx_pp_pro_actions trap table. DEBUG ONLY. */
+static ssize_t zx_pktdeal_write(struct file *f, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	unsigned int proto, deal;
+	char buf[64];
+	int port, i, ok = 0;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+
+	if (!strncmp(buf, "stock", 5)) {
+		for (i = 0; i < ZX_PP_PRO_ACTION_COUNT; i++)
+			for (port = 0; port < 8; port++)
+				zx_spa_set_enty_pktdeal_cfg(e, port,
+					zx_pp_pro_actions[i].proto,
+					zx_pp_pro_actions[i].action_pp0);
+		pr_info("[ZXETH] pktdeal: restored stock trap table\n");
+		return count;
+	}
+	if (!strncmp(buf, "all ", 4) && sscanf(buf + 4, "%u", &deal) == 1) {
+		for (proto = 0; proto <= 0x46; proto++)
+			for (port = 0; port < 8; port++)
+				if (zx_spa_set_enty_pktdeal_cfg(e, port, proto, deal & 3) == 0)
+					ok++;
+		pr_info("[ZXETH] pktdeal: ALL slots 0..0x46 -> deal=%u (%d writes)\n", deal & 3, ok);
+		return count;
+	}
+	if (sscanf(buf, "%u %u", &proto, &deal) != 2 || proto > 0x46)
+		return -EINVAL;
+	for (port = 0; port < 8; port++)
+		if (zx_spa_set_enty_pktdeal_cfg(e, port, proto & 0xff, deal & 3) == 0)
+			ok++;
+	pr_info("[ZXETH] pktdeal: proto-slot %u -> deal=%u on %d ports\n", proto, deal & 3, ok);
+	return count;
+}
+
+static const struct file_operations zx_pktdeal_fops = {
+	.owner  = THIS_MODULE,
+	.open   = simple_open,
+	.write  = zx_pktdeal_write,
+	.llseek = default_llseek,
+};
+
+/* txtest: inject N known TX frames straight through zx_sw_xmit — isolates the
+ * TX/egress path (no ARP/RX/ping involved). Frame: dst = host MAC (FDB-resolved
+ * to internal port 3 / MAC[2]), src = device MAC, ethertype 0x88b5 (local
+ * experimental, so it isn't mistaken for ARP/IP if it loops back), payload
+ * "ZXTX"+seq. Read the pipeline counters before/after to see where it dies.
+ *   sh -c "echo 5 > /sys/kernel/debug/zx_eth/txtest"
+ */
+static ssize_t zx_txtest_write(struct file *f, const char __user *ubuf,
+			       size_t count, loff_t *ppos)
+{
+	struct zx_eth *e = f->private_data;
+	static const u8 host_mac[6] = { 0xc8, 0xa3, 0x62, 0xe9, 0x59, 0x00 };
+	char buf[16];
+	unsigned int n = 1, i;
+
+	if (!e->sw_dev)
+		return -ENODEV;
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+	if (kstrtouint(buf, 0, &n) || n == 0)
+		n = 1;
+	if (n > 64)
+		n = 64;
+
+	for (i = 0; i < n; i++) {
+		struct sk_buff *skb = netdev_alloc_skb(e->sw_dev, 64);
+		u8 *p;
+
+		if (!skb)
+			break;
+		p = skb_put(skb, 64);
+		memset(p, 0, 64);
+		memcpy(p, host_mac, 6);
+		memcpy(p + 6, e->sw_dev->dev_addr, 6);
+		p[12] = 0x88; p[13] = 0xb5;
+		p[14] = 'Z'; p[15] = 'X'; p[16] = 'T'; p[17] = 'X'; p[18] = (u8)i;
+		skb->dev = e->sw_dev;
+		zx_sw_xmit(skb, e->sw_dev);
+	}
+	pr_info("[ZXETH] txtest: injected %u known frames (dst=host, ethertype 0x88b5)\n", i);
+	return count;
+}
+
+static const struct file_operations zx_txtest_fops = {
+	.owner  = THIS_MODULE,
+	.open   = simple_open,
+	.write  = zx_txtest_write,
+	.llseek = default_llseek,
+};
+
+/* [Stage-3 WiFi Phase B, 2026-07-23] wifi_bind: manually bind/unbind a WiFi
+ * vif to an IDM ring + ssid (spec §5 step 2 — decouples "does the dispatch
+ * mechanism work" from "how is the (idm,ssid) mapping discovered", the latter
+ * being an open policy question, spec §6.3). BUILD-VERIFIED, UNTESTED ON
+ * HARDWARE.
+ *   Bind:    echo '<ifname> <idm> <ssid>' > wifi_bind   # e.g. 'wlan1 0 0'
+ *   Unbind:  echo 'del <idm> <ssid>'      > wifi_bind   # e.g. 'del 0 0'
+ * Reading the file dumps the current 16-node table.
+ * NOTE: netdev_rx_handler_register returns -EBUSY if the vif already has an
+ * rx_handler (it does while a br0 member) — `brctl delif br0 <vif>` first
+ * (spec §2.3 coexistence caveat). */
+static ssize_t zx_wifi_bind_write(struct file *f, const char __user *ubuf,
+				  size_t count, loff_t *ppos)
+{
+	/* .open is single_open() (for the seq-file read side), so
+	 * f->private_data is the struct seq_file — the zx_eth pointer is in
+	 * seq->private (== inode->i_private). Every OTHER write knob in this
+	 * driver uses simple_open (private_data = i_private directly); this one
+	 * combines a seq-file reader with a writer, hence the extra hop.
+	 * [Fixed 2026-07-24 during on-device validation: the original
+	 * build-verified code read f->private_data directly and would have
+	 * dereferenced the seq_file as a zx_eth on the very first write.] */
+	struct zx_eth *e = ((struct seq_file *)f->private_data)->private;
+	char buf[64], ifname[IFNAMSIZ];
+	unsigned int idm, ssid;
+	struct net_device *vif;
+	int rc;
+
+	if (count == 0 || count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+
+	if (sscanf(buf, "del %u %u", &idm, &ssid) == 2) {
+		rc = zx_wifi_unregister_vif(e, idm & 0xff, ssid & 0xff);
+		pr_info("[ZXETH] wifi_bind: del idm%u ssid%u = %d [UNTESTED]\n",
+			idm, ssid, rc);
+		return rc ? rc : count;
+	}
+
+	if (sscanf(buf, "%15s %u %u", ifname, &idm, &ssid) != 3)
+		return -EINVAL;
+
+	vif = dev_get_by_name(&init_net, ifname);
+	if (!vif)
+		return -ENODEV;
+	rc = zx_wifi_register_vif(e, vif, idm & 0xff, ssid & 0xff);
+	dev_put(vif);	/* register took its own ref on success */
+	pr_info("[ZXETH] wifi_bind: %s idm%u ssid%u = %d [UNTESTED]\n",
+		ifname, idm, ssid, rc);
+	return rc ? rc : count;
+}
+
+static int zx_wifi_bind_show(struct seq_file *s, void *unused)
+{
+	struct zx_eth *e = s->private;
+	int i;
+
+	seq_puts(s, "# IDM<->WiFi dispatch table (Stage-3 Phase B)\n");
+	seq_printf(s, "# rx_dispatched=%u rx_nobind=%u tx_injected=%u\n",
+		   e->idm_wifi_rx_dispatched, e->idm_wifi_rx_nobind,
+		   e->idm_wifi_tx_injected);
+	seq_printf(s, "# tm_rx_fabric=%u tm_rx_dispatched=%u tm_rx_nobind=%u noparse=%u (Phase B.2)\n",
+		   e->tm_rx_fabric, e->tm_wifi_rx_dispatched,
+		   e->tm_wifi_rx_nobind, e->tm_wifi_rx_noparse);
+	seq_puts(s, "# node idm ssid  vif        idm_ndev\n");
+	for (i = 0; i < 16; i++) {
+		struct zx_wifi_dispatch_node *n = &e->zx_wifi_dispatch[i];
+
+		if (!n->enabled)
+			continue;
+		seq_printf(s, "  %2d   %u    %u    %-10s %s\n",
+			   i, n->idm, n->ssid,
+			   n->wlan_ndev ? n->wlan_ndev->name : "(null)",
+			   n->idm_ndev ? n->idm_ndev->name : "(null)");
+	}
+	return 0;
+}
+
+static int zx_wifi_bind_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, zx_wifi_bind_show, inode->i_private);
+}
+
+static const struct file_operations zx_wifi_bind_fops = {
+	.owner   = THIS_MODULE,
+	.open    = zx_wifi_bind_open,
+	.read    = seq_read,
+	.write   = zx_wifi_bind_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
