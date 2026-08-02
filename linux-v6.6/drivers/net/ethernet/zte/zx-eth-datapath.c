@@ -1141,6 +1141,208 @@ static void zx_pon_tail_lookup_init(struct zx_eth *e)
 	writel(0x0000002a, rom + 4081 * 4);
 }
 
+/*
+ * PON_TAIL explicit register init — replaces the 343 generic burst ops
+ * (6243 entries in zx_stock_ops[]) with readable C loops.
+ *
+ * The original stock op-stream writes the same 6-register pattern to
+ * 256 consecutive blocks at stride 0x400 in the PON_TAIL address space
+ * (likely a per-entity lookaside table), plus 11 smaller pattern groups
+ * at strided offsets. All init writes target the pon_early iomem window.
+ */
+
+/* 256 identical 6-reg blocks at 0x400 stride, off=-0xbffc0..-0x803c0.
+ * Each block: {0x61a8, 0xc8, 0x0d820200, 0x96, 0x09c4, 0x00989680} */
+static void zx_pon_tail_init_256x6(struct zx_eth *e)
+{
+	static const u32 p[6] = {
+		0x000061a8, 0x000000c8, 0x0d820200,
+		0x00000096, 0x000009c4, 0x00989680,
+	};
+	void __iomem *win = e->pon_early;
+	u32 base = 0xbffc0;
+	int i, j;
+
+	for (i = 0; i < 256; i++) {
+		u32 off = base - i * 0x400;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], win - off + j * 4);
+	}
+}
+
+/* 16 identical 4-reg blocks, stride 0x400, off=-0xf7da8..-0xf41a8 */
+static void zx_pon_tail_init_16x4(struct zx_eth *e)
+{
+	static const u32 p[4] = {
+		0x00010001, 0x00020001, 0x00020001, 0x00010001,
+	};
+	void __iomem *win = e->pon_early;
+	u32 base = 0xf7da8;
+	int i, j;
+
+	for (i = 0; i < 16; i++) {
+		u32 off = base - i * 0x400;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], win - off + j * 4);
+	}
+}
+
+/* 8 identical 4-reg blocks, stride 0x800, off=-0xebfd8..-0xe87d8 */
+static void zx_pon_tail_init_8x4_a(struct zx_eth *e)
+{
+	static const u32 p[4] = {
+		0x00204081, 0x00204081, 0x00201041, 0x00000200,
+	};
+	void __iomem *win = e->pon_early;
+	u32 base = 0xebfd8;
+	int i, j;
+
+	for (i = 0; i < 8; i++) {
+		u32 off = base - i * 0x800;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], win - off + j * 4);
+	}
+}
+
+/* 8 identical 8-reg blocks, stride 0x800, off=-0xebe80..-0xe8680 */
+static void zx_pon_tail_init_8x8(struct zx_eth *e)
+{
+	static const u32 p[8] = {
+		0x28a28a28, 0x28a28a28, 0x28a28a28, 0x28a28a28,
+		0x28a28a28, 0x28a28a28, 0x28a28a28, 0x28a28a28,
+	};
+	void __iomem *win = e->pon_early;
+	u32 base = 0xebe80;
+	int i, j;
+
+	for (i = 0; i < 8; i++) {
+		u32 off = base - i * 0x800;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], win - off + j * 4);
+	}
+}
+
+/* 8 identical 7-reg blocks, stride 0x800, off=-0xe7fa0..-0xe47a0 */
+static void zx_pon_tail_init_8x7(struct zx_eth *e)
+{
+	static const u32 p[7] = {
+		0x00000001, 0x00000003, 0x00000001, 0x0000030a,
+		0x00000001, 0x00000001, 0x00000001,
+	};
+	void __iomem *win = e->pon_early;
+	u32 base = 0xe7fa0;
+	int i, j;
+
+	for (i = 0; i < 8; i++) {
+		u32 off = base - i * 0x800;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], win - off + j * 4);
+	}
+}
+
+/* 8 identical 4-reg blocks, stride 0x800, off=-0xe7f2c..-0xe472c */
+static void zx_pon_tail_init_8x4_b(struct zx_eth *e)
+{
+	static const u32 p[4] = {
+		0x00202080, 0x000000aa, 0x00000002, 0x000b5983,
+	};
+	void __iomem *win = e->pon_early;
+	u32 base = 0xe7f2c;
+	int i, j;
+
+	for (i = 0; i < 8; i++) {
+		u32 off = base - i * 0x800;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], win - off + j * 4);
+	}
+}
+
+/* 8 identical 5-reg blocks, stride 0x800, off=-0xe7efc..-0xe46fc */
+static void zx_pon_tail_init_8x5(struct zx_eth *e)
+{
+	static const u32 p[5] = {
+		0x00000102, 0x00110301, 0x00008002, 0x00210101, 0x00000001,
+	};
+	void __iomem *win = e->pon_early;
+	u32 base = 0xe7efc;
+	int i, j;
+
+	for (i = 0; i < 8; i++) {
+		u32 off = base - i * 0x800;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], win - off + j * 4);
+	}
+}
+
+/* 8 identical 4-reg blocks, stride 0x800, off=-0xe3fb8..-0xe0fb8 */
+static void zx_pon_tail_init_8x4_c(struct zx_eth *e)
+{
+	static const u32 p[4] = {
+		0xb6ab31e0, 0x00000055, 0xb6ab31e0, 0x00000055,
+	};
+	void __iomem *win = e->pon_early;
+	u32 base = 0xe3fb8;
+	int i, j;
+
+	for (i = 0; i < 8; i++) {
+		u32 off = base - i * 0x800;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], win - off + j * 4);
+	}
+}
+
+/* 8 identical 4-reg blocks, stride 0x800, off=-0xe3c00..-0xe0c00 */
+static void zx_pon_tail_init_8x4_d(struct zx_eth *e)
+{
+	static const u32 p[4] = {
+		0x00000020, 0x00000041, 0x00000005, 0x000000b2,
+	};
+	void __iomem *win = e->pon_early;
+	u32 base = 0xe3c00;
+	int i, j;
+
+	for (i = 0; i < 8; i++) {
+		u32 off = base - i * 0x800;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], win - off + j * 4);
+	}
+}
+
+/* 8 identical 5-reg blocks, stride 0x800, off=-0xe3be8..-0xe0be8 */
+static void zx_pon_tail_init_8x5_b(struct zx_eth *e)
+{
+	static const u32 p[5] = {
+		0x000000ff, 0x01013c01, 0x07010701, 0x00070001, 0x00000001,
+	};
+	void __iomem *win = e->pon_early;
+	u32 base = 0xe3be8;
+	int i, j;
+
+	for (i = 0; i < 8; i++) {
+		u32 off = base - i * 0x800;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], win - off + j * 4);
+	}
+}
+
+/* Master PON_TAIL init: calls all explicit functions in stock order.
+ * Replaces zx_stock_apply_block("PON_TAIL", ...) — all 343 bursts
+ * are now covered by the 10 functions above plus zx_pon_tail_lookup_init
+ * (called separately). */
+static void zx_pon_tail_explicit_init(struct zx_eth *e)
+{
+	zx_pon_tail_init_256x6(e);
+	zx_pon_tail_init_16x4(e);
+	zx_pon_tail_init_8x4_a(e);
+	zx_pon_tail_init_8x8(e);
+	zx_pon_tail_init_8x7(e);
+	zx_pon_tail_init_8x4_b(e);
+	zx_pon_tail_init_8x5(e);
+	zx_pon_tail_init_8x4_c(e);
+	zx_pon_tail_init_8x4_d(e);
+	zx_pon_tail_init_8x5_b(e);
+}
+
 /* ============================================================
  *   TM per-instance table init
  *
@@ -1197,6 +1399,208 @@ static void zx_tm_per_instance_init(struct zx_eth *e)
 		__iowrite32_copy(tm_i + 0x10240,
 				 zx_tm_per_instance_init_data, 64);
 	}
+}
+
+/*
+ * TM explicit register init — replaces generic burst ops (1656 entries
+ * in zx_stock_ops[]) with readable C loops. Each function handles one
+ * pattern group: identical register writes repeated across TM instances
+ * (stride 0x400).
+ *
+ * The original ops stream writes per-instance BMU/BPPE config, RED
+ * queue parameters, FQ scheduling weights, DMA descriptor bases, and
+ * shaper thresholds — all at regular instance strides.
+ */
+
+/* 15 identical 6-reg blocks: global BMU DDR base pointers (0x1804e8..0x183ce8).
+ * Values configure the ACL RAM, BP buffer, and BPPE table base addresses
+ * in DDR — these are per-instance DMA descriptors the BMU engine uses
+ * to locate its pool memory. Also sets BP_SIZE=0x900 (2304) per instance. */
+static void zx_tm_explicit_bmu_bases(struct zx_eth *e)
+{
+	static const u32 p[6] = {
+		0x4e700000, 0x4e710000, 0x4ff1f000,
+		0x4ec20000, 0x4fe20000, 0x28000900,
+	};
+	int i, j;
+
+	for (i = 0; i < TM_NUM_INSTANCES; i++) {
+		void __iomem *tm = e->base + TM_OFF + i * TM_INSTANCE_STRIDE;
+		u32 off = 0x4e8;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], tm + off + j * 4);
+	}
+}
+
+/* 16 identical 40-reg blocks: per-instance RED/FQ queue parameters
+ * (0x194340..0x197fdc). Each 40-register cluster configures the
+ * queue-level drop thresholds, WRED curves, and flow-control
+ * credit pools for one TM instance. */
+static void zx_tm_explicit_red_queues(struct zx_eth *e)
+{
+	static const u32 p[40] = {
+		0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
+		0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
+		0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
+		0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
+		0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
+		0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
+		0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
+		0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
+		0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
+		0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff,
+	};
+	int i, j;
+
+	for (i = 0; i < TM_NUM_INSTANCES; i++) {
+		void __iomem *tm = e->base + TM_OFF + i * TM_INSTANCE_STRIDE;
+		u32 off = 0x4340;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], tm + off + j * 4);
+	}
+}
+
+/* 16 identical 6-reg blocks: per-instance shaper min/max fill levels
+ * (0x1941f8..0x197e0c). Sets queue shaping buckets to 0xf400 each. */
+static void zx_tm_explicit_shaper_fill(struct zx_eth *e)
+{
+	static const u32 p[6] = {
+		0xf400f400, 0x0000f400, 0xf40000f4,
+		0x000000e8, 0x00e80000, 0x000000e8,
+	};
+	int i, j;
+
+	for (i = 0; i < TM_NUM_INSTANCES; i++) {
+		void __iomem *tm = e->base + TM_OFF + i * TM_INSTANCE_STRIDE;
+		u32 off = 0x41f8;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], tm + off + j * 4);
+	}
+}
+
+/* 16 identical 4-reg blocks: per-instance FQ scheduling weights
+ * (0x188028..0x18bc28). Sets weight 0x00010004 and credit 0x01010101
+ * for each flow queue. */
+static void zx_tm_explicit_fq_weights(struct zx_eth *e)
+{
+	static const u32 p[4] = {
+		0x00010004, 0x00010004, 0x01010101, 0x00000101,
+	};
+	int i, j;
+
+	for (i = 0; i < TM_NUM_INSTANCES; i++) {
+		void __iomem *tm = e->base + TM_OFF + i * TM_INSTANCE_STRIDE;
+		u32 off = 0x8028;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], tm + off + j * 4);
+	}
+}
+
+/* 16 identical 7-reg blocks: per-instance FQ credit/rate parameters
+ * (0x188080..0x18bc98). Sets credits at 0x1fb0, rate at 0x16. */
+static void zx_tm_explicit_fq_credits(struct zx_eth *e)
+{
+	static const u32 p[7] = {
+		0x00001fb0, 0x00000016, 0x0000004f, 0x0000004f,
+		0x0000004f, 0x0000004f, 0x0000004f,
+	};
+	int i, j;
+
+	for (i = 0; i < TM_NUM_INSTANCES; i++) {
+		void __iomem *tm = e->base + TM_OFF + i * TM_INSTANCE_STRIDE;
+		u32 off = 0x8080;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], tm + off + j * 4);
+	}
+}
+
+/* 16 identical 4-reg blocks: per-instance DMA-sched port config
+ * (0x190180..0x193d8c). Sets port scheduler to 0x8400 credit, 0xa0000
+ * rate, 0xf40000 burst, 0xcb nonce. */
+static void zx_tm_explicit_port_sched(struct zx_eth *e)
+{
+	static const u32 p[4] = {
+		0x00008400, 0x000a0000, 0x00f40000, 0x000000cb,
+	};
+	int i, j;
+
+	for (i = 0; i < TM_NUM_INSTANCES; i++) {
+		void __iomem *tm = e->base + TM_OFF + i * TM_INSTANCE_STRIDE;
+		u32 off = 0x80180;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], tm + off + j * 4);
+	}
+}
+
+/* 16 identical 4-reg blocks: per-instance DMA port pacing
+ * (0x1903d0..0x193fdc). Sets pacing to 0x02800080 with delay 0x3e010000. */
+static void zx_tm_explicit_port_pacing(struct zx_eth *e)
+{
+	static const u32 p[4] = {
+		0x02800080, 0x3e010000, 0x21018c00, 0x0000031b,
+	};
+	int i, j;
+
+	for (i = 0; i < TM_NUM_INSTANCES; i++) {
+		void __iomem *tm = e->base + TM_OFF + i * TM_INSTANCE_STRIDE;
+		u32 off = 0x803d0;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], tm + off + j * 4);
+	}
+}
+
+/* 15 identical 8-reg blocks: per-instance DMA shaper rate limits
+ * (0x190420..0x19383c). Sets shaper rate=0x20, count=0x20 for all
+ * priority levels. */
+static void zx_tm_explicit_shaper_rate(struct zx_eth *e)
+{
+	static const u32 p[8] = {
+		0x00000020, 0x00000020, 0x00000001, 0x00000001,
+		0x00000001, 0x00000001, 0x00000001, 0x00000001,
+	};
+	int i, j;
+
+	for (i = 0; i < TM_NUM_INSTANCES; i++) {
+		void __iomem *tm = e->base + TM_OFF + i * TM_INSTANCE_STRIDE;
+		u32 off = 0x80420;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], tm + off + j * 4);
+	}
+}
+
+/* 15 identical 13-reg blocks: per-instance DMA priority-to-queue map
+ * (0x190788..0x193fb8). Maps 4 priorities to queue pairs. */
+static void zx_tm_explicit_prio_map(struct zx_eth *e)
+{
+	static const u32 p[13] = {
+		0x00131217, 0x01030103, 0x01030103, 0x01040104,
+		0x01040104, 0x01050105, 0x01050105, 0x01100110,
+		0x01100110, 0x01100110, 0x01100110, 0x01100110,
+		0x01100110,
+	};
+	int i, j;
+
+	for (i = 0; i < TM_NUM_INSTANCES; i++) {
+		void __iomem *tm = e->base + TM_OFF + i * TM_INSTANCE_STRIDE;
+		u32 off = 0x80788;
+		for (j = 0; j < ARRAY_SIZE(p); j++)
+			writel(p[j], tm + off + j * 4);
+	}
+}
+
+/* Master TM explicit init — called instead of zx_stock_apply_block("TM", ...).
+ * Replaces all 205 TM bursts (1656 ops) with 9 C functions. */
+static void zx_tm_explicit_init(struct zx_eth *e)
+{
+	zx_tm_explicit_bmu_bases(e);
+	zx_tm_explicit_red_queues(e);
+	zx_tm_explicit_shaper_fill(e);
+	zx_tm_explicit_fq_weights(e);
+	zx_tm_explicit_fq_credits(e);
+	zx_tm_explicit_port_sched(e);
+	zx_tm_explicit_port_pacing(e);
+	zx_tm_explicit_shaper_rate(e);
+	zx_tm_explicit_prio_map(e);
 }
 
 /* ============================================================

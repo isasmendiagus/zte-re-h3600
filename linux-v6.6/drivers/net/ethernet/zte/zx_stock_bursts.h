@@ -7,8 +7,10 @@
  * (off, val) singletons. Same writes, dramatically fewer operations.
  *
  * Source entries : 22363
- * Skipped blocks : ['NPP_AUX', 'PON_LOW'] (6879 entries via 638 runs)
+ * Skipped blocks : ['NPP_AUX', 'PON_LOW', 'PON_TAIL', 'TM'] (14778 entries via XXX runs)
  *                  → handled by explicit zx_<block>_init() in the driver
+ * PON_TAIL replaced 2026-08-02: 10 C functions replace 343 bursts (6243 ops)
+ * TM replaced 2026-08-02: 9 C functions replace 205 bursts (1656 ops)
  * Bursts (≥4 entries): 826, covering 5689 entries
  * Short runs    : 6890, covering 9795 entries
  * Total ops     : 10621 (vs 15484 replayed)
@@ -14950,16 +14952,16 @@ static const struct zx_stock_op zx_stock_ops[10621] = {
 #define ZX_STOCK_OPS_PON_B_START 0
 #define ZX_STOCK_OPS_PON_B_END   1792
 #define ZX_STOCK_OPS_PON_B_LEN   1792
-#define ZX_STOCK_OPS_PON_TAIL_START 1792
+#define ZX_STOCK_OPS_PON_TAIL_START 8035 /* now handled by zx_pon_tail_explicit_init() */
 #define ZX_STOCK_OPS_PON_TAIL_END   8035
-#define ZX_STOCK_OPS_PON_TAIL_LEN   6243
+#define ZX_STOCK_OPS_PON_TAIL_LEN   0
 #define ZX_STOCK_OPS_NPP_START 8035
 #define ZX_STOCK_OPS_NPP_END   8058
 #define ZX_STOCK_OPS_NPP_LEN   23
 /* NPP_AUX: handled by explicit zx_<block>_init() — no ops emitted */
-#define ZX_STOCK_OPS_TM_START 8058
+#define ZX_STOCK_OPS_TM_START 9714 /* now handled by zx_tm_explicit_init() */
 #define ZX_STOCK_OPS_TM_END   9714
-#define ZX_STOCK_OPS_TM_LEN   1656
+#define ZX_STOCK_OPS_TM_LEN   0
 #define ZX_STOCK_OPS_PP_FUC_START 9714
 #define ZX_STOCK_OPS_PP_FUC_END   10621
 #define ZX_STOCK_OPS_PP_FUC_LEN   907

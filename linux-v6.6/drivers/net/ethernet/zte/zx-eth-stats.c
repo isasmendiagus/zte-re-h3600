@@ -1349,15 +1349,13 @@ static void zx_eth_apply_stock_init(struct zx_eth *eth)
 	zx_stock_apply_block(eth, "PON_B",
 			     ZX_STOCK_OPS_PON_B_START,    ZX_STOCK_OPS_PON_B_END);
 	zx_pon_tail_lookup_init(eth);         /* 16 KB lookup RAM */
-	zx_stock_apply_block(eth, "PON_TAIL",
-			     ZX_STOCK_OPS_PON_TAIL_START, ZX_STOCK_OPS_PON_TAIL_END);
+	zx_pon_tail_explicit_init(eth);       /* 10 C loops replace 343 bursts */
 	zx_npp_twin_init(eth);                /* 3 twin-pair sub-blocks */
 	zx_stock_apply_block(eth, "NPP",
 			     ZX_STOCK_OPS_NPP_START,      ZX_STOCK_OPS_NPP_END);
 	zx_npp_aux_init(eth);                 /* 13 × 12 identical writes */
 	zx_tm_per_instance_init(eth);         /* 16 instance tables */
-	zx_stock_apply_block(eth, "TM",
-			     ZX_STOCK_OPS_TM_START,       ZX_STOCK_OPS_TM_END);
+	zx_tm_explicit_init(eth);             /* 9 C loops replace 205 TM bursts */
 	zx_stock_apply_block(eth, "PP_FUC",
 			     ZX_STOCK_OPS_PP_FUC_START,   ZX_STOCK_OPS_PP_FUC_END);
 }
