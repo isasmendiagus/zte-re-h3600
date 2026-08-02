@@ -1413,8 +1413,11 @@ static void zx_pp_init(struct zx_eth *e)
 	writel(0x015555FF, pp + PP_BRG_BASE + 0x0340);
 	writel(0x00000001, pp + PP_BRG_BASE + 0x0380);
 
-	/* pon_pp_cla_init — verified */
-	writel(0x00000600, pp + PP_CLA_BASE + 0x0080);
+	/* pon_pp_cla_init — verified. [ptype-fwd 2026-08-03]
+	 * bit0 = trap_acl_en: CLA intercepts protocol-classifier traps
+	 * and hash-looks them up before committing the trap verdict.
+	 * Needed because ptype 0x4b (TCP ACK) traps pre-CLA by default. */
+	writel(0x00000601, pp + PP_CLA_BASE + 0x0080);
 	/* stock leaves CLA[0x0084] as 0 — skip */
 
 	/* === HW classifier + SPA CPU pktdeal config from stock kotrace ===
@@ -1590,7 +1593,7 @@ static void zx_npp_init(struct zx_eth *e)
 {
 	/* All values verified from live stock dump. */
 	npp_write(e, NPP_REG_IRQ_ENABLE, 0xFFFFFF);	/* NPP reset gate: stock writes 0xFFFFFF (write-1-to-toggle, self-clears to 0 readback) */
-	npp_write(e, NPP_REG_IRQ_MASK,   0xFFFFFFFF);	/* NPP clock gate: U-Boot writes 0xFFFFFFFF (all 32 bits toggled), stock writes 0xFFFFF (20 bits). Higher bits may gate BMU/DDR paths */
+	npp_write(e, NPP_REG_IRQ_MASK,   0xFFFFF);	/* NPP clock gate: stock=0xFFFFF (20 bits). HEAD was 0xFFFFFFFF but higher bits may incorrectly gate paths needed for CLA/SIPA classifier forwarding */
 	usleep_range(1000, 2000);
 
 	/* IDM IRQs masked at probe — open() unmasks bit 2 selectively. */
@@ -2901,12 +2904,27 @@ static void zx_cla_apply_replay(struct zx_eth *e)
 		else
 			fail++;
 	}
-	/* ram=7 (CPU queue): all entries have data[0]=7, rest 0 — generate runtime */
-	for (i = ZX_CLA_RAM7_FIRST; i <= ZX_CLA_RAM7_LAST; i++) {
-		if (zx_cla_write_entry(e, 7, i, ram7_data) == 0)
-			ok++;
-		else
-			fail++;
+	/* ram=7 (CPU queue): all entries have data[0]=7, rest 0 — generate runtime.
+	 * [ptype-fwd 2026-08-03] skip ptype 0x4B addresses so they stay clear.
+	 * Ptype 0x4B = TCP ACK classification that traps pre-CLA; with
+	 * trap_acl_en=1 the CLA will hash-lookup these packets before trapping. */
+	{
+		static const u32 skip_addrs[] = {	/* ptype 0x4B in all 7 banks */
+			0x04B, 0x0CB, 0x14B, 0x1CB, 0x24B, 0x2CB, 0x34B, 0x3CB,
+		};
+		for (i = ZX_CLA_RAM7_FIRST; i <= ZX_CLA_RAM7_LAST; i++) {
+			int s;
+			bool skip = false;
+
+			for (s = 0; s < (int)ARRAY_SIZE(skip_addrs); s++)
+				if (i == skip_addrs[s]) { skip = true; break; }
+			if (skip)
+				continue;
+			if (zx_cla_write_entry(e, 7, i, ram7_data) == 0)
+				ok++;
+			else
+				fail++;
+		}
 	}
 	dev_dbg(e->dev, "CLA init: %u ok, %u fail (%u embedded + ram=7 0..%d)\n",
 		 ok, fail, ZX_CLA_INIT_TABLE_LEN, ZX_CLA_RAM7_LAST);
@@ -8644,6 +8662,12 @@ static void zx_eth_init_chip_tm(struct zx_eth *eth)
 
 	writel(0xa, eth->fpga_base + 0);
 	dev_dbg(eth->dev, "FPGA IRQ enable: wrote 0xa to fpga+0 (sbrg_set_irq_en_mask equiv)\n");
+
+	/* [ptype-fwd 2026-08-03] re-assert cla_config AFTER all stock
+	 * replay blocks (the TM/PP_FUC replays can overwrite it). bit0 =
+	 * trap_acl_en: CLA intercepts protocol-classifier traps and hash-
+	 * looks them up before committing the trap verdict. */
+	writel(0x00000601, eth->base + 0x1CC080);
 }
 
 /*

@@ -12,7 +12,9 @@ static const struct zx_pkt_map_entry zx_def_ptl_pkt_map[] = {
     { 0x61, 1, 1 },
     { 0x4c, 1, 1 },
     { 0x49, 1, 1 },
-    { 0x4b, 2, 2 },
+    /* ptype 0x4b (TCP ACK classification) removed — was trapping to q2
+     * before the CLA, killing HW offload UP direction. See 2026-08-02
+     * desIn latch analysis: action_rsn=0x4b l3_en=1 trapped pre-CLA. */
     { 0x51, 3, 3 },
     { 0x50, 3, 3 },
     { 0x52, 3, 3 },
